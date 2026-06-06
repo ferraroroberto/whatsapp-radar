@@ -20,11 +20,23 @@ WhatsApp  ──▶  Node sidecar (Baileys)  ──▶  data/linked_device/*.ndj
 
 The sidecar appends NDJSON (one JSON object per line) under the ignored `data/linked_device/` directory. Append-only files are crash-safe and need no cross-language locking; duplicates are expected and resolved by last-write-wins on read, then again by storage dedupe.
 
-- `chats.ndjson` — `{ "jid", "name", "type", "ts" }` (`type` is `group` or `dm`).
+- `chats.ndjson` — `{ "jid", "name", "type", "ts" }` (`type` is `group` or `dm`), plus *alias* rows `{ "jid", "alias_for", "ts" }` (see JID identity below).
 - `messages.ndjson` — `{ "jid", "msg_id", "ts", "sender", "text", "type", "raw" }`.
 - `status.json` — heartbeat `{ "paired", "connected", "last_update", "chats", "messages" }`, rewritten on every event and every 30s. The Python reader treats a `last_update` older than 120s as a dead sidecar.
 
 The Python reader (`connector/linked_device.py`) maps `jid → ChatRecord.source_chat_id` and `msg_id → MessageRecord.source_message_id`, sorts messages by `(ts, msg_id)`, and exposes only read methods.
+
+## JID identity & display names
+
+WhatsApp addresses one contact under several JID forms: a phone JID (`<number>@s.whatsapp.net`), a legacy business form (`@c.us`), a device-scoped form (`<number>:<device>@…`), and an opaque privacy form (`<id>@lid`). Chat-metadata events and the messages they describe can arrive under *different* forms for the same identity. Left unreconciled this strands a chat with a raw-JID name or with **zero associated messages** (the messages keyed under a variant never match the chat row).
+
+Both sides reconcile this so there is one row per identity:
+
+- **Normalization.** Every JID is canonicalized — lower-cased, agent/device suffix dropped, `@c.us → @s.whatsapp.net` — by the sidecar at write time (Baileys `jidNormalizedUser`) and again by the reader, which keys both chats and messages by the canonical form so a variant-keyed message still associates.
+- **Aliases.** The `@lid ↔ phone` pairing is known only to the protocol layer, so the sidecar emits an `alias_for` row whenever a contact event reveals it (`contact.id` / `contact.lid`). The reader folds aliases before keying, collapsing the `@lid` JID onto its phone JID. Alias rows are not themselves chats.
+- **Readable fallbacks.** When no saved name exists, a DM is named from the remote's `pushName`; failing that, the reader shows a formatted `+<number>` rather than the raw `<number>@…` JID. Group messages with no `pushName` (common in history sync) fall back to a humanized participant label so the conversation overlay still attributes a sender.
+
+This handling is unofficial-protocol behavior and may shift across Baileys releases; the reader degrades gracefully (canonical name → push name → `+<number>` → bare id) if the alias signal is absent.
 
 ## v1 message normalization set
 
@@ -56,5 +68,5 @@ These are the questions from [`onboarding.md`](onboarding.md), answered by this 
 ## Limitations / known gaps
 
 - History depth is bounded by what WhatsApp syncs to a freshly linked device; very old history may be unavailable.
-- Group sender labels come from `pushName`; they are local-only and never committed.
+- Group sender labels come from `pushName`, falling back to a humanized participant JID when a history-synced message carries none; they are local-only and never committed.
 - The sidecar lifecycle is currently manual (`npm start`); supervised running via App Launcher is a follow-up.

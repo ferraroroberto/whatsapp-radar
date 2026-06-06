@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 
 from src.connector.fixture import FixtureConnector
-
 from tests.helpers import ingest_all
 
 

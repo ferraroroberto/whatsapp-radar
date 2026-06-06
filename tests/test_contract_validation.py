@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+
 from src.analysis.contract import ContractError, parse_analysis
 
 

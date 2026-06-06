@@ -10,23 +10,36 @@ It follows the fleet's standard layout (as in `E:\automation\app-launcher`): UI 
 
 ```
 whatsapp-radar/
-  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|notify)
+  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|notify|tray)
+  app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py,
+                         #   routers/ (misc, auth, webauthn), static/ (vanilla-JS shell)
+  app/tray/tray.py       # pystray surface that owns the webapp lifecycle
   src/                   # logic, imported as `from src.…`
-    config.py  models.py
+    config.py  models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     connector/ (base, fixture, linked_device)
     db/ (store.py, schema.sql)
     analysis/ (classifier, contract, keywords, review, prompts/)
     notify/ (base, factory, telegram)   report/digest.py
     fixtures/sample_chats.json
-  config/                # committed defaults (default.json); local.json + .env are gitignored
+  config/                # committed defaults (default.json) + *.sample templates;
+                         #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env are gitignored
+  scripts/               # gen_ssl_cert, gen_token, set_password, gen_icons, run_named_tunnel, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
-  docs/  tests/
-  launcher.py  wr.bat    # entry points
+  webapp/                # runtime cert/log output (gitignored contents)
+  docs/  tests/ (+ tests/e2e Playwright)
+  launcher.py  wr.bat    # CLI entry points
+  tray.bat  webapp.bat  webapp_tunnel_named.bat  setup.bat   # webapp entry points
   requirements.txt  requirements-dev.txt  pytest.ini
   pyproject.toml         # tool config only (ruff/mypy) — no packaging
 ```
 
-Run it with `python launcher.py <command>`, `python -m app.cli.main <command>`, or the `wr.bat <command>` wrapper. (The FastAPI admin PWA + tray surfaces under `app/webapp/` and `app/tray/` arrive in later steps.)
+Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <command>`, or the `wr.bat <command>` wrapper.
+
+### Admin webapp & tray
+
+The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. The four tabs (Dashboard · Chats & Config · Execution · Audit) are empty shells until Steps 4–7 (#9–#12).
+
+**Safe restart (never blanket-kill python):** the tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill, which would take down sister apps (App Launcher, local-llm-hub, …). To restart by hand, find the owner with `Get-NetTCPConnection -LocalPort 8455` and stop that PID, then relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart the `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 
 ## Layout & Imports
 
@@ -54,7 +67,7 @@ Run it with `python launcher.py <command>`, `python -m app.cli.main <command>`, 
 
 - Reuse `E:\automation\local-llm-hub` for LLM calls. Do not implement direct `claude -p`, `agy`, or provider-specific subprocess wrappers in this repo.
 - Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI.
-- The admin UI (later steps) is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit. Its secrets (bearer token, Telegram token/chat id, passkey state) will live in the gitignored `config/webapp_config.json`; until that step lands, runtime secrets are read from the gitignored `.env` / `config/local.json`.
+- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8; see "Admin webapp & tray" above). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in the gitignored `config/webapp_config.json`; `WR_TELEGRAM_*` env / `config/local.json` still override it.
 - If a reusable convention emerges, route the general rule back to `E:\automation\project-scaffolding` instead of creating fleet drift here.
 
 ## Implementation Conventions

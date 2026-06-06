@@ -86,7 +86,33 @@ The fixture path above needs no credentials. To run against real chats and deliv
 2. Set `WR_CONNECTOR=linked_device`; `wr ingest` / `wr chats` / `wr monitor` / `wr review` then run unchanged against real data.
 3. For delivery, create a Telegram bot, set `WR_NOTIFIER=telegram` plus `WR_TELEGRAM_BOT_TOKEN` / `WR_TELEGRAM_CHAT_ID`, and `wr review` delivers one consolidated digest. `wr notify` re-delivers a run if a send failed.
 
-The connection is **read-only by construction** — no send/react/read-receipt surface exists. The unofficial-library risk (Baileys), the buffer contract, the message-normalization set, and answers to the spike questions are documented in [`docs/linked-device.md`](docs/linked-device.md). Credentials/session live only under ignored `auth/`; Telegram secrets live only in the ignored `.env`.
+The connection is **read-only by construction** — no send/react/read-receipt surface exists. The unofficial-library risk (Baileys), the buffer contract, the message-normalization set, and answers to the spike questions are documented in [`docs/linked-device.md`](docs/linked-device.md). Credentials/session live only under ignored `auth/`; Telegram secrets live in the gitignored `config/webapp_config.json` (or the ignored `.env` via `WR_TELEGRAM_*`).
+
+## Admin Webapp (phone-first PWA)
+
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), Tailscale TLS, and dormant Cloudflare named-tunnel scaffolding. The four tabs — Dashboard · Chats & Config · Execution · Audit — are empty shells today; Steps 4–7 fill them.
+
+```powershell
+.\setup.bat                 # one-shot: .venv + deps + PWA icons
+.\webapp.bat                # run the webapp standalone (HTTP, or HTTPS if a cert exists)
+.\tray.bat                  # adopt-or-spawn the webapp behind a tray icon (daily use)
+.\tray.bat --restart        # stop the running tray + reclaim :8455, start fresh
+
+# Optional hardening / access:
+.\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON
+.\.venv\Scripts\python.exe scripts\set_password.py PW  # add a login password
+.\.venv\Scripts\python.exe scripts\gen_ssl_cert.py     # Tailscale TLS + iOS trust profile
+```
+
+Restart matrix:
+
+| Command | Effect |
+| --- | --- |
+| `tray.bat` | no-op if a WhatsApp Radar tray is already running |
+| `tray.bat --restart` | kills only this repo's tray + reclaims `:8455` by PID (scoped to this `.venv` — never a blanket `pythonw` kill), then relaunches |
+| `webapp.bat` | standalone server, no tray (headless / dev iteration) |
+
+Secrets (bearer token, password, passkey state, **and the Telegram token/chat id**) live in the gitignored `config/webapp_config.json` (`config/webapp_config.sample.json` is the template). `WR_TELEGRAM_*` env still overrides it. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`.
 
 Verification gate:
 
@@ -94,7 +120,10 @@ Verification gate:
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m mypy src app
+powershell -File scripts\verify-before-ship.ps1   # all of the above + Playwright e2e (Chromium + WebKit/iPhone)
 ```
+
+The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on a free port and require `playwright install chromium webkit` once.
 
 ## Repository Status
 

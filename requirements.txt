@@ -5,3 +5,25 @@
 # Classification routes through local-llm-hub via the Anthropic-shape SDK
 # (base_url http://127.0.0.1:8000). No direct provider/subprocess wrappers.
 anthropic>=0.40
+
+# --- Admin webapp (Step 3 / issue #8) ---------------------------------------
+# FastAPI + uvicorn serve the phone-first PWA; same stack as App Launcher.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+# Multipart form parsing for future file uploads / form posts.
+python-multipart>=0.0.9
+# WebAuthn passkey gate (Face ID enrol + assert).
+webauthn>=2.0
+# Self-signed cert + iOS .mobileconfig generation (Tailscale TLS bootstrap).
+cryptography>=42.0
+# HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).
+requests>=2.31
+PyYAML>=6.0
+# Process introspection for the tray's port-owner reclaim.
+psutil>=5.9
+# PWA icon generation.
+Pillow>=10.0
+# Tray icon surface (app/tray/).
+pystray>=0.19
+# Windows toast notifications for tray lifecycle events.
+winotify>=1.1; sys_platform == "win32"

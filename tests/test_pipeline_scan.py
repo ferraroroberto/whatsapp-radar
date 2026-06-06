@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
 from src.analysis.pipeline import scan
 from src.config import Config, HubConfig, TelegramConfig
@@ -20,7 +21,6 @@ from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.models import ChatRecord, MessageRecord, StoredMessage
 from src.notify import telegram as telegram_mod
-
 from tests.helpers import chat_id_by_source
 
 _ACTIONABLE_JSON = json.dumps(

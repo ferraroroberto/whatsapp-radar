@@ -9,7 +9,6 @@ from src.analysis.contract import ContractError
 from src.analysis.review import review_monitored_chats
 from src.db import store
 from src.models import StoredMessage
-
 from tests.helpers import append_message, chat_id_by_source
 
 

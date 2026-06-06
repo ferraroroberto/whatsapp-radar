@@ -5,10 +5,10 @@ No hub/network: the inner LLM classifier is a fake that records whether it ran.
 
 from __future__ import annotations
 
-from whatsapp_radar.analysis.classifier import CascadeClassifier
-from whatsapp_radar.analysis.contract import parse_analysis
-from whatsapp_radar.analysis.keywords import has_actionable_signal, message_has_signal
-from whatsapp_radar.models import StoredMessage
+from src.analysis.classifier import CascadeClassifier
+from src.analysis.contract import parse_analysis
+from src.analysis.keywords import has_actionable_signal, message_has_signal
+from src.models import StoredMessage
 
 
 def _msg(mid: str, text: str) -> StoredMessage:

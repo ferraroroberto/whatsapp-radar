@@ -85,6 +85,6 @@ def build_digest(conn: sqlite3.Connection, run_id: int) -> Digest:
 def store_actionable(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
     # Thin indirection kept local so report does not import the whole store module's
     # surface; the query lives with the schema knowledge in db.store.
-    from ..db import store
+    from src.db import store
 
     return store.actionable_items_for_run(conn, run_id)

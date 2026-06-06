@@ -12,7 +12,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..models import ChatRecord, MessageRecord, StoredMessage
+from src.models import ChatRecord, MessageRecord, StoredMessage
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 

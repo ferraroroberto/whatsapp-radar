@@ -1,40 +1,9 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "whatsapp-radar"
-version = "0.1.0"
-description = "Local-first, read-only WhatsApp action radar — classify new messages and surface only actionable items."
-readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
-dependencies = [
-    "anthropic>=0.40",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
-    "mypy>=1.10",
-]
-
-[project.scripts]
-wr = "whatsapp_radar.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-whatsapp_radar = ["db/schema.sql", "fixtures/*.json", "analysis/prompts/*.md", "analysis/prompts/*.txt"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q"
+# Tool configuration only. WhatsApp Radar is not an installable package — it is
+# run from a checkout via `python launcher.py` (see CLAUDE.md for the src/+app/
+# layout shared across the fleet). Runtime deps live in requirements.txt.
 
 [tool.ruff]
-src = ["src", "tests"]
+src = ["src", "app", "tests"]
 line-length = 100
 target-version = "py311"
 
@@ -43,7 +12,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.11"
-packages = ["whatsapp_radar"]
-mypy_path = "src"
+mypy_path = "."
+explicit_package_bases = true
 strict = true
 warn_unused_ignores = true

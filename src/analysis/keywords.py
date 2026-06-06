@@ -11,9 +11,9 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Iterable
 from functools import lru_cache
-from importlib.resources import files
+from pathlib import Path
 
-from ..models import StoredMessage
+from src.models import StoredMessage
 
 _ROOTS_FILE = "keyword_roots.txt"
 
@@ -21,7 +21,7 @@ _ROOTS_FILE = "keyword_roots.txt"
 @lru_cache(maxsize=1)
 def load_keyword_roots() -> tuple[str, ...]:
     """Load the actionable roots, already normalized, ignoring comments/blanks."""
-    text = (files("whatsapp_radar.analysis.prompts") / _ROOTS_FILE).read_text(encoding="utf-8")
+    text = (Path(__file__).with_name("prompts") / _ROOTS_FILE).read_text(encoding="utf-8")
     roots = []
     for raw in text.splitlines():
         line = raw.strip()

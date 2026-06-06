@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from ..models import ChatRecord, MessageRecord
+from src.models import ChatRecord, MessageRecord
 
 
 @dataclass(frozen=True)

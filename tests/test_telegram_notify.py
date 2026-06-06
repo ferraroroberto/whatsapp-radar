@@ -10,11 +10,10 @@ from contextlib import contextmanager
 from typing import Any
 
 import pytest
-
-from whatsapp_radar.config import TelegramConfig
-from whatsapp_radar.notify import NotifierError, TelegramNotifier, build_notifier
-from whatsapp_radar.notify import telegram as telegram_mod
-from whatsapp_radar.report.digest import Digest, DigestItem
+from src.config import TelegramConfig
+from src.notify import NotifierError, TelegramNotifier, build_notifier
+from src.notify import telegram as telegram_mod
+from src.report.digest import Digest, DigestItem
 
 
 def _digest() -> Digest:

@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from whatsapp_radar.analysis.contract import ContractError, parse_analysis
+from src.analysis.contract import ContractError, parse_analysis
 
 
 def test_valid_payload_parses() -> None:

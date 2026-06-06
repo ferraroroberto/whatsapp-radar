@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from whatsapp_radar.connector.linked_device import LinkedDeviceConnector
+from src.connector.linked_device import LinkedDeviceConnector
 
 
 def _write_buffer(

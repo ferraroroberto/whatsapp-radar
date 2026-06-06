@@ -24,8 +24,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..models import ChatRecord, MessageRecord
-from .base import ConnectorStatus
+from src.connector.base import ConnectorStatus
+from src.models import ChatRecord, MessageRecord
 
 # A status.json older than this is treated as a dead sidecar (heartbeat is 30s).
 _STALE_AFTER_SECONDS = 120

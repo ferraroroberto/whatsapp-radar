@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from whatsapp_radar.analysis.classifier import _extract_json_object
-from whatsapp_radar.analysis.contract import parse_analysis
+from src.analysis.classifier import _extract_json_object
+from src.analysis.contract import parse_analysis
 
 
 def test_strips_think_block_and_extracts_object() -> None:

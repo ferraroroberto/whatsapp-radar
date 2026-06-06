@@ -44,25 +44,27 @@ Before building product features, complete the spike in [`docs/onboarding.md`](d
 
 The spike runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. All runtime state lives under the ignored `data/` path.
 
+The project runs from a checkout (no install step) — `wr.bat <cmd>` is the ergonomic wrapper for `python launcher.py <cmd>`.
+
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 
 # Ingest sanitized fixture chats/messages into local SQLite, then pick chats to monitor.
-.\.venv\Scripts\wr.exe ingest
-.\.venv\Scripts\wr.exe chats
-.\.venv\Scripts\wr.exe monitor 1
-.\.venv\Scripts\wr.exe monitor 3
+.\wr.bat ingest
+.\wr.bat chats
+.\wr.bat monitor 1
+.\wr.bat monitor 3
 
 # First review classifies the delta and prints one consolidated digest.
-.\.venv\Scripts\wr.exe review --dry-run
+.\wr.bat review --dry-run
 # Second review with no new messages does nothing and produces no notification.
-.\.venv\Scripts\wr.exe review --dry-run
+.\wr.bat review --dry-run
 ```
 
 Adding new messages causes only the delta to be reviewed; the per-chat cursor advances only after analysis is persisted, so a classifier error safely reprocesses the same delta next run.
 
-Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../local-llm-hub) (the `agentic_light` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call — so "utter noise" deltas never reach the model. Both prompt assets are inspectable plain-text files you can tune without touching code: the system prompt at `src/whatsapp_radar/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/whatsapp_radar/analysis/prompts/keyword_roots.txt`.
+Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../local-llm-hub) (the `agentic_light` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call — so "utter noise" deltas never reach the model. Both prompt assets are inspectable plain-text files you can tune without touching code: the system prompt at `src/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`.
 
 ## Running Against Real WhatsApp + Telegram
 
@@ -79,7 +81,7 @@ Verification gate:
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m mypy src
+.\.venv\Scripts\python.exe -m mypy src app
 ```
 
 ## Repository Status

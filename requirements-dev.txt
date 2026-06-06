@@ -1,0 +1,6 @@
+# Test / lint / type-check dependencies. Install with:
+#   .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+
+pytest>=8.0
+ruff>=0.6
+mypy>=1.10

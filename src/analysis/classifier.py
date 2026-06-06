@@ -9,7 +9,7 @@ Two implementations:
   opt-in (``WR_CLASSIFIER=hub``).
 
 Both return a raw JSON *string*; the review engine always validates it through
-:func:`whatsapp_radar.analysis.contract.parse_analysis`, so a malformed hub
+:func:`src.analysis.contract.parse_analysis`, so a malformed hub
 response is handled exactly like any other contract violation.
 """
 
@@ -19,10 +19,10 @@ import json
 import re
 from typing import Protocol, runtime_checkable
 
-from ..config import HubConfig
-from ..models import StoredMessage
-from .keywords import has_actionable_signal
-from .prompts import load_prompt
+from src.analysis.keywords import has_actionable_signal
+from src.analysis.prompts import load_prompt
+from src.config import HubConfig
+from src.models import StoredMessage
 
 # Returned by the cascade when the cheap prefilter finds no actionable signal, so
 # no LLM call is made. Mirrors the contract the parser expects.

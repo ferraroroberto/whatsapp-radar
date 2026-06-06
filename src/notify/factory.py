@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
-from ..config import TelegramConfig
-from .base import Notifier
-from .telegram import TelegramNotifier
+from src.config import TelegramConfig
+from src.notify.base import Notifier
+from src.notify.telegram import TelegramNotifier
 
 
 def build_notifier(name: str, telegram: TelegramConfig) -> Notifier | None:

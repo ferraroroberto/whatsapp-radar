@@ -13,6 +13,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from app.webapp.server import create_app
+from src.webapp_config import WebappConfig
 
 LOOPBACK = ("127.0.0.1", 5555)
 TAILNET = ("100.64.0.1", 5555)
@@ -20,13 +21,12 @@ REMOTE = ("203.0.113.5", 5555)
 
 
 def _client(
-    client: tuple[str, int] = LOOPBACK, *, token: str | None = None, password: str | None = None
+    client: tuple[str, int] = LOOPBACK, *, token: str = "", password: str = ""
 ) -> TestClient:
+    # Inject a clean config so the suite never depends on a developer's real
+    # config/webapp_config.json (which may carry a token/password).
     app = create_app()
-    if token is not None:
-        app.state.webapp_config.auth_token = token
-    if password is not None:
-        app.state.webapp_config.auth_password = password
+    app.state.webapp_config = WebappConfig(auth_token=token, auth_password=password)
     return TestClient(app, client=client)
 
 

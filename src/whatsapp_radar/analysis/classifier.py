@@ -21,6 +21,22 @@ from typing import Protocol, runtime_checkable
 
 from ..config import HubConfig
 from ..models import StoredMessage
+from .keywords import has_actionable_signal
+from .prompts import load_prompt
+
+# Returned by the cascade when the cheap prefilter finds no actionable signal, so
+# no LLM call is made. Mirrors the contract the parser expects.
+_NO_SIGNAL_RESULT = json.dumps(
+    {
+        "action_required": False,
+        "priority": None,
+        "summary": None,
+        "suggested_next_action": None,
+        "deadline": None,
+        "confidence": 0.5,
+        "evidence_message_ids": [],
+    }
+)
 
 # Keywords that deterministically mark a message as actionable for the stub.
 _ACTION_KEYWORDS = (
@@ -122,17 +138,10 @@ class StubClassifier:
         return json.dumps(result, ensure_ascii=False)
 
 
-_SYSTEM_PROMPT = (
-    "You triage WhatsApp group messages for a busy parent. You receive only the "
-    "NEW messages since the last review, plus compact prior context. Decide whether "
-    "they contain anything that REQUIRES the user's attention or action (deadlines, "
-    "payments, forms, RSVPs, direct requests). Ignore small talk. Respond with a "
-    "single JSON object and nothing else, with keys: action_required (bool), "
-    "priority ('low'|'medium'|'high' or null), summary (string or null), "
-    "suggested_next_action (string or null), deadline (string or null), confidence "
-    "(number 0..1), evidence_message_ids (array of the source_message_id strings you "
-    "relied on)."
-)
+# The system prompt is kept in an inspectable Markdown file
+# (analysis/prompts/classification_system.md) so it can be reviewed and tuned
+# without code changes. It is loaded verbatim at import time.
+_SYSTEM_PROMPT = load_prompt("classification_system")
 
 
 class HubClassifier:
@@ -162,9 +171,13 @@ class HubClassifier:
         client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
         response = client.messages.create(
             model=self._hub.model,
-            # Generous budget: agentic_light is a reasoning model that emits a
-            # <think> trace before the JSON, so a small cap truncates the answer.
-            max_tokens=2048,
+            # agentic_light is a reasoning model that emits a long <think> trace
+            # before the JSON; the budget must cover the trace AND the answer, or
+            # the response is truncated mid-think and yields no parseable JSON.
+            max_tokens=8192,
+            # Triage must be stable: identical messages must classify identically,
+            # so pin temperature to 0 rather than leaving the model's default.
+            temperature=0,
             system=_SYSTEM_PROMPT,
             messages=[
                 {
@@ -181,10 +194,33 @@ class HubClassifier:
         return _extract_json_object("".join(parts))
 
 
+class CascadeClassifier:
+    """Two-stage classifier: a cheap keyword prefilter gates an LLM call.
+
+    The prefilter (multilingual, ES/EN/CA) drops "utter noise" deltas without an
+    LLM round-trip: if no message carries an actionable root, it returns a
+    not-actionable result immediately. Otherwise it hands the whole (small) delta
+    to ``inner`` — the surrounding messages give the LLM the context a single
+    keyword-matching line would lack.
+    """
+
+    def __init__(self, inner: Classifier) -> None:
+        self._inner = inner
+
+    def classify(
+        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+    ) -> str:
+        if not has_actionable_signal(delta):
+            return _NO_SIGNAL_RESULT
+        return self._inner.classify(chat_display_name, delta, prior_context)
+
+
 def build_classifier(name: str, hub: HubConfig) -> Classifier:
-    """Construct a classifier by config name ('stub' | 'hub')."""
+    """Construct a classifier by config name ('stub' | 'hub' | 'cascade')."""
     if name == "stub":
         return StubClassifier()
     if name == "hub":
         return HubClassifier(hub)
-    raise ValueError(f"unknown classifier: {name!r} (expected 'stub' or 'hub')")
+    if name == "cascade":
+        return CascadeClassifier(HubClassifier(hub))
+    raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")

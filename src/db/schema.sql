@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS chats (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
     source_chat_id           TEXT NOT NULL UNIQUE,
     display_name             TEXT NOT NULL,
+    -- Operator-supplied label that overrides display_name in the UI. The human
+    -- fallback for chats the connector can only name as a bare number/JID.
+    alias                    TEXT,
     chat_type                TEXT NOT NULL DEFAULT 'group',
     status                   TEXT NOT NULL DEFAULT 'discovered',
     first_seen_at            TEXT NOT NULL,

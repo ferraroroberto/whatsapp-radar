@@ -390,12 +390,27 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   margin-bottom: 10px;
 }
 .modal-title {
+  /* Fill the row so the action buttons group together at the right edge
+     (rather than space-between scattering the pencil into the middle). */
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Header actions are equal squares so the ✏️ and ✕ match regardless of glyph. */
+.modal-head .icon-btn {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .history-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hist-msg { padding: 8px 0; border-bottom: 1px solid var(--border); }

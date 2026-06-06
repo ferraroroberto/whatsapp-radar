@@ -143,6 +143,24 @@ def test_get_chat(conn: sqlite3.Connection) -> None:
     assert store.get_chat(conn, 99999) is None
 
 
+def test_set_chat_alias_set_and_clear(conn: sqlite3.Connection) -> None:
+    mon, _ = _seed(conn)
+    assert store.get_chat(conn, mon)["alias"] is None
+
+    assert store.set_chat_alias(conn, mon, "  Tom  ") is True  # trimmed
+    assert store.get_chat(conn, mon)["alias"] == "Tom"
+    # The alias also surfaces in the overview listing the webapp renders.
+    overview = {r["id"]: r for r in store.chats_overview(conn)}
+    assert overview[mon]["alias"] == "Tom"
+
+    # Whitespace-only and None both clear back to NULL.
+    assert store.set_chat_alias(conn, mon, "   ") is True
+    assert store.get_chat(conn, mon)["alias"] is None
+    store.set_chat_alias(conn, mon, "Tom")
+    assert store.set_chat_alias(conn, mon, None) is True
+    assert store.get_chat(conn, mon)["alias"] is None
+
+
 # --- /api/chats endpoints ---------------------------------------------------
 
 def _app_with_db(db: Path, *, token: str = "") -> Any:
@@ -250,6 +268,29 @@ def test_status_ignore_and_validation(tmp_path: Path) -> None:
         assert store.get_chat(conn, mon)["status"] == "ignored"
     finally:
         conn.close()
+
+
+def test_alias_endpoint_sets_clears_and_validates(tmp_path: Path) -> None:
+    db = tmp_path / "alias.sqlite3"
+    conn = store.connect(db)
+    mon, _ = _seed(conn)
+    conn.close()
+
+    with TestClient(_app_with_db(db), client=LOOPBACK) as client:
+        # Set an alias; it comes back trimmed and shows up in the listing.
+        res = client.post(f"/api/chats/{mon}/alias", json={"alias": "  Tom  "})
+        assert res.status_code == 200 and res.json() == {"id": mon, "alias": "Tom"}
+        listed = {c["id"]: c for c in client.get("/api/chats").json()["chats"]}
+        assert listed[mon]["alias"] == "Tom"
+        assert client.get(f"/api/chats/{mon}/history").json()["alias"] == "Tom"
+
+        # Blank clears it; an over-long value is capped at 100 chars.
+        assert client.post(f"/api/chats/{mon}/alias", json={"alias": ""}).json()["alias"] is None
+        capped = client.post(f"/api/chats/{mon}/alias", json={"alias": "x" * 250}).json()["alias"]
+        assert capped is not None and len(capped) == 100
+
+        # Unknown chat → 404.
+        assert client.post("/api/chats/99999/alias", json={"alias": "x"}).status_code == 404
 
 
 def test_chats_requires_token_from_remote(tmp_path: Path) -> None:

@@ -8,13 +8,26 @@ talks to WhatsApp and exposes no write surface, so the read-only guarantee of th
 
 Buffer layout (all under an ignored path, written by the sidecar):
 
-- ``chats.ndjson``    — one JSON line per chat upsert ``{jid, name, type, ts}``
+- ``chats.ndjson``    — one JSON line per chat upsert ``{jid, name, type, ts}``;
+  the sidecar also emits *alias* rows ``{jid, alias_for, ts}`` that map WhatsApp's
+  hidden ``@lid`` address for a contact onto its phone JID (see below)
 - ``messages.ndjson`` — one JSON line per message ``{jid, msg_id, ts, sender, text, type, raw}``
 - ``status.json``     — heartbeat ``{paired, connected, last_update, chats, messages}``
 
 Both NDJSON files are append-only; duplicates are expected (history sync + live
 events overlap, edits re-emit). The reader applies last-write-wins per key, and
 storage deduplicates again idempotently downstream.
+
+WhatsApp identifies the same contact under several JID forms — a phone JID
+(``<number>@s.whatsapp.net``), a legacy business form (``@c.us``), a device-scoped
+form (``<number>:<device>@…``), and an opaque privacy form (``<id>@lid``). Messages
+and chat-metadata events can arrive under *different* forms for one identity, which
+would otherwise strand a chat with the wrong (raw-JID) name or zero associated
+messages. To keep one row per identity the reader (a) normalizes every JID to a
+canonical form (lower-cased, device/agent suffix dropped, ``@c.us`` → ``@s.whatsapp.net``)
+and (b) folds ``alias_for`` rows so an ``@lid`` JID collapses onto its phone JID
+before chats and messages are keyed. When no human name can be resolved it falls
+back to a readable form (``+<number>``) rather than surfacing the raw JID suffix.
 """
 
 from __future__ import annotations
@@ -42,6 +55,8 @@ class LinkedDeviceConnector:
         # Lazily-built {jid: {msg_id: row}} index so the (potentially large)
         # messages file is parsed once per connector, not once per chat.
         self._index: dict[str, dict[str, dict[str, Any]]] | None = None
+        # Lazily-built {alias_jid: canonical_jid} map from the sidecar's alias rows.
+        self._aliases: dict[str, str] | None = None
 
     # --- connection status -------------------------------------------------
 
@@ -71,30 +86,34 @@ class LinkedDeviceConnector:
     def list_chats(self) -> list[ChatRecord]:
         latest: dict[str, dict[str, Any]] = {}
         for row in self._read_ndjson(self._chats_file):
-            jid = row.get("jid")
+            if row.get("alias_for"):
+                continue  # alias rows carry no chat metadata — folded in _alias_map
+            jid = self._canonical_jid(row.get("jid"))
             if not jid:
                 continue
-            # Keep a previously-seen name if a later event omitted it.
-            if jid in latest and not row.get("name"):
-                row["name"] = latest[jid].get("name")
-            latest[jid] = row
+            # Keep a previously-seen name if a later event omitted it (last write
+            # wins on a real name, but a later nameless event never clears one).
+            name = row.get("name") or (latest[jid].get("name") if jid in latest else None)
+            latest[jid] = {"name": name, "type": row.get("type")}
+        index = self._message_index()
         return [
             ChatRecord(
                 source_chat_id=jid,
-                display_name=row.get("name") or jid,
-                chat_type=row.get("type", "group"),
+                display_name=row.get("name") or self._derive_name(jid, index.get(jid, {})),
+                chat_type=row.get("type") or self._chat_type(jid),
             )
             for jid, row in latest.items()
         ]
 
     def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
-        latest = self._message_index().get(source_chat_id, {})
+        key = self._canonical_jid(source_chat_id)
+        latest = self._message_index().get(key, {}) if key else {}
         messages = [
             MessageRecord(
                 source_message_id=row["msg_id"],
                 message_timestamp=row.get("ts", ""),
                 text=row.get("text"),
-                sender_label=row.get("sender"),
+                sender_label=self._sender_label(row),
                 message_type=row.get("type", "text"),
                 raw=row,
             )
@@ -109,16 +128,120 @@ class LinkedDeviceConnector:
         return None
 
     def _message_index(self) -> dict[str, dict[str, dict[str, Any]]]:
-        """Parse messages.ndjson once into {jid: {msg_id: row}} (last write wins)."""
+        """Parse messages.ndjson once into {canonical_jid: {msg_id: row}} (last write wins).
+
+        Keys are canonicalized (and alias-folded) so messages that arrive under a
+        JID variant of a chat associate to that chat rather than vanishing.
+        """
         if self._index is None:
             index: dict[str, dict[str, dict[str, Any]]] = {}
             for row in self._read_ndjson(self._messages_file):
-                jid = row.get("jid")
+                jid = self._canonical_jid(row.get("jid"))
                 msg_id = row.get("msg_id")
                 if jid and msg_id:
                     index.setdefault(jid, {})[msg_id] = row
             self._index = index
         return self._index
+
+    # --- JID canonicalization & name resolution ----------------------------
+
+    @staticmethod
+    def _normalize_jid(jid: Any) -> str | None:
+        """Canonicalize a single JID: lower-case, drop device/agent suffix, c.us→net.
+
+        Mirrors Baileys' ``jidNormalizedUser`` so the Python reader keys identities
+        the same way the sidecar does. Does not resolve ``@lid`` to a phone JID —
+        that mapping is only known to the sidecar and arrives as an alias row.
+        """
+        if not isinstance(jid, str):
+            return None
+        text = jid.strip().lower()
+        if not text:
+            return None
+        at = text.find("@")
+        if at < 0:
+            return text
+        user, server = text[:at], text[at + 1 :]
+        # The user part may carry an agent ("_N") and/or device (":N") suffix.
+        user = user.split(":", 1)[0].split("_", 1)[0]
+        if server == "c.us":
+            server = "s.whatsapp.net"
+        return f"{user}@{server}"
+
+    def _alias_map(self) -> dict[str, str]:
+        """Parse the sidecar's ``alias_for`` rows into {alias_jid: canonical_jid}."""
+        if self._aliases is None:
+            aliases: dict[str, str] = {}
+            for row in self._read_ndjson(self._chats_file):
+                target = row.get("alias_for")
+                if not target:
+                    continue
+                src = self._normalize_jid(row.get("jid"))
+                dst = self._normalize_jid(target)
+                if src and dst and src != dst:
+                    aliases[src] = dst
+            self._aliases = aliases
+        return self._aliases
+
+    def _canonical_jid(self, jid: Any) -> str | None:
+        """Normalize then fold through the alias map to one identity key."""
+        norm = self._normalize_jid(jid)
+        if norm is None:
+            return None
+        aliases = self._alias_map()
+        seen: set[str] = set()
+        while norm in aliases and norm not in seen:
+            seen.add(norm)
+            norm = aliases[norm]
+        return norm
+
+    @staticmethod
+    def _chat_type(jid: str) -> str:
+        return "group" if jid.endswith("@g.us") else "dm"
+
+    def _derive_name(self, jid: str, messages: dict[str, dict[str, Any]]) -> str:
+        """Best readable name for a chat the sidecar never labelled.
+
+        For a 1:1 chat the remote's most recent push name *is* the contact name, so
+        use it before falling back to a formatted phone number. Group chats always
+        receive a subject from the sidecar, so they only reach the humanized form
+        when genuinely unlabelled.
+        """
+        if self._chat_type(jid) == "dm":
+            for row in sorted(
+                messages.values(), key=lambda r: r.get("ts", ""), reverse=True
+            ):
+                sender = row.get("sender")
+                if sender and sender != "me" and not (row.get("raw") or {}).get("from_me"):
+                    return str(sender)
+        return self._humanize_jid(jid)
+
+    @classmethod
+    def _humanize_jid(cls, jid: Any) -> str:
+        """A readable label for a JID — ``+<number>`` for phone JIDs, else the bare
+        user part — so the raw ``@domain`` suffix never reaches the UI."""
+        norm = cls._normalize_jid(jid) or (jid if isinstance(jid, str) else "")
+        at = norm.find("@")
+        user = norm[:at] if at >= 0 else norm
+        server = norm[at + 1 :] if at >= 0 else ""
+        if server == "s.whatsapp.net" and user.isdigit():
+            return f"+{user}"
+        return user or norm
+
+    def _sender_label(self, row: dict[str, Any]) -> str | None:
+        """Resolve a message's sender, falling back to the participant JID.
+
+        History-synced messages often lack a push name, leaving the UI to render a
+        blank sender. For group messages the participant JID is still available in
+        ``raw`` and can be humanized; an own message resolves to "me"."""
+        sender = row.get("sender")
+        if sender:
+            return str(sender)
+        raw = row.get("raw") or {}
+        if raw.get("from_me"):
+            return "me"
+        participant = raw.get("participant")
+        return self._humanize_jid(participant) if participant else None
 
     # --- internals ---------------------------------------------------------
 

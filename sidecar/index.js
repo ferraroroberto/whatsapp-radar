@@ -10,9 +10,18 @@
  *
  * Storage layout (all under ignored paths, never committed):
  *   auth/                          linked-device credentials (multi-file auth)
- *   data/linked_device/chats.ndjson      one JSON line per chat upsert
+ *   data/linked_device/chats.ndjson      one JSON line per chat upsert; also
+ *                                        alias rows {jid, alias_for} mapping a
+ *                                        contact's @lid form onto its phone JID
  *   data/linked_device/messages.ndjson   one JSON line per message
  *   data/linked_device/status.json       heartbeat for the Python `status()`
+ *
+ * WhatsApp addresses one contact under several JID forms (phone @s.whatsapp.net,
+ * device-scoped <num>:<dev>@…, and the opaque privacy form <id>@lid). We normalize
+ * every JID we write (jidNormalizedUser) and, whenever a contact event reveals the
+ * @lid↔phone pairing, emit an alias row so the Python reader can fold both onto one
+ * identity. This is unofficial-protocol behavior and may shift across Baileys
+ * releases; the reader degrades gracefully (raw → humanized name) if it does.
  *
  * Lifecycle is explicit: run `npm start` (or `node index.js`) and leave it
  * running so it catches live messages. On first run it prints a QR code to
@@ -27,6 +36,10 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  jidNormalizedUser,
+  isJidGroup,
+  isJidUser,
+  isLidUser,
 } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
@@ -77,16 +90,33 @@ setInterval(() => writeStatus(currentConnected, currentPaired), 30_000).unref();
 
 function appendChat(jid, name, type) {
   if (!jid || jid === "status@broadcast") return;
+  const norm = jidNormalizedUser(jid) || jid;
   appendFileSync(
     chatsFile,
-    JSON.stringify({ jid, name: name || null, type, ts: new Date().toISOString() }) + "\n",
+    JSON.stringify({ jid: norm, name: name || null, type, ts: new Date().toISOString() }) + "\n",
     "utf-8",
   );
   chatsSeen += 1;
 }
 
+/**
+ * Record that a contact's hidden @lid address and phone JID are the same person,
+ * so the reader folds messages/metadata under either onto one chat row.
+ */
+function appendAlias(lidJid, phoneJid) {
+  if (!lidJid || !phoneJid) return;
+  const alias = jidNormalizedUser(lidJid) || lidJid;
+  const target = jidNormalizedUser(phoneJid) || phoneJid;
+  if (alias === target) return;
+  appendFileSync(
+    chatsFile,
+    JSON.stringify({ jid: alias, alias_for: target, ts: new Date().toISOString() }) + "\n",
+    "utf-8",
+  );
+}
+
 function chatType(jid) {
-  return jid && jid.endsWith("@g.us") ? "group" : "dm";
+  return isJidGroup(jid) ? "group" : "dm";
 }
 
 /**
@@ -150,8 +180,9 @@ function appendMessage(m) {
   const norm = normalizeMessage(m);
   if (!norm) return;
 
+  const participant = m.key.participant ? jidNormalizedUser(m.key.participant) : null;
   const record = {
-    jid,
+    jid: jidNormalizedUser(jid) || jid,
     msg_id: msgId,
     ts: isoFromTimestamp(m.messageTimestamp),
     sender: m.pushName || (m.key.fromMe ? "me" : null),
@@ -159,7 +190,7 @@ function appendMessage(m) {
     type: norm.type,
     raw: {
       from_me: Boolean(m.key.fromMe),
-      participant: m.key.participant || null,
+      participant,
     },
   };
   appendFileSync(messagesFile, JSON.stringify(record) + "\n", "utf-8");
@@ -220,10 +251,15 @@ async function start() {
   });
 
   // Contact names (for DMs) — only write rows that actually carry a name.
+  // Contacts also reveal the @lid↔phone pairing (ct.id / ct.lid), which we record
+  // as an alias so messages under either address land on one chat row.
   const onContacts = (contacts) => {
     for (const ct of contacts || []) {
       const name = ct.name || ct.notify || ct.verifiedName;
       if (ct.id && name) appendChat(ct.id, name, chatType(ct.id));
+      const phone = isJidUser(ct.id) ? ct.id : isJidUser(ct.lid) ? ct.lid : null;
+      const lid = isLidUser(ct.id) ? ct.id : isLidUser(ct.lid) ? ct.lid : null;
+      if (phone && lid) appendAlias(lid, phone);
     }
   };
   sock.ev.on("contacts.upsert", onContacts);
@@ -248,7 +284,12 @@ async function start() {
   // Live messages.
   sock.ev.on("messages.upsert", ({ messages }) => {
     for (const m of messages || []) {
-      appendChat(m.key?.remoteJid, undefined, chatType(m.key?.remoteJid));
+      const rj = m.key?.remoteJid;
+      // On a 1:1 chat the remote's push name *is* the contact name, so feed it in
+      // as the chat name — this is often the only label an unsaved contact ever gets.
+      const dmName =
+        rj && !isJidGroup(rj) && !m.key?.fromMe ? m.pushName || undefined : undefined;
+      appendChat(rj, dmName, chatType(rj));
       appendMessage(m);
     }
     writeStatus(true, true);

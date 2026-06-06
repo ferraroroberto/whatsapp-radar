@@ -194,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_notify.add_argument(
         "--run", type=int, default=None, help="run id to deliver (default: latest)"
     )
+
+    sub.add_parser("tray", help="run the system-tray surface that owns the admin webapp")
     return parser
 
 
@@ -204,6 +206,13 @@ def main(argv: list[str] | None = None) -> int:
             reconfigure(encoding="utf-8")
 
     args = build_parser().parse_args(argv)
+
+    # The tray owns the webapp lifecycle, not the message store — no DB needed.
+    if args.command == "tray":
+        from app.tray.tray import run_tray
+
+        return run_tray()
+
     config = load_config()
     conn = store.connect(config.db_path)
     try:

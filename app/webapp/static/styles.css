@@ -1,0 +1,191 @@
+/* Phone-first dark UI for the WhatsApp Radar admin PWA.
+ * Deliberately small: a tab bar, placeholder cards, a settings panel, a login
+ * overlay, and a toast. Steps 4–7 extend this as the tabs gain content. */
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #161616;
+  --surface-2: #1f1f1f;
+  --border: #2a2a2a;
+  --text: #ededed;
+  --muted: #9a9a9a;
+  --accent: #25d366;        /* WhatsApp green */
+  --accent-ink: #062b14;
+  --danger: #ef4444;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+/* The `hidden` attribute must always win, even over elements we give an
+ * explicit display (.login-overlay/.toast are display:flex/block). Without
+ * this, a hidden overlay still paints and intercepts pointer events. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: max(env(safe-area-inset-top), 12px) 12px calc(env(safe-area-inset-bottom) + 24px);
+}
+
+/* ---------------------------------------------------------------- tabs */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px 0;
+  background: var(--bg);
+}
+
+.tab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  padding: 12px 6px;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- cards */
+.pane { margin-top: 8px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.card h2 { margin: 0 0 6px; font-size: 1.1rem; }
+.card h3 { margin: 0 0 8px; font-size: 1rem; }
+
+.placeholder { text-align: center; padding: 40px 16px; }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+
+a { color: var(--accent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+/* ---------------------------------------------------------------- buttons */
+.big-btn {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 14px;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.icon-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.icon-btn.danger { color: var(--danger); }
+
+/* ---------------------------------------------------------------- settings */
+.settings-card { margin-top: 8px; }
+.settings-summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.settings-summary::-webkit-details-marker { display: none; }
+
+.webauthn-devices { list-style: none; margin: 8px 0; padding: 0; }
+.webauthn-devices li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------- login */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 16px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  text-align: center;
+}
+
+.login-card input {
+  width: 100%;
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.login-error {
+  margin-top: 12px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------- toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: 90%;
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.toast.good { border-color: var(--accent); }
+.toast.error { border-color: var(--danger); }

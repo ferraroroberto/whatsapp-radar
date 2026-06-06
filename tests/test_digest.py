@@ -8,7 +8,6 @@ from src.analysis.classifier import StubClassifier
 from src.analysis.review import review_monitored_chats
 from src.db import store
 from src.report.digest import build_digest
-
 from tests.helpers import chat_id_by_source
 
 

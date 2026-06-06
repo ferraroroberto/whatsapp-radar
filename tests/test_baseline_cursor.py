@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 
 from src.db import store
-
 from tests.helpers import append_message, chat_id_by_source
 
 

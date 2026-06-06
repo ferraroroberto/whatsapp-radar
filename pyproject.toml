@@ -10,9 +10,30 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["src", "app", "tests", "config", "scripts"]
+
 [tool.mypy]
 python_version = "3.11"
 mypy_path = "."
 explicit_package_bases = true
 strict = true
 warn_unused_ignores = true
+
+# Webapp third-party deps ship no type stubs. Keep our own code strict; just
+# silence the missing-import noise for these libraries.
+[[tool.mypy.overrides]]
+module = [
+    "fastapi.*",
+    "starlette.*",
+    "uvicorn.*",
+    "webauthn.*",
+    "pystray.*",
+    "PIL.*",
+    "yaml",
+    "psutil",
+    "winotify",
+    "requests.*",
+    "urllib3.*",
+]
+ignore_missing_imports = true

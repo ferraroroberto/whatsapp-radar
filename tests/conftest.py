@@ -7,9 +7,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
 from src.connector.fixture import FixtureConnector
 from src.db import store
-
 from tests.helpers import ingest_all
 
 

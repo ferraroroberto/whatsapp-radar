@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import pytest
+
 from src.config import TelegramConfig
 from src.notify import NotifierError, TelegramNotifier, build_notifier
 from src.notify import telegram as telegram_mod

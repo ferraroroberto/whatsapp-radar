@@ -103,9 +103,17 @@ def load_config(root: Path | None = None) -> Config:
         ),
         model=os.environ.get("WR_HUB_MODEL", hub_raw.get("model", "claude_sonnet")),
     )
+    # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)
+    # so the webapp UI owns them. Precedence: WR_TELEGRAM_* env > webapp_config >
+    # local.json/default.json. Imported lazily to avoid a config import cycle.
+    from src.webapp_config import load_webapp_config
+
+    wcfg = load_webapp_config()
+    tg_bot_default = wcfg.telegram_bot_token or tg_raw.get("bot_token", "")
+    tg_chat_default = wcfg.telegram_chat_id or tg_raw.get("chat_id", "")
     telegram = TelegramConfig(
-        bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_raw.get("bot_token", "")),
-        chat_id=os.environ.get("WR_TELEGRAM_CHAT_ID", tg_raw.get("chat_id", "")),
+        bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_bot_default),
+        chat_id=os.environ.get("WR_TELEGRAM_CHAT_ID", tg_chat_default),
     )
 
     resolved_db = Path(db_path)

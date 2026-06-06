@@ -67,6 +67,45 @@ def pytest_collection_modifyitems(
             item.add_marker(skip)
 
 
+def _seed_e2e_db(db_path: Path) -> None:
+    """Seed the throwaway e2e DB with SANITIZED fixtures only.
+
+    The Chats tab needs rows to toggle / open a history overlay for. Per the
+    project's hard privacy rule we use generic names ("Class 4A Group", …) and
+    invented text — never real WhatsApp data. One chat starts monitored, one
+    starts discovered so the toggle path has something to flip.
+    """
+    from src.db import store
+    from src.models import ChatRecord, MessageRecord
+
+    conn = store.connect(db_path)
+    try:
+        mon = store.upsert_chat(
+            conn,
+            ChatRecord(source_chat_id="e2e-g1", display_name="Class 4A Group", chat_type="group"),
+        )
+        store.upsert_chat(
+            conn,
+            ChatRecord(
+                source_chat_id="e2e-g2", display_name="School Parents Group", chat_type="group"
+            ),
+        )
+        store.set_chat_status(conn, mon, "monitored")
+        for i in range(3):
+            store.insert_message(
+                conn,
+                mon,
+                MessageRecord(
+                    source_message_id=f"e2e-a{i}",
+                    message_timestamp=f"2026-06-01T10:0{i}:00+00:00",
+                    text=f"sample message {i}",
+                    sender_label="Parent",
+                ),
+            )
+    finally:
+        conn.close()
+
+
 @pytest.fixture(scope="session")
 def base_url() -> Iterator[str]:
     if not _autoboot():
@@ -84,7 +123,9 @@ def base_url() -> Iterator[str]:
     # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
     # project's hard privacy rule — e2e runs only against sanitized/empty state.
     db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
-    env["WR_DB_PATH"] = str(Path(db_dir) / "e2e.sqlite3")
+    db_path = Path(db_dir) / "e2e.sqlite3"
+    env["WR_DB_PATH"] = str(db_path)
+    _seed_e2e_db(db_path)
     proc = subprocess.Popen(
         [
             sys.executable,

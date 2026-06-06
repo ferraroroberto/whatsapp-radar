@@ -1,0 +1,119 @@
+"""Config tab (#10): inspect the classifier, edit the safe settings subset.
+
+Read-only views of the LLM system prompt and the keyword roots — both are
+edited in their source files by design, never from the app. Editable: the safe
+runtime knobs (connector, classifier, notifier, hub model) which persist to the
+gitignored ``config/local.json`` host-override layer, plus the Telegram delivery
+secrets which persist to ``config/webapp_config.json``.
+
+The Telegram bot token is never returned in clear — only whether it is set and a
+last-4 hint — and a blank token field on save never overwrites a stored one.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+import src.analysis.keywords as keywords
+from src.analysis.prompts import load_prompt
+from src.config import load_config, save_local_overrides
+from src.webapp_config import load_webapp_config, update_webapp_config
+
+router = APIRouter()
+
+_VALID_CONNECTORS = {"fixture", "linked_device"}
+_VALID_CLASSIFIERS = {"stub", "hub", "cascade"}
+_VALID_NOTIFIERS = {"none", "telegram"}
+
+_FREQUENCY_NOTE = "Scan frequency is configured in App Launcher's Jobs tab, not here."
+
+
+class ConfigUpdate(BaseModel):
+    connector: str | None = None
+    classifier: str | None = None
+    notifier: str | None = None
+    hub_base_url: str | None = None
+    hub_model: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+
+
+def _read_roots_text() -> str:
+    """Verbatim contents of the keyword-roots file (shown read-only)."""
+    path = Path(keywords.__file__).with_name("prompts") / keywords._ROOTS_FILE
+    return path.read_text(encoding="utf-8")
+
+
+def _mask(token: str) -> dict[str, Any]:
+    return {"configured": bool(token), "hint": ("…" + token[-4:]) if len(token) >= 4 else ""}
+
+
+@router.get("/api/config")
+async def get_config() -> dict[str, Any]:
+    cfg = load_config()
+    wcfg = load_webapp_config()
+    return {
+        "prompt": load_prompt("classification_system"),
+        "keyword_roots": _read_roots_text(),
+        "settings": {
+            "connector": cfg.connector,
+            "classifier": cfg.classifier,
+            "notifier": cfg.notifier,
+            "hub": {"base_url": cfg.hub.base_url, "model": cfg.hub.model},
+        },
+        "telegram": {
+            "token": _mask(wcfg.telegram_bot_token),
+            "chat_id": wcfg.telegram_chat_id,
+        },
+        "options": {
+            "connector": sorted(_VALID_CONNECTORS),
+            "classifier": sorted(_VALID_CLASSIFIERS),
+            "notifier": sorted(_VALID_NOTIFIERS),
+        },
+        "note": _FREQUENCY_NOTE,
+    }
+
+
+@router.post("/api/config")
+async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
+    # Validate the enum-like fields before touching disk.
+    if payload.connector is not None and payload.connector not in _VALID_CONNECTORS:
+        raise HTTPException(status_code=400, detail=f"invalid connector {payload.connector!r}")
+    if payload.classifier is not None and payload.classifier not in _VALID_CLASSIFIERS:
+        raise HTTPException(status_code=400, detail=f"invalid classifier {payload.classifier!r}")
+    if payload.notifier is not None and payload.notifier not in _VALID_NOTIFIERS:
+        raise HTTPException(status_code=400, detail=f"invalid notifier {payload.notifier!r}")
+
+    # Safe runtime knobs → config/local.json (gitignored per-host override).
+    overrides: dict[str, Any] = {}
+    if payload.connector is not None:
+        overrides["connector"] = payload.connector
+    if payload.classifier is not None:
+        overrides["classifier"] = payload.classifier
+    if payload.notifier is not None:
+        overrides["notifier"] = payload.notifier
+    hub: dict[str, Any] = {}
+    if payload.hub_base_url is not None:
+        hub["base_url"] = payload.hub_base_url
+    if payload.hub_model is not None:
+        hub["model"] = payload.hub_model
+    if hub:
+        overrides["hub"] = hub
+    if overrides:
+        save_local_overrides(overrides)
+
+    # Telegram secrets → config/webapp_config.json. A blank token never
+    # overwrites a stored one (masked-secret pattern); chat_id may be cleared.
+    tg_fields: dict[str, Any] = {}
+    if payload.telegram_bot_token:
+        tg_fields["telegram_bot_token"] = payload.telegram_bot_token
+    if payload.telegram_chat_id is not None:
+        tg_fields["telegram_chat_id"] = payload.telegram_chat_id
+    if tg_fields:
+        update_webapp_config(**tg_fields)
+
+    return {"ok": True}

@@ -8,6 +8,8 @@ import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.j
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
 import { fetchDashboard } from './dashboard.js';
+import { fetchChats, wireChats } from './chats.js';
+import { fetchConfig, wireConfig } from './config.js';
 
 // --------------------------------------------------------- build identity
 async function fetchVersion() {
@@ -52,7 +54,13 @@ async function boot() {
 wireLoginForm(boot);
 wireTabs(function (tab) {
   if (tab === 'dashboard') fetchDashboard().catch(function () {});
+  if (tab === 'chats') {
+    fetchChats().catch(function () {});
+    if (!state.config) fetchConfig().catch(function () {});
+  }
 });
 wireWebauthn();
+wireChats();
+wireConfig();
 
 boot();

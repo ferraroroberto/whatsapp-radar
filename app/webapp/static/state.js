@@ -19,7 +19,16 @@ export const state = {
   tab: 'dashboard',
   webauthn: { configured: false, enrollment_open: false, devices: [] },
   dashboard: null,
+  // Chats & Config (#10)
+  chats: [],
+  chatsFilter: 'monitored',  // 'monitored' | 'all'
+  chatsSearch: '',
+  config: null,
 };
+
+// "All" can be ~900 chats on a real account; cap the DOM rows we render and
+// nudge the operator to search instead of scrolling a phone forever.
+export const CHATS_RENDER_CAP = 150;
 
 // ES modules are deferred — they execute after DOMContentLoaded, so
 // document.getElementById is safe at module top level.
@@ -44,6 +53,38 @@ export const els = {
   lastRunSummary: document.getElementById('lastRunSummary'),
   dashChannelsBody: document.getElementById('dashChannelsBody'),
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
+
+  // Chats (#10)
+  chatsRefresh: document.getElementById('chatsRefresh'),
+  chatsFilterMonitored: document.getElementById('chatsFilterMonitored'),
+  chatsFilterIgnored: document.getElementById('chatsFilterIgnored'),
+  chatsFilterAll: document.getElementById('chatsFilterAll'),
+  chatsSearchToggle: document.getElementById('chatsSearchToggle'),
+  chatsSearch: document.getElementById('chatsSearch'),
+  chatsCount: document.getElementById('chatsCount'),
+  chatsList: document.getElementById('chatsList'),
+  chatsEmpty: document.getElementById('chatsEmpty'),
+
+  // History overlay (#10)
+  historyOverlay: document.getElementById('historyOverlay'),
+  historyTitle: document.getElementById('historyTitle'),
+  historyClose: document.getElementById('historyClose'),
+  historyBody: document.getElementById('historyBody'),
+  historyEmpty: document.getElementById('historyEmpty'),
+
+  // Config (#10)
+  configCard: document.getElementById('configCard'),
+  cfgPrompt: document.getElementById('cfgPrompt'),
+  cfgRoots: document.getElementById('cfgRoots'),
+  configForm: document.getElementById('configForm'),
+  cfgConnector: document.getElementById('cfgConnector'),
+  cfgClassifier: document.getElementById('cfgClassifier'),
+  cfgNotifier: document.getElementById('cfgNotifier'),
+  cfgHubBaseUrl: document.getElementById('cfgHubBaseUrl'),
+  cfgHubModel: document.getElementById('cfgHubModel'),
+  cfgTgToken: document.getElementById('cfgTgToken'),
+  cfgTgChatId: document.getElementById('cfgTgChatId'),
+  cfgNote: document.getElementById('cfgNote'),
 
   settingsPanel: document.getElementById('settingsPanel'),
   webauthnStatus: document.getElementById('webauthnStatus'),

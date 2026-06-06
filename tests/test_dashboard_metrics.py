@@ -113,9 +113,10 @@ def test_aggregates_reconcile(conn: sqlite3.Connection) -> None:
     assert store.message_count_total(conn) == 5
 
     per_chat = store.messages_per_chat(conn, monitored_only=True)
+    # Ordered by last message descending: School Parents (11:01) before Class 4A (10:02).
     assert [(r["display_name"], r["message_count"]) for r in per_chat] == [
-        ("Class 4A Group", 3),
         ("School Parents Group", 2),
+        ("Class 4A Group", 3),
     ]
     # The ignored chat is excluded from the monitored-only view.
     assert len(store.messages_per_chat(conn, monitored_only=False)) == 3
@@ -161,7 +162,8 @@ def test_dashboard_endpoint_numbers(tmp_path: Path) -> None:
     assert body["chats"] == {"discovered": 0, "monitored": 2, "ignored": 1, "total": 3}
     assert body["messages"]["total"] == 5
     assert len(body["messages"]["per_channel"]) == 2
-    assert body["messages"]["per_channel"][0]["name"] == "Class 4A Group"
+    # Most recently active channel first.
+    assert body["messages"]["per_channel"][0]["name"] == "School Parents Group"
     assert body["scans"]["count"] == 1
     assert body["scans"]["last"]["mode"] == "live"
     assert body["alerts"] == {"actionable": 1, "notifications_sent": 1}

@@ -83,6 +83,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
         if name not in existing:
             conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
+    # `chats.alias` (operator override label) was added after the initial schema.
+    chat_cols = {row["name"] for row in conn.execute("PRAGMA table_info(chats)")}
+    if "alias" not in chat_cols:
+        conn.execute("ALTER TABLE chats ADD COLUMN alias TEXT")
 
 
 # --- chats -----------------------------------------------------------------
@@ -116,6 +120,20 @@ def set_chat_status(conn: sqlite3.Connection, chat_id: int, status: str) -> bool
     return cur.rowcount > 0
 
 
+def set_chat_alias(conn: sqlite3.Connection, chat_id: int, alias: str | None) -> bool:
+    """Set (or clear, with None) a chat's operator alias. True if a row changed.
+
+    The alias overrides the connector-derived ``display_name`` in the UI; an empty
+    or whitespace-only value is normalized to NULL so it falls back to that name.
+    """
+    cleaned = alias.strip() if alias else None
+    cur = conn.execute(
+        "UPDATE chats SET alias = ? WHERE id = ?", (cleaned or None, chat_id)
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def list_chats(
     conn: sqlite3.Connection, *, order_by_recent: bool = False
 ) -> list[sqlite3.Row]:
@@ -128,7 +146,7 @@ def list_chats(
     )
     return list(
         conn.execute(
-            "SELECT id, source_chat_id, display_name, chat_type, status, last_message_at "
+            "SELECT id, source_chat_id, display_name, alias, chat_type, status, last_message_at "
             f"FROM chats {order}"
         ).fetchall()
     )
@@ -575,7 +593,7 @@ def chats_overview(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """
     return list(
         conn.execute(
-            "SELECT c.id, c.source_chat_id, c.display_name, c.chat_type, c.status, "
+            "SELECT c.id, c.source_chat_id, c.display_name, c.alias, c.chat_type, c.status, "
             "c.last_message_at, "
             "(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS message_count, "
             "(SELECT m.text FROM messages m WHERE m.chat_id = c.id "
@@ -625,7 +643,7 @@ def recent_messages(
 def get_chat(conn: sqlite3.Connection, chat_id: int) -> sqlite3.Row | None:
     """Return a single chat row by internal id, or None if it doesn't exist."""
     row: sqlite3.Row | None = conn.execute(
-        "SELECT id, source_chat_id, display_name, chat_type, status, last_message_at "
+        "SELECT id, source_chat_id, display_name, alias, chat_type, status, last_message_at "
         "FROM chats WHERE id = ?",
         (chat_id,),
     ).fetchone()

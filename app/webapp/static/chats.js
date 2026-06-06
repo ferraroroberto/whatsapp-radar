@@ -25,6 +25,13 @@ function fmtTsFull(ts) {
 
 const HISTORY_PAGE = 30;
 
+// The label shown for a chat: the operator alias takes precedence, with the
+// connector-derived name kept in parentheses so both are visible — e.g.
+// "Tom (+44123…)". Without an alias it's just the derived name.
+function chatLabel(c) {
+  return c.alias ? c.alias + ' (' + c.name + ')' : c.name;
+}
+
 export async function fetchChats() {
   let data;
   try {
@@ -44,7 +51,7 @@ function visibleChats() {
     // simply everything that isn't monitored.
     if (state.chatsFilter === 'monitored' && c.status !== 'monitored') return false;
     if (state.chatsFilter === 'ignored' && c.status === 'monitored') return false;
-    if (q && !(c.name || '').toLowerCase().includes(q)) return false;
+    if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -80,8 +87,8 @@ function row(c) {
 
   const name = document.createElement('span');
   name.className = 'chat-name';
-  name.title = c.name;
-  name.textContent = c.name;
+  name.title = chatLabel(c);
+  name.textContent = chatLabel(c);
 
   const meta = document.createElement('span');
   meta.className = 'chat-meta';
@@ -131,7 +138,9 @@ async function setStatus(chat, status) {
 }
 
 // --------------------------------------------------------- history overlay
-const hist = { chatId: null, oldestTs: null, oldestId: null, hasMore: false, loading: false };
+const hist = {
+  chat: null, chatId: null, oldestTs: null, oldestId: null, hasMore: false, loading: false,
+};
 
 function histMsg(m) {
   const item = document.createElement('div');
@@ -155,10 +164,11 @@ function appendPage(msgs) {
 }
 
 async function openHistory(chat) {
-  els.historyTitle.textContent = chat.name;
+  els.historyTitle.textContent = chatLabel(chat);
   els.historyBody.textContent = '';
   els.historyEmpty.hidden = true;
   els.historyOverlay.hidden = false;
+  hist.chat = chat;
   hist.chatId = chat.id;
   hist.oldestTs = null;
   hist.oldestId = null;
@@ -206,7 +216,32 @@ async function loadOlder() {
 function closeHistory() {
   els.historyOverlay.hidden = true;
   els.historyBody.textContent = '';
+  hist.chat = null;
   hist.chatId = null;
+}
+
+// Rename: set or clear the operator alias for the chat in the open overlay. The
+// derived name stays in the DB (and the parenthesized label); the alias is the
+// human-friendly override that shows first — useful when the connector could only
+// resolve a bare number (e.g. an unsaved contact).
+async function renameChat() {
+  const chat = hist.chat;
+  if (!chat) return;
+  const next = window.prompt('Alias for this chat (blank to clear):', chat.alias || '');
+  if (next === null) return; // cancelled
+  try {
+    const res = await jsonApi('/api/chats/' + chat.id + '/alias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alias: next }),
+    });
+    chat.alias = res.alias;
+    els.historyTitle.textContent = chatLabel(chat);
+    render();
+    toast(res.alias ? 'Alias saved.' : 'Alias cleared.', 'good');
+  } catch (exc) {
+    toast('Rename failed: ' + (exc.message || exc), 'error');
+  }
 }
 
 // --------------------------------------------------------- wiring
@@ -232,6 +267,7 @@ export function wireChats() {
     state.chatsSearch = els.chatsSearch.value;
     render();
   });
+  els.historyRename.addEventListener('click', function () { renameChat().catch(function () {}); });
   els.historyClose.addEventListener('click', closeHistory);
   els.historyOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.historyOverlay) closeHistory();

@@ -21,6 +21,7 @@ router = APIRouter()
 
 _VALID_STATUSES = {"discovered", "monitored", "ignored"}
 _HISTORY_MAX = 200
+_ALIAS_MAX = 100
 
 
 def _db_path(request: Request) -> Path:
@@ -31,6 +32,11 @@ def _db_path(request: Request) -> Path:
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class AliasUpdate(BaseModel):
+    # An empty/whitespace value clears the alias (falls back to the derived name).
+    alias: str | None = None
 
 
 @router.get("/api/chats")
@@ -44,6 +50,7 @@ async def list_chats(request: Request) -> dict[str, Any]:
                     "id": int(row["id"]),
                     "source_chat_id": row["source_chat_id"],
                     "name": row["display_name"],
+                    "alias": row["alias"],
                     "type": row["chat_type"],
                     "status": row["status"],
                     "count": int(row["message_count"]),
@@ -77,6 +84,7 @@ async def chat_history(
         return {
             "chat_id": chat_id,
             "name": chat["display_name"],
+            "alias": chat["alias"],
             "has_more": has_more,
             "messages": [
                 {
@@ -111,5 +119,18 @@ async def set_status(request: Request, chat_id: int, payload: StatusUpdate) -> d
             store.baseline_cursor(conn, chat_id) if payload.status == "monitored" else False
         )
         return {"id": chat_id, "status": payload.status, "baselined": baselined}
+    finally:
+        conn.close()
+
+
+@router.post("/api/chats/{chat_id}/alias")
+async def set_alias(request: Request, chat_id: int, payload: AliasUpdate) -> dict[str, Any]:
+    cleaned = (payload.alias or "").strip()[:_ALIAS_MAX] or None
+    conn = store.connect(_db_path(request))
+    try:
+        if store.get_chat(conn, chat_id) is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+        store.set_chat_alias(conn, chat_id, cleaned)
+        return {"id": chat_id, "alias": cleaned}
     finally:
         conn.close()

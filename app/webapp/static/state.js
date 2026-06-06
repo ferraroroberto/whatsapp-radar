@@ -68,6 +68,7 @@ export const els = {
   // History overlay (#10)
   historyOverlay: document.getElementById('historyOverlay'),
   historyTitle: document.getElementById('historyTitle'),
+  historyRename: document.getElementById('historyRename'),
   historyClose: document.getElementById('historyClose'),
   historyBody: document.getElementById('historyBody'),
   historyEmpty: document.getElementById('historyEmpty'),

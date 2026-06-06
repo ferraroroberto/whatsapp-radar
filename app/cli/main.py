@@ -64,7 +64,9 @@ def _cmd_chats(conn: sqlite3.Connection, recent: bool, limit: int | None) -> int
     shown = chats[:limit] if limit else chats
     for c in shown:
         last = (c["last_message_at"] or "")[:16].replace("T", " ")
-        print(f"[{c['id']:>4}] {c['status']:<10} {last:<16}  {c['display_name']}")
+        alias = c["alias"]
+        label = f"{alias} ({c['display_name']})" if alias else c["display_name"]
+        print(f"[{c['id']:>4}] {c['status']:<10} {last:<16}  {label}")
     if limit and len(chats) > limit:
         print(f"… {len(chats) - limit} more (showing {limit} of {len(chats)}).")
     return 0

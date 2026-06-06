@@ -6,7 +6,9 @@
   "linked_device_dir": "data/linked_device",
   "hub": {
     "base_url": "http://127.0.0.1:8000",
-    "model": "claude_sonnet"
+    "model": "claude_sonnet",
+    "max_tokens": 8192,
+    "max_prompt_chars": 24000
   },
   "telegram": {
     "bot_token": "",

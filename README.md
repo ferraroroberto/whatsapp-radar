@@ -40,6 +40,38 @@ The practical connector path for personal/group chats is likely a WhatsApp Web l
 
 Before building product features, complete the spike in [`docs/onboarding.md`](docs/onboarding.md).
 
+## Running The Spike (No Personal Data)
+
+The spike runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. All runtime state lives under the ignored `data/` path.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+
+# Ingest sanitized fixture chats/messages into local SQLite, then pick chats to monitor.
+.\.venv\Scripts\wr.exe ingest
+.\.venv\Scripts\wr.exe chats
+.\.venv\Scripts\wr.exe monitor 1
+.\.venv\Scripts\wr.exe monitor 3
+
+# First review classifies the delta and prints one consolidated digest.
+.\.venv\Scripts\wr.exe review --dry-run
+# Second review with no new messages does nothing and produces no notification.
+.\.venv\Scripts\wr.exe review --dry-run
+```
+
+Adding new messages causes only the delta to be reviewed; the per-chat cursor advances only after analysis is persisted, so a classifier error safely reprocesses the same delta next run.
+
+Classification defaults to the offline stub. To route through [local-llm-hub](../local-llm-hub) instead (the `agentic_light` model on `127.0.0.1:8000`), set `WR_CLASSIFIER=hub` with the hub running. The real WhatsApp linked-device connector and Telegram delivery are deferred to follow-up issues.
+
+Verification gate:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m mypy src
+```
+
 ## Repository Status
 
-Initial planning scaffold only. The implementation plan lives in GitHub issues so it can be resumed cold by another agent.
+Spike foundation implemented (onboarding steps 1–7): read-only fixture connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, and a consolidated dry-run digest, all driven by the `wr` CLI. The real linked-device connector and Telegram delivery remain in GitHub issues so they can be resumed cold.

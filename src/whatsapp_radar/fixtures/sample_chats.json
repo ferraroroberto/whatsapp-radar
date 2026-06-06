@@ -1,0 +1,68 @@
+{
+  "_comment": "Sanitized, generic fixture data. No real chat names, people, or numbers. Used to develop and test the full pipeline without WhatsApp access.",
+  "chats": [
+    {
+      "source_chat_id": "chat-class-4a",
+      "display_name": "Class 4A Group",
+      "chat_type": "group",
+      "messages": [
+        {
+          "source_message_id": "c4a-0001",
+          "message_timestamp": "2026-06-01T08:00:00+00:00",
+          "sender_label": "Parent One",
+          "text": "Good morning everyone!"
+        },
+        {
+          "source_message_id": "c4a-0002",
+          "message_timestamp": "2026-06-01T08:05:00+00:00",
+          "sender_label": "Teacher",
+          "text": "Reminder: please bring the signed permission slip by Friday for the museum trip."
+        },
+        {
+          "source_message_id": "c4a-0003",
+          "message_timestamp": "2026-06-01T08:06:00+00:00",
+          "sender_label": "Parent Two",
+          "text": "Thanks for the heads up."
+        }
+      ]
+    },
+    {
+      "source_chat_id": "chat-building",
+      "display_name": "Building Residents",
+      "chat_type": "group",
+      "messages": [
+        {
+          "source_message_id": "bld-0001",
+          "message_timestamp": "2026-06-01T09:00:00+00:00",
+          "sender_label": "Neighbour A",
+          "text": "Lovely weather today."
+        },
+        {
+          "source_message_id": "bld-0002",
+          "message_timestamp": "2026-06-01T09:10:00+00:00",
+          "sender_label": "Neighbour B",
+          "text": "Indeed, enjoy the sunshine!"
+        }
+      ]
+    },
+    {
+      "source_chat_id": "chat-school-parents",
+      "display_name": "School Parents Group",
+      "chat_type": "group",
+      "messages": [
+        {
+          "source_message_id": "sp-0001",
+          "message_timestamp": "2026-06-02T07:30:00+00:00",
+          "sender_label": "Coordinator",
+          "text": "Welcome to the new term."
+        },
+        {
+          "source_message_id": "sp-0002",
+          "message_timestamp": "2026-06-02T07:35:00+00:00",
+          "sender_label": "Coordinator",
+          "text": "Urgent: please pay the activity fee today, the deadline is this evening."
+        }
+      ]
+    }
+  ]
+}

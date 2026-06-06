@@ -1,0 +1,9 @@
+{
+  "db_path": "data/whatsapp-radar.sqlite3",
+  "connector": "fixture",
+  "classifier": "stub",
+  "hub": {
+    "base_url": "http://127.0.0.1:8000",
+    "model": "agentic_light"
+  }
+}

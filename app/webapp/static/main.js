@@ -1,13 +1,13 @@
-/* Entry point: wires every module together, runs boot(), drives the poll.
+/* Entry point: wires every module together, runs boot(), drives the polls.
  *
- * Step 3 keeps boot() deliberately thin — the four tabs are empty shells, so
- * there is nothing to fetch beyond build identity + passkey status. Steps 4–7
- * add their fetchers here. */
+ * boot() fetches build identity, passkey status, and the Dashboard metrics
+ * (#9). Steps 5–7 add the remaining tab fetchers here. */
 
-import { els, state, WEBAUTHN_POLL_MS } from './state.js';
+import { els, state, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS } from './state.js';
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
+import { fetchDashboard } from './dashboard.js';
 
 // --------------------------------------------------------- build identity
 async function fetchVersion() {
@@ -38,15 +38,21 @@ async function boot() {
     return;
   }
   await fetchWebauthnStatus();
+  await fetchDashboard();
 
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});
   }, WEBAUTHN_POLL_MS);
+  setInterval(function () {
+    if (state.tab === 'dashboard') fetchDashboard().catch(function () {});
+  }, DASHBOARD_POLL_MS);
 }
 
 // --------------------------------------------------------- wire + go
 wireLoginForm(boot);
-wireTabs();
+wireTabs(function (tab) {
+  if (tab === 'dashboard') fetchDashboard().catch(function () {});
+});
 wireWebauthn();
 
 boot();

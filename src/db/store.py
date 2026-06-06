@@ -32,6 +32,22 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
+# Columns added to review_runs after the initial spike schema (#7's funnel).
+# `CREATE TABLE IF NOT EXISTS` never backfills columns on a pre-existing table,
+# so an older on-disk DB is missing them. These additive, non-destructive ALTERs
+# bring it up to date — each has a constant default, which SQLite allows.
+_REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("mode", "TEXT NOT NULL DEFAULT 'review'"),
+    ("params_json", "TEXT"),
+    ("chats_synced", "INTEGER NOT NULL DEFAULT 0"),
+    ("messages_synced", "INTEGER NOT NULL DEFAULT 0"),
+    ("chats_monitored", "INTEGER NOT NULL DEFAULT 0"),
+    ("stage1_passed", "INTEGER NOT NULL DEFAULT 0"),
+    ("stage2_llm_calls", "INTEGER NOT NULL DEFAULT 0"),
+    ("actionable", "INTEGER NOT NULL DEFAULT 0"),
+    ("notification_status", "TEXT"),
+)
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -53,8 +69,20 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additively backfill columns missing from an older on-disk schema.
+
+    Idempotent: only adds a column when absent, so repeated opens are no-ops.
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(review_runs)")}
+    for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
 
 
 # --- chats -----------------------------------------------------------------
@@ -490,3 +518,79 @@ def record_notification(
     )
     conn.commit()
     return _rowid(cur)
+
+
+# --- dashboard aggregates (read-only) --------------------------------------
+# These power the Dashboard tab (#9). They only ever SELECT — no writes, no
+# cursor changes — so they are safe to call from the webapp request path.
+
+def count_chats_by_status(conn: sqlite3.Connection) -> dict[str, int]:
+    """Chat counts keyed by status, always including the three known statuses."""
+    rows = conn.execute("SELECT status, COUNT(*) AS n FROM chats GROUP BY status").fetchall()
+    counts = {row["status"]: int(row["n"]) for row in rows}
+    return {
+        "discovered": counts.get("discovered", 0),
+        "monitored": counts.get("monitored", 0),
+        "ignored": counts.get("ignored", 0),
+    }
+
+
+def message_count_total(conn: sqlite3.Connection) -> int:
+    """Total stored messages across every chat (monitored or not)."""
+    return int(conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"])
+
+
+def messages_per_chat(
+    conn: sqlite3.Connection, *, monitored_only: bool = True
+) -> list[sqlite3.Row]:
+    """Per-chat message counts (id, display_name, status, last_message_at, message_count).
+
+    Most-active chats first. ``monitored_only`` restricts to chats being watched,
+    which is what the Dashboard's per-channel table shows.
+    """
+    where = "WHERE c.status = 'monitored'" if monitored_only else ""
+    return list(
+        conn.execute(
+            "SELECT c.id, c.display_name, c.status, c.last_message_at, "
+            "COUNT(m.id) AS message_count "
+            "FROM chats c LEFT JOIN messages m ON m.chat_id = c.id "
+            f"{where} GROUP BY c.id ORDER BY message_count DESC, c.id"
+        ).fetchall()
+    )
+
+
+def count_runs(conn: sqlite3.Connection) -> int:
+    """Number of review/scan runs recorded."""
+    return int(conn.execute("SELECT COUNT(*) AS n FROM review_runs").fetchone()["n"])
+
+
+def last_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """The most recent review run row, or None if no run has happened yet."""
+    row: sqlite3.Row | None = conn.execute(
+        "SELECT * FROM review_runs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return row
+
+
+def count_messages_since(conn: sqlite3.Connection, ingested_after: str) -> int:
+    """Messages ingested strictly after an ISO timestamp (the unscanned backlog)."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE ingested_at > ?", (ingested_after,)
+    ).fetchone()
+    return int(row["n"])
+
+
+def count_actionable_items(conn: sqlite3.Connection) -> int:
+    """Total actionable analysis verdicts across all runs (real alerts raised)."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM analysis_items WHERE action_required = 1"
+    ).fetchone()
+    return int(row["n"])
+
+
+def count_notifications_sent(conn: sqlite3.Connection) -> int:
+    """Total notifications successfully delivered across all runs."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE status = 'sent'"
+    ).fetchone()
+    return int(row["n"])

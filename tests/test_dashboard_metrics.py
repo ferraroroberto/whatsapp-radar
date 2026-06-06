@@ -1,0 +1,196 @@
+"""Dashboard aggregates (store) + the /api/dashboard endpoint.
+
+The store functions are asserted against a hand-seeded fixture DB so the numbers
+are known exactly; the endpoint test checks the JSON shape + the bearer gate.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from starlette.testclient import TestClient
+
+from app.webapp.server import create_app
+from src.db import store
+from src.models import ChatRecord, MessageRecord
+from src.webapp_config import WebappConfig
+
+LOOPBACK = ("127.0.0.1", 5555)
+REMOTE = ("203.0.113.5", 5555)
+
+
+def _seed(conn: sqlite3.Connection) -> None:
+    """Two monitored chats (3 + 2 messages), one ignored chat, one run with
+    one actionable verdict and one delivered notification."""
+    a = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="g1", display_name="Class 4A Group", chat_type="group")
+    )
+    b = store.upsert_chat(
+        conn,
+        ChatRecord(source_chat_id="g2", display_name="School Parents Group", chat_type="group"),
+    )
+    c = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="g3", display_name="Random Group", chat_type="group")
+    )
+    store.set_chat_status(conn, a, "monitored")
+    store.set_chat_status(conn, b, "monitored")
+    store.set_chat_status(conn, c, "ignored")
+
+    for i in range(3):
+        store.insert_message(
+            conn,
+            a,
+            MessageRecord(
+                source_message_id=f"a{i}",
+                message_timestamp=f"2026-06-01T10:0{i}:00+00:00",
+                text="hi",
+                sender_label="X",
+            ),
+        )
+    for i in range(2):
+        store.insert_message(
+            conn,
+            b,
+            MessageRecord(
+                source_message_id=f"b{i}",
+                message_timestamp=f"2026-06-01T11:0{i}:00+00:00",
+                text="yo",
+                sender_label="Y",
+            ),
+        )
+
+    run_id = store.start_run(conn, mode="live")
+    store.record_run_funnel(
+        conn,
+        run_id,
+        chats_synced=3,
+        messages_synced=5,
+        chats_monitored=2,
+        stage1_passed=1,
+        stage2_llm_calls=1,
+        actionable=1,
+        notification_status="sent",
+    )
+    store.finish_run(conn, run_id, "completed", chats_reviewed=2)
+    store.insert_analysis_item(
+        conn,
+        run_id,
+        a,
+        action_required=True,
+        priority="high",
+        summary="pick-up change",
+        suggested_next_action=None,
+        deadline=None,
+        confidence=0.9,
+        evidence_message_ids_json=None,
+    )
+    store.insert_analysis_item(
+        conn,
+        run_id,
+        b,
+        action_required=False,
+        priority=None,
+        summary=None,
+        suggested_next_action=None,
+        deadline=None,
+        confidence=None,
+        evidence_message_ids_json=None,
+    )
+    store.record_notification(conn, run_id, "telegram", "sent")
+
+
+# --- store aggregates -------------------------------------------------------
+
+def test_aggregates_reconcile(conn: sqlite3.Connection) -> None:
+    _seed(conn)
+
+    assert store.count_chats_by_status(conn) == {
+        "discovered": 0,
+        "monitored": 2,
+        "ignored": 1,
+    }
+    assert store.message_count_total(conn) == 5
+
+    per_chat = store.messages_per_chat(conn, monitored_only=True)
+    assert [(r["display_name"], r["message_count"]) for r in per_chat] == [
+        ("Class 4A Group", 3),
+        ("School Parents Group", 2),
+    ]
+    # The ignored chat is excluded from the monitored-only view.
+    assert len(store.messages_per_chat(conn, monitored_only=False)) == 3
+
+    assert store.count_runs(conn) == 1
+    last = store.last_run(conn)
+    assert last is not None and last["mode"] == "live"
+
+    # Deterministic backlog bounds: everything is after epoch, nothing after 2999.
+    assert store.count_messages_since(conn, "2000-01-01T00:00:00+00:00") == 5
+    assert store.count_messages_since(conn, "2999-01-01T00:00:00+00:00") == 0
+
+    assert store.count_actionable_items(conn) == 1
+    assert store.count_notifications_sent(conn) == 1
+
+
+def test_aggregates_empty_db(conn: sqlite3.Connection) -> None:
+    assert store.count_chats_by_status(conn) == {
+        "discovered": 0,
+        "monitored": 0,
+        "ignored": 0,
+    }
+    assert store.message_count_total(conn) == 0
+    assert store.count_runs(conn) == 0
+    assert store.last_run(conn) is None
+    assert store.count_actionable_items(conn) == 0
+
+
+# --- endpoint ---------------------------------------------------------------
+
+def test_dashboard_endpoint_numbers(tmp_path: Path) -> None:
+    db = tmp_path / "dash.sqlite3"
+    conn = store.connect(db)
+    _seed(conn)
+    conn.close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        body = client.get("/api/dashboard").json()
+
+    assert body["chats"] == {"discovered": 0, "monitored": 2, "ignored": 1, "total": 3}
+    assert body["messages"]["total"] == 5
+    assert len(body["messages"]["per_channel"]) == 2
+    assert body["messages"]["per_channel"][0]["name"] == "Class 4A Group"
+    assert body["scans"]["count"] == 1
+    assert body["scans"]["last"]["mode"] == "live"
+    assert body["alerts"] == {"actionable": 1, "notifications_sent": 1}
+
+
+def test_dashboard_empty_db_all_zeros(tmp_path: Path) -> None:
+    db = tmp_path / "empty.sqlite3"
+    store.connect(db).close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        body = client.get("/api/dashboard").json()
+
+    assert body["chats"]["total"] == 0
+    assert body["messages"]["per_channel"] == []
+    assert body["scans"]["last"] is None
+    assert body["scans"]["messages_since_last"] == 0
+
+
+def test_dashboard_requires_token_from_remote(tmp_path: Path) -> None:
+    db = tmp_path / "gated.sqlite3"
+    store.connect(db).close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="secret")
+    app.state.db_path = db
+    with TestClient(app, client=REMOTE) as client:
+        assert client.get("/api/dashboard").status_code == 401
+        ok = client.get("/api/dashboard", headers={"Authorization": "Bearer secret"})
+        assert ok.status_code == 200

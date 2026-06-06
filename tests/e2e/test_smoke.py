@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -25,6 +27,16 @@ def test_tab_switching(page: Page, base_url: str) -> None:
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
     expect(page.locator("#paneAudit")).to_be_hidden()
+
+
+@pytest.mark.smoke
+def test_dashboard_metrics_render(page: Page, base_url: str) -> None:
+    page.goto(base_url)
+    # The Dashboard is the default pane; its metric cards are present…
+    expect(page.locator("#paneDashboard")).to_contain_text("Channels monitored")
+    # …and main.js fetches /api/dashboard, replacing the "–" placeholder with a
+    # real count (0 on an empty DB), proving the metric round-trip works.
+    expect(page.locator("#mChannels")).to_have_text(re.compile(r"^\d+$"))
 
 
 @pytest.mark.smoke

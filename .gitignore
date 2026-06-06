@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Virtual envs
+.venv/
+venv/
+
+# Local config and secrets
+.env
+.env.*
+!.env.example
+config/local.*
+config/*.local.*
+
+# WhatsApp linked-device credentials and local private data
+auth/
+sessions/
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.log
+qr*.png
+qr*.txt
+
+# App Launcher scratch
+.launcher-tmp/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

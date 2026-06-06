@@ -15,8 +15,8 @@ import json
 import urllib.error
 import urllib.request
 
-from ..report.digest import Digest
-from .base import NotifierError
+from src.notify.base import NotifierError
+from src.report.digest import Digest
 
 _API = "https://api.telegram.org/bot{token}/sendMessage"
 _TIMEOUT_SECONDS = 15

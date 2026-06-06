@@ -6,7 +6,7 @@ cursor state. On failure a notifier raises :class:`NotifierError`; the caller
 records the failure and the same run can be re-delivered later (``wr notify``)
 without re-analysing anything.
 
-Concrete delivery (Telegram) lives in :mod:`whatsapp_radar.notify.telegram`. A
+Concrete delivery (Telegram) lives in :mod:`src.notify.telegram`. A
 notifier must send only to a non-WhatsApp channel and keep tokens in ignored
 config.
 """
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from ..report.digest import Digest
+from src.report.digest import Digest
 
 
 class NotifierError(RuntimeError):

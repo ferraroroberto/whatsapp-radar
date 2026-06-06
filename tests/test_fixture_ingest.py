@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.connector.fixture import FixtureConnector
+
 from tests.helpers import ingest_all
-from whatsapp_radar.connector.fixture import FixtureConnector
 
 
 def test_fixture_connector_is_read_only() -> None:

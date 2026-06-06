@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from whatsapp_radar.connector.fixture import FixtureConnector
-from whatsapp_radar.db import store
-from whatsapp_radar.models import MessageRecord
+from src.connector.fixture import FixtureConnector
+from src.db import store
+from src.models import MessageRecord
 
 
 def ingest_all(conn: sqlite3.Connection, connector: FixtureConnector) -> None:

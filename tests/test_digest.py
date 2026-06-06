@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.analysis.classifier import StubClassifier
+from src.analysis.review import review_monitored_chats
+from src.db import store
+from src.report.digest import build_digest
+
 from tests.helpers import chat_id_by_source
-from whatsapp_radar.analysis.classifier import StubClassifier
-from whatsapp_radar.analysis.review import review_monitored_chats
-from whatsapp_radar.db import store
-from whatsapp_radar.report.digest import build_digest
 
 
 def _monitor(conn: sqlite3.Connection, source_chat_id: str) -> None:

@@ -23,6 +23,12 @@ venv/
 config/local.*
 config/*.local.*
 
+# Webapp runtime + secrets (added by Step 3 — committed only as *.sample templates)
+webapp/certificates/
+webapp/*.log
+config/webapp_config.json
+config/cloudflared.yml
+
 # WhatsApp linked-device credentials and local private data
 auth/
 sessions/

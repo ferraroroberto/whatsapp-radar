@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..models import ChatRecord, MessageRecord
-from .base import ConnectorStatus
+from src.connector.base import ConnectorStatus
+from src.models import ChatRecord, MessageRecord
 
 _DEFAULT_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "sample_chats.json"
 

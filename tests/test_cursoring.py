@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.analysis.classifier import StubClassifier
+from src.analysis.contract import ContractError
+from src.analysis.review import review_monitored_chats
+from src.db import store
+from src.models import StoredMessage
+
 from tests.helpers import append_message, chat_id_by_source
-from whatsapp_radar.analysis.classifier import StubClassifier
-from whatsapp_radar.analysis.contract import ContractError
-from whatsapp_radar.analysis.review import review_monitored_chats
-from whatsapp_radar.db import store
-from whatsapp_radar.models import StoredMessage
 
 
 def _monitor(conn: sqlite3.Connection, source_chat_id: str) -> int:
@@ -72,7 +73,7 @@ def test_cursor_not_advanced_on_contract_error(ingested_conn: sqlite3.Connection
     assert recovered.messages_processed == 3
 
     # The raised error type is ContractError under the hood.
-    from whatsapp_radar.analysis.contract import parse_analysis
+    from src.analysis.contract import parse_analysis
 
     try:
         parse_analysis("{ not valid json")

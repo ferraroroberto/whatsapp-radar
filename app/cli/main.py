@@ -10,15 +10,15 @@ import argparse
 import sqlite3
 import sys
 
-from .analysis.classifier import build_classifier
-from .analysis.review import review_monitored_chats
-from .config import Config, load_config
-from .connector.base import MessageConnector
-from .connector.fixture import FixtureConnector
-from .connector.linked_device import LinkedDeviceConnector
-from .db import store
-from .notify import NotifierError, build_notifier
-from .report.digest import Digest, build_digest
+from src.analysis.classifier import build_classifier
+from src.analysis.review import review_monitored_chats
+from src.config import Config, load_config
+from src.connector.base import MessageConnector
+from src.connector.fixture import FixtureConnector
+from src.connector.linked_device import LinkedDeviceConnector
+from src.db import store
+from src.notify import NotifierError, build_notifier
+from src.report.digest import Digest, build_digest
 
 
 def _build_connector(config: Config) -> MessageConnector:

@@ -24,15 +24,15 @@ The connection is **read-only**: there is no code path that sends a WhatsApp mes
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 Verify the offline path works with no credentials and no network (uses the sanitized fixture connector and the deterministic stub classifier):
 
 ```powershell
-.\.venv\Scripts\wr.exe ingest
-.\.venv\Scripts\wr.exe chats
-.\.venv\Scripts\wr.exe review --dry-run
+.\wr.bat ingest
+.\wr.bat chats
+.\wr.bat review --dry-run
 ```
 
 ## Step 2 — Install and run the WhatsApp sidecar
@@ -67,7 +67,7 @@ WR_CONNECTOR=linked_device
 Check the connection from Python:
 
 ```powershell
-.\.venv\Scripts\wr.exe status
+.\wr.bat status
 ```
 
 You should see `Connector: linked_device (connected=True)`. If it says *not paired* or *stale*, the sidecar is not running or not yet paired — revisit Step 2.
@@ -75,10 +75,10 @@ You should see `Connector: linked_device (connected=True)`. If it says *not pair
 ## Step 4 — Ingest, then choose what to monitor
 
 ```powershell
-.\.venv\Scripts\wr.exe ingest                 # pull buffered chats/messages into local SQLite
-.\.venv\Scripts\wr.exe chats --recent --limit 40  # most recently-active chats first, with ids
-.\.venv\Scripts\wr.exe monitor 3              # mark chat #3 as monitored (repeat per chat)
-.\.venv\Scripts\wr.exe ignore 5               # optionally silence a chat
+.\wr.bat ingest                 # pull buffered chats/messages into local SQLite
+.\wr.bat chats --recent --limit 40  # most recently-active chats first, with ids
+.\wr.bat monitor 3              # mark chat #3 as monitored (repeat per chat)
+.\wr.bat ignore 5               # optionally silence a chat
 ```
 
 On a busy account with hundreds of chats, `chats --recent` (most recent message first) and `--limit N` make the list scannable. Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start monitoring — you won't get a digest of months of backlog. Only monitored chats are reviewed. Re-running `ingest` is safe and idempotent — storage deduplicates on `(chat_id, source_message_id)`.
@@ -94,8 +94,8 @@ On a busy account with hundreds of chats, `chats --recent` (most recent message 
   ```
 
 Two prompt assets are plain-text and loaded verbatim, so you can **read and tune them freely** without touching code:
-- `src/whatsapp_radar/analysis/prompts/classification_system.md` — the instruction sent to the model.
-- `src/whatsapp_radar/analysis/prompts/keyword_roots.txt` — the cascade's actionable roots (add your own).
+- `src/analysis/prompts/classification_system.md` — the instruction sent to the model.
+- `src/analysis/prompts/keyword_roots.txt` — the cascade's actionable roots (add your own).
 
 The hub call pins `temperature=0` so identical messages classify identically. The digest summary language follows the model's default (currently English); change it by editing the system prompt.
 
@@ -115,16 +115,16 @@ The hub call pins `temperature=0` so identical messages classify identically. Th
 ## Step 7 — Run a review and deliver
 
 ```powershell
-.\.venv\Scripts\wr.exe review              # classify the delta and deliver if actionable
-.\.venv\Scripts\wr.exe review --dry-run    # classify and print, but do not deliver
+.\wr.bat review              # classify the delta and deliver if actionable
+.\wr.bat review --dry-run    # classify and print, but do not deliver
 ```
 
 - If nothing is actionable, **no notification is sent**.
 - If delivery fails (network, bad token), the run's analysis and cursors are already saved, so you can retry delivery alone:
 
   ```powershell
-  .\.venv\Scripts\wr.exe notify             # re-deliver the latest run's digest
-  .\.venv\Scripts\wr.exe notify --run 12    # re-deliver a specific run
+  .\wr.bat notify             # re-deliver the latest run's digest
+  .\wr.bat notify --run 12    # re-deliver a specific run
   ```
 
 Running `review` again with no new messages does nothing and produces no notification. The per-chat cursor advances only **after** analysis is persisted, so a classifier error safely reprocesses the same delta next time.
@@ -151,7 +151,7 @@ Running `review` again with no new messages does nothing and produces no notific
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m mypy src
+.\.venv\Scripts\python.exe -m mypy src app
 ```
 
 The test suite runs entirely offline against sanitized fixtures — no WhatsApp credentials, no network, no Telegram.

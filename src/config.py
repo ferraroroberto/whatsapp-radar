@@ -19,7 +19,7 @@ from typing import Any
 
 def project_root() -> Path:
     """Repository root (the directory containing ``config/`` and ``pyproject.toml``)."""
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.db import store
+
 from tests.helpers import append_message, chat_id_by_source
-from whatsapp_radar.db import store
 
 
 def test_baseline_skips_backlog_then_reviews_only_new(ingested_conn: sqlite3.Connection) -> None:
@@ -30,7 +31,7 @@ def test_baseline_skips_backlog_then_reviews_only_new(ingested_conn: sqlite3.Con
 
 
 def test_baseline_no_messages_is_noop(conn: sqlite3.Connection) -> None:
-    from whatsapp_radar.models import ChatRecord
+    from src.models import ChatRecord
 
     chat_id = store.upsert_chat(conn, ChatRecord("empty@g.us", "Empty Group"))
     assert store.baseline_cursor(conn, chat_id) is False

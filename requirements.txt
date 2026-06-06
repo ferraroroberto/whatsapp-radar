@@ -1,0 +1,7 @@
+# Runtime dependencies. Install with:
+#   python -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Classification routes through local-llm-hub via the Anthropic-shape SDK
+# (base_url http://127.0.0.1:8000). No direct provider/subprocess wrappers.
+anthropic>=0.40

@@ -13,9 +13,9 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-from ..db import store
-from .classifier import Classifier
-from .contract import ContractError, parse_analysis
+from src.analysis.classifier import Classifier
+from src.analysis.contract import ContractError, parse_analysis
+from src.db import store
 
 
 @dataclass

@@ -62,7 +62,17 @@ python -m venv .venv
 
 Adding new messages causes only the delta to be reviewed; the per-chat cursor advances only after analysis is persisted, so a classifier error safely reprocesses the same delta next run.
 
-Classification defaults to the offline stub. To route through [local-llm-hub](../local-llm-hub) instead (the `agentic_light` model on `127.0.0.1:8000`), set `WR_CLASSIFIER=hub` with the hub running. The real WhatsApp linked-device connector and Telegram delivery are deferred to follow-up issues.
+Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../local-llm-hub) (the `agentic_light` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call — so "utter noise" deltas never reach the model. Both prompt assets are inspectable plain-text files you can tune without touching code: the system prompt at `src/whatsapp_radar/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/whatsapp_radar/analysis/prompts/keyword_roots.txt`.
+
+## Running Against Real WhatsApp + Telegram
+
+The fixture path above needs no credentials. To run against real chats and deliver digests to Telegram, follow the full step-by-step guide in [`docs/manual.md`](docs/manual.md). In short:
+
+1. Pair a WhatsApp **linked device** with the read-only Node sidecar (`cd sidecar && npm install && npm start`, then scan the QR). It writes a local buffer under the ignored `data/linked_device/`.
+2. Set `WR_CONNECTOR=linked_device`; `wr ingest` / `wr chats` / `wr monitor` / `wr review` then run unchanged against real data.
+3. For delivery, create a Telegram bot, set `WR_NOTIFIER=telegram` plus `WR_TELEGRAM_BOT_TOKEN` / `WR_TELEGRAM_CHAT_ID`, and `wr review` delivers one consolidated digest. `wr notify` re-delivers a run if a send failed.
+
+The connection is **read-only by construction** — no send/react/read-receipt surface exists. The unofficial-library risk (Baileys), the buffer contract, the message-normalization set, and answers to the spike questions are documented in [`docs/linked-device.md`](docs/linked-device.md). Credentials/session live only under ignored `auth/`; Telegram secrets live only in the ignored `.env`.
 
 Verification gate:
 
@@ -74,4 +84,4 @@ Verification gate:
 
 ## Repository Status
 
-Spike foundation implemented (onboarding steps 1–7): read-only fixture connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, and a consolidated dry-run digest, all driven by the `wr` CLI. The real linked-device connector and Telegram delivery remain in GitHub issues so they can be resumed cold.
+Spike complete end-to-end. On top of the fixture foundation (read-only connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, consolidated digest), the repo now has: the real WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader), baseline-to-now on first monitor, a multilingual (ES/EN/CA) cascade classifier that gates LLM calls behind a keyword prefilter, and retryable Telegram delivery. See [`docs/manual.md`](docs/manual.md) and [`docs/linked-device.md`](docs/linked-device.md). The fixture connector and offline stub classifier remain the default so the whole suite runs with no credentials.

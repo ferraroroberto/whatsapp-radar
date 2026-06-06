@@ -1,0 +1,105 @@
+# Actionable keyword ROOTS for the cascade classifier's cheap prefilter.
+#
+# Purpose: drop "utter noise" batches before spending an LLM call. This is a
+# HIGH-RECALL gate — a false positive only costs one LLM call, a false negative
+# silently drops a real item, so err toward matching. The LLM does the precision.
+#
+# Matching: each message is lowercased and accent-stripped, then we test whether
+# any root below appears as a substring. Roots are therefore short, accent-free
+# morphological stems covering Spanish (ES), English (EN), and Catalan (CA).
+#
+# One root per line. Lines starting with '#' and blank lines are ignored.
+# Edit freely — this file is loaded verbatim at runtime.
+
+# money / payments
+pag
+pay
+bizum
+transferenc
+ingres
+euro
+preci
+preu
+cobr
+cuota
+quota
+
+# confirm / RSVP / sign-up
+confirm
+rsvp
+apunt
+inscri
+inscrip
+reserv
+asisti
+assist
+
+# dates / deadlines / time
+fecha
+data
+deadline
+plazo
+termini
+limite
+antes de
+abans
+hora
+manana
+demà
+divendres
+viernes
+
+# bring / prepare / buy
+traer
+traig
+portar
+bring
+llevar
+prepar
+compr
+necesit
+necessit
+falta
+
+# forms / documents / permission
+formulari
+formular
+form
+firma
+signa
+autoriz
+permis
+document
+justificant
+justificante
+
+# requests / urgency / reminders
+urgent
+importan
+recorda
+recordator
+please
+porfa
+por favor
+si us plau
+pendient
+pendent
+deber
+deure
+
+# meetings / school events
+reuni
+meeting
+qued
+tutoria
+examen
+exam
+prova
+entrega
+tarea
+deures
+homework
+excursi
+salida
+sortida
+reunio

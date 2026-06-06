@@ -32,6 +32,10 @@ def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # WAL + NORMAL keeps the many small commits in the review/ingest paths fast
+    # while staying durable enough for a local single-writer store.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
     conn.commit()
     return conn
@@ -68,11 +72,20 @@ def set_chat_status(conn: sqlite3.Connection, chat_id: int, status: str) -> bool
     return cur.rowcount > 0
 
 
-def list_chats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def list_chats(
+    conn: sqlite3.Connection, *, order_by_recent: bool = False
+) -> list[sqlite3.Row]:
+    # ``order_by_recent`` lists the most recently-active chats first (NULLs last),
+    # which is how an operator scans a large account to pick what to monitor.
+    order = (
+        "ORDER BY last_message_at IS NULL, last_message_at DESC, id"
+        if order_by_recent
+        else "ORDER BY id"
+    )
     return list(
         conn.execute(
             "SELECT id, source_chat_id, display_name, chat_type, status, last_message_at "
-            "FROM chats ORDER BY id"
+            f"FROM chats {order}"
         ).fetchall()
     )
 
@@ -120,6 +133,48 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
     return cur.rowcount > 0
 
 
+def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]) -> int:
+    """Bulk-insert messages idempotently in one transaction. Returns rows created.
+
+    The ingest path can deliver tens of thousands of messages; committing per row
+    (as :func:`insert_message` does for the single-message review path) is far too
+    slow at that scale, so this batches the whole chat into one commit.
+    """
+    import json
+
+    if not msgs:
+        return 0
+    before = conn.total_changes
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO messages
+            (chat_id, source_message_id, sender_label, message_timestamp,
+             text, message_type, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                chat_id,
+                m.source_message_id,
+                m.sender_label,
+                m.message_timestamp,
+                m.text,
+                m.message_type,
+                json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
+                _now(),
+            )
+            for m in msgs
+        ],
+    )
+    inserted = conn.total_changes - before
+    conn.execute(
+        "UPDATE chats SET last_message_at = MAX(COALESCE(last_message_at, ''), ?) WHERE id = ?",
+        (max(m.message_timestamp for m in msgs), chat_id),
+    )
+    conn.commit()
+    return inserted
+
+
 def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[StoredMessage]:
     """Messages newer than the chat's cursor, ordered by (timestamp, id).
 
@@ -164,6 +219,28 @@ def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[Stored
     ]
 
 
+def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
+    """Set the cursor to the latest stored message so only newer messages review.
+
+    Used when a chat is first monitored: it baselines past the existing backlog so
+    the first review does not classify months of history. No-op (returns False) if
+    the chat already has a cursor or has no messages yet.
+    """
+    if conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
+    ).fetchone():
+        return False
+    row = conn.execute(
+        "SELECT id, message_timestamp FROM messages WHERE chat_id = ? "
+        "ORDER BY message_timestamp DESC, id DESC LIMIT 1",
+        (chat_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    advance_cursor(conn, chat_id, int(row["id"]), row["message_timestamp"], None)
+    return True
+
+
 def get_rolling_context(conn: sqlite3.Connection, chat_id: int) -> str | None:
     row = conn.execute(
         "SELECT rolling_context_json FROM chat_review_state WHERE chat_id = ?",
@@ -205,6 +282,12 @@ def start_run(conn: sqlite3.Connection) -> int:
     )
     conn.commit()
     return _rowid(cur)
+
+
+def latest_run_id(conn: sqlite3.Connection) -> int | None:
+    """Return the id of the most recent review run, or None if there are none."""
+    row = conn.execute("SELECT id FROM review_runs ORDER BY id DESC LIMIT 1").fetchone()
+    return int(row["id"]) if row else None
 
 
 def finish_run(

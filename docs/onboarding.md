@@ -8,6 +8,8 @@ Prove whether a local linked-device WhatsApp connector can support a safe, reusa
 
 ## First Spike Questions
 
+These are **answered** by the implemented linked-device connector — see [`linked-device.md`](linked-device.md) for the full answers.
+
 - Can a linked-device connector reliably pair and reconnect on the target Windows host?
 - Can it receive enough chat history and new-message events to support incremental review?
 - Are message IDs stable enough to use as cursors?
@@ -29,7 +31,7 @@ Never commit files from those paths.
 
 ## Suggested Spike Shape
 
-Steps 1–7 are implemented (see the README "Running The Spike" section). Step 8 is deferred to a follow-up issue.
+Steps 1–8 are implemented. Steps 1–7 run offline (see the README "Running The Spike" section); the real linked-device connector and step 8 (Telegram delivery) are covered by [`manual.md`](manual.md) and [`linked-device.md`](linked-device.md).
 
 1. [done] Create a connector prototype behind a narrow interface: connect, report status, list chats, ingest events, stop.
 2. [done] Persist raw-but-local message records into SQLite with stable internal IDs and source message IDs.
@@ -38,7 +40,7 @@ Steps 1–7 are implemented (see the README "Running The Spike" section). Step 8
 5. [done] Build a CLI command that marks chats as monitored in local SQLite.
 6. [done] Build a CLI command that reviews monitored chats since the last cursor and emits a dry-run JSON digest.
 7. [done] Call local-llm-hub only after the fixture path and cursoring are proven (opt-in `WR_CLASSIFIER=hub`; the offline stub classifier is the default).
-8. [deferred] Add Telegram delivery only after the digest JSON is stable.
+8. [done] Add Telegram delivery (read-only-safe, retryable via `wr notify`) now that the digest JSON is stable.
 
 ## Acceptance For The Spike
 

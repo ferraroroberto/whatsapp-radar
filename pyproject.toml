@@ -27,7 +27,7 @@ wr = "whatsapp_radar.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-whatsapp_radar = ["db/schema.sql", "fixtures/*.json"]
+whatsapp_radar = ["db/schema.sql", "fixtures/*.json", "analysis/prompts/*.md", "analysis/prompts/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

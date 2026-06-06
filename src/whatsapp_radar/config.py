@@ -29,11 +29,20 @@ class HubConfig:
 
 
 @dataclass(frozen=True)
+class TelegramConfig:
+    bot_token: str
+    chat_id: str
+
+
+@dataclass(frozen=True)
 class Config:
     db_path: Path
     connector: str
     classifier: str
     hub: HubConfig
+    notifier: str
+    telegram: TelegramConfig
+    linked_device_dir: Path
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -79,23 +88,40 @@ def load_config(root: Path | None = None) -> Config:
     )
     hub_raw = merged.get("hub", {})
 
+    tg_raw = merged.get("telegram", {})
+
     db_path = os.environ.get("WR_DB_PATH", merged.get("db_path", "data/whatsapp-radar.sqlite3"))
     connector = os.environ.get("WR_CONNECTOR", merged.get("connector", "fixture"))
     classifier = os.environ.get("WR_CLASSIFIER", merged.get("classifier", "stub"))
+    notifier = os.environ.get("WR_NOTIFIER", merged.get("notifier", "none"))
+    linked_device_dir = os.environ.get(
+        "WR_LINKED_DEVICE_DIR", merged.get("linked_device_dir", "data/linked_device")
+    )
     hub = HubConfig(
         base_url=os.environ.get(
             "WR_HUB_BASE_URL", hub_raw.get("base_url", "http://127.0.0.1:8000")
         ),
         model=os.environ.get("WR_HUB_MODEL", hub_raw.get("model", "agentic_light")),
     )
+    telegram = TelegramConfig(
+        bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_raw.get("bot_token", "")),
+        chat_id=os.environ.get("WR_TELEGRAM_CHAT_ID", tg_raw.get("chat_id", "")),
+    )
 
     resolved_db = Path(db_path)
     if not resolved_db.is_absolute():
         resolved_db = root / resolved_db
+
+    resolved_buffer = Path(linked_device_dir)
+    if not resolved_buffer.is_absolute():
+        resolved_buffer = root / resolved_buffer
 
     return Config(
         db_path=resolved_db,
         connector=connector,
         classifier=classifier,
         hub=hub,
+        notifier=notifier,
+        telegram=telegram,
+        linked_device_dir=resolved_buffer,
     )

@@ -90,7 +90,7 @@ The connection is **read-only by construction** — no send/react/read-receipt s
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), Tailscale TLS, and dormant Cloudflare named-tunnel scaffolding. The four tabs — Dashboard · Chats & Config · Execution · Audit — are empty shells today; Steps 4–7 fill them.
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), Tailscale TLS, and dormant Cloudflare named-tunnel scaffolding. Of the four tabs — Dashboard · Chats & Config · Execution · Audit — the **Dashboard** is live: read-only metrics (channels monitored, messages stored, scans run, backlog since the last scan, alerts raised, notifications sent, plus a per-monitored-channel table) served by `GET /api/dashboard`. Chats & Config · Execution · Audit are still empty shells that Steps 5–7 fill.
 
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons

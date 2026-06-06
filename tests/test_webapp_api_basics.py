@@ -62,6 +62,21 @@ def test_static_served(loopback: TestClient) -> None:
     assert r.status_code == 200
 
 
+def test_index_revalidated(loopback: TestClient) -> None:
+    # The iPhone-stale-index guard: GET / must force revalidation so Safari can't
+    # keep referencing a ?v=<old hash> asset. Matches the fleet cache scheme.
+    cc = loopback.get("/").headers.get("cache-control", "")
+    assert "no-cache" in cc and "must-revalidate" in cc
+
+
+def test_static_assets_immutable(loopback: TestClient) -> None:
+    # Hashed JS/CSS get a year-long immutable cache — safe because the ?v= stamp
+    # changes whenever the bytes change.
+    for name in ("main.js", "styles.css"):
+        cc = loopback.get(f"/static/{name}").headers.get("cache-control", "")
+        assert "max-age=31536000" in cc and "immutable" in cc, name
+
+
 def test_webauthn_status_default(loopback: TestClient) -> None:
     body = loopback.get("/api/webauthn/status").json()
     assert body["configured"] is False

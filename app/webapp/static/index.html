@@ -24,9 +24,25 @@
     </nav>
 
     <section id="paneDashboard" class="pane">
-      <div class="card placeholder">
-        <h2>📊 Dashboard</h2>
-        <p class="muted">Funnel + recent runs land here in Step 4 (#9).</p>
+      <div class="metric-grid">
+        <div class="card metric"><span class="metric-value" id="mChannels">–</span><span class="metric-label">Channels monitored</span></div>
+        <div class="card metric"><span class="metric-value" id="mMessages">–</span><span class="metric-label">Messages stored</span></div>
+        <div class="card metric"><span class="metric-value" id="mScans">–</span><span class="metric-label">Scans run</span></div>
+        <div class="card metric"><span class="metric-value" id="mBacklog">–</span><span class="metric-label">New since last scan</span></div>
+        <div class="card metric"><span class="metric-value" id="mActionable">–</span><span class="metric-label">Alerts raised</span></div>
+        <div class="card metric"><span class="metric-value" id="mNotified">–</span><span class="metric-label">Notifications sent</span></div>
+      </div>
+      <div class="card lastrun-card">
+        <p class="lastrun-head"><strong>Last scan</strong> <span id="lastRunWhen" class="muted"></span></p>
+        <p id="lastRunSummary" class="muted small">Loading…</p>
+      </div>
+      <div class="card">
+        <h3>Monitored channels</h3>
+        <table class="data-table" id="dashChannelsTable">
+          <thead><tr><th>Channel</th><th class="num">Msgs</th><th class="when">Last msg</th></tr></thead>
+          <tbody id="dashChannelsBody"></tbody>
+        </table>
+        <p id="dashChannelsEmpty" class="muted small" hidden>No channels monitored yet.</p>
       </div>
     </section>
 

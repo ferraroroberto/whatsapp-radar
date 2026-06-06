@@ -1,7 +1,8 @@
 /* Four-tab switcher: Dashboard | Chats | Execution | Audit.
  *
- * Routing only in Step 3 — the panes are empty placeholders that Steps 4–7
- * (#9–#12) fill in. */
+ * Routing + an optional onTab callback so a tab can refresh its data when it
+ * becomes visible (Dashboard wired in Step 4 / #9). Chats · Execution · Audit
+ * panes are still placeholders that Steps 5–7 (#10–#12) fill in. */
 
 import { els, state } from './state.js';
 
@@ -19,11 +20,15 @@ export function setTab(tab) {
   els.paneAudit.hidden = tab !== 'audit';
 }
 
-export function wireTabs() {
-  els.tabDashboard.addEventListener('click', function () { setTab('dashboard'); });
-  els.tabChats.addEventListener('click', function () { setTab('chats'); });
-  els.tabExecution.addEventListener('click', function () { setTab('execution'); });
-  els.tabAudit.addEventListener('click', function () { setTab('audit'); });
+export function wireTabs(onTab) {
+  function go(tab) {
+    setTab(tab);
+    if (onTab) onTab(tab);
+  }
+  els.tabDashboard.addEventListener('click', function () { go('dashboard'); });
+  els.tabChats.addEventListener('click', function () { go('chats'); });
+  els.tabExecution.addEventListener('click', function () { go('execution'); });
+  els.tabAudit.addEventListener('click', function () { go('audit'); });
 }
 
 export { TABS };

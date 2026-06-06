@@ -13,10 +13,12 @@ export const UNLOCK_KEY = 'wa-radar.unlock';
 export const UNLOCK_EXP_KEY = 'wa-radar.unlock.exp';
 
 export const WEBAUTHN_POLL_MS = 15000;
+export const DASHBOARD_POLL_MS = 15000;
 
 export const state = {
   tab: 'dashboard',
   webauthn: { configured: false, enrollment_open: false, devices: [] },
+  dashboard: null,
 };
 
 // ES modules are deferred — they execute after DOMContentLoaded, so
@@ -30,6 +32,18 @@ export const els = {
   paneChats: document.getElementById('paneChats'),
   paneExecution: document.getElementById('paneExecution'),
   paneAudit: document.getElementById('paneAudit'),
+
+  // Dashboard (#9) metrics
+  mChannels: document.getElementById('mChannels'),
+  mMessages: document.getElementById('mMessages'),
+  mScans: document.getElementById('mScans'),
+  mBacklog: document.getElementById('mBacklog'),
+  mActionable: document.getElementById('mActionable'),
+  mNotified: document.getElementById('mNotified'),
+  lastRunWhen: document.getElementById('lastRunWhen'),
+  lastRunSummary: document.getElementById('lastRunSummary'),
+  dashChannelsBody: document.getElementById('dashChannelsBody'),
+  dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
 
   settingsPanel: document.getElementById('settingsPanel'),
   webauthnStatus: document.getElementById('webauthnStatus'),

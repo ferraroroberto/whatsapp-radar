@@ -9,9 +9,10 @@ Routes (split across ``app/webapp/routers/``):
     GET  /install-ca             → iOS .mobileconfig              (misc)
     POST /api/login              → swap password for token        (auth)
     /api/webauthn/*              → passkey ceremonies             (webauthn)
+    GET  /api/dashboard          → read-only metrics              (dashboard)
 
-The four PWA tabs (Dashboard · Chats & Config · Execution · Audit) are empty
-shells here; Steps 4–7 (#9–#12) add their API surface.
+The Dashboard tab is live (#9); Chats & Config · Execution · Audit are still
+empty shells that Steps 5–7 (#10–#12) fill.
 """
 
 from __future__ import annotations
@@ -29,8 +30,9 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from app.webapp.middleware import BearerTokenMiddleware
-from app.webapp.routers import auth, misc, webauthn
+from app.webapp.routers import auth, dashboard, misc, webauthn
 from app.webapp.routers._helpers import STATIC_DIR
+from src.config import load_config
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
 from src.webapp_config import load_webapp_config
 from src.webauthn_gate import WebAuthnGate
@@ -106,6 +108,8 @@ def create_app() -> FastAPI:
 
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
+    # Resolved once; the dashboard router reads it (tests override app.state.db_path).
+    app.state.db_path = load_config().db_path
 
     asset_hashes = compute_asset_hashes(STATIC_DIR)
     app.state.asset_hashes = asset_hashes
@@ -127,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(misc.router)
     app.include_router(auth.router)
     app.include_router(webauthn.router)
+    app.include_router(dashboard.router)
 
     return app
 

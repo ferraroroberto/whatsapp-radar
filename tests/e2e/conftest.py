@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -78,6 +80,11 @@ def base_url() -> Iterator[str]:
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    # Never read the developer's real WhatsApp data: point the autobooted app at
+    # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
+    # project's hard privacy rule — e2e runs only against sanitized/empty state.
+    db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
+    env["WR_DB_PATH"] = str(Path(db_dir) / "e2e.sqlite3")
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -111,3 +118,4 @@ def base_url() -> Iterator[str]:
         proc.terminate()
         with contextlib.suppress(subprocess.TimeoutExpired):
             proc.wait(timeout=5)
+        shutil.rmtree(db_dir, ignore_errors=True)

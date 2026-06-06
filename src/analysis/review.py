@@ -27,7 +27,8 @@ class ReviewOutcome:
     errors: list[tuple[int, str]] = field(default_factory=list)
 
 
-def _prior_context(rolling_context_json: str | None) -> str | None:
+def prior_context(rolling_context_json: str | None) -> str | None:
+    """Extract the last rolling summary from a chat's stored context JSON, if any."""
     if not rolling_context_json:
         return None
     try:
@@ -49,7 +50,7 @@ def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> 
             continue
 
         outcome.chats_with_delta += 1
-        prior = _prior_context(store.get_rolling_context(conn, chat_id))
+        prior = prior_context(store.get_rolling_context(conn, chat_id))
 
         try:
             raw = classifier.classify(chat["display_name"], delta, prior)

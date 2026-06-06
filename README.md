@@ -64,7 +64,19 @@ python -m venv .venv
 
 Adding new messages causes only the delta to be reviewed; the per-chat cursor advances only after analysis is persisted, so a classifier error safely reprocesses the same delta next run.
 
-Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../local-llm-hub) (the `agentic_light` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call — so "utter noise" deltas never reach the model. Both prompt assets are inspectable plain-text files you can tune without touching code: the system prompt at `src/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`.
+### One-shot `scan` (the scheduled job)
+
+`scan` is the single callable that collapses the whole flow — sync → keyword prefilter (Stage 1) → LLM (Stage 2) → digest → deliver — into one run, and it persists a **full per-run audit trace** so every decision is inspectable (what synced, what passed the keyword stage, the exact LLM prompt and raw response, the verdict, and what was delivered). This is what App Launcher's Jobs tab fires.
+
+```powershell
+.\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
+.\wr.bat scan --dry-run       # replay stored messages with no connector, no delivery, no cursor advance
+.\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
+```
+
+Live `scan` advances each cursor only after that chat's analysis and trace are persisted (same retry-safe guarantee as `review`). `--dry-run` replays history straight from SQLite — it never touches the connector, never delivers, and never advances a cursor — so it's the safe way to see what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`.
+
+Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../local-llm-hub) (the `claude_sonnet` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call — so "utter noise" deltas never reach the model. Use a model that answers with JSON directly (the default `claude_sonnet` does); reasoning models that emit a long `<think>` trace can overrun the token budget and return nothing parseable. Both prompt assets are inspectable plain-text files you can tune without touching code: the system prompt at `src/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`.
 
 ## Running Against Real WhatsApp + Telegram
 

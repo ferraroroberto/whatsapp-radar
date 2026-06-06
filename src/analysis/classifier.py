@@ -5,7 +5,7 @@ Two implementations:
 - :class:`StubClassifier` — deterministic, keyword-based, no network. Default for
   development and the entire test suite, so nothing depends on a running hub.
 - :class:`HubClassifier` — routes through the local LLM hub via the Anthropic SDK
-  (``base_url`` -> ``127.0.0.1:8000``, ``model="agentic_light"``). Wired but
+  (``base_url`` -> ``127.0.0.1:8000``, ``model="claude_sonnet"``). Wired but
   opt-in (``WR_CLASSIFIER=hub``).
 
 Both return a raw JSON *string*; the review engine always validates it through
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from src.analysis.keywords import has_actionable_signal
@@ -95,6 +96,23 @@ def _extract_json_object(text: str) -> str:
     return cleaned
 
 
+@dataclass(frozen=True)
+class ClassificationOutcome:
+    """A classification plus the trace metadata the audit log records.
+
+    ``raw_output`` is the JSON string the contract parser consumes. The optional
+    prompt/response fields are populated by LLM-backed classifiers so the trace
+    can show the *exact* prompt sent and the *raw* model response; deterministic
+    classifiers (e.g. the stub) leave them ``None`` and set ``llm_called=False``.
+    """
+
+    raw_output: str
+    llm_called: bool = False
+    system_prompt: str | None = None
+    user_prompt: str | None = None
+    raw_response: str | None = None
+
+
 @runtime_checkable
 class Classifier(Protocol):
     """Maps a chat's message delta to raw JSON output for the contract parser."""
@@ -105,12 +123,27 @@ class Classifier(Protocol):
         ...
 
 
+@runtime_checkable
+class TracedClassifier(Protocol):
+    """A classifier that also reports trace metadata for the audit log.
+
+    Kept separate from :class:`Classifier` so the review engine and its test
+    doubles only need the plain ``classify`` method, while the scan pipeline can
+    require the richer ``classify_traced``.
+    """
+
+    def classify_traced(
+        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+    ) -> ClassificationOutcome:
+        ...
+
+
 class StubClassifier:
     """Deterministic keyword classifier — no LLM, no network."""
 
-    def classify(
+    def classify_traced(
         self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
-    ) -> str:
+    ) -> ClassificationOutcome:
         evidence: list[str] = []
         high = False
         first_hit: str | None = None
@@ -135,7 +168,12 @@ class StubClassifier:
             "confidence": 0.9 if action_required else 0.8,
             "evidence_message_ids": evidence,
         }
-        return json.dumps(result, ensure_ascii=False)
+        return ClassificationOutcome(raw_output=json.dumps(result, ensure_ascii=False))
+
+    def classify(
+        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+    ) -> str:
+        return self.classify_traced(chat_display_name, delta, prior_context).raw_output
 
 
 # The system prompt is kept in an inspectable Markdown file
@@ -162,36 +200,49 @@ class HubClassifier:
             lines.append(f"- [{msg.source_message_id}] {sender}: {msg.text or ''}")
         return "\n".join(lines)
 
-    def classify(
+    def classify_traced(
         self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
-    ) -> str:
+    ) -> ClassificationOutcome:
         # Lazy import so the stub/default path needs no SDK import at module load.
         from anthropic import Anthropic
 
+        user_prompt = self._build_user_prompt(chat_display_name, delta, prior_context)
         client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
         response = client.messages.create(
             model=self._hub.model,
-            # agentic_light is a reasoning model that emits a long <think> trace
-            # before the JSON; the budget must cover the trace AND the answer, or
-            # the response is truncated mid-think and yields no parseable JSON.
+            # The default model (claude_sonnet) answers with JSON directly. The
+            # budget still has headroom for reasoning models that emit a long
+            # <think> trace before the JSON — if it can't cover trace AND answer,
+            # the response truncates mid-think and yields nothing parseable. (A
+            # reasoning model that overruns this budget was why the default moved
+            # off agentic_light; see the audit trace.)
             max_tokens=8192,
             # Triage must be stable: identical messages must classify identically,
             # so pin temperature to 0 rather than leaving the model's default.
             temperature=0,
             system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": self._build_user_prompt(chat_display_name, delta, prior_context),
-                }
-            ],
+            messages=[{"role": "user", "content": user_prompt}],
         )
         parts = [
             getattr(block, "text", "")
             for block in response.content
             if getattr(block, "type", "") == "text"
         ]
-        return _extract_json_object("".join(parts))
+        raw_response = "".join(parts)
+        # Capture the raw model text AND the extracted JSON so the trace can show
+        # exactly what was sent and returned, even when extraction later fails.
+        return ClassificationOutcome(
+            raw_output=_extract_json_object(raw_response),
+            llm_called=True,
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_response,
+        )
+
+    def classify(
+        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+    ) -> str:
+        return self.classify_traced(chat_display_name, delta, prior_context).raw_output
 
 
 class CascadeClassifier:
@@ -223,4 +274,19 @@ def build_classifier(name: str, hub: HubConfig) -> Classifier:
         return HubClassifier(hub)
     if name == "cascade":
         return CascadeClassifier(HubClassifier(hub))
+    raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")
+
+
+def build_stage2_classifier(name: str, hub: HubConfig) -> TracedClassifier:
+    """Construct the Stage-2 classifier for the scan pipeline.
+
+    The pipeline owns Stage 1 (the keyword prefilter) itself, so it never wants a
+    :class:`CascadeClassifier` here — it wants the engine that runs *after* the
+    prefilter. ``stub`` stays deterministic/offline; both ``hub`` and ``cascade``
+    map to the LLM-backed :class:`HubClassifier`.
+    """
+    if name == "stub":
+        return StubClassifier()
+    if name in ("hub", "cascade"):
+        return HubClassifier(hub)
     raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")

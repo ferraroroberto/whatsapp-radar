@@ -52,17 +52,23 @@ class Digest:
         if not self.items:
             return "WhatsApp Radar: no actionable items."
         header = f"WhatsApp Radar — {len(self.items)} item(s) need attention:"
-        blocks = [header]
-        for i in self.items:
-            lines = [f"• {i.chat}" + (f" [{i.priority}]" if i.priority else "")]
-            if i.summary:
-                lines.append(f"  {i.summary}")
-            if i.suggested_next_action:
-                lines.append(f"  → {i.suggested_next_action}")
-            if i.deadline:
-                lines.append(f"  ⏰ {i.deadline}")
-            blocks.append("\n".join(lines))
-        return "\n\n".join(blocks)
+        return "\n\n".join([header, *(render_item(i) for i in self.items)])
+
+
+def render_item(item: DigestItem) -> str:
+    """Render one digest item as a plain-text block (one chat's contribution).
+
+    Shared by :meth:`Digest.to_telegram_text` and the audit trace so the per-chat
+    ``telegram_text`` recorded for a run matches exactly what the digest renders.
+    """
+    lines = [f"• {item.chat}" + (f" [{item.priority}]" if item.priority else "")]
+    if item.summary:
+        lines.append(f"  {item.summary}")
+    if item.suggested_next_action:
+        lines.append(f"  → {item.suggested_next_action}")
+    if item.deadline:
+        lines.append(f"  ⏰ {item.deadline}")
+    return "\n".join(lines)
 
 
 def build_digest(conn: sqlite3.Connection, run_id: int) -> Digest:

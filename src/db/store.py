@@ -9,10 +9,26 @@ after analysis has been persisted.
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.models import ChatRecord, MessageRecord, StoredMessage
+
+_MESSAGE_COLUMNS = (
+    "id, chat_id, source_message_id, message_timestamp, text, sender_label, message_type"
+)
+
+
+def _to_stored(row: sqlite3.Row) -> StoredMessage:
+    return StoredMessage(
+        id=int(row["id"]),
+        chat_id=int(row["chat_id"]),
+        source_message_id=row["source_message_id"],
+        message_timestamp=row["message_timestamp"],
+        text=row["text"],
+        sender_label=row["sender_label"],
+        message_type=row["message_type"],
+    )
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
@@ -191,32 +207,43 @@ def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[Stored
 
     if ts is None or mid is None:
         rows = conn.execute(
-            "SELECT id, chat_id, source_message_id, message_timestamp, text, "
-            "sender_label, message_type FROM messages "
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
             "WHERE chat_id = ? ORDER BY message_timestamp, id",
             (chat_id,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT id, chat_id, source_message_id, message_timestamp, text, "
-            "sender_label, message_type FROM messages "
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
             "WHERE chat_id = ? AND (message_timestamp > ? OR "
             "(message_timestamp = ? AND id > ?)) ORDER BY message_timestamp, id",
             (chat_id, ts, ts, mid),
         ).fetchall()
 
-    return [
-        StoredMessage(
-            id=int(r["id"]),
-            chat_id=int(r["chat_id"]),
-            source_message_id=r["source_message_id"],
-            message_timestamp=r["message_timestamp"],
-            text=r["text"],
-            sender_label=r["sender_label"],
-            message_type=r["message_type"],
-        )
-        for r in rows
-    ]
+    return [_to_stored(r) for r in rows]
+
+
+def messages_for_chat(
+    conn: sqlite3.Connection, chat_id: int, *, since_days: int | None = None
+) -> list[StoredMessage]:
+    """All messages for a chat, ordered by (timestamp, id), ignoring the cursor.
+
+    Used by the dry-run scan to *replay* stored history rather than the live
+    delta. ``since_days`` windows the replay to messages from the last N days.
+    """
+    if since_days is None:
+        rows = conn.execute(
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
+            "WHERE chat_id = ? ORDER BY message_timestamp, id",
+            (chat_id,),
+        ).fetchall()
+    else:
+        cutoff = (datetime.now(UTC) - timedelta(days=since_days)).isoformat()
+        rows = conn.execute(
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
+            "WHERE chat_id = ? AND message_timestamp >= ? ORDER BY message_timestamp, id",
+            (chat_id, cutoff),
+        ).fetchall()
+    return [_to_stored(r) for r in rows]
 
 
 def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
@@ -276,12 +303,47 @@ def advance_cursor(
 
 # --- runs / analysis / notifications --------------------------------------
 
-def start_run(conn: sqlite3.Connection) -> int:
+def start_run(
+    conn: sqlite3.Connection, mode: str = "review", params_json: str | None = None
+) -> int:
     cur = conn.execute(
-        "INSERT INTO review_runs (started_at, status) VALUES (?, 'running')", (_now(),)
+        "INSERT INTO review_runs (started_at, status, mode, params_json) "
+        "VALUES (?, 'running', ?, ?)",
+        (_now(), mode, params_json),
     )
     conn.commit()
     return _rowid(cur)
+
+
+def record_run_funnel(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    chats_synced: int,
+    messages_synced: int,
+    chats_monitored: int,
+    stage1_passed: int,
+    stage2_llm_calls: int,
+    actionable: int,
+    notification_status: str,
+) -> None:
+    """Persist a run's funnel counters and final notification status."""
+    conn.execute(
+        "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
+        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ? "
+        "WHERE id = ?",
+        (
+            chats_synced,
+            messages_synced,
+            chats_monitored,
+            stage1_passed,
+            stage2_llm_calls,
+            actionable,
+            notification_status,
+            run_id,
+        ),
+    )
+    conn.commit()
 
 
 def latest_run_id(conn: sqlite3.Connection) -> int | None:
@@ -341,6 +403,68 @@ def insert_analysis_item(
     )
     conn.commit()
     return _rowid(cur)
+
+
+def insert_analysis_trace(
+    conn: sqlite3.Connection,
+    run_id: int,
+    chat_id: int,
+    *,
+    input_message_ids_json: str,
+    input_text: str | None,
+    stage1_passed: bool,
+    stage1_roots_json: str,
+    llm_called: bool,
+    llm_system_prompt: str | None,
+    llm_user_prompt: str | None,
+    llm_raw_response: str | None,
+    parsed_result_json: str | None,
+    final_action: str,
+    telegram_text: str | None,
+    error: str | None,
+) -> int:
+    """Persist the full per-chat audit trace for one run (one row per chat)."""
+    cur = conn.execute(
+        """
+        INSERT INTO analysis_trace
+            (run_id, chat_id, input_message_ids_json, input_text, stage1_passed,
+             stage1_roots_json, llm_called, llm_system_prompt, llm_user_prompt,
+             llm_raw_response, parsed_result_json, final_action, telegram_text,
+             error, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            chat_id,
+            input_message_ids_json,
+            input_text,
+            1 if stage1_passed else 0,
+            stage1_roots_json,
+            1 if llm_called else 0,
+            llm_system_prompt,
+            llm_user_prompt,
+            llm_raw_response,
+            parsed_result_json,
+            final_action,
+            telegram_text,
+            error,
+            _now(),
+        ),
+    )
+    conn.commit()
+    return _rowid(cur)
+
+
+def traces_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
+    """Return a run's audit-trace rows joined to chat names, ordered by chat."""
+    return list(
+        conn.execute(
+            "SELECT t.*, c.display_name FROM analysis_trace t "
+            "JOIN chats c ON c.id = t.chat_id "
+            "WHERE t.run_id = ? ORDER BY t.chat_id",
+            (run_id,),
+        ).fetchall()
+    )
 
 
 def actionable_items_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:

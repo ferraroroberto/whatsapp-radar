@@ -1,7 +1,7 @@
 """Command-line entry point.
 
-Commands: status | ingest | chats | monitor | ignore | review. The CLI wires the
-boundaries together but holds no business logic of its own.
+Commands: status | ingest | chats | monitor | ignore | review | scan | notify.
+The CLI wires the boundaries together but holds no business logic of its own.
 """
 
 from __future__ import annotations
@@ -11,24 +11,21 @@ import sqlite3
 import sys
 
 from src.analysis.classifier import build_classifier
+from src.analysis.pipeline import Mode, scan
 from src.analysis.review import review_monitored_chats
 from src.config import Config, load_config
 from src.connector.base import MessageConnector
-from src.connector.fixture import FixtureConnector
-from src.connector.linked_device import LinkedDeviceConnector
+from src.connector.factory import build_connector
 from src.db import store
-from src.notify import NotifierError, build_notifier
+from src.notify import deliver_digest
 from src.report.digest import Digest, build_digest
 
 
 def _build_connector(config: Config) -> MessageConnector:
-    if config.connector == "fixture":
-        return FixtureConnector()
-    if config.connector == "linked_device":
-        return LinkedDeviceConnector(config.linked_device_dir)
-    raise SystemExit(
-        f"connector {config.connector!r} is not available (expected 'fixture' or 'linked_device')"
-    )
+    try:
+        return build_connector(config)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _cmd_status(conn: sqlite3.Connection, config: Config) -> int:
@@ -109,29 +106,39 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     return _deliver(conn, config, outcome.run_id, digest)
 
 
+def _cmd_scan(
+    conn: sqlite3.Connection, config: Config, dry_run: bool, days: int | None
+) -> int:
+    """Unified pipeline: sync -> Stage 1 -> Stage 2 -> digest -> deliver, with a trace."""
+    mode: Mode = "dry_run" if dry_run else "live"
+    connector = None if dry_run else _build_connector(config)
+    outcome = scan(conn, config, mode=mode, days=days, connector=connector)
+
+    if outcome.digest is not None:
+        print(outcome.digest.to_json())
+    print(
+        f"\nRun {outcome.run_id} [{mode}]: synced {outcome.chats_synced} chats / "
+        f"{outcome.messages_synced} msgs, {outcome.chats_monitored} monitored, "
+        f"{outcome.chats_with_delta} with delta, stage1={outcome.stage1_passed}, "
+        f"llm={outcome.stage2_llm_calls}, actionable={outcome.actionable}, "
+        f"notify={outcome.notification_status}.",
+        file=sys.stderr,
+    )
+    for chat_id, err in outcome.errors:
+        print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
+    return 1 if outcome.notification_status == "failed" else 0
+
+
 def _deliver(conn: sqlite3.Connection, config: Config, run_id: int, digest: Digest) -> int:
     """Deliver a run's digest, recording the outcome. Retryable via 'wr notify'."""
-    try:
-        notifier = build_notifier(config.notifier, config.telegram)
-    except (NotifierError, ValueError) as exc:
-        store.record_notification(conn, run_id, config.notifier, "failed", str(exc))
-        print(f"Notifier misconfigured: {exc}", file=sys.stderr)
+    status, detail = deliver_digest(conn, config, run_id, digest)
+    if status == "failed":
+        print(f"Delivery failed (retry with 'wr notify'): {detail}", file=sys.stderr)
         return 1
-
-    if notifier is None:
-        store.record_notification(conn, run_id, config.notifier, "skipped", "no notifier (none)")
+    if status == "skipped":
         print("Notifier is 'none' — digest recorded as skipped (set WR_NOTIFIER=telegram).",
               file=sys.stderr)
         return 0
-
-    try:
-        notifier.send(digest)
-    except NotifierError as exc:
-        store.record_notification(conn, run_id, config.notifier, "failed", str(exc))
-        print(f"Delivery failed (retry with 'wr notify'): {exc}", file=sys.stderr)
-        return 1
-
-    store.record_notification(conn, run_id, config.notifier, "sent")
     print(f"Digest delivered via {config.notifier}.", file=sys.stderr)
     return 0
 
@@ -171,6 +178,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="print the digest without delivering it"
     )
 
+    p_scan = sub.add_parser(
+        "scan", help="unified sync -> analyze -> digest -> notify, with a full audit trace"
+    )
+    p_scan.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="replay stored messages with no connector, no delivery, no cursor advance",
+    )
+    p_scan.add_argument(
+        "--days", type=int, default=None, help="dry-run: only replay messages from the last N days"
+    )
+
     p_notify = sub.add_parser("notify", help="(re)deliver a run's digest (latest by default)")
     p_notify.add_argument(
         "--run", type=int, default=None, help="run id to deliver (default: latest)"
@@ -200,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_set_status(conn, args.chat_id, "ignored")
         if args.command == "review":
             return _cmd_review(conn, config, args.dry_run)
+        if args.command == "scan":
+            return _cmd_scan(conn, config, args.dry_run, args.days)
         if args.command == "notify":
             return _cmd_notify(conn, config, args.run)
     finally:

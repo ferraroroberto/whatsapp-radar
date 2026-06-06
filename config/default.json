@@ -6,7 +6,7 @@
   "linked_device_dir": "data/linked_device",
   "hub": {
     "base_url": "http://127.0.0.1:8000",
-    "model": "agentic_light"
+    "model": "claude_sonnet"
   },
   "telegram": {
     "bot_token": "",

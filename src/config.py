@@ -77,6 +77,25 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return out
 
 
+def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> Path:
+    """Deep-merge ``partial`` into the gitignored ``config/local.json`` (atomic).
+
+    This is the per-host override layer the webapp's safe-settings form writes to
+    — never the committed ``config/default.json``. Existing keys not present in
+    ``partial`` are preserved. Returns the path written.
+    """
+    root = root or project_root()
+    target = root / "config" / "local.json"
+    current = _load_json(target)
+    merged = _deep_merge(current, partial)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    os.replace(tmp, target)
+    return target
+
+
 def load_config(root: Path | None = None) -> Config:
     """Build the effective :class:`Config` from defaults, local overrides, and env."""
     root = root or project_root()

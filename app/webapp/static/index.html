@@ -47,10 +47,61 @@
     </section>
 
     <section id="paneChats" class="pane" hidden>
-      <div class="card placeholder">
-        <h2>💬 Chats &amp; Config</h2>
-        <p class="muted">Monitor/ignore chats and edit settings here in Step 5 (#10).</p>
-      </div>
+      <section class="card">
+        <div class="card-header">
+          <h2>💬 Chats</h2>
+          <button id="chatsRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
+        </div>
+        <div class="chats-toolbar">
+          <div id="chatsFilter" class="segmented" role="radiogroup" aria-label="Chat filter">
+            <button id="chatsFilterMonitored" type="button" class="active" data-filter="monitored">Monitored</button>
+            <button id="chatsFilterIgnored" type="button" data-filter="ignored">Ignored</button>
+            <button id="chatsFilterAll" type="button" data-filter="all">All</button>
+          </div>
+          <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name" aria-label="Search">🔍</button>
+        </div>
+        <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search chats by name…" autocomplete="off" hidden>
+        <p id="chatsCount" class="muted small"></p>
+        <ul id="chatsList" class="card-list" aria-label="Chats"></ul>
+        <div id="chatsEmpty" class="empty" hidden>No chats to show.</div>
+      </section>
+
+      <details id="configCard" class="card coding-card">
+        <summary class="coding-summary">
+          <div class="coding-summary-row">
+            <span class="coding-summary-title">🛠️ Classifier &amp; settings</span>
+          </div>
+        </summary>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">System prompt <span class="opt-tag">(read-only — edit the file)</span></h3>
+          <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
+          <h3 class="opt-group-title">Keyword roots <span class="opt-tag">(read-only — edit the file)</span></h3>
+          <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Safe settings</h3>
+          <form id="configForm" autocomplete="off">
+            <label class="stacked"><span>Connector</span>
+              <select id="cfgConnector" class="select-native"></select></label>
+            <label class="stacked"><span>Classifier</span>
+              <select id="cfgClassifier" class="select-native"></select></label>
+            <label class="stacked"><span>Notifier</span>
+              <select id="cfgNotifier" class="select-native"></select></label>
+            <label class="stacked"><span>Hub base URL</span>
+              <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
+            <label class="stacked"><span>Hub model</span>
+              <input id="cfgHubModel" type="text" class="input-native"></label>
+            <label class="stacked"><span>Telegram bot token</span>
+              <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
+            <label class="stacked"><span>Telegram chat ID</span>
+              <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+            <p id="cfgNote" class="opt-hint"></p>
+            <button type="submit" class="big-btn">💾 Save settings</button>
+          </form>
+        </div>
+      </details>
     </section>
 
     <section id="paneExecution" class="pane" hidden>
@@ -89,6 +140,17 @@
 
     <div id="toast" class="toast" hidden></div>
   </main>
+
+  <div id="historyOverlay" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+      <header class="modal-head">
+        <h2 id="historyTitle" class="modal-title"></h2>
+        <button id="historyClose" type="button" class="icon-btn" aria-label="Close">✕</button>
+      </header>
+      <div id="historyBody" class="history-body"></div>
+      <p id="historyEmpty" class="muted small" hidden>No messages stored for this chat.</p>
+    </div>
+  </div>
 
   <div id="loginOverlay" class="login-overlay" hidden>
     <form id="loginForm" class="login-card" autocomplete="off">

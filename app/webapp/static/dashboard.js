@@ -6,7 +6,13 @@
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
 
+// Per-channel "Last msg" column: compact, no year ("06-06 12:47"). The last-scan
+// card below still uses the full timestamp via fmtTsFull.
 function fmtTs(ts) {
+  if (!ts) return '—';
+  return String(ts).replace('T', ' ').slice(5, 16);
+}
+function fmtTsFull(ts) {
   if (!ts) return '—';
   return String(ts).replace('T', ' ').slice(0, 16);
 }
@@ -40,7 +46,7 @@ function render(d) {
   // Two-line last-scan card: title + date on line 1, the report on line 2.
   const last = d.scans.last;
   if (last) {
-    els.lastRunWhen.textContent = fmtTs(last.started_at);
+    els.lastRunWhen.textContent = fmtTsFull(last.started_at);
     els.lastRunSummary.textContent =
       last.mode + ' · ' + last.status + ' · ' + fmtNum(last.messages_synced) + ' msgs · ' +
       fmtNum(last.actionable) + ' actionable · ' + (last.notification_status || 'none');

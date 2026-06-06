@@ -554,9 +554,82 @@ def messages_per_chat(
             "SELECT c.id, c.display_name, c.status, c.last_message_at, "
             "COUNT(m.id) AS message_count "
             "FROM chats c LEFT JOIN messages m ON m.chat_id = c.id "
-            f"{where} GROUP BY c.id ORDER BY message_count DESC, c.id"
+            f"{where} GROUP BY c.id "
+            "ORDER BY c.last_message_at IS NULL, c.last_message_at DESC, c.id"
         ).fetchall()
     )
+
+
+# --- chats & config tab (read-only listing + bounded history) --------------
+# Powers the Chats & Config tab (#10). Listing and history are SELECT-only; the
+# tab's only writes go through set_chat_status / baseline_cursor (above).
+
+def chats_overview(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """All chats with their status, message count, and latest message preview.
+
+    Columns: id, source_chat_id, display_name, chat_type, status,
+    last_message_at, message_count, last_message_text. The latest text comes from
+    a correlated subquery keyed by the same (timestamp, id) ordering the cursor
+    uses. Most recently active first (NULLs last) so the operator's live chats
+    surface at the top of the picker.
+    """
+    return list(
+        conn.execute(
+            "SELECT c.id, c.source_chat_id, c.display_name, c.chat_type, c.status, "
+            "c.last_message_at, "
+            "(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS message_count, "
+            "(SELECT m.text FROM messages m WHERE m.chat_id = c.id "
+            " ORDER BY m.message_timestamp DESC, m.id DESC LIMIT 1) AS last_message_text "
+            "FROM chats c "
+            "ORDER BY c.last_message_at IS NULL, c.last_message_at DESC, c.id"
+        ).fetchall()
+    )
+
+
+def recent_messages(
+    conn: sqlite3.Connection,
+    chat_id: int,
+    *,
+    limit: int = 100,
+    before_ts: str | None = None,
+    before_id: int | None = None,
+) -> tuple[list[StoredMessage], bool]:
+    """A page of the chat's messages (oldest→newest) plus whether older remain.
+
+    No cursor → the newest ``limit`` messages. With a ``(before_ts, before_id)``
+    cursor → the newest ``limit`` messages strictly *older* than it, which is how
+    the history overlay lazily loads more as you scroll up. Ordering and the
+    cursor both use the lexicographic ``(message_timestamp, id)`` key. One extra
+    row is fetched so ``has_more`` is known without a second query. Bounded so a
+    chat with tens of thousands of messages never floods the request path.
+    """
+    if before_ts is not None and before_id is not None:
+        rows = conn.execute(
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
+            "WHERE chat_id = ? AND (message_timestamp < ? OR "
+            "(message_timestamp = ? AND id < ?)) "
+            "ORDER BY message_timestamp DESC, id DESC LIMIT ?",
+            (chat_id, before_ts, before_ts, before_id, limit + 1),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"SELECT {_MESSAGE_COLUMNS} FROM messages "
+            "WHERE chat_id = ? ORDER BY message_timestamp DESC, id DESC LIMIT ?",
+            (chat_id, limit + 1),
+        ).fetchall()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return [_to_stored(r) for r in reversed(rows)], has_more
+
+
+def get_chat(conn: sqlite3.Connection, chat_id: int) -> sqlite3.Row | None:
+    """Return a single chat row by internal id, or None if it doesn't exist."""
+    row: sqlite3.Row | None = conn.execute(
+        "SELECT id, source_chat_id, display_name, chat_type, status, last_message_at "
+        "FROM chats WHERE id = ?",
+        (chat_id,),
+    ).fetchone()
+    return row
 
 
 def count_runs(conn: sqlite3.Connection) -> int:

@@ -45,7 +45,8 @@ qr*.txt
 # App Launcher scratch
 .launcher-tmp/
 
-# IDE / OS
+# Agent / IDE / OS
+.claude/
 .vscode/
 .idea/
 *.swp

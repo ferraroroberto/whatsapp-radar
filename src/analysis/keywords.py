@@ -10,12 +10,29 @@ from __future__ import annotations
 
 import unicodedata
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from src.models import StoredMessage
 
 _ROOTS_FILE = "keyword_roots.txt"
+
+
+@dataclass(frozen=True)
+class KeywordSignal:
+    """Result of the Stage-1 prefilter: whether it matched and which roots did.
+
+    ``matched`` is exposed via :meth:`__bool__` so the cascade can keep using
+    ``if not has_actionable_signal(delta)``, while ``roots`` carries the Stage-1
+    evidence the audit trace records.
+    """
+
+    matched: bool
+    roots: tuple[str, ...] = ()
+
+    def __bool__(self) -> bool:
+        return self.matched
 
 
 @lru_cache(maxsize=1)
@@ -37,13 +54,26 @@ def normalize(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
-def message_has_signal(text: str | None) -> bool:
+def matched_roots(text: str | None) -> list[str]:
+    """Return every actionable root found in ``text`` (normalized), in roots order."""
     if not text:
-        return False
+        return []
     normalized = normalize(text)
-    return any(root in normalized for root in load_keyword_roots())
+    return [root for root in load_keyword_roots() if root in normalized]
 
 
-def has_actionable_signal(delta: Iterable[StoredMessage]) -> bool:
-    """True if any message in the delta contains an actionable root."""
-    return any(message_has_signal(m.text) for m in delta)
+def message_has_signal(text: str | None) -> bool:
+    return bool(matched_roots(text))
+
+
+def has_actionable_signal(delta: Iterable[StoredMessage]) -> KeywordSignal:
+    """Stage-1 verdict over a delta, carrying the unique roots that matched.
+
+    Truthy iff any message contains an actionable root; the matched roots are
+    deduplicated while preserving first-seen order so the trace records evidence.
+    """
+    seen: dict[str, None] = {}
+    for message in delta:
+        for root in matched_roots(message.text):
+            seen.setdefault(root, None)
+    return KeywordSignal(matched=bool(seen), roots=tuple(seen))

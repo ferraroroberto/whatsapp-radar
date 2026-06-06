@@ -101,7 +101,7 @@ def load_config(root: Path | None = None) -> Config:
         base_url=os.environ.get(
             "WR_HUB_BASE_URL", hub_raw.get("base_url", "http://127.0.0.1:8000")
         ),
-        model=os.environ.get("WR_HUB_MODEL", hub_raw.get("model", "agentic_light")),
+        model=os.environ.get("WR_HUB_MODEL", hub_raw.get("model", "claude_sonnet")),
     )
     telegram = TelegramConfig(
         bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_raw.get("bot_token", "")),

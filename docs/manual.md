@@ -119,6 +119,16 @@ The hub call pins `temperature=0` so identical messages classify identically. Th
 .\wr.bat review --dry-run    # classify and print, but do not deliver
 ```
 
+Or use **`scan`** — the one-shot that does the whole flow (sync → keyword prefilter → LLM → digest → deliver) and writes a full audit trace of every decision. This is the command to schedule:
+
+```powershell
+.\wr.bat scan               # sync all chats, analyze monitored deltas, deliver one digest
+.\wr.bat scan --dry-run     # replay stored messages: no connector, no delivery, no cursor advance
+.\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
+```
+
+Every `scan` run records its funnel (chats synced, what passed each stage, LLM calls, actionable count, delivery status) on `review_runs`, and a per-chat decision trail — the analyzed delta, the keyword evidence, the exact LLM prompt and raw response, the verdict, and the delivered text — on `analysis_trace`. A later step surfaces these in the admin UI; until then you can read them straight from the SQLite DB.
+
 - If nothing is actionable, **no notification is sent**.
 - If delivery fails (network, bad token), the run's analysis and cursors are already saved, so you can retry delivery alone:
 
@@ -132,7 +142,7 @@ Running `review` again with no new messages does nothing and produces no notific
 ## Routine operation
 
 - Keep the **sidecar running** (it captures live messages and history).
-- Schedule `wr review` periodically (App Launcher Jobs, or run it by hand). Each run processes only the delta and delivers at most one digest.
+- Schedule `wr scan` periodically (App Launcher Jobs, or run it by hand) — it syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace. (`wr review` remains for analyzing an already-ingested buffer without a sync.)
 - Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/` and re-run the sidecar).
 
 ## Troubleshooting

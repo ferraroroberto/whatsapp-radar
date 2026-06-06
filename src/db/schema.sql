@@ -44,14 +44,52 @@ CREATE TABLE IF NOT EXISTS chat_review_state (
     rolling_context_json           TEXT
 );
 
+-- One row per scan/review run. Beyond lifecycle (status/timing) it records the
+-- run mode, its parameters, and the full funnel so any run is inspectable:
+-- how much was synced, how much passed each stage, and what was delivered.
 CREATE TABLE IF NOT EXISTS review_runs (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at     TEXT NOT NULL,
-    completed_at   TEXT,
-    status         TEXT NOT NULL DEFAULT 'running',
-    chats_reviewed INTEGER NOT NULL DEFAULT 0,
-    error          TEXT
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at          TEXT NOT NULL,
+    completed_at        TEXT,
+    status              TEXT NOT NULL DEFAULT 'running',
+    mode                TEXT NOT NULL DEFAULT 'review',  -- 'live' | 'dry_run' | 'review'
+    params_json         TEXT,                            -- run parameters (e.g. {"days": 7})
+    chats_reviewed      INTEGER NOT NULL DEFAULT 0,      -- chats that had a delta
+    chats_synced        INTEGER NOT NULL DEFAULT 0,      -- chats pulled from the connector (live)
+    messages_synced     INTEGER NOT NULL DEFAULT 0,      -- new messages stored (live)
+    chats_monitored     INTEGER NOT NULL DEFAULT 0,      -- monitored chats considered
+    stage1_passed       INTEGER NOT NULL DEFAULT 0,      -- deltas that passed the keyword prefilter
+    stage2_llm_calls    INTEGER NOT NULL DEFAULT 0,      -- LLM classifications actually made
+    actionable          INTEGER NOT NULL DEFAULT 0,      -- chats with an actionable verdict
+    notification_status TEXT,                            -- 'sent'|'failed'|'skipped'|'dry_run'|'none'
+    error               TEXT
 );
+
+-- Per-run, per-chat audit trail: the complete decision record for one chat in one
+-- run. A missed important message is a real failure, so every stage is captured —
+-- the analyzed delta, the keyword evidence, the exact LLM prompt and raw response,
+-- the validated result, the final action, and the digest text it contributed.
+CREATE TABLE IF NOT EXISTS analysis_trace (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id                 INTEGER NOT NULL REFERENCES review_runs(id) ON DELETE CASCADE,
+    chat_id                INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    input_message_ids_json TEXT,            -- source_message_ids analyzed
+    input_text             TEXT,            -- rendered delta handed to stage 1
+    stage1_passed          INTEGER NOT NULL DEFAULT 0,
+    stage1_roots_json      TEXT,            -- keyword roots that triggered (Stage-1 evidence)
+    llm_called             INTEGER NOT NULL DEFAULT 0,
+    llm_system_prompt      TEXT,            -- exact system prompt sent (Stage 2)
+    llm_user_prompt        TEXT,            -- exact user prompt sent (Stage 2)
+    llm_raw_response       TEXT,            -- raw model text before JSON extraction
+    parsed_result_json     TEXT,            -- validated AnalysisResult (null on contract error)
+    final_action           TEXT NOT NULL,   -- 'not_actionable' | 'actionable' | 'contract_error'
+    telegram_text          TEXT,            -- this chat's contribution to the digest
+    error                  TEXT,            -- contract error detail, if any
+    created_at             TEXT NOT NULL,
+    UNIQUE (run_id, chat_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_trace_run ON analysis_trace (run_id);
 
 CREATE TABLE IF NOT EXISTS analysis_items (
     id                        INTEGER PRIMARY KEY AUTOINCREMENT,

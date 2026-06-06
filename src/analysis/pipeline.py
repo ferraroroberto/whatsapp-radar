@@ -215,11 +215,25 @@ def scan(
         except ContractError as exc:
             # Do NOT persist an analysis item or advance the cursor: the same
             # delta is retried next run. The trace still captures the failure.
-            outcome.errors.append((chat_id, str(exc)))
+            # A budget overrun (stop_reason == 'max_tokens') is recorded as a
+            # distinct, self-explanatory state rather than a generic contract
+            # error, so a model swap that silently zeroes out classification is
+            # obvious in the trace (issue #17).
+            if co.stop_reason == "max_tokens":
+                final_action = "llm_truncated"
+                error = (
+                    "model hit max_tokens before emitting parseable JSON "
+                    f"(raw {len(co.raw_response or '')} chars) — use a model that "
+                    "answers with JSON directly or raise hub.max_tokens"
+                )
+            else:
+                final_action = "contract_error"
+                error = str(exc)
+            outcome.errors.append((chat_id, error))
             _write_trace(
                 conn, run_id, chat_id,
                 signal=signal, delta=delta, outcome=co, result=None,
-                final_action="contract_error", telegram_text=None, error=str(exc),
+                final_action=final_action, telegram_text=None, error=error,
             )
             continue
 

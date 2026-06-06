@@ -99,6 +99,8 @@ Two prompt assets are plain-text and loaded verbatim, so you can **read and tune
 
 The hub call pins `temperature=0` so identical messages classify identically. The digest summary language follows the model's default (currently English); change it by editing the system prompt.
 
+The hub path is robust to the configured model. The output budget (`WR_HUB_MAX_TOKENS`, default 8192) is sized per model — a reasoning model whose `<think>` trace overruns it truncates before the JSON, and that case is recorded as a distinct `llm_truncated` state in the audit trace (with a "raise hub.max_tokens or use a JSON-answering model" hint), not a generic `contract_error`. The delta sent in one prompt is capped at `WR_HUB_MAX_PROMPT_CHARS` characters (default 24000), keeping the most recent messages, so a whole-history `scan` can't blow the model's context window.
+
 ## Step 6 — Set up Telegram delivery
 
 1. In Telegram, message **@BotFather**, send `/newbot`, and follow the prompts. Copy the **bot token** it gives you.

@@ -65,9 +65,10 @@ def _trace(conn: sqlite3.Connection, run_id: int, chat_id: int) -> sqlite3.Row:
 class _FakeTraced:
     """A Stage-2 classifier that records calls and returns canned trace metadata."""
 
-    def __init__(self, raw_output: str) -> None:
+    def __init__(self, raw_output: str, *, stop_reason: str | None = None) -> None:
         self.calls = 0
         self._raw = raw_output
+        self._stop_reason = stop_reason
 
     def classify_traced(
         self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
@@ -79,6 +80,7 @@ class _FakeTraced:
             system_prompt="SYSTEM-PROMPT",
             user_prompt=f"USER-PROMPT for {chat_display_name}",
             raw_response=f"<think>reasoning</think>{self._raw}",
+            stop_reason=self._stop_reason,
         )
 
 
@@ -325,3 +327,34 @@ def test_contract_error_traces_and_does_not_advance_cursor(
     )
     assert recovered.chats_with_delta == 1
     assert recovered.actionable == 1
+
+
+def test_truncated_response_is_distinct_from_contract_error(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # A reasoning model that spends its whole budget on <think> and never reaches
+    # the JSON (stop_reason == 'max_tokens') must be recorded as a distinct,
+    # self-explanatory state — not the generic contract_error a malformed-but-
+    # complete response would get.
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    config = _config(tmp_path)
+    truncated = _FakeTraced("<think>endless reasoning that never closes", stop_reason="max_tokens")
+
+    bad = scan(
+        ingested_conn, config, mode="live",
+        connector=FixtureConnector(), classifier=truncated,
+    )
+
+    assert bad.errors and bad.errors[0][0] == chat_id
+    assert "max_tokens" in bad.errors[0][1]
+    row = _trace(ingested_conn, bad.run_id, chat_id)
+    assert row["final_action"] == "llm_truncated"
+    assert row["parsed_result_json"] is None
+    assert "max_tokens" in row["error"]
+    # Same safety as a contract error: no analysis item, no cursor advance.
+    assert ingested_conn.execute(
+        "SELECT COUNT(*) AS n FROM analysis_items WHERE run_id = ?", (bad.run_id,)
+    ).fetchone()["n"] == 0
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
+    ).fetchone() is None

@@ -26,6 +26,13 @@ def project_root() -> Path:
 class HubConfig:
     base_url: str
     model: str
+    # Output token budget for one classification call. Sized per model rather
+    # than hard-coded so a reasoning model with a long <think> trace can be given
+    # room instead of silently truncating mid-think.
+    max_tokens: int = 8192
+    # Max characters of the rendered message delta sent in one prompt. Caps a
+    # whole-history scan so a single request can't blow the model's context.
+    max_prompt_chars: int = 24000
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,10 @@ def load_config(root: Path | None = None) -> Config:
             "WR_HUB_BASE_URL", hub_raw.get("base_url", "http://127.0.0.1:8000")
         ),
         model=os.environ.get("WR_HUB_MODEL", hub_raw.get("model", "claude_sonnet")),
+        max_tokens=int(os.environ.get("WR_HUB_MAX_TOKENS", hub_raw.get("max_tokens", 8192))),
+        max_prompt_chars=int(
+            os.environ.get("WR_HUB_MAX_PROMPT_CHARS", hub_raw.get("max_prompt_chars", 24000))
+        ),
     )
     # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)
     # so the webapp UI owns them. Precedence: WR_TELEGRAM_* env > webapp_config >

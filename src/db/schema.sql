@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS analysis_trace (
     llm_user_prompt        TEXT,            -- exact user prompt sent (Stage 2)
     llm_raw_response       TEXT,            -- raw model text before JSON extraction
     parsed_result_json     TEXT,            -- validated AnalysisResult (null on contract error)
-    final_action           TEXT NOT NULL,   -- 'not_actionable' | 'actionable' | 'contract_error'
+    final_action           TEXT NOT NULL,   -- 'not_actionable' | 'actionable' | 'contract_error' | 'llm_truncated'
     telegram_text          TEXT,            -- this chat's contribution to the digest
     error                  TEXT,            -- contract error detail, if any
     created_at             TEXT NOT NULL,

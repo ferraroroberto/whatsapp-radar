@@ -111,6 +111,10 @@ class ClassificationOutcome:
     system_prompt: str | None = None
     user_prompt: str | None = None
     raw_response: str | None = None
+    # The model's stop reason (Anthropic shape: 'end_turn', 'max_tokens', …).
+    # ``"max_tokens"`` means the response was truncated before completing — the
+    # pipeline uses this to distinguish a budget overrun from malformed JSON.
+    stop_reason: str | None = None
 
 
 @runtime_checkable
@@ -191,14 +195,36 @@ class HubClassifier:
     def _build_user_prompt(
         self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
     ) -> str:
-        lines = [f"Chat: {chat_display_name}"]
+        header = [f"Chat: {chat_display_name}"]
         if prior_context:
-            lines.append(f"Prior context: {prior_context}")
-        lines.append("New messages:")
-        for msg in delta:
-            sender = msg.sender_label or "unknown"
-            lines.append(f"- [{msg.source_message_id}] {sender}: {msg.text or ''}")
-        return "\n".join(lines)
+            header.append(f"Prior context: {prior_context}")
+        header.append("New messages:")
+
+        formatted = [
+            f"- [{msg.source_message_id}] {msg.sender_label or 'unknown'}: {msg.text or ''}"
+            for msg in delta
+        ]
+        # Cap the delta so a whole-history scan can't build a single prompt that
+        # blows the model's context window. Keep the most recent messages (most
+        # relevant for triage) by walking newest-first until the char budget is
+        # spent, then note how many older ones were dropped.
+        budget = self._hub.max_prompt_chars
+        kept_reversed: list[str] = []
+        used = 0
+        for line in reversed(formatted):
+            # Always keep at least the most recent message, truncating it if a
+            # single message alone exceeds the budget.
+            candidate = line[:budget] if not kept_reversed and len(line) > budget else line
+            if kept_reversed and used + len(candidate) + 1 > budget:
+                break
+            kept_reversed.append(candidate)
+            used += len(candidate) + 1
+
+        kept = list(reversed(kept_reversed))
+        omitted = len(formatted) - len(kept)
+        if omitted:
+            kept.insert(0, f"[... {omitted} older message(s) omitted to fit the context budget]")
+        return "\n".join(header + kept)
 
     def classify_traced(
         self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
@@ -210,13 +236,13 @@ class HubClassifier:
         client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
         response = client.messages.create(
             model=self._hub.model,
-            # The default model (claude_sonnet) answers with JSON directly. The
-            # budget still has headroom for reasoning models that emit a long
-            # <think> trace before the JSON — if it can't cover trace AND answer,
-            # the response truncates mid-think and yields nothing parseable. (A
-            # reasoning model that overruns this budget was why the default moved
-            # off agentic_light; see the audit trace.)
-            max_tokens=8192,
+            # Output budget is configurable per model (hub.max_tokens) rather than
+            # a single hard-coded value: the default model (claude_sonnet) answers
+            # with JSON directly, but a reasoning model that emits a long <think>
+            # trace before the JSON can overrun a small budget and truncate
+            # mid-think, yielding nothing parseable. When that happens the pipeline
+            # records a distinct 'llm_truncated' state via ``stop_reason`` below.
+            max_tokens=self._hub.max_tokens,
             # Triage must be stable: identical messages must classify identically,
             # so pin temperature to 0 rather than leaving the model's default.
             temperature=0,
@@ -231,12 +257,15 @@ class HubClassifier:
         raw_response = "".join(parts)
         # Capture the raw model text AND the extracted JSON so the trace can show
         # exactly what was sent and returned, even when extraction later fails.
+        # ``stop_reason`` lets the pipeline tell a budget overrun ('max_tokens')
+        # apart from genuinely malformed JSON.
         return ClassificationOutcome(
             raw_output=_extract_json_object(raw_response),
             llm_called=True,
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             raw_response=raw_response,
+            stop_reason=getattr(response, "stop_reason", None),
         )
 
     def classify(

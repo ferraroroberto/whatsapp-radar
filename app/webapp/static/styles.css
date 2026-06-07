@@ -684,7 +684,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 
 /* Recent-runs list: one lean line each — OK/KO · kind · when. */
-.exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; }
+/* max-height ≈ 5 rows (each ~39 px); scroll reveals older entries. */
+.exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; max-height: 210px; overflow-y: auto; }
 #execRunsEmpty, #execViewer, #execViewerEmpty { padding: 4px 16px 14px; }
 #execViewer { padding-top: 8px; }
 .exec-run-li {

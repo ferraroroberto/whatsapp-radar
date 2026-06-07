@@ -251,20 +251,24 @@ def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRe
 
 
 def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[StoredMessage]:
-    """Messages newer than the chat's cursor, ordered by (timestamp, id).
+    """Messages ingested after the chat's cursor, ordered by (timestamp, id).
 
-    Uses the lexicographic ``(message_timestamp, id)`` ordering so a tie on
-    timestamp is broken deterministically by insertion id.
+    The cursor key is the monotonic ingestion id (``messages.id``, an
+    AUTOINCREMENT rowid), **not** the send-timestamp. Ingestion is not monotonic
+    in send-time: a resync can backfill history whose ``message_timestamp``
+    predates messages already past the cursor. Keying the delta on send-time
+    would filter those out forever; keying on ``id`` guarantees nothing ingested
+    after the cursor is ever skipped (#37). The rows are still *ordered* by
+    ``(message_timestamp, id)`` so the delta reads in send-time order for the
+    classifier and digest — only the cursor predicate uses ``id``.
     """
     state = conn.execute(
-        "SELECT last_processed_message_timestamp AS ts, last_processed_message_id AS mid "
-        "FROM chat_review_state WHERE chat_id = ?",
+        "SELECT last_processed_message_id AS mid FROM chat_review_state WHERE chat_id = ?",
         (chat_id,),
     ).fetchone()
-    ts = state["ts"] if state else None
     mid = state["mid"] if state else None
 
-    if ts is None or mid is None:
+    if mid is None:
         rows = conn.execute(
             f"SELECT {_MESSAGE_COLUMNS} FROM messages "
             "WHERE chat_id = ? ORDER BY message_timestamp, id",
@@ -273,9 +277,8 @@ def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[Stored
     else:
         rows = conn.execute(
             f"SELECT {_MESSAGE_COLUMNS} FROM messages "
-            "WHERE chat_id = ? AND (message_timestamp > ? OR "
-            "(message_timestamp = ? AND id > ?)) ORDER BY message_timestamp, id",
-            (chat_id, ts, ts, mid),
+            "WHERE chat_id = ? AND id > ? ORDER BY message_timestamp, id",
+            (chat_id, mid),
         ).fetchall()
 
     return [_to_stored(r) for r in rows]
@@ -306,11 +309,14 @@ def messages_for_chat(
 
 
 def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
-    """Set the cursor to the latest stored message so only newer messages review.
+    """Set the cursor to the last-ingested stored message so only newer review.
 
     Used when a chat is first monitored: it baselines past the existing backlog so
     the first review does not classify months of history. No-op (returns False) if
-    the chat already has a cursor or has no messages yet.
+    the chat already has a cursor or has no messages yet. Baselines by the max
+    ingestion ``id`` (not max send-time) to match the cursor key — so a chat whose
+    backlog includes backfilled, out-of-send-order history is still fully skipped
+    rather than replaying any message ingested before monitoring began (#37).
     """
     if conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
@@ -318,7 +324,7 @@ def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
         return False
     row = conn.execute(
         "SELECT id, message_timestamp FROM messages WHERE chat_id = ? "
-        "ORDER BY message_timestamp DESC, id DESC LIMIT 1",
+        "ORDER BY id DESC LIMIT 1",
         (chat_id,),
     ).fetchone()
     if row is None:

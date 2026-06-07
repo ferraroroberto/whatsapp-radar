@@ -140,7 +140,11 @@ def _advance(
     """Advance the per-chat cursor (live mode only) after analysis is persisted."""
     if mode != "live":
         return
-    last = delta[-1]
+    # The cursor key is the ingestion id, and the delta is send-time ordered, so
+    # the high-water mark is the max id, not delta[-1] (a backfilled message can
+    # have a newer id but an older send-time). Advancing by max id is what keeps a
+    # backfill from being re-served — or skipped — on the next scan (#37).
+    last = max(delta, key=lambda m: m.id)
     rolling = json.dumps({"last_summary": summary, "last_message_id": last.source_message_id})
     store.advance_cursor(conn, chat_id, last.id, last.message_timestamp, rolling)
 

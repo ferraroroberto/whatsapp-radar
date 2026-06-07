@@ -38,6 +38,13 @@ export const state = {
     syncs: [],             // recent sync_log rows (per-sync ingest deltas)
     syncTotals: null,      // {chats, messages} current stored totals
   },
+  // Audit (#12): per-run trace drill-down (read-only).
+  audit: {
+    runs: [],              // recent review/scan runs (with funnel)
+    syncs: [],             // resync/reprocess maintenance markers
+    selected: null,        // selected run id, or null
+    detail: null,          // last fetched {run, traces}
+  },
 };
 
 export const EXECUTION_POLL_MS = 1500;
@@ -143,6 +150,18 @@ export const els = {
   execRuns: document.getElementById('execRuns'),
   execRunsEmpty: document.getElementById('execRunsEmpty'),
   execRefresh: document.getElementById('execRefresh'),
+
+  // Audit (#12)
+  auditRefresh: document.getElementById('auditRefresh'),
+  auditRuns: document.getElementById('auditRuns'),
+  auditRunsEmpty: document.getElementById('auditRunsEmpty'),
+  auditDetailCard: document.getElementById('auditDetailCard'),
+  auditDetailTitle: document.getElementById('auditDetailTitle'),
+  auditDetailClose: document.getElementById('auditDetailClose'),
+  auditDetailMeta: document.getElementById('auditDetailMeta'),
+  auditFunnel: document.getElementById('auditFunnel'),
+  auditTraces: document.getElementById('auditTraces'),
+  auditTracesEmpty: document.getElementById('auditTracesEmpty'),
 
   settingsPanel: document.getElementById('settingsPanel'),
   webauthnStatus: document.getElementById('webauthnStatus'),

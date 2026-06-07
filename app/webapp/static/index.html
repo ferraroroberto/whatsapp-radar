@@ -222,10 +222,26 @@
     </section>
 
     <section id="paneAudit" class="pane" hidden>
-      <div class="card placeholder">
-        <h2>🔍 Audit</h2>
-        <p class="muted">Per-run prompts, responses, and verdicts here in Step 7 (#12).</p>
-      </div>
+      <section class="card">
+        <div class="card-header">
+          <h2>🔍 Audit</h2>
+          <button id="auditRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
+        </div>
+        <p class="muted small">Every run is listed and fully drillable — confirm exactly why each message was or wasn't promoted.</p>
+        <ul id="auditRuns" class="card-list audit-runs" aria-label="Recent runs"></ul>
+        <p id="auditRunsEmpty" class="muted small" hidden>No runs yet — run a scan from the Run tab.</p>
+      </section>
+
+      <section id="auditDetailCard" class="card" hidden>
+        <div class="card-header">
+          <h3 id="auditDetailTitle" class="audit-detail-kind"></h3>
+          <button id="auditDetailClose" type="button" class="icon-btn" aria-label="Close" title="Close">✕</button>
+        </div>
+        <p id="auditDetailMeta" class="muted small"></p>
+        <div id="auditFunnel" class="exec-funnel" aria-label="Funnel"></div>
+        <div id="auditTraces" class="audit-traces" aria-label="Per-chat trace"></div>
+        <p id="auditTracesEmpty" class="muted small" hidden>No per-chat trace recorded for this run.</p>
+      </section>
     </section>
 
     <details id="settingsPanel" class="card settings-card">

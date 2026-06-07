@@ -676,6 +676,32 @@ def last_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
     return row
 
 
+def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """Review/scan runs newest-first, with the funnel columns the Audit list needs.
+
+    Read-only (SELECT only) so it is safe on the webapp request path; powers the
+    Audit tab's run list where each run is shown with its mode, parameters, and
+    funnel counters before drilling into the per-chat trace.
+    """
+    return list(
+        conn.execute(
+            "SELECT id, started_at, completed_at, status, mode, params_json, "
+            "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
+            "stage1_passed, stage2_llm_calls, actionable, notification_status, error "
+            "FROM review_runs ORDER BY id DESC LIMIT ?",
+            (max(1, limit),),
+        ).fetchall()
+    )
+
+
+def review_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
+    """A single review run by id (full row), or None if it doesn't exist."""
+    row: sqlite3.Row | None = conn.execute(
+        "SELECT * FROM review_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    return row
+
+
 def count_messages_since(conn: sqlite3.Connection, ingested_after: str) -> int:
     """Messages ingested strictly after an ISO timestamp (the unscanned backlog)."""
     row = conn.execute(

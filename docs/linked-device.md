@@ -1,6 +1,6 @@
 # Linked-Device Connector — Design & Risk
 
-Reference for the real WhatsApp Web linked-device connector. For the step-by-step operator guide, see [`manual.md`](manual.md).
+Reference for the real WhatsApp Web linked-device connector. To stand it up from zero see [`bootstrapping.md`](bootstrapping.md); for day-to-day operation see [`manual.md`](manual.md).
 
 ## Why a sidecar
 
@@ -53,9 +53,9 @@ This handling is unofficial-protocol behavior and may shift across Baileys relea
 
 **No media bytes are downloaded** — read-only, privacy-preserving, and unnecessary for text classification. Voice-note transcription (via the hub's whisper endpoint) is a possible follow-up, not part of v1.
 
-## First Spike Questions — answers
+## Connector design questions — answers
 
-These are the questions from [`onboarding.md`](onboarding.md), answered by this implementation.
+The open questions when this connector was designed, answered by the implementation.
 
 1. **Can a linked-device connector reliably pair and reconnect on the target Windows host?** Yes. Baileys `useMultiFileAuthState('auth/')` persists the session; pairing is a one-time QR scan. `connection.update` drives automatic reconnect on transient drops; only a phone-side logout (`DisconnectReason.loggedOut`) requires re-pairing.
 2. **Can it receive enough chat history and new-message events for incremental review?** Yes. `syncFullHistory: true` plus the `messaging-history.set` event provide initial history; `messages.upsert` provides the live stream. Both feed the same buffer, so review sees a continuous timeline.
@@ -69,4 +69,4 @@ These are the questions from [`onboarding.md`](onboarding.md), answered by this 
 
 - History depth is bounded by what WhatsApp syncs to a freshly linked device; very old history may be unavailable.
 - Group sender labels come from `pushName`, falling back to a humanized participant JID when a history-synced message carries none; they are local-only and never committed.
-- The sidecar lifecycle is currently manual (`npm start`); supervised running via App Launcher is a follow-up.
+- The sidecar is a long-running process. For unattended use it is supervised via App Launcher (see [`bootstrapping.md`](bootstrapping.md) Step 7); started by hand it is `cd sidecar && npm start`.

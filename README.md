@@ -38,7 +38,7 @@ The expected shape is a small standalone local service, integrated with the exis
 
 The practical connector path for personal/group chats is likely a WhatsApp Web linked-device integration. That is technically feasible but not an official WhatsApp Business Platform use case. Any implementation must be conservative: read-only behavior in our code, no send surface, no bulk automation, no scraping beyond chats the account can already see, clear local-only storage, and explicit operator consent.
 
-Before building product features, complete the spike in [`docs/onboarding.md`](docs/onboarding.md).
+To stand the whole system up from zero — new WhatsApp linked device, new Telegram bot, phone access, App Launcher wiring — follow [`docs/bootstrapping.md`](docs/bootstrapping.md).
 
 ## Running The Spike (No Personal Data)
 
@@ -82,7 +82,7 @@ Classification defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route th
 
 ## Running Against Real WhatsApp + Telegram
 
-The fixture path above needs no credentials. To run against real chats and deliver digests to Telegram, follow the full step-by-step guide in [`docs/manual.md`](docs/manual.md). In short:
+The fixture path above needs no credentials. To run against real chats and deliver digests to Telegram, follow the from-zero runbook in [`docs/bootstrapping.md`](docs/bootstrapping.md) (and [`docs/manual.md`](docs/manual.md) for day-to-day operation). In short:
 
 1. Pair a WhatsApp **linked device** with the read-only Node sidecar (`cd sidecar && npm install && npm start`, then scan the QR). It writes a local buffer under the ignored `data/linked_device/`.
 2. Set `WR_CONNECTOR=linked_device`; `wr ingest` / `wr chats` / `wr monitor` / `wr review` / `wr scan` / `wr resync` / `wr reprocess --confirm` then run unchanged against real data. `wr scan`, `wr resync`, and `wr reprocess` are also launchable as plain processes from App Launcher's Jobs tab (and surfaced live in the webapp's Execution tab).
@@ -127,6 +127,10 @@ powershell -File scripts\verify-before-ship.ps1   # all of the above + Playwrigh
 
 The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on a free port and require `playwright install chromium webkit` once.
 
+## Home-stack wiring (App Launcher)
+
+WhatsApp Radar runs as part of the home stack through [App Launcher](../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, and the admin PWA opened from the **Apps** tab. That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI. The full procedure (job name + cadence, the two Apps rows, and the calendar-anchored cert/token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
+
 ## Repository Status
 
-Spike complete end-to-end. On top of the fixture foundation (read-only connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, consolidated digest), the repo now has: the real WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader), baseline-to-now on first monitor, a multilingual (ES/EN/CA) cascade classifier that gates LLM calls behind a keyword prefilter, and retryable Telegram delivery. See [`docs/manual.md`](docs/manual.md) and [`docs/linked-device.md`](docs/linked-device.md). The fixture connector and offline stub classifier remain the default so the whole suite runs with no credentials.
+Spike complete end-to-end. On top of the fixture foundation (read-only connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, consolidated digest), the repo now has: the real WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader), baseline-to-now on first monitor, a multilingual (ES/EN/CA) cascade classifier that gates LLM calls behind a keyword prefilter, and retryable Telegram delivery. To recreate it from zero see [`docs/bootstrapping.md`](docs/bootstrapping.md); for day-to-day operation see [`docs/manual.md`](docs/manual.md) and for the connector design [`docs/linked-device.md`](docs/linked-device.md). The fixture connector and offline stub classifier remain the default so the whole suite runs with no credentials.

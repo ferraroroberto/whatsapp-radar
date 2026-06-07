@@ -79,7 +79,8 @@ def test_state_running_when_paired_connected_fresh(tmp_path: Path) -> None:
     info = sidecar.sidecar_state(tmp_path)
     assert info.state == sidecar.STATE_RUNNING
     assert info.is_live
-    assert "3 chats" in info.detail and "7 messages" in info.detail
+    assert info.chats == 3 and info.messages == 7  # session counters still parsed
+    assert "buffered" not in info.detail  # not presented as a misleading buffer total
 
 
 # --- launch: single-instance + clear failures ------------------------------

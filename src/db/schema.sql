@@ -116,3 +116,21 @@ CREATE TABLE IF NOT EXISTS notifications (
     sent_at  TEXT,
     error    TEXT
 );
+
+-- One row per sync (ingest) so the operator can see, at a glance, that syncing is
+-- pulling new data: when it ran, how many chats/messages it added, and the running
+-- totals afterwards. Written by every sync path (resync + live scan) so a scheduled
+-- job is as visible as a webapp click. Per-message ingest time lives on
+-- messages.ingested_at; this is the per-run summary on top of it.
+CREATE TABLE IF NOT EXISTS sync_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ran_at         TEXT NOT NULL,
+    source         TEXT NOT NULL,                  -- 'resync' | 'scan'
+    chats_added    INTEGER NOT NULL DEFAULT 0,
+    chats_updated  INTEGER NOT NULL DEFAULT 0,
+    messages_added INTEGER NOT NULL DEFAULT 0,
+    total_chats    INTEGER NOT NULL DEFAULT 0,
+    total_messages INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_log_ran ON sync_log (ran_at DESC);

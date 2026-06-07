@@ -91,6 +91,27 @@ def test_resync_aborts_when_source_offline(conn: sqlite3.Connection) -> None:
     assert store.count_chats(conn) == 0
 
 
+def test_resync_records_a_sync_log_row(conn: sqlite3.Connection) -> None:
+    out = resync(conn, FixtureConnector())
+    rows = store.recent_syncs(conn)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["source"] == "resync"
+    assert row["messages_added"] == out.messages_added > 0
+    assert row["chats_added"] == out.chats_added
+    # Totals are the running store size after the sync.
+    assert row["total_messages"] == store.count_messages(conn)
+    assert row["total_chats"] == store.count_chats(conn)
+
+
+def test_resync_logs_even_a_noop(conn: sqlite3.Connection) -> None:
+    resync(conn, FixtureConnector())
+    resync(conn, FixtureConnector())  # second run is a no-op delta
+    rows = store.recent_syncs(conn)
+    assert len(rows) == 2  # a no-op still records "ran, found nothing new"
+    assert (rows[0]["chats_added"], rows[0]["messages_added"]) == (0, 0)
+
+
 def test_resync_outcome_to_dict_shape(conn: sqlite3.Connection) -> None:
     payload = resync_outcome_to_dict(resync(conn, FixtureConnector()))
     assert payload["kind"] == "resync"

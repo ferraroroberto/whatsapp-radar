@@ -33,6 +33,7 @@ from app.webapp import runs
 from app.webapp.routers._helpers import maybe_json
 from src.config import load_config
 from src.connector.factory import build_connector
+from src.db import store
 
 router = APIRouter()
 
@@ -127,9 +128,9 @@ async def execution_health(request: Request) -> dict[str, Any]:
 
     A read-only probe: builds the configured connector and reads its status
     (which the linked-device reader derives from the sidecar's heartbeat file).
-    ``detail`` carries buffered counts so the operator can also see, at a glance,
-    how much the source currently holds. Never raises — a bad config or missing
-    sidecar surfaces as ``connected: false`` with the reason.
+    Never raises — a bad config or missing sidecar surfaces as ``connected: false``
+    with the reason. (The richer Execution-tab pill uses ``/api/sidecar/status``
+    plus ``/api/execution/syncs``; this stays a minimal connector probe.)
     """
     cfg = load_config()
     try:
@@ -137,6 +138,25 @@ async def execution_health(request: Request) -> dict[str, Any]:
         return {"name": status.name, "connected": status.connected, "detail": status.detail}
     except ValueError as exc:
         return {"name": cfg.connector, "connected": False, "detail": str(exc)}
+
+
+@router.get("/api/execution/syncs")
+async def list_syncs(request: Request, limit: int = 20) -> dict[str, Any]:
+    """Recent sync deltas + current stored totals (the 'is it working?' view).
+
+    Every sync path writes a ``sync_log`` row, so this lists when each ran and how
+    many chats/messages it added — covering scheduled Jobs the run viewer can't
+    see. ``totals`` are the live counts so the operator can confirm the store is
+    actually growing.
+    """
+    limit = max(1, min(limit, 100))
+    conn = store.connect(_db_path(request))
+    try:
+        rows = [dict(r) for r in store.recent_syncs(conn, limit)]
+        totals = {"chats": store.count_chats(conn), "messages": store.count_messages(conn)}
+    finally:
+        conn.close()
+    return {"syncs": rows, "totals": totals}
 
 
 @router.get("/api/execution/runs")

@@ -104,6 +104,27 @@ def test_kill_unknown_run_404(captured: dict[str, Any], monkeypatch: pytest.Monk
     assert res.status_code == 404
 
 
+def test_syncs_endpoint_lists_recent_and_totals(tmp_path: Any) -> None:
+    from app.webapp.server import create_app
+    from src.db import store
+
+    db = tmp_path / "syncs.sqlite3"
+    conn = store.connect(db)
+    store.record_sync(conn, source="resync", chats_added=2, chats_updated=1, messages_added=5)
+    conn.close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        body = client.get("/api/execution/syncs").json()
+
+    assert body["syncs"][0]["source"] == "resync"
+    assert body["syncs"][0]["messages_added"] == 5
+    assert body["syncs"][0]["chats_added"] == 2
+    assert set(body["totals"]) == {"chats", "messages"}
+
+
 def test_health_reports_connector_status(captured: dict[str, Any]) -> None:
     res = captured["client"].get("/api/execution/health")
     assert res.status_code == 200

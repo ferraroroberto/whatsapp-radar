@@ -70,6 +70,16 @@ def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutco
             )
     finally:
         connector.stop()
+    # One sync_log row per resync — visible whether fired from the CLI, a
+    # scheduled Job, or the webapp (the per-message ingest time is on
+    # messages.ingested_at; this is the per-run summary).
+    store.record_sync(
+        conn,
+        source="resync",
+        chats_added=outcome.chats_added,
+        chats_updated=outcome.chats_updated,
+        messages_added=outcome.messages_added,
+    )
     return outcome
 
 

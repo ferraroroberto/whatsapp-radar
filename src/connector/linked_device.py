@@ -78,7 +78,9 @@ class LinkedDeviceConnector:
         elif not fresh:
             detail = "sidecar heartbeat stale — process may have stopped"
         else:
-            detail = f"{raw.get('chats', 0)} chats, {raw.get('messages', 0)} messages buffered"
+            # The sidecar's counters are per-session, not buffer totals — don't
+            # present them as "buffered" (stored totals are surfaced from the DB).
+            detail = "connected — receiving live updates"
         return ConnectorStatus(name="linked_device", connected=connected, detail=detail)
 
     # --- read surface ------------------------------------------------------

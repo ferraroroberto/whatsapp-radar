@@ -34,9 +34,16 @@ class TelegramNotifier:
         self._chat_id = chat_id
 
     def send(self, digest: Digest) -> None:
-        payload = json.dumps(
-            {"chat_id": self._chat_id, "text": digest.to_telegram_text()}
-        ).encode("utf-8")
+        self.send_text(digest.to_telegram_text())
+
+    def send_text(self, text: str) -> None:
+        """Deliver a plain-text message to the configured chat.
+
+        Used both for the digest and for out-of-band operational alerts (e.g. a
+        scan aborted because the WhatsApp source went offline), so a scheduled
+        run that would otherwise look green still reaches the operator.
+        """
+        payload = json.dumps({"chat_id": self._chat_id, "text": text}).encode("utf-8")
         request = urllib.request.Request(
             _API.format(token=self._token),
             data=payload,

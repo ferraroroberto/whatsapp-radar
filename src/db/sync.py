@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.connector.base import MessageConnector
+from src.connector.preflight import ensure_connected
 from src.db import store
 
 
@@ -44,7 +45,10 @@ def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutco
     from what is stored — re-seeing an unchanged chat writes nothing, so the
     no-op guarantee holds even though every chat is re-read each run.
     """
-    connector.connect()
+    # Liveness gate (#29): never upsert from a dead/stale source. Raises
+    # ConnectorOffline if the connector isn't connected (the fixture, which loads
+    # on connect, is always live — so the offline suite is unaffected).
+    ensure_connected(connector)
     outcome = ResyncOutcome()
     try:
         for chat in connector.list_chats():

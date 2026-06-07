@@ -34,6 +34,7 @@ export const state = {
     selected: null,        // {kind, run_id} the viewer is showing, or null
     detail: null,          // last fetched run detail
     queue: [],             // pending chained actions (multi-step run), fired in order
+    sidecar: null,         // last /api/sidecar/status snapshot (connection health)
   },
 };
 
@@ -119,6 +120,10 @@ export const els = {
   execHealthDot: document.getElementById('execHealthDot'),
   execHealthLabel: document.getElementById('execHealthLabel'),
   execHealthDetail: document.getElementById('execHealthDetail'),
+  execReconnect: document.getElementById('execReconnect'),
+  execReconnectMsg: document.getElementById('execReconnectMsg'),
+  execReconnectBtn: document.getElementById('execReconnectBtn'),
+  execQr: document.getElementById('execQr'),
   execRunsCard: document.getElementById('execRunsCard'),
   execViewerCard: document.getElementById('execViewerCard'),
   execViewer: document.getElementById('execViewer'),

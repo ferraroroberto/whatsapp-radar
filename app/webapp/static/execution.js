@@ -150,17 +150,69 @@ async function killSelected() {
 // ----------------------------------------------------------- polling + render
 
 // Connection liveness dot (mirrors local-llm-hub's green-dot health pill): is
-// the WhatsApp sidecar paired & fresh? Refreshed alongside the runs poll.
+// the WhatsApp sidecar paired & fresh? When it isn't, the pill grows a one-tap
+// relaunch and — if a fresh QR is needed — the pairing image, so the connection
+// can be recovered from a phone without a terminal (#29). Refreshed with the poll.
+const DOT_CLASS = { running: 'up', connecting: 'warn', stale: 'down', needs_qr: 'warn', stopped: 'down' };
+
+// Re-stamp the QR src at most every 20s (the pairing code rotates ~that often)
+// so the <img> doesn't flicker on every 1.5s poll.
+function qrSrc() {
+  return '/api/sidecar/qr?t=' + Math.floor(Date.now() / 20000);
+}
+
 export async function fetchHealth() {
-  let h;
+  let s;
   try {
-    h = await jsonApi('/api/execution/health');
+    s = await jsonApi('/api/sidecar/status');
   } catch (_) {
     return;
   }
-  els.execHealthDot.classList.remove('up', 'down', 'unknown');
-  els.execHealthDot.classList.add(h.connected ? 'up' : 'down');
-  els.execHealthDetail.textContent = h.detail || (h.connected ? 'connected' : 'not connected');
+  execState().sidecar = s;
+  els.execHealthDot.classList.remove('up', 'down', 'unknown', 'warn');
+  els.execHealthDot.classList.add(DOT_CLASS[s.state] || 'unknown');
+  els.execHealthDetail.textContent = s.detail || s.state;
+  renderReconnect(s);
+}
+
+function renderReconnect(s) {
+  if (s.is_live) {
+    els.execReconnect.hidden = true;
+    els.execQr.hidden = true;
+    return;
+  }
+  els.execReconnect.hidden = false;
+  if (s.state === 'needs_qr') {
+    els.execReconnectMsg.textContent =
+      'Open WhatsApp → Linked devices → Link a device, then scan this code.';
+    els.execReconnectBtn.textContent = s.has_qr ? '🔄 Refresh QR' : '🔌 Start & show QR';
+    if (s.has_qr) {
+      const next = qrSrc();
+      if (els.execQr.dataset.src !== next) { els.execQr.src = next; els.execQr.dataset.src = next; }
+      els.execQr.hidden = false;
+    } else {
+      els.execQr.hidden = true;
+    }
+  } else {
+    els.execReconnectMsg.textContent = s.detail || 'The WhatsApp sidecar is not connected.';
+    els.execReconnectBtn.textContent = '🔌 Reconnect WhatsApp';
+    els.execQr.hidden = true;
+  }
+  els.execReconnectBtn.disabled = (s.state === 'connecting');
+}
+
+async function reconnectSidecar() {
+  els.execReconnectBtn.disabled = true;
+  try {
+    const res = await jsonApi('/api/sidecar/start', { method: 'POST' });
+    toast(res.launched ? 'Starting WhatsApp sidecar…' : 'Sidecar already running', '');
+  } catch (exc) {
+    if (exc.status === 503) toast(String(exc.message || 'Cannot start sidecar'), 'error');
+    else toast(String(exc.message || exc), 'error');
+  } finally {
+    els.execReconnectBtn.disabled = false;
+  }
+  fetchHealth().catch(function () {});
 }
 
 export async function fetchExecution() {
@@ -415,6 +467,7 @@ export function wireExecution() {
 
   els.execRunScan.addEventListener('click', runSelection);
   els.execReprocess.addEventListener('click', confirmReprocess);
+  els.execReconnectBtn.addEventListener('click', reconnectSidecar);
   // Refresh + Stop live inside <summary> elements; stop their clicks from
   // toggling the surrounding <details>.
   els.execKill.addEventListener('click', function (ev) {

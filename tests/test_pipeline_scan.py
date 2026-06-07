@@ -16,7 +16,7 @@ import pytest
 
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
 from src.analysis.pipeline import scan, scan_outcome_to_dict
-from src.config import Config, HubConfig, TelegramConfig
+from src.config import Config, HubConfig, TelegramConfig, TranscriptionConfig
 from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
 from src.db import store
@@ -43,6 +43,9 @@ def _config(tmp_path: Path, *, notifier: str = "none") -> Config:
         connector="fixture",
         classifier="stub",
         hub=HubConfig(base_url="http://127.0.0.1:8000", model="claude_sonnet"),
+        transcription=TranscriptionConfig(
+            enabled=False, window_days=7, hub_base_url="http://127.0.0.1:8090", model="whisper-1"
+        ),
         notifier=notifier,
         telegram=TelegramConfig(bot_token="t", chat_id="c"),
         linked_device_dir=tmp_path / "ld",

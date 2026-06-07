@@ -36,6 +36,14 @@ class HubConfig:
 
 
 @dataclass(frozen=True)
+class TranscriptionConfig:
+    enabled: bool
+    window_days: int
+    hub_base_url: str
+    model: str
+
+
+@dataclass(frozen=True)
 class TelegramConfig:
     bot_token: str
     chat_id: str
@@ -47,6 +55,7 @@ class Config:
     connector: str
     classifier: str
     hub: HubConfig
+    transcription: TranscriptionConfig
     notifier: str
     telegram: TelegramConfig
     linked_device_dir: Path
@@ -133,6 +142,7 @@ def load_config(root: Path | None = None) -> Config:
         _load_json(root / "config" / "local.json"),
     )
     hub_raw = merged.get("hub", {})
+    tx_raw = merged.get("transcription", {})
 
     tg_raw = merged.get("telegram", {})
 
@@ -168,6 +178,22 @@ def load_config(root: Path | None = None) -> Config:
         bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_bot_default),
         chat_id=os.environ.get("WR_TELEGRAM_CHAT_ID", tg_chat_default),
     )
+    transcription = TranscriptionConfig(
+        enabled=_as_bool(
+            os.environ.get("WR_TRANSCRIPTION_ENABLED"),
+            tx_raw.get("enabled", True),
+        ),
+        window_days=int(
+            os.environ.get("WR_TRANSCRIPTION_WINDOW_DAYS", tx_raw.get("window_days", 7))
+        ),
+        hub_base_url=os.environ.get(
+            "WR_TRANSCRIPTION_HUB_BASE_URL",
+            tx_raw.get("hub_base_url", "http://127.0.0.1:8090"),
+        ),
+        model=os.environ.get(
+            "WR_TRANSCRIPTION_MODEL", tx_raw.get("model", "whisper-1")
+        ),
+    )
 
     resolved_db = Path(db_path)
     if not resolved_db.is_absolute():
@@ -182,6 +208,7 @@ def load_config(root: Path | None = None) -> Config:
         connector=connector,
         classifier=classifier,
         hub=hub,
+        transcription=transcription,
         notifier=notifier,
         telegram=telegram,
         linked_device_dir=resolved_buffer,

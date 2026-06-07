@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from src.config import Config, HubConfig, TelegramConfig
+from src.config import Config, HubConfig, TelegramConfig, TranscriptionConfig
 from src.notify import telegram as telegram_mod
 from src.notify.alert import send_alert
 
@@ -23,6 +23,9 @@ def _config(*, notifier: str, token: str = "t", chat: str = "c") -> Config:
         connector="fixture",
         classifier="stub",
         hub=HubConfig(base_url="http://127.0.0.1:8000", model="m"),
+        transcription=TranscriptionConfig(
+            enabled=False, window_days=7, hub_base_url="http://127.0.0.1:8090", model="whisper-1"
+        ),
         notifier=notifier,
         telegram=TelegramConfig(bot_token=token, chat_id=chat),
         linked_device_dir="ld",  # type: ignore[arg-type]

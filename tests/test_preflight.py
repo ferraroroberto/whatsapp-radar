@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.config import Config, HubConfig, TelegramConfig
+from src.config import Config, HubConfig, TelegramConfig, TranscriptionConfig
 from src.connector import preflight as preflight_mod
 from src.connector.base import ConnectorStatus
 from src.connector.preflight import ConnectorOffline, ensure_connected, preflight
@@ -49,6 +49,9 @@ def _config(connector: str = "linked_device", *, autostart: bool = True) -> Conf
         connector=connector,
         classifier="stub",
         hub=HubConfig(base_url="http://127.0.0.1:8000", model="m"),
+        transcription=TranscriptionConfig(
+            enabled=False, window_days=7, hub_base_url="http://127.0.0.1:8090", model="whisper-1"
+        ),
         notifier="none",
         telegram=TelegramConfig(bot_token="", chat_id=""),
         linked_device_dir=Path("ld"),

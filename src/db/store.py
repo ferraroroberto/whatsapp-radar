@@ -9,6 +9,7 @@ after analysis has been persisted.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -317,6 +318,76 @@ def reconcile_voice_media(
     if updated:
         conn.commit()
     return updated
+
+
+@dataclass(frozen=True)
+class PendingTranscription:
+    """A voice row awaiting hub transcription."""
+
+    id: int
+    media_path: str
+    raw_json: str | None
+
+
+def skip_old_voice_notes(conn: sqlite3.Connection, window_days: int) -> int:
+    """Mark voice notes outside the transcription window as skipped_old."""
+    cutoff = (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
+    cur = conn.execute(
+        """
+        UPDATE messages SET transcription_status = 'skipped_old'
+        WHERE message_type = 'voice'
+          AND transcription_status NOT IN ('done', 'skipped_old')
+          AND message_timestamp < ?
+        """,
+        (cutoff,),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def list_pending_transcriptions(
+    conn: sqlite3.Connection, window_days: int
+) -> list[PendingTranscription]:
+    """Voice rows with pending status and a media file, within the window."""
+    cutoff = (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT id, media_path, raw_json FROM messages
+        WHERE transcription_status = 'pending'
+          AND media_path IS NOT NULL
+          AND message_timestamp >= ?
+        ORDER BY message_timestamp, id
+        """,
+        (cutoff,),
+    ).fetchall()
+    return [
+        PendingTranscription(int(r["id"]), r["media_path"], r["raw_json"]) for r in rows
+    ]
+
+
+def apply_transcription_done(
+    conn: sqlite3.Connection,
+    message_id: int,
+    transcript: str,
+    raw_json: str,
+) -> None:
+    """Persist a successful transcription and overwrite message text."""
+    conn.execute(
+        """
+        UPDATE messages SET text = ?, transcription_status = 'done', raw_json = ?
+        WHERE id = ?
+        """,
+        (transcript, raw_json, message_id),
+    )
+    conn.commit()
+
+
+def apply_transcription_failed(conn: sqlite3.Connection, message_id: int) -> None:
+    conn.execute(
+        "UPDATE messages SET transcription_status = 'failed' WHERE id = ?",
+        (message_id,),
+    )
+    conn.commit()
 
 
 def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[StoredMessage]:

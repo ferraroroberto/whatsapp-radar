@@ -77,7 +77,10 @@ def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> 
         if result.action_required:
             outcome.actionable_chats += 1
 
-        last = delta[-1]
+        # The cursor key is the ingestion id and the delta is send-time ordered,
+        # so advance by the max id (not delta[-1]) — a backfilled message can have
+        # a newer id but an older send-time, and must not be skipped next run (#37).
+        last = max(delta, key=lambda m: m.id)
         rolling = json.dumps(
             {"last_summary": result.summary, "last_message_id": last.source_message_id}
         )

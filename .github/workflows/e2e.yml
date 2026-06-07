@@ -1,0 +1,71 @@
+# Pre-ship gate on CI (issue #20).
+#
+# Runs the exact same gate as the local `scripts/verify-before-ship.ps1` so the
+# checks run without relying on the developer remembering. The local gate stays
+# the contract — this workflow is supplementary and adapts to the script, never
+# the reverse.
+#
+# windows-2025 is mandatory: this is a Windows-targeted app (winotify, pystray,
+# psutil port reclaim) and `verify-before-ship.ps1` hard-requires
+# `.venv\Scripts\python.exe`, so the workflow creates `.venv` and installs into
+# it — the script is untouched. Pinned explicitly because `windows-latest` is
+# being redirected to windows-2025 and shouldn't drift under us.
+name: e2e
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-before-ship:
+    runs-on: windows-2025
+    # Cap a hung run rather than letting GitHub's 6-hour default burn the
+    # runner: the gate's WebKit/iPhone e2e leg is the one notoriously flaky
+    # part, and a wedged browser should fail fast, not stall. A green run is
+    # well under this.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Create .venv and install deps
+        # Test deps are split out of runtime deps — both files must be
+        # installed (requirements-dev.txt carries pytest + pytest-playwright).
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install Playwright browsers
+        run: .\.venv\Scripts\python.exe -m playwright install chromium webkit
+
+      - name: Seed webapp config from committed sample
+        # webapp_config.json is gitignored — only webapp_config.sample.json is
+        # checked in. Loopback bypasses the bearer middleware, so the sample
+        # token is sufficient for the e2e suite. default.json is committed, so
+        # it needs no seeding; cloudflared is dormant and unused by the gate.
+        run: Copy-Item config/webapp_config.sample.json config/webapp_config.json
+
+      - name: Run pre-ship gate
+        run: pwsh -File scripts/verify-before-ship.ps1
+
+      - name: Upload e2e diagnostic log
+        # Runs even when the gate fails — the autoboot webapp output makes any
+        # future CI-only e2e failure diagnosable from the run page without a
+        # local repro.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-logs
+          path: webapp/e2e-autoboot-webapp.log
+          if-no-files-found: warn
+          retention-days: 7

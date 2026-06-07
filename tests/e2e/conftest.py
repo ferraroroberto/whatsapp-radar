@@ -134,6 +134,15 @@ def base_url() -> Iterator[str]:
     # QR routes at an empty throwaway dir (renders as a 'stopped' connection).
     env["WR_LINKED_DEVICE_DIR"] = str(Path(db_dir) / "linked_device")
     _seed_e2e_db(db_path)
+    # Capture the autobooted webapp's output to a gitignored log file (the
+    # fleet convention, matching voice-transcriber / app-launcher) rather than
+    # discarding it: CI uploads this on failure so a runner-only e2e break is
+    # diagnosable from the run page without a local repro.
+    log_dir = ROOT / "webapp"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = (log_dir / "e2e-autoboot-webapp.log").open(
+        "w", encoding="utf-8", errors="replace"
+    )
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -149,8 +158,8 @@ def base_url() -> Iterator[str]:
         ],
         cwd=str(ROOT),
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
     )
     try:
         deadline = time.time() + 20
@@ -167,4 +176,5 @@ def base_url() -> Iterator[str]:
         proc.terminate()
         with contextlib.suppress(subprocess.TimeoutExpired):
             proc.wait(timeout=5)
+        log.close()
         shutil.rmtree(db_dir, ignore_errors=True)

@@ -12,9 +12,10 @@ Routes (split across ``app/webapp/routers/``):
     GET  /api/dashboard          → read-only metrics              (dashboard)
     /api/chats[...]             → list / history / status toggle (chats)
     GET/POST /api/config         → prompt + safe settings         (config)
+    /api/execution/*            → run pipeline pieces + run log   (execution)
 
-Dashboard (#9) and Chats & Config (#10) are live; Execution · Audit are still
-empty shells that Steps 6–7 (#11–#12) fill.
+Dashboard (#9), Chats & Config (#10) and Execution (#11) are live; Audit is
+still an empty shell that Step 7 (#12) fills.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from app.webapp.middleware import BearerTokenMiddleware
-from app.webapp.routers import auth, chats, dashboard, misc, webauthn
+from app.webapp.routers import auth, chats, dashboard, execution, misc, webauthn
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
@@ -137,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(chats.router)
     app.include_router(config_router.router)
+    app.include_router(execution.router)
 
     return app
 

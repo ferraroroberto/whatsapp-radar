@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from src.analysis.classifier import (
     ClassificationOutcome,
@@ -45,6 +46,16 @@ from src.notify.delivery import deliver_digest
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
 Mode = Literal["live", "dry_run"]
+
+# A sink for human-readable progress lines. The CLI wires it to stdout so a
+# launched run streams its funnel as it happens; tests/library callers may omit
+# it. Kept deliberately string-in/None-out so it can't affect control flow.
+Progress = Callable[[str], None]
+
+
+def _emit(progress: Progress | None, line: str) -> None:
+    if progress is not None:
+        progress(line)
 
 _NOT_ACTIONABLE = AnalysisResult(
     action_required=False,
@@ -132,7 +143,12 @@ def _advance(
     store.advance_cursor(conn, chat_id, last.id, last.message_timestamp, rolling)
 
 
-def _sync(conn: sqlite3.Connection, connector: MessageConnector, outcome: ScanOutcome) -> None:
+def _sync(
+    conn: sqlite3.Connection,
+    connector: MessageConnector,
+    outcome: ScanOutcome,
+    progress: Progress | None = None,
+) -> None:
     """Pull all chats + messages from the connector into the store (live mode)."""
     connector.connect()
     for chat in connector.list_chats():
@@ -142,6 +158,10 @@ def _sync(conn: sqlite3.Connection, connector: MessageConnector, outcome: ScanOu
             conn, chat_id, connector.fetch_messages(chat.source_chat_id)
         )
     connector.stop()
+    _emit(
+        progress,
+        f"✓ synced {outcome.chats_synced} chats / {outcome.messages_synced} new messages",
+    )
 
 
 def scan(
@@ -152,12 +172,15 @@ def scan(
     days: int | None = None,
     connector: MessageConnector | None = None,
     classifier: TracedClassifier | None = None,
+    progress: Progress | None = None,
 ) -> ScanOutcome:
     """Run one scan: sync (live) -> analyze monitored deltas -> digest -> deliver.
 
     ``connector`` and ``classifier`` may be injected (tests, alternate wiring);
     otherwise they are built from ``config``. ``days`` windows the dry-run replay.
+    ``progress`` receives human-readable stage lines for live output.
     """
+    _emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
     run_id = store.start_run(conn, mode=mode, params_json=json.dumps({"days": days}))
     outcome = ScanOutcome(run_id=run_id, mode=mode)
     stage2 = classifier if classifier is not None else build_stage2_classifier(
@@ -165,10 +188,18 @@ def scan(
     )
 
     if mode == "live":
-        _sync(conn, connector if connector is not None else build_connector(config), outcome)
+        _sync(
+            conn,
+            connector if connector is not None else build_connector(config),
+            outcome,
+            progress,
+        )
+    else:
+        _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
     monitored = store.monitored_chats(conn)
     outcome.chats_monitored = len(monitored)
+    _emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
     for chat in monitored:
         chat_id = int(chat["id"])
@@ -205,6 +236,11 @@ def scan(
             continue
 
         outcome.stage1_passed += 1
+        _emit(
+            progress,
+            f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
+            f"(keywords: {', '.join(signal.roots) or 'n/a'}) → Stage 2",
+        )
         prior = prior_context(store.get_rolling_context(conn, chat_id))
         co = stage2.classify_traced(chat["display_name"], delta, prior)
         if co.llm_called:
@@ -298,4 +334,39 @@ def scan(
         actionable=outcome.actionable,
         notification_status=outcome.notification_status,
     )
+    _emit(
+        progress,
+        f"✓ done — Stage 1 {outcome.stage1_passed}, LLM {outcome.stage2_llm_calls}, "
+        f"actionable {outcome.actionable}, notify {outcome.notification_status}",
+    )
     return outcome
+
+
+def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
+    """Serialize a :class:`ScanOutcome` to the structured result payload.
+
+    This is the ``kind: "scan"`` result the Execution tab renders: the full
+    funnel, the would-be / sent Telegram text, and the per-chat error list. Used
+    by the CLI to emit the run's result sentinel.
+    """
+    digest = outcome.digest
+    return {
+        "kind": "scan",
+        "ok": outcome.notification_status != "failed",
+        "run_id": outcome.run_id,
+        "mode": outcome.mode,
+        "funnel": {
+            "chats_synced": outcome.chats_synced,
+            "messages_synced": outcome.messages_synced,
+            "chats_monitored": outcome.chats_monitored,
+            "chats_with_delta": outcome.chats_with_delta,
+            "stage1_passed": outcome.stage1_passed,
+            "stage2_llm_calls": outcome.stage2_llm_calls,
+            "actionable": outcome.actionable,
+        },
+        "notification_status": outcome.notification_status,
+        "telegram_text": digest.to_telegram_text() if digest and digest.has_actionable_items
+        else None,
+        "actionable_count": len(digest.items) if digest else 0,
+        "errors": [{"chat_id": cid, "error": err} for cid, err in outcome.errors],
+    }

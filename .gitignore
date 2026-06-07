@@ -27,6 +27,8 @@ config/*.local.*
 webapp/certificates/
 webapp/*.log
 webapp/last_tunnel_url.txt
+# Execution-tab run records: run.json + output.log carry chat names/message text.
+webapp/runs/
 config/webapp_config.json
 config/webauthn_devices.json
 config/cloudflared.yml

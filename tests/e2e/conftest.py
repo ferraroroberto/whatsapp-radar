@@ -119,6 +119,11 @@ def base_url() -> Iterator[str]:
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    # Execution-tab runs spawn the CLI; pin the offline stub classifier + no
+    # notifier so a dry-run scan stays fast and never touches the network/hub.
+    env["WR_CLASSIFIER"] = "stub"
+    env["WR_CONNECTOR"] = "fixture"
+    env["WR_NOTIFIER"] = "none"
     # Never read the developer's real WhatsApp data: point the autobooted app at
     # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
     # project's hard privacy rule — e2e runs only against sanitized/empty state.

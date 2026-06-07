@@ -710,17 +710,26 @@ def messages_per_chat(
     which is what the Dashboard's per-channel table shows. Linked child chats are
     excluded from the monitored view so a family that is one person isn't listed
     twice; the child's messages remain on its own row in the all-chats view.
+
+    The count and last-message time are computed over the chat's whole **family**
+    — itself plus any linked children — so a monitored parent's row represents the
+    merged family (matching ``chats_overview`` and the Chats tab), not just its own
+    messages. For an unlinked/standalone chat the family is just itself, so counts
+    and ordering are unchanged.
     """
     where = (
         "WHERE c.status = 'monitored' AND c.parent_chat_id IS NULL" if monitored_only else ""
     )
+    family = (
+        "m.chat_id IN (SELECT x.id FROM chats x WHERE x.id = c.id OR x.parent_chat_id = c.id)"
+    )
     return list(
         conn.execute(
-            "SELECT c.id, c.display_name, c.status, c.last_message_at, "
-            "COUNT(m.id) AS message_count "
-            "FROM chats c LEFT JOIN messages m ON m.chat_id = c.id "
-            f"{where} GROUP BY c.id "
-            "ORDER BY c.last_message_at IS NULL, c.last_message_at DESC, c.id"
+            "SELECT c.id, c.display_name, c.status, "
+            f"(SELECT MAX(m.message_timestamp) FROM messages m WHERE {family}) AS last_message_at, "
+            f"(SELECT COUNT(*) FROM messages m WHERE {family}) AS message_count "
+            f"FROM chats c {where} "
+            "ORDER BY last_message_at IS NULL, last_message_at DESC, c.id"
         ).fetchall()
     )
 

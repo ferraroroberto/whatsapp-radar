@@ -47,3 +47,4 @@ class StoredMessage:
     text: str | None
     sender_label: str | None
     message_type: str
+    transcription_status: str = "none"

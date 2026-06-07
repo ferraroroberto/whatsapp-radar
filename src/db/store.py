@@ -15,7 +15,8 @@ from pathlib import Path
 from src.models import ChatRecord, MessageRecord, StoredMessage
 
 _MESSAGE_COLUMNS = (
-    "id, chat_id, source_message_id, message_timestamp, text, sender_label, message_type"
+    "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
+    "message_type, transcription_status"
 )
 
 
@@ -28,6 +29,7 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
         text=row["text"],
         sender_label=row["sender_label"],
         message_type=row["message_type"],
+        transcription_status=row["transcription_status"],
     )
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -46,6 +48,14 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("stage2_llm_calls", "INTEGER NOT NULL DEFAULT 0"),
     ("actionable", "INTEGER NOT NULL DEFAULT 0"),
     ("notification_status", "TEXT"),
+    ("voice_transcribed", "INTEGER NOT NULL DEFAULT 0"),
+    ("voice_failed", "INTEGER NOT NULL DEFAULT 0"),
+    ("voice_skipped_old", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+_MESSAGES_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("transcription_status", "TEXT NOT NULL DEFAULT 'none'"),
+    ("media_path", "TEXT"),
 )
 
 
@@ -87,6 +97,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
     chat_cols = {row["name"] for row in conn.execute("PRAGMA table_info(chats)")}
     if "alias" not in chat_cols:
         conn.execute("ALTER TABLE chats ADD COLUMN alias TEXT")
+    msg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    for name, declaration in _MESSAGES_ADDED_COLUMNS:
+        if name not in msg_cols:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {name} {declaration}")
+
+
+def _voice_ingest_fields(msg: MessageRecord) -> tuple[str, str | None]:
+    """Derive transcription_status and media_path for ingest."""
+    if msg.message_type != "voice":
+        return "none", None
+    raw = msg.raw or {}
+    media_path = raw.get("media_path")
+    if media_path:
+        return "pending", str(media_path)
+    return "failed", None
 
 
 # --- chats -----------------------------------------------------------------
@@ -180,12 +205,13 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
     """Insert a message idempotently. Returns True if a new row was created."""
     import json
 
+    transcription_status, media_path = _voice_ingest_fields(msg)
     cur = conn.execute(
         """
         INSERT OR IGNORE INTO messages
             (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             text, message_type, transcription_status, media_path, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             chat_id,
@@ -194,6 +220,8 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
             msg.message_timestamp,
             msg.text,
             msg.message_type,
+            transcription_status,
+            media_path,
             json.dumps(msg.raw, ensure_ascii=False) if msg.raw else None,
             _now(),
         ),
@@ -204,7 +232,9 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
             "WHERE id = ?",
             (msg.message_timestamp, chat_id),
         )
-    conn.commit()
+        conn.commit()
+    else:
+        reconcile_voice_media(conn, chat_id, [msg])
     return cur.rowcount > 0
 
 
@@ -220,34 +250,73 @@ def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRe
     if not msgs:
         return 0
     before = conn.total_changes
+    rows = [
+        (
+            chat_id,
+            m.source_message_id,
+            m.sender_label,
+            m.message_timestamp,
+            m.text,
+            m.message_type,
+            *_voice_ingest_fields(m),
+            json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
+            _now(),
+        )
+        for m in msgs
+    ]
     conn.executemany(
         """
         INSERT OR IGNORE INTO messages
             (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             text, message_type, transcription_status, media_path, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [
-            (
-                chat_id,
-                m.source_message_id,
-                m.sender_label,
-                m.message_timestamp,
-                m.text,
-                m.message_type,
-                json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
-                _now(),
-            )
-            for m in msgs
-        ],
+        rows,
     )
     inserted = conn.total_changes - before
+    reconcile_voice_media(conn, chat_id, msgs)
     conn.execute(
         "UPDATE chats SET last_message_at = MAX(COALESCE(last_message_at, ''), ?) WHERE id = ?",
         (max(m.message_timestamp for m in msgs), chat_id),
     )
     conn.commit()
     return inserted
+
+
+def reconcile_voice_media(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> int:
+    """Backfill media_path on existing voice rows when the sidecar later delivers audio."""
+    import json
+
+    updated = 0
+    for m in msgs:
+        if m.message_type != "voice":
+            continue
+        raw = m.raw or {}
+        media_path = raw.get("media_path")
+        if not media_path:
+            continue
+        cur = conn.execute(
+            """
+            UPDATE messages SET media_path = ?, transcription_status = 'pending',
+                   raw_json = ?
+            WHERE chat_id = ? AND source_message_id = ?
+              AND message_type = 'voice'
+              AND transcription_status IN ('none', 'failed')
+              AND (media_path IS NULL OR media_path = '')
+            """,
+            (
+                str(media_path),
+                json.dumps(raw, ensure_ascii=False),
+                chat_id,
+                m.source_message_id,
+            ),
+        )
+        updated += cur.rowcount
+    if updated:
+        conn.commit()
+    return updated
 
 
 def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[StoredMessage]:

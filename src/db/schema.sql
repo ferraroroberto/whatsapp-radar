@@ -18,7 +18,14 @@ CREATE TABLE IF NOT EXISTS chats (
     first_seen_at            TEXT NOT NULL,
     last_seen_at             TEXT NOT NULL,
     last_message_at          TEXT,
-    monitor_frequency_minutes INTEGER
+    monitor_frequency_minutes INTEGER,
+    -- Operator-declared link: when set, this chat is a *child* folded into the
+    -- parent (a top-level chat) so the same person reached under two numbers is
+    -- one family. Depth is capped at 1 (a child can't itself be a parent) by the
+    -- link API. Pure metadata over the per-chat rows — no message data moves, and
+    -- each chat keeps its own cursor. ON DELETE SET NULL so dropping a parent
+    -- frees its children rather than cascading.
+    parent_chat_id           INTEGER REFERENCES chats(id) ON DELETE SET NULL
 );
 
 -- Raw-but-local message records. Idempotent on (chat_id, source_message_id).
@@ -83,6 +90,7 @@ CREATE TABLE IF NOT EXISTS analysis_trace (
     chat_id                INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     input_message_ids_json TEXT,            -- source_message_ids analyzed
     input_text             TEXT,            -- rendered delta handed to stage 1
+    messages_json          TEXT,            -- per-message record: [{id,sender,text,roots}] (#12)
     stage1_passed          INTEGER NOT NULL DEFAULT 0,
     stage1_roots_json      TEXT,            -- keyword roots that triggered (Stage-1 evidence)
     llm_called             INTEGER NOT NULL DEFAULT 0,

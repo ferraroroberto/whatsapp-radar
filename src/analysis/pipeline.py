@@ -35,8 +35,8 @@ from src.analysis.classifier import (
     build_stage2_classifier,
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import KeywordSignal, has_actionable_signal
-from src.analysis.review import prior_context
+from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_roots
+from src.analysis.review import advance_family_cursors, prior_context
 from src.config import Config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
@@ -112,6 +112,28 @@ def _truncate_delta_for_transcription(delta: list[StoredMessage]) -> list[Stored
     return out
 
 
+def _messages_record(delta: list[StoredMessage]) -> str:
+    """Per-message audit record: each message with the Stage-1 roots it matched.
+
+    Captured at run time (not recomputed on read) so the trace stays faithful to
+    the keyword roots that actually ran, even if ``keyword_roots.txt`` changes
+    later. The LLM's per-message verdict is *not* stored here — it is derived on
+    read from the parsed result's ``evidence_message_ids`` (issue #12).
+    """
+    return json.dumps(
+        [
+            {
+                "id": m.source_message_id,
+                "sender": m.sender_label,
+                "text": m.text,
+                "roots": matched_roots(m.text),
+            }
+            for m in delta
+        ],
+        ensure_ascii=False,
+    )
+
+
 def _result_json(result: AnalysisResult) -> str:
     return json.dumps(asdict(result), ensure_ascii=False)
 
@@ -135,6 +157,7 @@ def _write_trace(
         chat_id,
         input_message_ids_json=json.dumps([m.source_message_id for m in delta]),
         input_text=_render_delta(delta),
+        messages_json=_messages_record(delta),
         stage1_passed=signal.matched,
         stage1_roots_json=json.dumps(list(signal.roots)),
         llm_called=outcome.llm_called if outcome else False,
@@ -155,12 +178,15 @@ def _advance(
     delta: list[StoredMessage],
     summary: str | None,
 ) -> None:
-    """Advance the per-chat cursor (live mode only) after analysis is persisted."""
+    """Advance the family's per-member cursors (live mode only) after persistence.
+
+    The merged delta spans the head and any linked children; each keeps its own
+    ingestion-id cursor (#37), so advancement is grouped by origin chat rather
+    than a single high-water mark. Dry-run advances nothing.
+    """
     if mode != "live":
         return
-    last = delta[-1]
-    rolling = json.dumps({"last_summary": summary, "last_message_id": last.source_message_id})
-    store.advance_cursor(conn, chat_id, last.id, last.message_timestamp, rolling)
+    advance_family_cursors(conn, chat_id, delta, summary)
 
 
 def _sync(
@@ -282,9 +308,9 @@ def scan(
     for chat in monitored:
         chat_id = int(chat["id"])
         delta = (
-            store.messages_since_cursor(conn, chat_id)
+            store.family_delta_since_cursor(conn, chat_id)
             if mode == "live"
-            else store.messages_for_chat(conn, chat_id, since_days=days)
+            else store.family_delta_replay(conn, chat_id, since_days=days)
         )
         if not delta:
             continue

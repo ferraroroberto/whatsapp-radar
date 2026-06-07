@@ -85,6 +85,7 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
         "display_name": row["display_name"],
         "input_message_ids": _loads(row["input_message_ids_json"]),
         "input_text": row["input_text"],
+        "messages": _loads(row["messages_json"]),
         "stage1_passed": bool(row["stage1_passed"]),
         "stage1_roots": _loads(row["stage1_roots_json"]),
         "llm_called": bool(row["llm_called"]),

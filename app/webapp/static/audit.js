@@ -136,9 +136,8 @@ function syncListItem(sync) {
 function renderRuns() {
   const ax = auditState();
   els.auditRuns.textContent = '';
-  els.auditRunsEmpty.hidden = ax.runs.length > 0 || ax.syncs.length > 0;
+  els.auditRunsEmpty.hidden = ax.runs.length > 0;
   for (const run of ax.runs) els.auditRuns.appendChild(runListItem(run));
-  for (const sync of ax.syncs) els.auditRuns.appendChild(syncListItem(sync));
 }
 
 // ----------------------------------------------------------- run detail
@@ -193,6 +192,62 @@ function traceField(title, text) {
   return wrap;
 }
 
+// One message inside a chat trace: its text plus why it did / didn't trigger.
+// Stage-1 shows the exact keyword roots that message matched (or "no keyword");
+// the LLM column is shown only when the LLM ran, marking whether the model
+// flagged this message as evidence. Eliminates the "which ones triggered?" black
+// box (#12). All content via textContent (privacy + no markup eval).
+function messageRow(m, llmCalled, evidence) {
+  const li = document.createElement('li');
+  li.className = 'audit-msg';
+
+  const head = document.createElement('div');
+  head.className = 'audit-msg-head';
+
+  const sender = document.createElement('span');
+  sender.className = 'audit-msg-sender small';
+  sender.textContent = m.sender || 'unknown';
+  head.appendChild(sender);
+
+  const roots = Array.isArray(m.roots) ? m.roots : [];
+  const s1 = document.createElement('span');
+  s1.className = 'audit-msg-badge ' + (roots.length ? 'act' : 'muted');
+  s1.textContent = roots.length ? '🔑 ' + roots.join(', ') : 'no keyword';
+  head.appendChild(s1);
+
+  if (llmCalled) {
+    const flagged = evidence.some(function (e) { return String(e) === String(m.id); });
+    const s2 = document.createElement('span');
+    s2.className = 'audit-msg-badge ' + (flagged ? 'act' : 'muted');
+    s2.textContent = flagged ? '🔔 LLM flagged' : 'LLM: not flagged';
+    head.appendChild(s2);
+  }
+
+  const text = document.createElement('p');
+  text.className = 'audit-msg-text';
+  text.textContent = m.text || '(no text)';
+
+  li.append(head, text);
+  return li;
+}
+
+function messagesList(t) {
+  const msgs = Array.isArray(t.messages) ? t.messages : [];
+  if (!msgs.length) return null;
+  const evidence = (t.parsed_result && Array.isArray(t.parsed_result.evidence_message_ids))
+    ? t.parsed_result.evidence_message_ids : [];
+  const wrap = document.createElement('div');
+  wrap.className = 'audit-field';
+  const h = document.createElement('h5');
+  h.className = 'audit-field-title';
+  h.textContent = `Messages (${msgs.length})`;
+  const ul = document.createElement('ul');
+  ul.className = 'audit-msg-list';
+  for (const m of msgs) ul.appendChild(messageRow(m, t.llm_called, evidence));
+  wrap.append(h, ul);
+  return wrap;
+}
+
 function traceBlock(t) {
   const det = document.createElement('details');
   det.className = 'audit-trace card coding-card';
@@ -223,9 +278,12 @@ function traceBlock(t) {
   stages.textContent = `${s1} · ${s2}`;
   body.appendChild(stages);
 
+  // Per-message breakdown when the trace carries it (#12); older rows fall back
+  // to the rendered input blob so historical traces still render.
+  const perMessage = messagesList(t);
   const roots = Array.isArray(t.stage1_roots) ? t.stage1_roots.join(', ') : t.stage1_roots;
   const fields = [
-    traceField('Input messages', t.input_text),
+    perMessage || traceField('Input messages', t.input_text),
     traceField('Stage-1 roots triggered', roots),
     traceField('LLM system prompt', t.llm_system_prompt),
     traceField('LLM user prompt', t.llm_user_prompt),
@@ -258,6 +316,16 @@ function renderDetail(data) {
   els.auditTraces.textContent = '';
   const traces = data.traces || [];
   els.auditTracesEmpty.hidden = traces.length > 0;
+  // Reconcile the funnel when there's nothing to drill into: a live scan can sync
+  // messages yet trace nothing because none landed in a monitored chat. Say so
+  // explicitly rather than a bare "no trace" — without surfacing the unmonitored
+  // chats' content (scope stays monitored-only, #12).
+  if (!traces.length) {
+    const synced = (run.funnel && run.funnel.messages_synced) || 0;
+    els.auditTracesEmpty.textContent = synced
+      ? `${synced} message${synced === 1 ? '' : 's'} synced, but none in a monitored chat — nothing to analyze.`
+      : 'No per-chat trace recorded for this run.';
+  }
   for (const t of traces) els.auditTraces.appendChild(traceBlock(t));
 
   // Bring the detail into view on a phone after tapping a run up the list.

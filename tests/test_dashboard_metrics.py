@@ -133,6 +133,49 @@ def test_aggregates_reconcile(conn: sqlite3.Connection) -> None:
     assert store.count_notifications_sent(conn) == 1
 
 
+def test_messages_per_chat_folds_linked_family(conn: sqlite3.Connection) -> None:
+    """A monitored parent's row aggregates its linked children: summed count and
+    the family's max last-message time, so the Dashboard matches the Chats tab
+    (#42). A child's newer message floats the parent to the top."""
+    parent = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="p", display_name="School Office", chat_type="dm")
+    )
+    child = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="c", display_name="+44987", chat_type="dm")
+    )
+    other = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="o", display_name="Class 4A Group", chat_type="group")
+    )
+    store.set_chat_status(conn, parent, "monitored")
+    store.set_chat_status(conn, other, "monitored")
+    store.insert_message(
+        conn, parent,
+        MessageRecord(source_message_id="p1", message_timestamp="2026-06-01T10:00:00+00:00",
+                      text="old", sender_label="O"),
+    )
+    store.insert_message(
+        conn, child,
+        MessageRecord(source_message_id="c1", message_timestamp="2026-06-07T12:00:00+00:00",
+                      text="new", sender_label="O"),
+    )
+    store.insert_message(
+        conn, other,
+        MessageRecord(source_message_id="o1", message_timestamp="2026-06-05T09:00:00+00:00",
+                      text="hi", sender_label="X"),
+    )
+    store.link_chats(conn, child, parent)
+
+    rows = store.messages_per_chat(conn, monitored_only=True)
+    # The child is folded into the parent (not its own row); two monitored heads.
+    by_id = {int(r["id"]): r for r in rows}
+    assert set(by_id) == {parent, other}
+    # Parent shows the family's summed count and the child's newer last-message.
+    assert by_id[parent]["message_count"] == 2
+    assert by_id[parent]["last_message_at"] == "2026-06-07T12:00:00+00:00"
+    # And it sorts first, ahead of the other monitored chat (05 Jun).
+    assert [int(r["id"]) for r in rows][0] == parent
+
+
 def test_aggregates_empty_db(conn: sqlite3.Connection) -> None:
     assert store.count_chats_by_status(conn) == {
         "discovered": 0,

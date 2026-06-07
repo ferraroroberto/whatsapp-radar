@@ -42,6 +42,48 @@ def test_new_message_processes_only_the_delta(ingested_conn: sqlite3.Connection)
     assert third.messages_processed == 1  # only the one new message
 
 
+def test_backfilled_out_of_order_message_is_not_skipped(
+    ingested_conn: sqlite3.Connection,
+) -> None:
+    """A resync backfilling an older-send-time message is still picked up (#37).
+
+    The cursor keys on ingestion id, not send-time, so a message ingested *after*
+    a scan but bearing a ``message_timestamp`` earlier than the cursor's high-water
+    send-time lands in the next delta rather than being filtered out forever.
+    """
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    classifier = StubClassifier()
+    review_monitored_chats(ingested_conn, classifier)  # advances cursor past backlog
+    assert review_monitored_chats(ingested_conn, classifier).messages_processed == 0
+
+    # Backfill: ingested now (new id) but with a send-time *older* than the cursor's
+    # high-water send-time (2026-06-01T08:06 from c4a-0003).
+    append_message(
+        ingested_conn,
+        "chat-class-4a",
+        "c4a-backfill",
+        "please sign and return the form",
+        timestamp="2026-06-01T08:04:00+00:00",
+    )
+
+    after = review_monitored_chats(ingested_conn, classifier)
+    assert after.chats_with_delta == 1
+    assert after.messages_processed == 1  # the backfilled message, not skipped
+
+    # And it is not reprocessed on the next run.
+    assert review_monitored_chats(ingested_conn, classifier).messages_processed == 0
+
+    # The cursor advanced to the backfill's ingestion id (the new high-water mark).
+    state = ingested_conn.execute(
+        "SELECT last_processed_message_id FROM chat_review_state WHERE chat_id = ?",
+        (chat_id,),
+    ).fetchone()
+    backfill_id = ingested_conn.execute(
+        "SELECT id FROM messages WHERE source_message_id = 'c4a-backfill'"
+    ).fetchone()[0]
+    assert state["last_processed_message_id"] == backfill_id
+
+
 def test_only_monitored_chats_are_reviewed(ingested_conn: sqlite3.Connection) -> None:
     _monitor(ingested_conn, "chat-class-4a")  # building + school-parents left unmonitored
     outcome = review_monitored_chats(ingested_conn, StubClassifier())

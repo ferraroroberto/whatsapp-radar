@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from src.analysis.classifier import Classifier
 from src.analysis.contract import ContractError, parse_analysis
 from src.db import store
+from src.models import StoredMessage
 
 
 @dataclass
@@ -38,14 +39,49 @@ def prior_context(rolling_context_json: str | None) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def advance_family_cursors(
+    conn: sqlite3.Connection,
+    head_id: int,
+    delta: list[StoredMessage],
+    summary: str | None,
+) -> None:
+    """Advance each consumed member's cursor after the family analysis is persisted.
+
+    A family review folds the head and its linked children into one merged delta;
+    each member keeps its own cursor (#37). Group the delta by origin chat and
+    advance every member by *its own* max ingestion id — not ``delta[-1]`` — so a
+    backfilled out-of-send-order message is never skipped next run. Only the head
+    carries the rolling summary; folded children, which are never reviewed
+    standalone, advance with no rolling context of their own.
+    """
+    by_chat: dict[int, list[StoredMessage]] = {}
+    for m in delta:
+        by_chat.setdefault(m.chat_id, []).append(m)
+    for cid, msgs in by_chat.items():
+        last = max(msgs, key=lambda m: m.id)
+        rolling = (
+            json.dumps(
+                {"last_summary": summary, "last_message_id": last.source_message_id}
+            )
+            if cid == head_id
+            else None
+        )
+        store.advance_cursor(conn, cid, last.id, last.message_timestamp, rolling)
+
+
 def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> ReviewOutcome:
-    """Review every monitored chat's delta and persist results within one run."""
+    """Review every monitored family's delta and persist results within one run.
+
+    Iterates *family heads* (``store.monitored_chats`` already excludes linked
+    children); each head's delta is the merge of its own and its children's
+    messages since each member's cursor, classified once under the head.
+    """
     run_id = store.start_run(conn)
     outcome = ReviewOutcome(run_id=run_id)
 
     for chat in store.monitored_chats(conn):
         chat_id = int(chat["id"])
-        delta = store.messages_since_cursor(conn, chat_id)
+        delta = store.family_delta_since_cursor(conn, chat_id)
         if not delta:
             continue
 
@@ -77,12 +113,9 @@ def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> 
         if result.action_required:
             outcome.actionable_chats += 1
 
-        last = delta[-1]
-        rolling = json.dumps(
-            {"last_summary": result.summary, "last_message_id": last.source_message_id}
-        )
-        # Cursor advance happens only after the analysis row above is committed.
-        store.advance_cursor(conn, chat_id, last.id, last.message_timestamp, rolling)
+        # Cursor advance happens only after the analysis row above is committed,
+        # and per-member across the family (each member keeps its own cursor).
+        advance_family_cursors(conn, chat_id, delta, result.summary)
 
     status = "completed_with_errors" if outcome.errors else "completed"
     store.finish_run(conn, run_id, status, outcome.chats_with_delta)

@@ -276,9 +276,24 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .chat-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   padding-right: 10px;
 }
+/* Parent badge: a small chip showing how many chats are linked under this one.
+   Tapping it opens the overlay with the link panel expanded (#25). */
+.chat-link-badge {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chat-link-badge:active { background: var(--bg-elev-2); }
 /* Single watch toggle: visible-but-muted when off, lit + accent ring when
    monitored. The off state keeps a clear bordered tap target + readable opacity
    (a near-transparent greyscale icon was nearly invisible on desktop). */
@@ -412,6 +427,41 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   justify-content: center;
   line-height: 1;
 }
+/* Link panel (#25): collapsible block under the overlay header that shows the
+   chat's link role — parent's children, a child's parent, or a standalone's
+   "link to a parent" action. */
+.link-panel {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.link-status { font-size: 13px; margin-bottom: 8px; }
+.link-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.link-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.link-btn:active { background: var(--bg-elev-2); }
+.link-children { list-style: none; margin: 0; padding: 0; }
+.link-children li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.link-child-name { flex: 1; min-width: 0; font-size: 14px; word-break: break-word; }
+.link-search { margin-bottom: 8px; }
+
 .history-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hist-msg { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .hist-msg:last-child { border-bottom: none; }
@@ -635,7 +685,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 
 /* Recent-runs list: one lean line each — OK/KO · kind · when. */
-.exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; }
+/* max-height ≈ 5 rows (each ~39 px); scroll reveals older entries. */
+.exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; max-height: 210px; overflow-y: auto; }
 #execRunsEmpty, #execViewer, #execViewerEmpty { padding: 4px 16px 14px; }
 #execViewer { padding-top: 8px; }
 .exec-run-li {
@@ -663,7 +714,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-run-when { flex: none; }
 
 /* Recent-syncs list: one lean line each — when · +msgs/+chats · source (#31). */
-.exec-syncs { gap: 0; padding: 0 16px 8px; margin: 0; }
+/* max-height ≈ 5 rows (each ~37 px); scroll reveals older entries. */
+.exec-syncs { gap: 0; padding: 0 16px 8px; margin: 0; max-height: 195px; overflow-y: auto; }
 #execSyncsEmpty { padding: 4px 16px 14px; }
 .exec-sync-li {
   display: flex;
@@ -678,7 +730,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-sync-src { flex: none; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Audit tab (#12): run list + per-run trace drill-down. */
-.audit-runs { gap: 0; padding: 0; margin: 0; }
+/* max-height ≈ 5 rows (each ~60 px); scroll reveals older entries. */
+.audit-runs { gap: 0; padding: 0; margin: 0; max-height: 310px; overflow-y: auto; }
 .audit-run-li {
   display: flex;
   flex-direction: column;
@@ -738,3 +791,26 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   letter-spacing: 0.03em;
 }
 .audit-pre { max-height: 240px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* Per-message trace breakdown (#12): one row per message with its Stage-1 /
+   LLM verdict badges, so the operator sees which messages triggered and which
+   didn't. */
+.audit-msg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.audit-msg {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
+.audit-msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 3px; }
+.audit-msg-sender { font-weight: 600; }
+.audit-msg-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.audit-msg-badge.act { color: var(--good); border-color: var(--good); }
+.audit-msg-badge.muted { color: var(--muted); }
+.audit-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }

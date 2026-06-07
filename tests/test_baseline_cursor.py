@@ -29,6 +29,30 @@ def test_baseline_skips_backlog_then_reviews_only_new(ingested_conn: sqlite3.Con
     assert [m.source_message_id for m in delta] == ["new-after-baseline"]
 
 
+def test_baseline_skips_out_of_order_backlog(ingested_conn: sqlite3.Connection) -> None:
+    """Baselining past backfilled, out-of-send-order history replays nothing (#37).
+
+    The baseline uses the max ingestion id, so even a backlog message whose
+    send-time is older than others but was ingested last is still skipped.
+    """
+    conn = ingested_conn
+    source_chat_id = "chat-class-4a"
+    chat_id = chat_id_by_source(conn, source_chat_id)
+
+    # A backfilled history message: newest id, but an older send-time than the
+    # other messages already stored for this chat.
+    append_message(
+        conn,
+        source_chat_id,
+        "c4a-old-backfill",
+        "ancient note",
+        timestamp="2026-06-01T07:00:00+00:00",
+    )
+
+    assert store.baseline_cursor(conn, chat_id) is True
+    assert store.messages_since_cursor(conn, chat_id) == []  # whole backlog skipped
+
+
 def test_baseline_no_messages_is_noop(conn: sqlite3.Connection) -> None:
     from src.models import ChatRecord
 

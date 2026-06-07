@@ -25,16 +25,26 @@ def chat_id_by_source(conn: sqlite3.Connection, source_chat_id: str) -> int:
 
 
 def append_message(
-    conn: sqlite3.Connection, source_chat_id: str, source_message_id: str, text: str
+    conn: sqlite3.Connection,
+    source_chat_id: str,
+    source_message_id: str,
+    text: str,
+    *,
+    timestamp: str = "2026-06-10T10:00:00+00:00",
 ) -> None:
-    """Simulate a connector delivering one new message into an existing chat."""
+    """Simulate a connector delivering one new message into an existing chat.
+
+    ``timestamp`` defaults to a recent send-time; pass an *older* one to simulate
+    a resync backfilling out-of-order history (a message ingested after the cursor
+    whose send-time predates it).
+    """
     chat_id = chat_id_by_source(conn, source_chat_id)
     store.insert_message(
         conn,
         chat_id,
         MessageRecord(
             source_message_id=source_message_id,
-            message_timestamp="2026-06-10T10:00:00+00:00",
+            message_timestamp=timestamp,
             text=text,
             sender_label="Tester",
         ),

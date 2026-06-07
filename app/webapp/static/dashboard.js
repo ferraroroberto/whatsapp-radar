@@ -5,16 +5,15 @@
 
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
+import { fmtLocalDateTime } from './format.js';
 
-// Per-channel "Last msg" column: compact, no year ("06-06 12:47"). The last-scan
-// card below still uses the full timestamp via fmtTsFull.
+// Per-channel "Last msg" column: compact LOCAL time, no year ("06-07 14:47").
+// The last-scan card below uses the full local timestamp via fmtTsFull.
 function fmtTs(ts) {
-  if (!ts) return '—';
-  return String(ts).replace('T', ' ').slice(5, 16);
+  return fmtLocalDateTime(ts, { withYear: false });
 }
 function fmtTsFull(ts) {
-  if (!ts) return '—';
-  return String(ts).replace('T', ' ').slice(0, 16);
+  return fmtLocalDateTime(ts);
 }
 
 // Thousands separator with a period (29999 → "29.999"), deterministic across

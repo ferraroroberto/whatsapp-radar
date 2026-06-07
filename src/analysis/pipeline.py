@@ -35,7 +35,7 @@ from src.analysis.classifier import (
     build_stage2_classifier,
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import KeywordSignal, has_actionable_signal
+from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_roots
 from src.analysis.review import advance_family_cursors, prior_context
 from src.config import Config
 from src.connector.base import MessageConnector
@@ -94,6 +94,28 @@ def _render_delta(delta: list[StoredMessage]) -> str:
     )
 
 
+def _messages_record(delta: list[StoredMessage]) -> str:
+    """Per-message audit record: each message with the Stage-1 roots it matched.
+
+    Captured at run time (not recomputed on read) so the trace stays faithful to
+    the keyword roots that actually ran, even if ``keyword_roots.txt`` changes
+    later. The LLM's per-message verdict is *not* stored here — it is derived on
+    read from the parsed result's ``evidence_message_ids`` (issue #12).
+    """
+    return json.dumps(
+        [
+            {
+                "id": m.source_message_id,
+                "sender": m.sender_label,
+                "text": m.text,
+                "roots": matched_roots(m.text),
+            }
+            for m in delta
+        ],
+        ensure_ascii=False,
+    )
+
+
 def _result_json(result: AnalysisResult) -> str:
     return json.dumps(asdict(result), ensure_ascii=False)
 
@@ -117,6 +139,7 @@ def _write_trace(
         chat_id,
         input_message_ids_json=json.dumps([m.source_message_id for m in delta]),
         input_text=_render_delta(delta),
+        messages_json=_messages_record(delta),
         stage1_passed=signal.matched,
         stage1_roots_json=json.dumps(list(signal.roots)),
         llm_called=outcome.llm_called if outcome else False,

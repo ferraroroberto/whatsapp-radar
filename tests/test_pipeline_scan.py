@@ -332,6 +332,12 @@ def test_trace_captures_prompt_and_raw_response(
     assert row["final_action"] == "actionable"
     assert json.loads(row["parsed_result_json"])["action_required"] is True
     assert "Class 4A Group" in row["telegram_text"]
+    # Per-message audit record (#12): one entry per analyzed message, each
+    # carrying the Stage-1 roots it matched. At least one message in an
+    # actionable chat must have matched a root (that's why it passed Stage 1).
+    messages = json.loads(row["messages_json"])
+    assert messages and all({"id", "sender", "text", "roots"} <= m.keys() for m in messages)
+    assert any(m["roots"] for m in messages)
 
 
 def test_stage1_noise_skips_the_llm(
@@ -351,6 +357,10 @@ def test_stage1_noise_skips_the_llm(
     row = _trace(ingested_conn, outcome.run_id, chat_id)
     assert row["final_action"] == "not_actionable"
     assert row["llm_called"] == 0
+    # The filtered messages are still recorded per-message, each with no roots —
+    # so the operator can see exactly what went through and why it didn't trigger.
+    messages = json.loads(row["messages_json"])
+    assert messages and all(m["roots"] == [] for m in messages)
     # Cursor still advances: the delta was processed (just not actionable).
     assert ingested_conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)

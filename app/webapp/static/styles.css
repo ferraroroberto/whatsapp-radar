@@ -787,3 +787,26 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   letter-spacing: 0.03em;
 }
 .audit-pre { max-height: 240px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* Per-message trace breakdown (#12): one row per message with its Stage-1 /
+   LLM verdict badges, so the operator sees which messages triggered and which
+   didn't. */
+.audit-msg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.audit-msg {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
+.audit-msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 3px; }
+.audit-msg-sender { font-weight: 600; }
+.audit-msg-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.audit-msg-badge.act { color: var(--good); border-color: var(--good); }
+.audit-msg-badge.muted { color: var(--muted); }
+.audit-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }

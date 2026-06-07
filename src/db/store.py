@@ -94,6 +94,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE chats ADD COLUMN parent_chat_id INTEGER "
             "REFERENCES chats(id) ON DELETE SET NULL"
         )
+    # `analysis_trace.messages_json` (per-message audit record: id/sender/text and
+    # the Stage-1 keyword roots each message matched) was added after the initial
+    # trace schema (#12). Additive, non-destructive; old rows stay NULL and the
+    # audit view falls back to the rendered `input_text` blob for them.
+    trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
+    if "messages_json" not in trace_cols:
+        conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
 
 
 # --- chats -----------------------------------------------------------------
@@ -601,6 +608,7 @@ def insert_analysis_trace(
     *,
     input_message_ids_json: str,
     input_text: str | None,
+    messages_json: str | None,
     stage1_passed: bool,
     stage1_roots_json: str,
     llm_called: bool,
@@ -616,17 +624,18 @@ def insert_analysis_trace(
     cur = conn.execute(
         """
         INSERT INTO analysis_trace
-            (run_id, chat_id, input_message_ids_json, input_text, stage1_passed,
-             stage1_roots_json, llm_called, llm_system_prompt, llm_user_prompt,
-             llm_raw_response, parsed_result_json, final_action, telegram_text,
-             error, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (run_id, chat_id, input_message_ids_json, input_text, messages_json,
+             stage1_passed, stage1_roots_json, llm_called, llm_system_prompt,
+             llm_user_prompt, llm_raw_response, parsed_result_json, final_action,
+             telegram_text, error, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
             chat_id,
             input_message_ids_json,
             input_text,
+            messages_json,
             1 if stage1_passed else 0,
             stage1_roots_json,
             1 if llm_called else 0,

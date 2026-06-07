@@ -39,6 +39,11 @@ class AliasUpdate(BaseModel):
     alias: str | None = None
 
 
+class LinkUpdate(BaseModel):
+    # The canonical (top-level) chat this chat should be folded into as a child.
+    parent_id: int
+
+
 @router.get("/api/chats")
 async def list_chats(request: Request) -> dict[str, Any]:
     conn = store.connect(_db_path(request))
@@ -56,6 +61,10 @@ async def list_chats(request: Request) -> dict[str, Any]:
                     "count": int(row["message_count"]),
                     "last_message_at": row["last_message_at"],
                     "last_message_text": row["last_message_text"],
+                    # The parent link: present (non-null) on a child chat the
+                    # operator has folded into another. The frontend hides children
+                    # from the list and nests them under their parent.
+                    "parent_chat_id": row["parent_chat_id"],
                 }
                 for row in rows
             ]
@@ -78,8 +87,19 @@ async def chat_history(
         chat = store.get_chat(conn, chat_id)
         if chat is None:
             raise HTTPException(status_code=404, detail="chat not found")
-        messages, has_more = store.recent_messages(
-            conn, chat_id, limit=limit, before_ts=before_ts, before_id=before_id
+        # A parent's history is the time-ordered merge of itself and its linked
+        # children; for a standalone or child chat this is just its own messages.
+        member_ids = store.family_member_ids(conn, chat_id)
+        multi = len(member_ids) > 1
+        # Per-origin labels so each message in a merged family stays attributable.
+        origin: dict[int, str] = {}
+        if multi:
+            for mid in member_ids:
+                row = store.get_chat(conn, mid)
+                if row is not None:
+                    origin[mid] = row["alias"] or row["display_name"]
+        messages, has_more = store.recent_messages_family(
+            conn, member_ids, limit=limit, before_ts=before_ts, before_id=before_id
         )
         return {
             "chat_id": chat_id,
@@ -93,6 +113,8 @@ async def chat_history(
                     "sender": m.sender_label,
                     "text": m.text,
                     "type": m.message_type,
+                    # Only on a merged family view (>1 member); absent for a lone chat.
+                    **({"origin": origin.get(m.chat_id)} if multi else {}),
                 }
                 for m in messages
             ],
@@ -132,5 +154,45 @@ async def set_alias(request: Request, chat_id: int, payload: AliasUpdate) -> dic
             raise HTTPException(status_code=404, detail="chat not found")
         store.set_chat_alias(conn, chat_id, cleaned)
         return {"id": chat_id, "alias": cleaned}
+    finally:
+        conn.close()
+
+
+@router.post("/api/chats/{chat_id}/link")
+async def link_chat(request: Request, chat_id: int, payload: LinkUpdate) -> dict[str, Any]:
+    """Link ``chat_id`` as a child of ``payload.parent_id`` (also re-parents).
+
+    The link is keyed on the child. Returns 404 if either chat is missing and 400
+    if the link would break the depth-1 rules (self-link, linking under a child,
+    or linking a chat that already has children).
+    """
+    conn = store.connect(_db_path(request))
+    try:
+        if store.get_chat(conn, chat_id) is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+        if store.get_chat(conn, payload.parent_id) is None:
+            raise HTTPException(status_code=404, detail="parent chat not found")
+        try:
+            store.link_chats(conn, chat_id, payload.parent_id)
+        except store.LinkError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"id": chat_id, "parent_id": payload.parent_id}
+    finally:
+        conn.close()
+
+
+@router.post("/api/chats/{chat_id}/unlink")
+async def unlink_chat(request: Request, chat_id: int) -> dict[str, Any]:
+    """Remove ``chat_id``'s parent link, restoring it as an independent chat.
+
+    Used both to detach a child and to unlink one child from a parent's overlay
+    (the call targets the child either way). No message data or cursor is touched.
+    """
+    conn = store.connect(_db_path(request))
+    try:
+        if store.get_chat(conn, chat_id) is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+        unlinked = store.unlink_chat(conn, chat_id)
+        return {"id": chat_id, "unlinked": unlinked}
     finally:
         conn.close()

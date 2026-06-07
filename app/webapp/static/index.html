@@ -272,10 +272,25 @@
       <header class="modal-head">
         <h2 id="historyTitle" class="modal-title"></h2>
         <button id="historyRename" type="button" class="icon-btn" aria-label="Rename chat" title="Rename — set an alias">✏️</button>
+        <button id="historyLink" type="button" class="icon-btn" aria-label="Manage links" title="Link — merge another chat onto this person">🔗</button>
         <button id="historyClose" type="button" class="icon-btn" aria-label="Close">✕</button>
       </header>
+      <div id="historyLinkPanel" class="link-panel" hidden></div>
       <div id="historyBody" class="history-body"></div>
       <p id="historyEmpty" class="muted small" hidden>No messages stored for this chat.</p>
+    </div>
+  </div>
+
+  <div id="linkPickerOverlay" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="linkPickerTitle">
+      <header class="modal-head">
+        <h2 id="linkPickerTitle" class="modal-title">Link to…</h2>
+        <button id="linkPickerClose" type="button" class="icon-btn" aria-label="Close">✕</button>
+      </header>
+      <input id="linkPickerSearch" type="search" class="input-native link-search" placeholder="Search by name or alias…" autocomplete="off">
+      <p id="linkPickerCount" class="muted small"></p>
+      <ul id="linkPickerList" class="card-list"></ul>
+      <p id="linkPickerEmpty" class="muted small" hidden>No matching chats.</p>
     </div>
   </div>
 

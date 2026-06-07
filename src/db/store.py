@@ -83,10 +83,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
         if name not in existing:
             conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
-    # `chats.alias` (operator override label) was added after the initial schema.
+    # `chats.alias` (operator override label) and `chats.parent_chat_id` (the
+    # parent↔child link) were both added after the initial schema. Each is an
+    # additive, non-destructive ALTER with a constant default.
     chat_cols = {row["name"] for row in conn.execute("PRAGMA table_info(chats)")}
     if "alias" not in chat_cols:
         conn.execute("ALTER TABLE chats ADD COLUMN alias TEXT")
+    if "parent_chat_id" not in chat_cols:
+        conn.execute(
+            "ALTER TABLE chats ADD COLUMN parent_chat_id INTEGER "
+            "REFERENCES chats(id) ON DELETE SET NULL"
+        )
 
 
 # --- chats -----------------------------------------------------------------
@@ -134,6 +141,84 @@ def set_chat_alias(conn: sqlite3.Connection, chat_id: int, alias: str | None) ->
     return cur.rowcount > 0
 
 
+class LinkError(ValueError):
+    """An operator link request that violates the parent↔child rules.
+
+    Raised by :func:`link_chats` so the API can translate it to a 400. Existence
+    (404) is checked by the caller before linking.
+    """
+
+
+def child_count(conn: sqlite3.Connection, parent_id: int) -> int:
+    """How many chats are linked as children of ``parent_id`` (0 if it's not a parent)."""
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) AS n FROM chats WHERE parent_chat_id = ?", (parent_id,)
+        ).fetchone()["n"]
+    )
+
+
+def child_chats(conn: sqlite3.Connection, parent_id: int) -> list[sqlite3.Row]:
+    """The child chats linked under ``parent_id``, ordered by id (empty if none)."""
+    return list(
+        conn.execute(
+            "SELECT id, source_chat_id, display_name, alias, chat_type, status, "
+            "last_message_at, parent_chat_id FROM chats WHERE parent_chat_id = ? ORDER BY id",
+            (parent_id,),
+        ).fetchall()
+    )
+
+
+def family_member_ids(conn: sqlite3.Connection, head_id: int) -> list[int]:
+    """Chat ids that make up a family: the head first, then its children by id.
+
+    For a standalone or childless chat this is just ``[head_id]``. The review path
+    folds these members' deltas into one analysis under the head; each member still
+    keeps its own per-chat cursor.
+    """
+    rows = conn.execute(
+        "SELECT id FROM chats WHERE parent_chat_id = ? ORDER BY id", (head_id,)
+    ).fetchall()
+    return [head_id, *(int(r["id"]) for r in rows)]
+
+
+def link_chats(conn: sqlite3.Connection, child_id: int, parent_id: int) -> None:
+    """Link ``child_id`` as a child of ``parent_id`` (also used to re-parent).
+
+    The link lives on the child (``parent_chat_id``). Enforces depth-1 families:
+    a chat can't link to itself, can't link under a chat that is itself a child,
+    and a chat that already has children can't become a child. Raises
+    :class:`LinkError` on any violation. Callers verify both chats exist first.
+    """
+    if child_id == parent_id:
+        raise LinkError("a chat cannot be linked to itself")
+    parent = get_chat(conn, parent_id)
+    if parent is None:
+        raise LinkError("parent chat not found")
+    if parent["parent_chat_id"] is not None:
+        raise LinkError("cannot link under a chat that is itself a child")
+    if child_count(conn, child_id) > 0:
+        raise LinkError("cannot link a chat that already has linked children")
+    conn.execute(
+        "UPDATE chats SET parent_chat_id = ? WHERE id = ?", (parent_id, child_id)
+    )
+    conn.commit()
+
+
+def unlink_chat(conn: sqlite3.Connection, child_id: int) -> bool:
+    """Clear a chat's parent link, restoring it as an independent chat.
+
+    Returns True if the chat was a child (a row changed); False if it had no link.
+    No message data or cursor is touched — only the link metadata is removed.
+    """
+    cur = conn.execute(
+        "UPDATE chats SET parent_chat_id = NULL WHERE id = ? AND parent_chat_id IS NOT NULL",
+        (child_id,),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def list_chats(
     conn: sqlite3.Connection, *, order_by_recent: bool = False
 ) -> list[sqlite3.Row]:
@@ -153,10 +238,14 @@ def list_chats(
 
 
 def monitored_chats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    # Review iterates *family heads* only: a monitored chat that has been linked
+    # as a child (``parent_chat_id`` set) is folded into its parent's family
+    # review, never reviewed standalone. Its own status is left intact and takes
+    # effect again once it is unlinked.
     return list(
         conn.execute(
             "SELECT id, source_chat_id, display_name FROM chats "
-            "WHERE status = 'monitored' ORDER BY id"
+            "WHERE status = 'monitored' AND parent_chat_id IS NULL ORDER BY id"
         ).fetchall()
     )
 
@@ -306,6 +395,41 @@ def messages_for_chat(
             (chat_id, cutoff),
         ).fetchall()
     return [_to_stored(r) for r in rows]
+
+
+def _merge_by_send_order(deltas: list[list[StoredMessage]]) -> list[StoredMessage]:
+    """Flatten per-member deltas into one list ordered by ``(message_timestamp, id)``.
+
+    The same total order the cursor and history paging use, so a merged family
+    delta reads in send-time order for the classifier and digest while each
+    message keeps its origin ``chat_id`` for per-member cursor advancement.
+    """
+    merged = [m for delta in deltas for m in delta]
+    merged.sort(key=lambda m: (m.message_timestamp, m.id))
+    return merged
+
+
+def family_delta_since_cursor(conn: sqlite3.Connection, head_id: int) -> list[StoredMessage]:
+    """The live review delta for a whole family: each member's messages past *its
+    own* cursor, merged in send-time order. For a standalone chat this is exactly
+    :func:`messages_since_cursor`. Members keep independent cursors (#37), so the
+    caller must advance each member it consumed — not just the head.
+    """
+    members = family_member_ids(conn, head_id)
+    return _merge_by_send_order([messages_since_cursor(conn, cid) for cid in members])
+
+
+def family_delta_replay(
+    conn: sqlite3.Connection, head_id: int, *, since_days: int | None = None
+) -> list[StoredMessage]:
+    """The dry-run replay delta for a whole family: every member's stored messages
+    (optionally windowed to ``since_days``), merged in send-time order, ignoring
+    cursors. The family counterpart of :func:`messages_for_chat`.
+    """
+    members = family_member_ids(conn, head_id)
+    return _merge_by_send_order(
+        [messages_for_chat(conn, cid, since_days=since_days) for cid in members]
+    )
 
 
 def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
@@ -583,9 +707,13 @@ def messages_per_chat(
     """Per-chat message counts (id, display_name, status, last_message_at, message_count).
 
     Most-active chats first. ``monitored_only`` restricts to chats being watched,
-    which is what the Dashboard's per-channel table shows.
+    which is what the Dashboard's per-channel table shows. Linked child chats are
+    excluded from the monitored view so a family that is one person isn't listed
+    twice; the child's messages remain on its own row in the all-chats view.
     """
-    where = "WHERE c.status = 'monitored'" if monitored_only else ""
+    where = (
+        "WHERE c.status = 'monitored' AND c.parent_chat_id IS NULL" if monitored_only else ""
+    )
     return list(
         conn.execute(
             "SELECT c.id, c.display_name, c.status, c.last_message_at, "
@@ -605,20 +733,27 @@ def chats_overview(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """All chats with their status, message count, and latest message preview.
 
     Columns: id, source_chat_id, display_name, chat_type, status,
-    last_message_at, message_count, last_message_text. The latest text comes from
-    a correlated subquery keyed by the same (timestamp, id) ordering the cursor
-    uses. Most recently active first (NULLs last) so the operator's live chats
-    surface at the top of the picker.
+    last_message_at, message_count, last_message_text. The count, latest time, and
+    preview are computed over the chat's whole **family** — itself plus any linked
+    children — so a parent row represents the merged family, not just its own
+    messages (a child's newer message correctly floats the parent to the top and
+    sets the preview). The family set is ``c`` plus chats whose ``parent_chat_id``
+    is ``c``; for a standalone or child chat that is just itself. Most recently
+    active first (NULLs last) so the operator's live chats surface at the top.
     """
+    family = (
+        "m.chat_id IN (SELECT x.id FROM chats x WHERE x.id = c.id OR x.parent_chat_id = c.id)"
+    )
     return list(
         conn.execute(
             "SELECT c.id, c.source_chat_id, c.display_name, c.alias, c.chat_type, c.status, "
-            "c.last_message_at, "
-            "(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS message_count, "
-            "(SELECT m.text FROM messages m WHERE m.chat_id = c.id "
+            "c.parent_chat_id, "
+            f"(SELECT COUNT(*) FROM messages m WHERE {family}) AS message_count, "
+            f"(SELECT MAX(m.message_timestamp) FROM messages m WHERE {family}) AS last_message_at, "
+            f"(SELECT m.text FROM messages m WHERE {family} "
             " ORDER BY m.message_timestamp DESC, m.id DESC LIMIT 1) AS last_message_text "
             "FROM chats c "
-            "ORDER BY c.last_message_at IS NULL, c.last_message_at DESC, c.id"
+            "ORDER BY last_message_at IS NULL, last_message_at DESC, c.id"
         ).fetchall()
     )
 
@@ -640,19 +775,44 @@ def recent_messages(
     row is fetched so ``has_more`` is known without a second query. Bounded so a
     chat with tens of thousands of messages never floods the request path.
     """
+    return recent_messages_family(
+        conn, [chat_id], limit=limit, before_ts=before_ts, before_id=before_id
+    )
+
+
+def recent_messages_family(
+    conn: sqlite3.Connection,
+    chat_ids: list[int],
+    *,
+    limit: int = 100,
+    before_ts: str | None = None,
+    before_id: int | None = None,
+) -> tuple[list[StoredMessage], bool]:
+    """A page of messages across one or more chats — the merged family history.
+
+    Same paging contract as :func:`recent_messages` (newest→oldest internally,
+    returned oldest→newest, ``has_more`` flag), but over a *set* of chat ids so a
+    parent's overlay shows a time-ordered merge of itself and its linked children.
+    The ``(message_timestamp, id)`` key is a global total order across chats, so a
+    single cursor pages the whole family correctly. Each :class:`StoredMessage`
+    keeps its ``chat_id`` so callers can attribute every message to its origin.
+    """
+    if not chat_ids:
+        return [], False
+    placeholders = ",".join("?" for _ in chat_ids)
     if before_ts is not None and before_id is not None:
         rows = conn.execute(
             f"SELECT {_MESSAGE_COLUMNS} FROM messages "
-            "WHERE chat_id = ? AND (message_timestamp < ? OR "
+            f"WHERE chat_id IN ({placeholders}) AND (message_timestamp < ? OR "
             "(message_timestamp = ? AND id < ?)) "
             "ORDER BY message_timestamp DESC, id DESC LIMIT ?",
-            (chat_id, before_ts, before_ts, before_id, limit + 1),
+            (*chat_ids, before_ts, before_ts, before_id, limit + 1),
         ).fetchall()
     else:
         rows = conn.execute(
             f"SELECT {_MESSAGE_COLUMNS} FROM messages "
-            "WHERE chat_id = ? ORDER BY message_timestamp DESC, id DESC LIMIT ?",
-            (chat_id, limit + 1),
+            f"WHERE chat_id IN ({placeholders}) ORDER BY message_timestamp DESC, id DESC LIMIT ?",
+            (*chat_ids, limit + 1),
         ).fetchall()
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -662,8 +822,8 @@ def recent_messages(
 def get_chat(conn: sqlite3.Connection, chat_id: int) -> sqlite3.Row | None:
     """Return a single chat row by internal id, or None if it doesn't exist."""
     row: sqlite3.Row | None = conn.execute(
-        "SELECT id, source_chat_id, display_name, alias, chat_type, status, last_message_at "
-        "FROM chats WHERE id = ?",
+        "SELECT id, source_chat_id, display_name, alias, chat_type, status, "
+        "last_message_at, parent_chat_id FROM chats WHERE id = ?",
         (chat_id,),
     ).fetchone()
     return row
@@ -792,16 +952,22 @@ def recent_syncs(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]
 # reprocess.py so the SQL stays here with the schema knowledge.
 
 def snapshot_operator_state(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Operator-set state worth preserving across a rebuild: status + alias.
+    """Operator-set state worth preserving across a rebuild: status, alias, link.
 
-    Returns (source_chat_id, status, alias) for every chat the operator has
-    touched — anything not in the default 'discovered'/no-alias resting state.
-    Keyed by ``source_chat_id`` (not the internal id, which the rebuild reassigns).
+    Returns (source_chat_id, status, alias, parent_source_chat_id) for every chat
+    the operator has touched — anything not in the default 'discovered'/no-alias/
+    unlinked resting state. The parent is captured by *its* ``source_chat_id`` (not
+    internal id, which the rebuild reassigns) so the parent↔child link can be
+    re-resolved after re-ingest. A linked child with otherwise-default state is
+    still included because of its ``parent_chat_id``.
     """
     return list(
         conn.execute(
-            "SELECT source_chat_id, status, alias FROM chats "
-            "WHERE status != 'discovered' OR alias IS NOT NULL"
+            "SELECT c.source_chat_id, c.status, c.alias, "
+            "p.source_chat_id AS parent_source_chat_id "
+            "FROM chats c LEFT JOIN chats p ON p.id = c.parent_chat_id "
+            "WHERE c.status != 'discovered' OR c.alias IS NOT NULL "
+            "OR c.parent_chat_id IS NOT NULL"
         ).fetchall()
     )
 

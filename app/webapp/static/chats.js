@@ -32,6 +32,17 @@ function chatLabel(c) {
   return c.alias ? c.alias + ' (' + c.name + ')' : c.name;
 }
 
+// Link role (derived, not stored): a chat is a CHILD when it points at a parent,
+// a PARENT when other chats point at it, else STANDALONE. Depth is capped at 1,
+// so a chat is never both. Children are hidden from the list and folded into the
+// parent's family review (#25).
+function childrenOf(parentId) {
+  return state.chats.filter(function (c) { return c.parent_chat_id === parentId; });
+}
+function isChild(c) {
+  return c.parent_chat_id != null;
+}
+
 export async function fetchChats() {
   let data;
   try {
@@ -46,6 +57,9 @@ export async function fetchChats() {
 function visibleChats() {
   const q = state.chatsSearch.trim().toLowerCase();
   return state.chats.filter(function (c) {
+    // Linked children never appear as their own row — they are folded into the
+    // parent and managed from the parent's overlay (#25).
+    if (isChild(c)) return false;
     // Two states that matter: monitored, or not. A chat is "ignored" by default
     // (never-touched 'discovered' chats included), so the Ignored bucket is
     // simply everything that isn't monitored.
@@ -103,6 +117,21 @@ function row(c) {
   // Single watch toggle: lit/active when monitored, dim otherwise.
   const actions = document.createElement('div');
   actions.className = 'chat-actions';
+
+  // A parent shows a 🔗N badge; tapping it opens the overlay with the link panel
+  // already expanded so the family can be managed in one tap.
+  const kids = childrenOf(c.id);
+  if (kids.length) {
+    const badge = document.createElement('button');
+    badge.type = 'button';
+    badge.className = 'chat-link-badge';
+    badge.textContent = '🔗' + kids.length;
+    badge.title = kids.length + ' linked chat' + (kids.length === 1 ? '' : 's');
+    badge.setAttribute('aria-label', badge.title);
+    badge.addEventListener('click', function () { openHistory(c, true); });
+    actions.appendChild(badge);
+  }
+
   const watch = document.createElement('button');
   watch.type = 'button';
   watch.className = 'chat-watch';
@@ -147,7 +176,10 @@ function histMsg(m) {
   item.className = 'hist-msg';
   const meta = document.createElement('div');
   meta.className = 'hist-meta';
-  meta.textContent = (m.sender || '—') + ' · ' + fmtTsFull(m.ts);
+  // On a merged family view each message carries its origin chat so the operator
+  // can tell which number it came from; absent on a single-chat view.
+  const who = m.sender || '—';
+  meta.textContent = (m.origin ? m.origin + ' · ' : '') + who + ' · ' + fmtTsFull(m.ts);
   const text = document.createElement('div');
   text.className = 'hist-text';
   text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
@@ -163,13 +195,16 @@ function appendPage(msgs) {
   if (msgs.length) { hist.oldestTs = msgs[0].ts; hist.oldestId = msgs[0].id; }
 }
 
-async function openHistory(chat) {
+async function openHistory(chat, openPanel) {
   els.historyTitle.textContent = chatLabel(chat);
   els.historyBody.textContent = '';
   els.historyEmpty.hidden = true;
   els.historyOverlay.hidden = false;
   hist.chat = chat;
   hist.chatId = chat.id;
+  // Panel starts collapsed on a normal open; the 🔗 badge opens it expanded.
+  panelOpen = !!openPanel;
+  syncLinkPanel();
   hist.oldestTs = null;
   hist.oldestId = null;
   hist.hasMore = false;
@@ -216,8 +251,192 @@ async function loadOlder() {
 function closeHistory() {
   els.historyOverlay.hidden = true;
   els.historyBody.textContent = '';
+  els.historyLinkPanel.hidden = true;
+  els.historyLinkPanel.textContent = '';
+  panelOpen = false;
   hist.chat = null;
   hist.chatId = null;
+}
+
+// ----------------------------------------------------------- link management
+// All link maintenance happens inside a chat's overlay. The 🔗 button toggles a
+// panel whose content depends on the chat's role:
+//   standalone → "Link to a parent…" (opens the picker; this chat becomes a child)
+//   child      → "Linked to <parent>" + Unlink / Change parent…
+//   parent     → its children, each with an Unlink ✕
+// The link is keyed on the child, so every mutation targets a child id and the
+// server enforces the depth-1 rules.
+let panelOpen = false;
+
+function linkBtn(text, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'link-btn';
+  b.textContent = text;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderLinkPanel(chat) {
+  const panel = els.historyLinkPanel;
+  panel.textContent = '';
+  const kids = childrenOf(chat.id);
+
+  if (chat.parent_chat_id != null) {
+    // Child: show its parent with unlink / re-parent.
+    const parent = state.chats.find(function (c) { return c.id === chat.parent_chat_id; });
+    const status = document.createElement('div');
+    status.className = 'link-status';
+    status.textContent = 'Linked to: ' + (parent ? chatLabel(parent) : '#' + chat.parent_chat_id);
+    const actions = document.createElement('div');
+    actions.className = 'link-actions';
+    actions.append(
+      linkBtn('Unlink', function () { unlinkChat(chat); }),
+      linkBtn('Change parent…', function () { openPicker(chat); })
+    );
+    panel.append(status, actions);
+  } else if (kids.length) {
+    // Parent: list children, each unlinkable. No "set a parent" — a parent can't
+    // itself become a child.
+    const status = document.createElement('div');
+    status.className = 'link-status';
+    status.textContent = 'Linked chats (' + kids.length + '):';
+    panel.appendChild(status);
+    const ul = document.createElement('ul');
+    ul.className = 'link-children';
+    for (const k of kids) {
+      const li = document.createElement('li');
+      const nm = document.createElement('span');
+      nm.className = 'link-child-name';
+      nm.textContent = chatLabel(k);
+      const x = linkBtn('✕', function () { unlinkChat(k); });
+      x.title = 'Unlink this chat';
+      li.append(nm, x);
+      ul.appendChild(li);
+    }
+    panel.appendChild(ul);
+  } else {
+    // Standalone: offer to fold this chat into a canonical parent.
+    const hint = document.createElement('div');
+    hint.className = 'link-status muted';
+    hint.textContent = 'Not linked. Merge another number for the same person onto a parent chat.';
+    const actions = document.createElement('div');
+    actions.className = 'link-actions';
+    actions.appendChild(linkBtn('🔗 Link to a parent…', function () { openPicker(chat); }));
+    panel.append(hint, actions);
+  }
+}
+
+function syncLinkPanel() {
+  if (!hist.chat) return;
+  if (panelOpen) {
+    renderLinkPanel(hist.chat);
+    els.historyLinkPanel.hidden = false;
+  } else {
+    els.historyLinkPanel.hidden = true;
+    els.historyLinkPanel.textContent = '';
+  }
+}
+
+function toggleLinkPanel() {
+  if (!hist.chat) return;
+  panelOpen = !panelOpen;
+  syncLinkPanel();
+}
+
+// After any link mutation: refresh the chat list, then reload the open overlay so
+// both the merged history and the link panel reflect the new family. If the chat
+// itself vanished from the data (shouldn't happen) the overlay just closes.
+async function refreshAfterLink() {
+  await fetchChats();
+  if (els.historyOverlay.hidden) return;
+  const fresh = state.chats.find(function (c) { return c.id === hist.chatId; });
+  if (!fresh) { closeHistory(); return; }
+  openHistory(fresh, true).catch(function () {});
+}
+
+async function unlinkChat(chat) {
+  try {
+    await jsonApi('/api/chats/' + chat.id + '/unlink', { method: 'POST' });
+    toast('Unlinked.', 'good');
+    await refreshAfterLink();
+  } catch (exc) {
+    toast('Unlink failed: ' + (exc.message || exc), 'error');
+  }
+}
+
+// ----------------------------------------------------------- parent picker
+const picker = { child: null };
+
+function pickerCandidates() {
+  const q = els.linkPickerSearch.value.trim().toLowerCase();
+  const child = picker.child;
+  return state.chats.filter(function (c) {
+    if (!child || c.id === child.id) return false;     // never itself
+    if (c.parent_chat_id != null) return false;        // target must be top-level
+    if (c.id === child.parent_chat_id) return false;   // already this child's parent
+    if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function renderPicker() {
+  const all = pickerCandidates();
+  const shown = all.slice(0, CHATS_RENDER_CAP);
+  els.linkPickerList.textContent = '';
+  els.linkPickerEmpty.hidden = all.length > 0;
+  els.linkPickerCount.textContent = all.length > shown.length
+    ? 'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.'
+    : (all.length ? fmtNum(all.length) + ' chat' + (all.length === 1 ? '' : 's') : '');
+
+  for (const c of shown) {
+    const li = document.createElement('li');
+    li.className = 'chat-row';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chat-main';
+    const nm = document.createElement('span');
+    nm.className = 'chat-name';
+    nm.textContent = chatLabel(c);
+    const meta = document.createElement('span');
+    meta.className = 'chat-meta';
+    meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtTsFull(c.last_message_at);
+    b.append(nm, meta);
+    b.addEventListener('click', function () { doLink(picker.child, c); });
+    li.appendChild(b);
+    els.linkPickerList.appendChild(li);
+  }
+}
+
+function openPicker(child) {
+  picker.child = child;
+  els.linkPickerTitle.textContent = 'Link “' + chatLabel(child) + '” to…';
+  els.linkPickerSearch.value = '';
+  els.linkPickerOverlay.hidden = false;
+  renderPicker();
+  els.linkPickerSearch.focus();
+}
+
+function closePicker() {
+  els.linkPickerOverlay.hidden = true;
+  els.linkPickerList.textContent = '';
+  picker.child = null;
+}
+
+async function doLink(child, parent) {
+  if (!child || !parent) return;
+  try {
+    await jsonApi('/api/chats/' + child.id + '/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent_id: parent.id }),
+    });
+    toast('Linked to ' + chatLabel(parent) + '.', 'good');
+    closePicker();
+    await refreshAfterLink();
+  } catch (exc) {
+    toast('Link failed: ' + (exc.message || exc), 'error');
+  }
 }
 
 // Rename: set or clear the operator alias for the chat in the open overlay. The
@@ -268,10 +487,18 @@ export function wireChats() {
     render();
   });
   els.historyRename.addEventListener('click', function () { renameChat().catch(function () {}); });
+  els.historyLink.addEventListener('click', toggleLinkPanel);
   els.historyClose.addEventListener('click', closeHistory);
   els.historyOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.historyOverlay) closeHistory();
   });
+  // Parent picker overlay (#25): search filters by name or alias; tap a result
+  // in renderPicker to link. Close on the ✕ or a backdrop tap.
+  els.linkPickerClose.addEventListener('click', closePicker);
+  els.linkPickerOverlay.addEventListener('click', function (ev) {
+    if (ev.target === els.linkPickerOverlay) closePicker();
+  });
+  els.linkPickerSearch.addEventListener('input', renderPicker);
   // Newest is at the top; scrolling to the bottom pages in older messages.
   els.historyBody.addEventListener('scroll', function () {
     const b = els.historyBody;

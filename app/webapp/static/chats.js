@@ -144,13 +144,18 @@ const hist = {
 
 function histMsg(m) {
   const item = document.createElement('div');
-  item.className = 'hist-msg';
+  item.className = 'hist-msg' + (m.type === 'voice' ? ' hist-voice' : '');
   const meta = document.createElement('div');
   meta.className = 'hist-meta';
   meta.textContent = (m.sender || '—') + ' · ' + fmtTsFull(m.ts);
   const text = document.createElement('div');
   text.className = 'hist-text';
-  text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
+  if (m.type === 'voice') {
+    const body = m.text != null ? m.text : '(' + (m.type || 'voice') + ')';
+    text.textContent = '🎤 ' + body;
+  } else {
+    text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
+  }
   item.append(meta, text);
   return item;
 }

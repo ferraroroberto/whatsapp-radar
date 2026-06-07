@@ -413,7 +413,7 @@ function funnelCells(result) {
   if (!result) return null;
   const f = result.funnel || {};
   if (result.kind === 'scan') {
-    return [
+    const cells = [
       { label: 'Synced', value: f.messages_synced },
       { label: 'Monitored', value: f.chats_monitored },
       { label: 'New (Δ)', value: f.chats_with_delta },
@@ -422,6 +422,10 @@ function funnelCells(result) {
       { label: 'Actionable', value: f.actionable },
       { label: 'Notify', value: result.notification_status },
     ];
+    if (f.voice_transcribed) cells.push({ label: 'Transcribed', value: f.voice_transcribed });
+    if (f.voice_failed) cells.push({ label: 'Voice failed', value: f.voice_failed });
+    if (f.voice_skipped_old) cells.push({ label: 'Voice skipped', value: f.voice_skipped_old });
+    return cells;
   }
   if (result.kind === 'process') {
     return [

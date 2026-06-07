@@ -71,6 +71,9 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
             "stage1_passed": int(row["stage1_passed"]),
             "stage2_llm_calls": int(row["stage2_llm_calls"]),
             "actionable": int(row["actionable"]),
+            "voice_transcribed": int(row["voice_transcribed"]),
+            "voice_failed": int(row["voice_failed"]),
+            "voice_skipped_old": int(row["voice_skipped_old"]),
         },
     }
 

@@ -42,15 +42,27 @@ const ACTION_META = {
 function actionMeta(action) { return ACTION_META[action] || { label: action || '?', cls: 'muted' }; }
 
 // One compact line summarizing the funnel for the run list.
+function voiceFunnelBits(f) {
+  if (!f) return '';
+  const bits = [];
+  if (f.voice_transcribed) bits.push(`${f.voice_transcribed} transcribed`);
+  if (f.voice_failed) bits.push(`${f.voice_failed} voice failed`);
+  if (f.voice_skipped_old) bits.push(`${f.voice_skipped_old} skipped (old)`);
+  return bits.join(' · ');
+}
+
 function funnelSummary(f) {
   if (!f) return '';
-  return [
+  const parts = [
     `${f.messages_synced} synced`,
     `${f.chats_monitored} monitored`,
     `${f.stage1_passed} Stage 1`,
     `${f.stage2_llm_calls} LLM`,
     `${f.actionable} actionable`,
-  ].join(' · ');
+  ];
+  const voice = voiceFunnelBits(f);
+  if (voice) parts.push(voice);
+  return parts.join(' · ');
 }
 
 function paramsSummary(params) {
@@ -133,7 +145,7 @@ function renderRuns() {
 
 function funnelCells(run) {
   const f = run.funnel || {};
-  return [
+  const cells = [
     { label: 'Synced', value: f.messages_synced },
     { label: 'Monitored', value: f.chats_monitored },
     { label: 'Reviewed', value: f.chats_reviewed },
@@ -142,6 +154,10 @@ function funnelCells(run) {
     { label: 'Actionable', value: f.actionable },
     { label: 'Notify', value: run.notification_status },
   ];
+  if (f.voice_transcribed) cells.push({ label: 'Transcribed', value: f.voice_transcribed });
+  if (f.voice_failed) cells.push({ label: 'Voice failed', value: f.voice_failed });
+  if (f.voice_skipped_old) cells.push({ label: 'Voice skipped', value: f.voice_skipped_old });
+  return cells;
 }
 
 function renderFunnel(run) {

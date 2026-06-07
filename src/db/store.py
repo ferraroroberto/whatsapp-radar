@@ -834,7 +834,8 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
         conn.execute(
             "SELECT id, started_at, completed_at, status, mode, params_json, "
             "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
-            "stage1_passed, stage2_llm_calls, actionable, notification_status, error "
+            "stage1_passed, stage2_llm_calls, actionable, notification_status, error, "
+            "voice_transcribed, voice_failed, voice_skipped_old "
             "FROM review_runs ORDER BY id DESC LIMIT ?",
             (max(1, limit),),
         ).fetchall()

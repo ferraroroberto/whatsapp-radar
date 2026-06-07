@@ -41,6 +41,11 @@ def test_audit_drilldown_shows_trace(page: Page, base_url: str) -> None:
     expect(trace).to_be_visible()
     expect(trace).to_contain_text("Class 4A Group")
 
-    # 4. Expanding the trace reveals the input the decision was made on.
+    # 4. Expanding the trace reveals the per-message breakdown (#12): each message
+    #    with its own Stage-1 / LLM verdict badge, so the operator can see which
+    #    messages triggered and which didn't — no black box.
     trace.locator("summary").click()
-    expect(trace).to_contain_text("Input messages")
+    expect(trace).to_contain_text("Messages (")
+    messages = trace.locator(".audit-msg")
+    expect(messages.first).to_be_visible()
+    expect(messages.first.locator(".audit-msg-badge").first).to_be_visible()

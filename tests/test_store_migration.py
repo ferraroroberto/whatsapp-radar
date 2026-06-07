@@ -23,6 +23,28 @@ CREATE TABLE review_runs (
 );
 """
 
+_LEGACY_ANALYSIS_TRACE = """
+CREATE TABLE analysis_trace (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id                 INTEGER NOT NULL,
+    chat_id                INTEGER NOT NULL,
+    input_message_ids_json TEXT,
+    input_text             TEXT,
+    stage1_passed          INTEGER NOT NULL DEFAULT 0,
+    stage1_roots_json      TEXT,
+    llm_called             INTEGER NOT NULL DEFAULT 0,
+    llm_system_prompt      TEXT,
+    llm_user_prompt        TEXT,
+    llm_raw_response       TEXT,
+    parsed_result_json     TEXT,
+    final_action           TEXT NOT NULL,
+    telegram_text          TEXT,
+    error                  TEXT,
+    created_at             TEXT NOT NULL,
+    UNIQUE (run_id, chat_id)
+);
+"""
+
 _LEGACY_CHATS = """
 CREATE TABLE chats (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +87,29 @@ def test_connect_migrates_legacy_review_runs(tmp_path: Path) -> None:
         conn2 = store.connect(db)
         assert store.count_runs(conn2) == 1
         conn2.close()
+    finally:
+        conn.close()
+
+
+def test_connect_migrates_analysis_trace_messages_json(tmp_path: Path) -> None:
+    db = tmp_path / "legacy_trace.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_ANALYSIS_TRACE)
+    raw.execute(
+        "INSERT INTO analysis_trace (run_id, chat_id, final_action, created_at) "
+        "VALUES (1, 1, 'not_actionable', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
+        assert "messages_json" in cols
+        # The pre-existing row survives with a NULL per-message record (the audit
+        # view falls back to the rendered input blob for it).
+        row = conn.execute("SELECT messages_json FROM analysis_trace WHERE id = 1").fetchone()
+        assert row["messages_json"] is None
     finally:
         conn.close()
 

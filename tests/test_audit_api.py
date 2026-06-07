@@ -67,13 +67,23 @@ def _seed(conn: sqlite3.Connection) -> int:
         a,
         input_message_ids_json=json.dumps(["a0", "a1"]),
         input_text="bring a packed lunch tomorrow",
+        messages_json=json.dumps(
+            [
+                {"id": "a0", "sender": "Parent", "text": "bring a packed lunch",
+                 "roots": ["lunch"]},
+                {"id": "a1", "sender": "Parent", "text": "tomorrow please",
+                 "roots": ["tomorrow"]},
+            ]
+        ),
         stage1_passed=True,
         stage1_roots_json=json.dumps(["lunch", "tomorrow"]),
         llm_called=True,
         llm_system_prompt="You are a classifier.",
         llm_user_prompt="Messages: bring a packed lunch tomorrow",
         llm_raw_response='{"action_required": true, "priority": "high"}',
-        parsed_result_json=json.dumps({"action_required": True, "priority": "high"}),
+        parsed_result_json=json.dumps(
+            {"action_required": True, "priority": "high", "evidence_message_ids": ["a0"]}
+        ),
         final_action="actionable",
         telegram_text="📌 Class 4A Group: packed lunch tomorrow",
         error=None,
@@ -85,6 +95,9 @@ def _seed(conn: sqlite3.Connection) -> int:
         b,
         input_message_ids_json=json.dumps(["b0"]),
         input_text="thanks everyone",
+        messages_json=json.dumps(
+            [{"id": "b0", "sender": "Parent", "text": "thanks everyone", "roots": []}]
+        ),
         stage1_passed=False,
         stage1_roots_json=json.dumps([]),
         llm_called=False,
@@ -179,14 +192,23 @@ def test_audit_run_drilldown_trace(tmp_path: Path) -> None:
     assert a["llm_called"] is True
     assert a["llm_system_prompt"] == "You are a classifier."
     assert "packed lunch" in a["llm_user_prompt"]
-    assert a["parsed_result"] == {"action_required": True, "priority": "high"}
+    assert a["parsed_result"]["action_required"] is True
     assert a["telegram_text"] is not None
+    # Per-message breakdown (#12): each message carries its own Stage-1 roots, and
+    # the LLM-flagged message is identifiable via parsed_result.evidence_message_ids.
+    assert [m["id"] for m in a["messages"]] == ["a0", "a1"]
+    assert a["messages"][0]["roots"] == ["lunch"]
+    assert a["parsed_result"]["evidence_message_ids"] == ["a0"]
 
     b = traces["School Parents Group"]
     assert b["final_action"] == "not_actionable"
     assert b["stage1_passed"] is False
     assert b["llm_called"] is False
     assert b["llm_system_prompt"] is None
+    # A filtered message still appears, with no matched roots.
+    assert b["messages"] == [
+        {"id": "b0", "sender": "Parent", "text": "thanks everyone", "roots": []}
+    ]
 
 
 def test_audit_run_unknown_404(tmp_path: Path) -> None:

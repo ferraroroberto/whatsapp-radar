@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS analysis_trace (
     chat_id                INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     input_message_ids_json TEXT,            -- source_message_ids analyzed
     input_text             TEXT,            -- rendered delta handed to stage 1
+    messages_json          TEXT,            -- per-message record: [{id,sender,text,roots}] (#12)
     stage1_passed          INTEGER NOT NULL DEFAULT 0,
     stage1_roots_json      TEXT,            -- keyword roots that triggered (Stage-1 evidence)
     llm_called             INTEGER NOT NULL DEFAULT 0,

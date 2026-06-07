@@ -35,6 +35,8 @@ export const state = {
     detail: null,          // last fetched run detail
     queue: [],             // pending chained actions (multi-step run), fired in order
     sidecar: null,         // last /api/sidecar/status snapshot (connection health)
+    syncs: [],             // recent sync_log rows (per-sync ingest deltas)
+    syncTotals: null,      // {chats, messages} current stored totals
   },
 };
 
@@ -124,6 +126,9 @@ export const els = {
   execReconnectMsg: document.getElementById('execReconnectMsg'),
   execReconnectBtn: document.getElementById('execReconnectBtn'),
   execQr: document.getElementById('execQr'),
+  execSyncs: document.getElementById('execSyncs'),
+  execSyncsEmpty: document.getElementById('execSyncsEmpty'),
+  execSyncTotals: document.getElementById('execSyncTotals'),
   execRunsCard: document.getElementById('execRunsCard'),
   execViewerCard: document.getElementById('execViewerCard'),
   execViewer: document.getElementById('execViewer'),

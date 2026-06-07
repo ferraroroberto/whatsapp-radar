@@ -161,6 +161,40 @@ function qrSrc() {
   return '/api/sidecar/qr?t=' + Math.floor(Date.now() / 20000);
 }
 
+function fmtCount(n) { return (n === undefined || n === null) ? '–' : Number(n).toLocaleString(); }
+
+function fmtClock(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtSyncWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d)
+    ? String(iso)
+    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// When the source is live, show what's actually *stored* and the last sync delta
+// (truthful) instead of the sidecar's session counters, which reset on reconnect
+// and misread as "empty" (#31).
+function healthDetail(s) {
+  const ex = execState();
+  if (s.is_live && ex.syncTotals) {
+    const last = ex.syncs && ex.syncs[0];
+    const lastBit = last ? ` · last sync ${fmtClock(last.ran_at)} +${last.messages_added}` : '';
+    return `${fmtCount(ex.syncTotals.messages)} messages stored${lastBit}`;
+  }
+  return s.detail || s.state;
+}
+
+function refreshHealthDetail() {
+  const s = execState().sidecar;
+  if (s) els.execHealthDetail.textContent = healthDetail(s);
+}
+
 export async function fetchHealth() {
   let s;
   try {
@@ -171,8 +205,51 @@ export async function fetchHealth() {
   execState().sidecar = s;
   els.execHealthDot.classList.remove('up', 'down', 'unknown', 'warn');
   els.execHealthDot.classList.add(DOT_CLASS[s.state] || 'unknown');
-  els.execHealthDetail.textContent = s.detail || s.state;
+  refreshHealthDetail();
   renderReconnect(s);
+}
+
+// Recent sync deltas (sync_log): proof the ingest is actually pulling new data,
+// covering scheduled Jobs the run viewer never sees.
+export async function fetchSyncs() {
+  let data;
+  try {
+    data = await jsonApi('/api/execution/syncs');
+  } catch (_) {
+    return;
+  }
+  const ex = execState();
+  ex.syncs = data.syncs || [];
+  ex.syncTotals = data.totals || null;
+  renderSyncs();
+  refreshHealthDetail();
+}
+
+function syncRow(s) {
+  const li = document.createElement('li');
+  li.className = 'exec-sync-li';
+  const when = document.createElement('span');
+  when.className = 'exec-sync-when muted small';
+  when.textContent = fmtSyncWhen(s.ran_at);
+  const delta = document.createElement('span');
+  delta.className = 'exec-sync-delta';
+  const chatBit = s.chats_added ? ` · +${s.chats_added} chat${s.chats_added > 1 ? 's' : ''}` : '';
+  delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${chatBit}`;
+  const src = document.createElement('span');
+  src.className = 'exec-sync-src muted small';
+  src.textContent = s.source;
+  li.append(when, delta, src);
+  return li;
+}
+
+function renderSyncs() {
+  const ex = execState();
+  els.execSyncs.textContent = '';
+  els.execSyncsEmpty.hidden = ex.syncs.length > 0;
+  for (const s of ex.syncs) els.execSyncs.appendChild(syncRow(s));
+  els.execSyncTotals.textContent = ex.syncTotals
+    ? `${fmtCount(ex.syncTotals.chats)} chats · ${fmtCount(ex.syncTotals.messages)} msgs`
+    : '';
 }
 
 function renderReconnect(s) {
@@ -217,6 +294,7 @@ async function reconnectSidecar() {
 
 export async function fetchExecution() {
   fetchHealth().catch(function () {});
+  fetchSyncs().catch(function () {});
   let data;
   try {
     data = await jsonApi('/api/execution/runs');

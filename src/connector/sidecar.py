@@ -136,7 +136,10 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
     elif not connected:
         state, detail = STATE_CONNECTING, "linking — waiting for WhatsApp to connect"
     else:
-        state, detail = STATE_RUNNING, f"{chats} chats, {messages} messages buffered"
+        # The sidecar's own counters are per-session (they reset on reconnect), so
+        # don't present them as buffer totals — the UI shows the truthful *stored*
+        # totals + last-sync delta instead (#31).
+        state, detail = STATE_RUNNING, "connected — receiving live updates"
 
     return SidecarStateInfo(
         state=state,

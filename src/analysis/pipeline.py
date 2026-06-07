@@ -46,6 +46,7 @@ from src.models import StoredMessage
 from src.notify.alert import send_alert
 from src.notify.delivery import deliver_digest
 from src.report.digest import Digest, DigestItem, build_digest, render_item
+from src.transcription import transcribe_pending
 
 Mode = Literal["live", "dry_run"]
 
@@ -83,15 +84,32 @@ class ScanOutcome:
     stage1_passed: int = 0
     stage2_llm_calls: int = 0
     actionable: int = 0
+    voice_transcribed: int = 0
+    voice_failed: int = 0
+    voice_skipped_old: int = 0
     notification_status: str = "none"
     errors: list[tuple[int, str]] = field(default_factory=list)
     digest: Digest | None = None
 
 
 def _render_delta(delta: list[StoredMessage]) -> str:
-    return "\n".join(
-        f"[{m.source_message_id}] {m.sender_label or 'unknown'}: {m.text or ''}" for m in delta
-    )
+    lines: list[str] = []
+    for m in delta:
+        body = m.text or ""
+        if m.message_type == "voice":
+            body = f"🎤 {body}"
+        lines.append(f"[{m.source_message_id}] {m.sender_label or 'unknown'}: {body}")
+    return "\n".join(lines)
+
+
+def _truncate_delta_for_transcription(delta: list[StoredMessage]) -> list[StoredMessage]:
+    """Stop before the first voice note that still needs transcription."""
+    out: list[StoredMessage] = []
+    for m in delta:
+        if m.message_type == "voice" and m.transcription_status in ("pending", "failed"):
+            break
+        out.append(m)
+    return out
 
 
 def _result_json(result: AnalysisResult) -> str:
@@ -249,6 +267,11 @@ def scan(
         except ConnectorOffline as exc:
             return _abort_offline(conn, config, outcome, exc, progress)
         _sync(conn, live_connector, outcome, progress)
+        if config.transcription.enabled:
+            tx = transcribe_pending(conn, config, progress=progress)
+            outcome.voice_transcribed = tx.transcribed
+            outcome.voice_failed = tx.failed
+            outcome.voice_skipped_old = tx.skipped_old
     else:
         _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
@@ -263,6 +286,9 @@ def scan(
             if mode == "live"
             else store.messages_for_chat(conn, chat_id, since_days=days)
         )
+        if not delta:
+            continue
+        delta = _truncate_delta_for_transcription(delta)
         if not delta:
             continue
         outcome.chats_with_delta += 1
@@ -388,6 +414,9 @@ def scan(
         stage2_llm_calls=outcome.stage2_llm_calls,
         actionable=outcome.actionable,
         notification_status=outcome.notification_status,
+        voice_transcribed=outcome.voice_transcribed,
+        voice_failed=outcome.voice_failed,
+        voice_skipped_old=outcome.voice_skipped_old,
     )
     _emit(
         progress,
@@ -418,6 +447,9 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
             "stage1_passed": outcome.stage1_passed,
             "stage2_llm_calls": outcome.stage2_llm_calls,
             "actionable": outcome.actionable,
+            "voice_transcribed": outcome.voice_transcribed,
+            "voice_failed": outcome.voice_failed,
+            "voice_skipped_old": outcome.voice_skipped_old,
         },
         "notification_status": outcome.notification_status,
         "telegram_text": digest.to_telegram_text() if digest and digest.has_actionable_items

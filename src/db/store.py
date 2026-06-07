@@ -525,11 +525,15 @@ def record_run_funnel(
     stage2_llm_calls: int,
     actionable: int,
     notification_status: str,
+    voice_transcribed: int = 0,
+    voice_failed: int = 0,
+    voice_skipped_old: int = 0,
 ) -> None:
     """Persist a run's funnel counters and final notification status."""
     conn.execute(
         "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
-        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ? "
+        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ?, "
+        "voice_transcribed = ?, voice_failed = ?, voice_skipped_old = ? "
         "WHERE id = ?",
         (
             chats_synced,
@@ -539,6 +543,9 @@ def record_run_funnel(
             stage2_llm_calls,
             actionable,
             notification_status,
+            voice_transcribed,
+            voice_failed,
+            voice_skipped_old,
             run_id,
         ),
     )

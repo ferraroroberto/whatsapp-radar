@@ -729,7 +729,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-sync-src { flex: none; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Audit tab (#12): run list + per-run trace drill-down. */
-.audit-runs { gap: 0; padding: 0; margin: 0; }
+/* max-height ≈ 5 rows (each ~60 px); scroll reveals older entries. */
+.audit-runs { gap: 0; padding: 0; margin: 0; max-height: 310px; overflow-y: auto; }
 .audit-run-li {
   display: flex;
   flex-direction: column;

@@ -40,8 +40,10 @@ from src.analysis.review import prior_context
 from src.config import Config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
+from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.models import StoredMessage
+from src.notify.alert import send_alert
 from src.notify.delivery import deliver_digest
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
@@ -164,6 +166,44 @@ def _sync(
     )
 
 
+def _abort_offline(
+    conn: sqlite3.Connection,
+    config: Config,
+    outcome: ScanOutcome,
+    exc: ConnectorOffline,
+    progress: Progress | None,
+) -> ScanOutcome:
+    """Finalize a live run that aborted because the source was offline.
+
+    Records the run as failed with an empty funnel (no chats synced, no cursor
+    advanced — the read-only guarantee holds since nothing was read or analysed),
+    and best-effort alerts the notification channel so a scheduled run that would
+    otherwise look green still reaches the operator.
+    """
+    outcome.notification_status = "offline"
+    outcome.errors.append((0, str(exc)))
+    _emit(progress, f"✗ aborted — WhatsApp source offline: {exc}")
+    alert_status, _ = send_alert(
+        config,
+        f"⚠️ WhatsApp Radar: live scan aborted — source offline ({exc}). "
+        "No messages were checked. Reconnect the WhatsApp sidecar.",
+    )
+    _emit(progress, f"• offline alert: {alert_status}")
+    store.finish_run(conn, outcome.run_id, "failed", 0)
+    store.record_run_funnel(
+        conn,
+        outcome.run_id,
+        chats_synced=0,
+        messages_synced=0,
+        chats_monitored=0,
+        stage1_passed=0,
+        stage2_llm_calls=0,
+        actionable=0,
+        notification_status="offline",
+    )
+    return outcome
+
+
 def scan(
     conn: sqlite3.Connection,
     config: Config,
@@ -188,12 +228,14 @@ def scan(
     )
 
     if mode == "live":
-        _sync(
-            conn,
-            connector if connector is not None else build_connector(config),
-            outcome,
-            progress,
-        )
+        live_connector = connector if connector is not None else build_connector(config)
+        try:
+            # Liveness gate (#29): never sync from a dead/stale source. Relaunches
+            # the sidecar once if it merely stopped; otherwise aborts loudly.
+            preflight(config, live_connector, progress=progress)
+        except ConnectorOffline as exc:
+            return _abort_offline(conn, config, outcome, exc, progress)
+        _sync(conn, live_connector, outcome, progress)
     else:
         _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
@@ -352,7 +394,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
     digest = outcome.digest
     return {
         "kind": "scan",
-        "ok": outcome.notification_status != "failed",
+        "ok": outcome.notification_status not in ("failed", "offline"),
         "run_id": outcome.run_id,
         "mode": outcome.mode,
         "funnel": {

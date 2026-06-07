@@ -13,9 +13,11 @@ Routes (split across ``app/webapp/routers/``):
     /api/chats[...]             → list / history / status toggle (chats)
     GET/POST /api/config         → prompt + safe settings         (config)
     /api/execution/*            → run pipeline pieces + run log   (execution)
+    /api/sidecar/*              → WhatsApp connection state/QR    (sidecar)
 
 Dashboard (#9), Chats & Config (#10) and Execution (#11) are live; Audit is
-still an empty shell that Step 7 (#12) fills.
+still an empty shell that Step 7 (#12) fills. The sidecar routes (#29) back the
+Execution health pill's relaunch / re-pair affordances.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from app.webapp.middleware import BearerTokenMiddleware
-from app.webapp.routers import auth, chats, dashboard, execution, misc, webauthn
+from app.webapp.routers import auth, chats, dashboard, execution, misc, sidecar, webauthn
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
@@ -113,7 +115,10 @@ def create_app() -> FastAPI:
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
     # Resolved once; the dashboard router reads it (tests override app.state.db_path).
-    app.state.db_path = load_config().db_path
+    _cfg = load_config()
+    app.state.db_path = _cfg.db_path
+    # The sidecar router reads the buffer dir from here (tests override it).
+    app.state.linked_device_dir = _cfg.linked_device_dir
 
     asset_hashes = compute_asset_hashes(STATIC_DIR)
     app.state.asset_hashes = asset_hashes
@@ -139,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(chats.router)
     app.include_router(config_router.router)
     app.include_router(execution.router)
+    app.include_router(sidecar.router)
 
     return app
 

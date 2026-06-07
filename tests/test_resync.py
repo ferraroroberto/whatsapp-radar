@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
+from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
+from src.connector.preflight import ConnectorOffline
 from src.db import store
 from src.db.sync import resync, resync_outcome_to_dict
+from src.models import ChatRecord, MessageRecord
 
 
 def test_resync_ingests_then_is_noop(conn: sqlite3.Connection) -> None:
@@ -55,6 +60,35 @@ def test_resync_reports_new_messages_only(conn: sqlite3.Connection) -> None:
     again = resync(conn, FixtureConnector())
     assert again.messages_added == 1
     assert again.chats_added == 0
+
+
+class _OfflineConnector:
+    """Reports offline and refuses reads — the #29 liveness gate must catch it."""
+
+    def connect(self) -> ConnectorStatus:
+        return ConnectorStatus(name="linked_device", connected=False, detail="heartbeat stale")
+
+    def status(self) -> ConnectorStatus:
+        return self.connect()
+
+    def list_chats(self) -> list[ChatRecord]:
+        raise AssertionError("an offline source must never be read")
+
+    def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
+        raise AssertionError("an offline source must never be read")
+
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        return source_chat_id
+
+    def stop(self) -> None:
+        return None
+
+
+def test_resync_aborts_when_source_offline(conn: sqlite3.Connection) -> None:
+    with pytest.raises(ConnectorOffline):
+        resync(conn, _OfflineConnector())
+    # Nothing was written from the dead source.
+    assert store.count_chats(conn) == 0
 
 
 def test_resync_outcome_to_dict_shape(conn: sqlite3.Connection) -> None:

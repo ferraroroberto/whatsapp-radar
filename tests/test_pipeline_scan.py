@@ -15,8 +15,9 @@ from typing import Any
 import pytest
 
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
-from src.analysis.pipeline import scan
+from src.analysis.pipeline import scan, scan_outcome_to_dict
 from src.config import Config, HubConfig, TelegramConfig
+from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.models import ChatRecord, MessageRecord, StoredMessage
@@ -82,6 +83,65 @@ class _FakeTraced:
             raw_response=f"<think>reasoning</think>{self._raw}",
             stop_reason=self._stop_reason,
         )
+
+
+class _OfflineConnector:
+    """A connector that reports offline and refuses to be read (the #29 gate)."""
+
+    def connect(self) -> ConnectorStatus:
+        return ConnectorStatus(name="linked_device", connected=False, detail="heartbeat stale")
+
+    def status(self) -> ConnectorStatus:
+        return self.connect()
+
+    def list_chats(self) -> list[ChatRecord]:
+        raise AssertionError("an offline source must never be read")
+
+    def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
+        raise AssertionError("an offline source must never be read")
+
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        return source_chat_id
+
+    def stop(self) -> None:
+        return None
+
+
+# --- offline preflight gate (#29) -----------------------------------------
+
+def test_live_scan_aborts_offline_without_syncing_or_advancing(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+
+    outcome = scan(
+        ingested_conn,
+        _config(tmp_path),  # connector="fixture" → no relaunch attempt, just abort
+        mode="live",
+        connector=_OfflineConnector(),
+        classifier=StubClassifier(),
+    )
+
+    # Aborted loudly: not a clean completed run, and surfaced as not-ok.
+    assert outcome.notification_status == "offline"
+    assert outcome.chats_synced == 0
+    assert outcome.errors and "offline" in outcome.errors[0][1]
+    assert scan_outcome_to_dict(outcome)["ok"] is False
+
+    # The run is recorded as failed (a scheduled job sees red, not green).
+    row = ingested_conn.execute(
+        "SELECT status, notification_status FROM review_runs WHERE id = ?", (outcome.run_id,)
+    ).fetchone()
+    assert row["status"] == "failed"
+    assert row["notification_status"] == "offline"
+
+    # Read-only guarantee held: no cursor advanced, nothing delivered.
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
+    ).fetchone() is None
+    assert ingested_conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE run_id = ?", (outcome.run_id,)
+    ).fetchone()["n"] == 0
 
 
 # --- live funnel -----------------------------------------------------------

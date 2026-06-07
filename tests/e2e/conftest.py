@@ -130,6 +130,9 @@ def base_url() -> Iterator[str]:
     db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
     db_path = Path(db_dir) / "e2e.sqlite3"
     env["WR_DB_PATH"] = str(db_path)
+    # Never read the developer's real WhatsApp buffer: point the sidecar status /
+    # QR routes at an empty throwaway dir (renders as a 'stopped' connection).
+    env["WR_LINKED_DEVICE_DIR"] = str(Path(db_dir) / "linked_device")
     _seed_e2e_db(db_path)
     proc = subprocess.Popen(
         [

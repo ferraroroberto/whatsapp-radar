@@ -22,10 +22,12 @@ from src.analysis.review import review_monitored_chats
 from src.config import Config, load_config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
+from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.sync import resync, resync_outcome_to_dict
 from src.notify import deliver_digest
+from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
 from src.runresult import format_result
 
@@ -154,13 +156,22 @@ def _cmd_scan(
     for chat_id, err in outcome.errors:
         print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
     _emit_result(scan_outcome_to_dict(outcome))
-    return 1 if outcome.notification_status == "failed" else 0
+    return 1 if outcome.notification_status in ("failed", "offline") else 0
 
 
 def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
     """Incremental upsert from the connector buffer (the Resync action)."""
     connector = _build_connector(config)
     _progress("▶ resync starting — pulling latest from the connector buffer")
+    try:
+        # Liveness gate (#29): self-heal the sidecar if it merely stopped, else
+        # abort loudly instead of silently upserting nothing from a dead source.
+        preflight(config, connector, progress=_progress)
+    except ConnectorOffline as exc:
+        _progress(f"✗ resync aborted — WhatsApp source offline: {exc}")
+        send_alert(config, f"⚠️ WhatsApp Radar: resync aborted — source offline ({exc}).")
+        _emit_result({"kind": "resync", "ok": False, "error": f"connector offline: {exc}"})
+        return 1
     outcome = resync(conn, connector)
     _progress(
         f"✓ resync done — {outcome.chats_added} chats added, "

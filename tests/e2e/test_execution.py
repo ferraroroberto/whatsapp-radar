@@ -34,3 +34,21 @@ def test_execution_dry_run_shows_funnel(page: Page, base_url: str) -> None:
 
     # The run shows up in the recent-runs list too.
     expect(page.locator("#execRuns")).to_contain_text("Full pipeline")
+
+
+@pytest.mark.smoke
+def test_execution_offline_shows_reconnect(page: Page, base_url: str) -> None:
+    """With an empty sidecar buffer the health pill offers a relaunch (#29).
+
+    Asserts the offline affordance *renders* — it never clicks Reconnect, so no
+    Node process is ever spawned from the test.
+    """
+    page.goto(base_url)
+    page.locator("#tabExecution").click()
+    expect(page.locator("#paneExecution")).to_be_visible()
+
+    # The throwaway buffer (conftest) has no status.json → 'stopped' → red dot
+    # and a visible Reconnect button.
+    expect(page.locator("#execReconnect")).to_be_visible(timeout=10_000)
+    expect(page.locator("#execReconnectBtn")).to_be_visible()
+    expect(page.locator("#execHealthDot")).to_have_class("exec-health-dot down")

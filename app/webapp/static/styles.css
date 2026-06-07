@@ -603,8 +603,34 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-health-dot.up { background: var(--good); box-shadow: 0 0 6px var(--good); }
 .exec-health-dot.down { background: var(--danger); }
 .exec-health-dot.unknown { background: var(--muted); }
+.exec-health-dot.warn { background: #e0a23a; box-shadow: 0 0 6px #e0a23a; }
 .exec-health-label { font-size: 13px; font-weight: 600; color: var(--fg); flex: none; }
 .exec-health-detail { margin-left: auto; text-align: right; }
+
+/* Reconnect / re-pair panel: shown under the pill when the source is down (#29). */
+.exec-reconnect {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.exec-reconnect p { margin: 0; text-align: center; }
+.exec-reconnect .run-btn { max-width: 360px; }
+.exec-qr {
+  width: 232px;
+  height: 232px;
+  max-width: 78vw;
+  max-height: 78vw;
+  image-rendering: pixelated;
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
 
 /* Recent-runs list: one lean line each — OK/KO · kind · when. */
 .exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; }

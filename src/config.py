@@ -50,6 +50,10 @@ class Config:
     notifier: str
     telegram: TelegramConfig
     linked_device_dir: Path
+    # When the live source is the linked-device sidecar, a preflight may relaunch
+    # it automatically if it has stopped (issue #29). Off skips the self-heal and
+    # simply aborts the run loudly when the source is offline.
+    sidecar_autostart: bool = True
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -72,6 +76,22 @@ def _load_dotenv(path: Path) -> None:
         key = key.strip()
         if key and key not in os.environ:
             os.environ[key] = value.strip()
+
+
+def _as_bool(env_value: str | None, default: bool) -> bool:
+    """Coerce an env string (or fall back to ``default``) to a bool.
+
+    Accepts the usual truthy/falsy spellings; an unrecognized value keeps the
+    default rather than silently flipping the flag.
+    """
+    if env_value is None:
+        return bool(default)
+    token = env_value.strip().lower()
+    if token in {"1", "true", "yes", "on"}:
+        return True
+    if token in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -123,6 +143,9 @@ def load_config(root: Path | None = None) -> Config:
     linked_device_dir = os.environ.get(
         "WR_LINKED_DEVICE_DIR", merged.get("linked_device_dir", "data/linked_device")
     )
+    sidecar_autostart = _as_bool(
+        os.environ.get("WR_SIDECAR_AUTOSTART"), merged.get("sidecar_autostart", True)
+    )
     hub = HubConfig(
         base_url=os.environ.get(
             "WR_HUB_BASE_URL", hub_raw.get("base_url", "http://127.0.0.1:8000")
@@ -162,4 +185,5 @@ def load_config(root: Path | None = None) -> Config:
         notifier=notifier,
         telegram=telegram,
         linked_device_dir=resolved_buffer,
+        sidecar_autostart=sidecar_autostart,
     )

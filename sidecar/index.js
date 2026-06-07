@@ -14,6 +14,7 @@
  *                                        alias rows {jid, alias_for} mapping a
  *                                        contact's @lid form onto its phone JID
  *   data/linked_device/messages.ndjson   one JSON line per message
+ *   data/linked_device/media/<msg_id>.ogg  PTT voice-note audio (downloaded read-only)
  *   data/linked_device/status.json       heartbeat for the Python `status()`
  *
  * WhatsApp addresses one contact under several JID forms (phone @s.whatsapp.net,
@@ -28,7 +29,7 @@
  * pair; the session persists and reconnects automatically afterwards.
  */
 
-import { mkdirSync, appendFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, appendFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +41,7 @@ import makeWASocket, {
   isJidGroup,
   isJidUser,
   isLidUser,
+  downloadMediaMessage,
 } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
@@ -55,8 +57,10 @@ const chatsFile = join(bufferDir, "chats.ndjson");
 const messagesFile = join(bufferDir, "messages.ndjson");
 const statusFile = join(bufferDir, "status.json");
 const qrPngFile = join(bufferDir, "qr.png");
+const mediaDir = join(bufferDir, "media");
 
 mkdirSync(bufferDir, { recursive: true });
+mkdirSync(mediaDir, { recursive: true });
 
 let chatsSeen = 0;
 let messagesSeen = 0;
@@ -153,7 +157,18 @@ function normalizeMessage(m) {
     return { text: `[document: ${name}]`, type: "document" };
   }
   if (inner.audioMessage) {
-    return { text: "[voice note]", type: "voice" };
+    const audio = inner.audioMessage;
+    return {
+      text: "[voice note]",
+      type: "voice",
+      ptt: Boolean(audio.ptt),
+      audioMeta: audio.ptt
+        ? {
+            mimetype: audio.mimetype || "audio/ogg; codecs=opus",
+            seconds: audio.seconds ?? null,
+          }
+        : null,
+    };
   }
   if (inner.protocolMessage) {
     // type 0 = REVOKE (deleted); editedMessage carries an edit.
@@ -172,7 +187,32 @@ function normalizeMessage(m) {
   return null;
 }
 
-function appendMessage(m) {
+/**
+ * Download a PTT voice note to disk. Returns a path relative to bufferDir, or null.
+ * Media re-request can fail across Baileys/WhatsApp releases — never throw to caller.
+ */
+async function downloadVoiceNote(sock, m, msgId) {
+  const relPath = join("media", `${msgId}.ogg`);
+  const absPath = join(bufferDir, relPath);
+  if (existsSync(absPath)) {
+    return relPath.replace(/\\/g, "/");
+  }
+  try {
+    const buffer = await downloadMediaMessage(
+      m,
+      "buffer",
+      {},
+      { logger: sock.logger, reuploadRequest: sock.updateMediaMessage },
+    );
+    writeFileSync(absPath, buffer);
+    return relPath.replace(/\\/g, "/");
+  } catch (err) {
+    console.error(`Voice note download failed for ${msgId}:`, err?.message || err);
+    return null;
+  }
+}
+
+async function appendMessage(sock, m) {
   const jid = m.key?.remoteJid;
   const msgId = m.key?.id;
   if (!jid || !msgId || jid === "status@broadcast") return;
@@ -181,6 +221,27 @@ function appendMessage(m) {
   if (!norm) return;
 
   const participant = m.key.participant ? jidNormalizedUser(m.key.participant) : null;
+  const raw = {
+    from_me: Boolean(m.key.fromMe),
+    participant,
+  };
+  if (norm.type === "voice") {
+    raw.placeholder_text = norm.text;
+  }
+
+  let mediaPath = null;
+  if (norm.type === "voice" && norm.ptt && norm.audioMeta) {
+    mediaPath = await downloadVoiceNote(sock, m, msgId);
+    if (mediaPath) {
+      raw.media_path = mediaPath;
+      raw.media_mimetype = norm.audioMeta.mimetype;
+      raw.seconds = norm.audioMeta.seconds;
+      raw.ptt = true;
+    } else {
+      raw.media_error = "download_failed";
+    }
+  }
+
   const record = {
     jid: jidNormalizedUser(jid) || jid,
     msg_id: msgId,
@@ -188,11 +249,11 @@ function appendMessage(m) {
     sender: m.pushName || (m.key.fromMe ? "me" : null),
     text: norm.text,
     type: norm.type,
-    raw: {
-      from_me: Boolean(m.key.fromMe),
-      participant,
-    },
+    raw,
   };
+  if (mediaPath) {
+    record.media_path = mediaPath;
+  }
   appendFileSync(messagesFile, JSON.stringify(record) + "\n", "utf-8");
   messagesSeen += 1;
 }
@@ -266,10 +327,10 @@ async function start() {
   sock.ev.on("contacts.update", onContacts);
 
   // History sync after pairing: chats, contacts, and their messages.
-  sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+  sock.ev.on("messaging-history.set", async ({ chats, contacts, messages }) => {
     for (const c of chats || []) appendChat(c.id, c.name || c.subject, chatType(c.id));
     onContacts(contacts);
-    for (const m of messages || []) appendMessage(m);
+    for (const m of messages || []) await appendMessage(sock, m);
     writeStatus(true, true);
   });
 
@@ -282,7 +343,7 @@ async function start() {
   });
 
   // Live messages.
-  sock.ev.on("messages.upsert", ({ messages }) => {
+  sock.ev.on("messages.upsert", async ({ messages }) => {
     for (const m of messages || []) {
       const rj = m.key?.remoteJid;
       // On a 1:1 chat the remote's push name *is* the contact name, so feed it in
@@ -290,7 +351,7 @@ async function start() {
       const dmName =
         rj && !isJidGroup(rj) && !m.key?.fromMe ? m.pushName || undefined : undefined;
       appendChat(rj, dmName, chatType(rj));
-      appendMessage(m);
+      await appendMessage(sock, m);
     }
     writeStatus(true, true);
   });

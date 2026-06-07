@@ -59,6 +59,10 @@ _MESSAGES_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("media_path", "TEXT"),
 )
 
+_SYNC_LOG_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("voice_notes_added", "INTEGER NOT NULL DEFAULT 0"),
+)
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -116,6 +120,33 @@ def _migrate(conn: sqlite3.Connection) -> None:
     trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
+    sync_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sync_log)")}
+    for name, declaration in _SYNC_LOG_ADDED_COLUMNS:
+        if name not in sync_cols:
+            conn.execute(f"ALTER TABLE sync_log ADD COLUMN {name} {declaration}")
+
+
+def _count_new_pending_voice(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> int:
+    """How many voice rows in ``msgs`` would be newly inserted as pending."""
+    candidates = [
+        m.source_message_id
+        for m in msgs
+        if m.message_type == "voice" and _voice_ingest_fields(m)[0] == "pending"
+    ]
+    if not candidates:
+        return 0
+    placeholders = ",".join("?" * len(candidates))
+    existing = {
+        row[0]
+        for row in conn.execute(
+            f"SELECT source_message_id FROM messages WHERE chat_id = ? "
+            f"AND source_message_id IN ({placeholders})",
+            (chat_id, *candidates),
+        )
+    }
+    return sum(1 for sid in candidates if sid not in existing)
 
 
 def _voice_ingest_fields(msg: MessageRecord) -> tuple[str, str | None]:
@@ -335,17 +366,19 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
     return cur.rowcount > 0
 
 
-def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]) -> int:
-    """Bulk-insert messages idempotently in one transaction. Returns rows created.
+def insert_messages(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> tuple[int, int]:
+    """Bulk-insert messages idempotently in one transaction.
 
-    The ingest path can deliver tens of thousands of messages; committing per row
-    (as :func:`insert_message` does for the single-message review path) is far too
-    slow at that scale, so this batches the whole chat into one commit.
+    Returns ``(rows_created, voice_notes_added)`` where ``voice_notes_added`` counts
+    newly inserted voice rows with ``transcription_status='pending'``.
     """
     import json
 
     if not msgs:
-        return 0
+        return 0, 0
+    voice_notes_added = _count_new_pending_voice(conn, chat_id, msgs)
     before = conn.total_changes
     rows = [
         (
@@ -377,7 +410,7 @@ def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRe
         (max(m.message_timestamp for m in msgs), chat_id),
     )
     conn.commit()
-    return inserted
+    return inserted, voice_notes_added
 
 
 def reconcile_voice_media(
@@ -1077,6 +1110,7 @@ def record_sync(
     chats_added: int,
     chats_updated: int,
     messages_added: int,
+    voice_notes_added: int = 0,
 ) -> int:
     """Record one sync's delta + the running totals afterwards. Returns its id.
 
@@ -1086,13 +1120,15 @@ def record_sync(
     """
     cur = conn.execute(
         "INSERT INTO sync_log (ran_at, source, chats_added, chats_updated, "
-        "messages_added, total_chats, total_messages) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "messages_added, voice_notes_added, total_chats, total_messages) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             _now(),
             source,
             chats_added,
             chats_updated,
             messages_added,
+            voice_notes_added,
             count_chats(conn),
             count_messages(conn),
         ),
@@ -1105,7 +1141,7 @@ def recent_syncs(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]
     """The most recent sync_log rows, newest first."""
     return conn.execute(
         "SELECT id, ran_at, source, chats_added, chats_updated, messages_added, "
-        "total_chats, total_messages FROM sync_log ORDER BY id DESC LIMIT ?",
+        "voice_notes_added, total_chats, total_messages FROM sync_log ORDER BY id DESC LIMIT ?",
         (max(1, limit),),
     ).fetchall()
 

@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
     chats_added    INTEGER NOT NULL DEFAULT 0,
     chats_updated  INTEGER NOT NULL DEFAULT 0,
     messages_added INTEGER NOT NULL DEFAULT 0,
+    voice_notes_added INTEGER NOT NULL DEFAULT 0,
     total_chats    INTEGER NOT NULL DEFAULT 0,
     total_messages INTEGER NOT NULL DEFAULT 0
 );

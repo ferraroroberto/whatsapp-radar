@@ -198,15 +198,18 @@ def _sync(
     """Pull all chats + messages from the connector into the store (live mode)."""
     connector.connect()
     chats_added = 0
+    voice_notes_added = 0
     for chat in connector.list_chats():
         is_new = store.chat_id_for_source(conn, chat.source_chat_id) is None
         chat_id = store.upsert_chat(conn, chat)
         outcome.chats_synced += 1
         if is_new:
             chats_added += 1
-        outcome.messages_synced += store.insert_messages(
+        added, voice = store.insert_messages(
             conn, chat_id, connector.fetch_messages(chat.source_chat_id)
         )
+        outcome.messages_synced += added
+        voice_notes_added += voice
     connector.stop()
     # A sync_log row so a live scan's ingest is as visible as a resync's (#31).
     store.record_sync(
@@ -215,6 +218,7 @@ def _sync(
         chats_added=chats_added,
         chats_updated=outcome.chats_synced - chats_added,
         messages_added=outcome.messages_synced,
+        voice_notes_added=voice_notes_added,
     )
     _emit(
         progress,

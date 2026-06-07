@@ -357,6 +357,8 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
                 "notifier": "telegram",
                 "hub_base_url": "http://127.0.0.1:8000",
                 "hub_model": "claude_sonnet",
+                "transcription_enabled": False,
+                "transcription_window_days": 14,
                 "telegram_chat_id": "99",
                 # blank token must NOT be forwarded to update_webapp_config
                 "telegram_bot_token": "",
@@ -368,6 +370,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     assert saved_local["classifier"] == "cascade"
     assert saved_local["notifier"] == "telegram"
     assert saved_local["hub"] == {"base_url": "http://127.0.0.1:8000", "model": "claude_sonnet"}
+    assert saved_local["transcription"] == {"enabled": False, "window_days": 14}
     # chat_id forwarded; blank token suppressed.
     assert saved_tg == {"telegram_chat_id": "99"}
 

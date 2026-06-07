@@ -31,10 +31,16 @@ class ResyncOutcome:
     chats_added: int = 0
     chats_updated: int = 0
     messages_added: int = 0
+    voice_notes_added: int = 0
 
     @property
     def is_noop(self) -> bool:
-        return (self.chats_added, self.chats_updated, self.messages_added) == (0, 0, 0)
+        return (
+            self.chats_added,
+            self.chats_updated,
+            self.messages_added,
+            self.voice_notes_added,
+        ) == (0, 0, 0, 0)
 
 
 def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutcome:
@@ -65,9 +71,11 @@ def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutco
                 ):
                     store.upsert_chat(conn, chat)
                     outcome.chats_updated += 1
-            outcome.messages_added += store.insert_messages(
+            added, voice = store.insert_messages(
                 conn, chat_id, connector.fetch_messages(chat.source_chat_id)
             )
+            outcome.messages_added += added
+            outcome.voice_notes_added += voice
     finally:
         connector.stop()
     # One sync_log row per resync — visible whether fired from the CLI, a
@@ -79,6 +87,7 @@ def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutco
         chats_added=outcome.chats_added,
         chats_updated=outcome.chats_updated,
         messages_added=outcome.messages_added,
+        voice_notes_added=outcome.voice_notes_added,
     )
     return outcome
 
@@ -91,5 +100,6 @@ def resync_outcome_to_dict(outcome: ResyncOutcome) -> dict[str, Any]:
         "chats_added": outcome.chats_added,
         "chats_updated": outcome.chats_updated,
         "messages_added": outcome.messages_added,
+        "voice_notes_added": outcome.voice_notes_added,
         "noop": outcome.is_noop,
     }

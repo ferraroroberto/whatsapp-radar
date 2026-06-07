@@ -182,3 +182,52 @@ def test_transcribed_voice_passes_stage1_and_is_actionable(
     assert trace is not None
     assert "🎤" in trace["input_text"]
     assert "meeting" in trace["input_text"]
+
+
+def test_live_scan_transcribes_pending_voice_in_one_pass(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    chat_id = store.upsert_chat(
+        conn,
+        ChatRecord(
+            source_chat_id="live-voice@g.us",
+            display_name="Live Voice Group",
+            chat_type="group",
+        ),
+    )
+    store.set_chat_status(conn, chat_id, "monitored")
+    rel = "media/LV1.ogg"
+    audio = tmp_path / "linked_device" / rel
+    audio.parent.mkdir(parents=True, exist_ok=True)
+    audio.write_bytes(b"fake-ogg")
+    store.insert_message(
+        conn,
+        chat_id,
+        MessageRecord(
+            source_message_id="LV1",
+            message_timestamp="2026-06-10T10:00:00+00:00",
+            text="[voice note]",
+            message_type="voice",
+            raw={"media_path": rel, "placeholder_text": "[voice note]"},
+        ),
+    )
+    cfg = _config(tmp_path)
+    with patch(
+        "src.transcription.runner.transcribe_file",
+        return_value="School trip permission slip due Monday",
+    ):
+        outcome = scan(
+            conn,
+            cfg,
+            mode="live",
+            connector=_EmptyLiveConnector(),
+            classifier=_ActionableClassifier(),
+        )
+    assert outcome.voice_transcribed == 1
+    row = conn.execute(
+        "SELECT text, transcription_status FROM messages WHERE source_message_id = 'LV1'"
+    ).fetchone()
+    assert row is not None
+    assert row["transcription_status"] == "done"
+    assert "permission slip" in row["text"]
+    assert not audio.is_file()

@@ -66,6 +66,20 @@ Two prompt assets are plain-text and loaded verbatim, so **read and tune them fr
 
 The hub call pins `temperature=0` so identical messages classify identically. Use a model that answers with JSON directly (the default `claude_sonnet` does). A reasoning model whose `<think>` trace overruns the output budget (`WR_HUB_MAX_TOKENS`, default 8192) truncates before the JSON — recorded as a distinct `llm_truncated` audit state, not a generic `contract_error`. The delta sent in one prompt is capped at `WR_HUB_MAX_PROMPT_CHARS` (default 24000, oldest messages dropped) so a whole-history scan can't blow the model's context window.
 
+## Voice notes
+
+PTT voice notes are a first-class message type. The read-only sidecar downloads encrypted audio to `data/linked_device/media/<msg_id>.ogg` when a voice note arrives; the Python store records `transcription_status=pending` and keeps the placeholder text `[voice note]` until transcription completes.
+
+On a **live `scan`**, after sync and before analysis, the pipeline transcribes pending voice notes via the fleet's Whisper turbo server on **`127.0.0.1:8090`** (`POST /v1/audio/transcriptions`, language auto-detect, no translation). Ensure [local-llm-hub](../../local-llm-hub) has the audio service running before expecting transcripts. On success the transcript overwrites `messages.text` and the audio file is deleted locally.
+
+Configuration (also editable in the PWA's Chats & Config tab):
+
+- `transcription.enabled` in `config/default.json` or `config/local.json` (env: `WR_TRANSCRIPTION_ENABLED`)
+- `transcription.window_days` — only voice notes within this many days are transcribed on first run; older ones are marked `skipped_old` (env: `WR_TRANSCRIPTION_WINDOW_DAYS`, default 7)
+- `transcription.hub_base_url` / `transcription.model` — Whisper endpoint defaults (`http://127.0.0.1:8090`, `whisper-1`); override via env if needed
+
+Failure behavior: a transcription error marks the row `failed` and retries on the next scan. The per-chat analysis cursor **does not advance** past a pending or failed voice note, so real content is never silently skipped.
+
 ## Routine operation
 
 - Keep the **sidecar running** — it captures live messages and history. App Launcher supervises it; see [`bootstrapping.md`](bootstrapping.md) Step 7.
@@ -83,6 +97,7 @@ The hub call pins `temperature=0` so identical messages classify identically. Us
 | `ingest` finds 0 chats | History not synced yet | Wait a moment after pairing, re-run `ingest` |
 | Delivery `failed` | Bad token/chat id or no network | Fix the Telegram secrets, then `wr notify` |
 | Empty digest every run | Classifier too strict, or chats not monitored | Check `wr chats` / Chats & Config, tune the prompt |
+| Voice notes stay `[voice note]` | Whisper hub not running on `:8090` | Start local-llm-hub audio service; re-run `wr scan` |
 | Scheduled scan exits non-zero | Source was dead (sidecar down) — by design | Bring the sidecar back; the run alerted rather than reporting green |
 
 ## Verification gate (for contributors)

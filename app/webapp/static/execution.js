@@ -234,7 +234,8 @@ function syncRow(s) {
   const delta = document.createElement('span');
   delta.className = 'exec-sync-delta';
   const chatBit = s.chats_added ? ` · +${s.chats_added} chat${s.chats_added > 1 ? 's' : ''}` : '';
-  delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${chatBit}`;
+  const voiceBit = s.voice_notes_added ? ` (${s.voice_notes_added} voice)` : '';
+  delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${voiceBit}${chatBit}`;
   const src = document.createElement('span');
   src.className = 'exec-sync-src muted small';
   src.textContent = s.source;
@@ -436,11 +437,15 @@ function funnelCells(result) {
     ];
   }
   if (result.kind === 'resync') {
-    return [
+    const cells = [
       { label: 'Chats +', value: result.chats_added },
       { label: 'Chats ~', value: result.chats_updated },
       { label: 'Messages +', value: result.messages_added },
     ];
+    if (result.voice_notes_added) {
+      cells.push({ label: 'Voice +', value: result.voice_notes_added });
+    }
+    return cells;
   }
   if (result.kind === 'reprocess') {
     return [

@@ -118,6 +118,7 @@ async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
                 "chats_added": int(s["chats_added"]),
                 "chats_updated": int(s["chats_updated"]),
                 "messages_added": int(s["messages_added"]),
+                "voice_notes_added": int(s["voice_notes_added"]),
             }
             for s in store.recent_syncs(conn, limit)
             if s["source"] in _MAINTENANCE_SOURCES

@@ -127,7 +127,8 @@ function syncListItem(sync) {
   const delta = document.createElement('span');
   delta.className = 'audit-sync-delta muted small';
   const chatBit = sync.chats_added ? ` · +${sync.chats_added} chat${sync.chats_added > 1 ? 's' : ''}` : '';
-  delta.textContent = `+${sync.messages_added} msg${sync.messages_added === 1 ? '' : 's'}${chatBit}`;
+  const voiceBit = sync.voice_notes_added ? ` (${sync.voice_notes_added} voice)` : '';
+  delta.textContent = `+${sync.messages_added} msg${sync.messages_added === 1 ? '' : 's'}${voiceBit}${chatBit}`;
 
   li.append(tag, when, delta);
   return li;

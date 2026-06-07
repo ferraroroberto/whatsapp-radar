@@ -124,9 +124,8 @@ function syncListItem(sync) {
 function renderRuns() {
   const ax = auditState();
   els.auditRuns.textContent = '';
-  els.auditRunsEmpty.hidden = ax.runs.length > 0 || ax.syncs.length > 0;
+  els.auditRunsEmpty.hidden = ax.runs.length > 0;
   for (const run of ax.runs) els.auditRuns.appendChild(runListItem(run));
-  for (const sync of ax.syncs) els.auditRuns.appendChild(syncListItem(sync));
 }
 
 // ----------------------------------------------------------- run detail

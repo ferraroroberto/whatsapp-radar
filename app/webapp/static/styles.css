@@ -675,3 +675,65 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-sync-when { flex: none; }
 .exec-sync-delta { flex: 1; min-width: 0; font-size: 14px; color: var(--fg); }
 .exec-sync-src { flex: none; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Audit tab (#12): run list + per-run trace drill-down. */
+.audit-runs { gap: 0; padding: 0; margin: 0; }
+.audit-run-li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.audit-run-li:last-child { border-bottom: 0; }
+.audit-run-li.selected { background: rgba(74, 138, 243, 0.10); border-radius: 8px; }
+.audit-run-top { display: flex; align-items: center; gap: 10px; }
+.audit-run-when { flex: 1; min-width: 0; }
+.audit-run-funnel { margin: 0; padding-left: 34px; }
+.audit-mode-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  flex: none;
+  border: 1px solid var(--border);
+}
+.audit-mode-badge.live { color: var(--good); border-color: var(--good); }
+.audit-mode-badge.dry { color: var(--warn); border-color: var(--warn); }
+.audit-mode-badge.review { color: var(--muted); }
+
+/* Maintenance markers (resync / reprocess) interleaved into the timeline. */
+.audit-sync-li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+.audit-sync-li:last-child { border-bottom: 0; }
+.audit-sync-tag { font-size: 12px; font-weight: 600; color: var(--muted); flex: none; }
+.audit-sync-delta { flex: 1; min-width: 0; text-align: right; }
+
+/* Run detail: header + funnel (reuses .exec-funnel) + per-chat trace blocks. */
+.audit-detail-kind { margin: 0; font-size: 15px; }
+.audit-traces { display: flex; flex-direction: column; gap: 8px; }
+.audit-trace { margin: 0; }
+.audit-trace-body { padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.audit-verdict { font-size: 12px; font-weight: 600; flex: none; }
+.audit-verdict.act { color: var(--good); }
+.audit-verdict.err { color: var(--danger); }
+.audit-verdict.muted { color: var(--muted); }
+.audit-field { display: flex; flex-direction: column; gap: 3px; }
+.audit-field-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.audit-pre { max-height: 240px; margin: 0; white-space: pre-wrap; word-break: break-word; }

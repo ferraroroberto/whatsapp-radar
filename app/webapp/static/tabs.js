@@ -1,8 +1,8 @@
 /* Four-tab switcher: Dashboard | Chats | Execution | Audit.
  *
  * Routing + an optional onTab callback so a tab can refresh its data when it
- * becomes visible (Dashboard wired in Step 4 / #9). Chats · Execution · Audit
- * panes are still placeholders that Steps 5–7 (#10–#12) fill in. */
+ * becomes visible. All four panes are live: Dashboard (#9), Chats (#10),
+ * Execution (#11), Audit (#12). */
 
 import { els, state } from './state.js';
 

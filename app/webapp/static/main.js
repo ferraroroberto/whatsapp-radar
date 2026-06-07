@@ -11,6 +11,7 @@ import { fetchDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { fetchConfig, wireConfig } from './config.js';
 import { fetchExecution, wireExecution } from './execution.js';
+import { fetchAudit, wireAudit } from './audit.js';
 
 // --------------------------------------------------------- build identity
 async function fetchVersion() {
@@ -67,10 +68,12 @@ wireTabs(function (tab) {
     if (!state.config) fetchConfig().catch(function () {});
   }
   if (tab === 'execution') fetchExecution().catch(function () {});
+  if (tab === 'audit') fetchAudit().catch(function () {});
 });
 wireWebauthn();
 wireChats();
 wireConfig();
 wireExecution();
+wireAudit();
 
 boot();

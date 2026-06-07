@@ -4,7 +4,7 @@
   "_comment_auth_password": "Optional companion to auth_token: a fresh device with no token shows a login overlay; the password swaps for the bearer token. Set/clear via scripts/set_password.py. Failed attempts log to webapp/auth.log.",
   "_comment_tailnet_allowlist": "Extra IPs / CIDRs allowed to reach the passkey endpoints on top of loopback + the Tailscale CGNAT range 100.64.0.0/10. Leave empty unless you need LAN access.",
   "_comment_webauthn": "Passkey gate. webauthn_rp_id is the bare tailnet hostname (e.g. 'pc.tailnet.ts.net'); webauthn_origin is the full https origin the phone connects to (e.g. 'https://pc.tailnet.ts.net:8455'). Leave both empty to disable the passkey gate.",
-  "_comment_telegram": "Digest delivery secrets (migrated off .env in Step 3). The CLI and webapp both read these. Obtain them per docs/manual.md.",
+  "_comment_telegram": "Digest delivery secrets (migrated off .env in Step 3). The CLI and webapp both read these. Obtain them per docs/bootstrapping.md step 4.",
   "enabled": true,
   "host": "0.0.0.0",
   "port": 8455,

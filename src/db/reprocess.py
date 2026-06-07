@@ -48,6 +48,7 @@ class ReprocessOutcome:
     monitored_preserved: int = 0
     ignored_preserved: int = 0
     aliases_preserved: int = 0
+    links_preserved: int = 0
     # Operator-touched chats whose old source id couldn't be matched to any
     # rebuilt chat (e.g. a chat that no longer exists in the buffer). Their
     # state is dropped — surfaced so the operator can re-set it by hand.
@@ -110,6 +111,28 @@ def reprocess(
             store.set_chat_alias(conn, chat_id, alias)
             outcome.aliases_preserved += 1
 
+    # Re-apply parent↔child links in a second pass, after every chat's id and
+    # state exist in the rebuilt cache. Both sides are mapped through the
+    # connector's canonicalization; a link the rebuilt topology no longer permits
+    # (e.g. either end vanished, or it would now form a chain) is silently dropped.
+    for row in snapshot:
+        parent_source = row["parent_source_chat_id"]
+        if not parent_source:
+            continue
+        child_source = connector.canonical_source_id(row["source_chat_id"]) or row[
+            "source_chat_id"
+        ]
+        new_parent_source = connector.canonical_source_id(parent_source) or parent_source
+        child_id = store.chat_id_for_source(conn, child_source)
+        parent_id = store.chat_id_for_source(conn, new_parent_source)
+        if child_id is None or parent_id is None or child_id == parent_id:
+            continue
+        try:
+            store.link_chats(conn, child_id, parent_id)
+            outcome.links_preserved += 1
+        except store.LinkError:
+            continue
+
     return outcome
 
 
@@ -125,5 +148,6 @@ def reprocess_outcome_to_dict(outcome: ReprocessOutcome) -> dict[str, Any]:
         "monitored_preserved": outcome.monitored_preserved,
         "ignored_preserved": outcome.ignored_preserved,
         "aliases_preserved": outcome.aliases_preserved,
+        "links_preserved": outcome.links_preserved,
         "unmapped": outcome.unmapped,
     }

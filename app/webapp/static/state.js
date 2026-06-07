@@ -92,9 +92,20 @@ export const els = {
   historyOverlay: document.getElementById('historyOverlay'),
   historyTitle: document.getElementById('historyTitle'),
   historyRename: document.getElementById('historyRename'),
+  historyLink: document.getElementById('historyLink'),
+  historyLinkPanel: document.getElementById('historyLinkPanel'),
   historyClose: document.getElementById('historyClose'),
   historyBody: document.getElementById('historyBody'),
   historyEmpty: document.getElementById('historyEmpty'),
+
+  // Link picker overlay (#25)
+  linkPickerOverlay: document.getElementById('linkPickerOverlay'),
+  linkPickerTitle: document.getElementById('linkPickerTitle'),
+  linkPickerClose: document.getElementById('linkPickerClose'),
+  linkPickerSearch: document.getElementById('linkPickerSearch'),
+  linkPickerCount: document.getElementById('linkPickerCount'),
+  linkPickerList: document.getElementById('linkPickerList'),
+  linkPickerEmpty: document.getElementById('linkPickerEmpty'),
 
   // Config (#10)
   configCard: document.getElementById('configCard'),

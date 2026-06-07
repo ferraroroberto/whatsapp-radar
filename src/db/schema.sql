@@ -18,7 +18,14 @@ CREATE TABLE IF NOT EXISTS chats (
     first_seen_at            TEXT NOT NULL,
     last_seen_at             TEXT NOT NULL,
     last_message_at          TEXT,
-    monitor_frequency_minutes INTEGER
+    monitor_frequency_minutes INTEGER,
+    -- Operator-declared link: when set, this chat is a *child* folded into the
+    -- parent (a top-level chat) so the same person reached under two numbers is
+    -- one family. Depth is capped at 1 (a child can't itself be a parent) by the
+    -- link API. Pure metadata over the per-chat rows — no message data moves, and
+    -- each chat keeps its own cursor. ON DELETE SET NULL so dropping a parent
+    -- frees its children rather than cascading.
+    parent_chat_id           INTEGER REFERENCES chats(id) ON DELETE SET NULL
 );
 
 -- Raw-but-local message records. Idempotent on (chat_id, source_message_id).

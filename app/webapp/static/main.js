@@ -3,13 +3,14 @@
  * boot() fetches build identity, passkey status, and the Dashboard metrics
  * (#9). Steps 5–7 add the remaining tab fetchers here. */
 
-import { els, state, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS } from './state.js';
+import { els, state, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
 import { fetchDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { fetchConfig, wireConfig } from './config.js';
+import { fetchExecution, wireExecution } from './execution.js';
 
 // --------------------------------------------------------- build identity
 async function fetchVersion() {
@@ -48,6 +49,13 @@ async function boot() {
   setInterval(function () {
     if (state.tab === 'dashboard') fetchDashboard().catch(function () {});
   }, DASHBOARD_POLL_MS);
+  // While the Execution tab is open, poll runs so a live run streams; also keep
+  // polling whenever a run is in flight, so leaving the tab doesn't strand it.
+  setInterval(function () {
+    if (state.tab === 'execution' || state.execution.active) {
+      fetchExecution().catch(function () {});
+    }
+  }, EXECUTION_POLL_MS);
 }
 
 // --------------------------------------------------------- wire + go
@@ -58,9 +66,11 @@ wireTabs(function (tab) {
     fetchChats().catch(function () {});
     if (!state.config) fetchConfig().catch(function () {});
   }
+  if (tab === 'execution') fetchExecution().catch(function () {});
 });
 wireWebauthn();
 wireChats();
 wireConfig();
+wireExecution();
 
 boot();

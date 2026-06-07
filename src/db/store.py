@@ -161,6 +161,19 @@ def monitored_chats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     )
 
 
+def chat_id_for_source(conn: sqlite3.Connection, source_chat_id: str) -> int | None:
+    """Return the internal id for a chat's ``source_chat_id``, or None if absent.
+
+    The resync path uses this to classify an incoming chat as new (insert) vs
+    existing (compare-then-maybe-update) without an upsert that would always
+    touch ``last_seen_at`` and so report a phantom change on a no-op run.
+    """
+    row = conn.execute(
+        "SELECT id FROM chats WHERE source_chat_id = ?", (source_chat_id,)
+    ).fetchone()
+    return int(row["id"]) if row else None
+
+
 # --- messages --------------------------------------------------------------
 
 def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:
@@ -685,3 +698,50 @@ def count_notifications_sent(conn: sqlite3.Connection) -> int:
         "SELECT COUNT(*) AS n FROM notifications WHERE status = 'sent'"
     ).fetchone()
     return int(row["n"])
+
+
+def count_chats(conn: sqlite3.Connection) -> int:
+    """Total chats stored, regardless of status."""
+    return int(conn.execute("SELECT COUNT(*) AS n FROM chats").fetchone()["n"])
+
+
+# --- reprocess (full cache rebuild) ----------------------------------------
+# The local store is a cache rebuildable from the connector buffer. Reprocess
+# (src/db/reprocess.py) snapshots operator-set state, wipes the derived cache,
+# re-ingests with current reader logic, then re-applies the snapshot. These two
+# helpers are the snapshot + wipe primitives; the orchestration lives in
+# reprocess.py so the SQL stays here with the schema knowledge.
+
+def snapshot_operator_state(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Operator-set state worth preserving across a rebuild: status + alias.
+
+    Returns (source_chat_id, status, alias) for every chat the operator has
+    touched — anything not in the default 'discovered'/no-alias resting state.
+    Keyed by ``source_chat_id`` (not the internal id, which the rebuild reassigns).
+    """
+    return list(
+        conn.execute(
+            "SELECT source_chat_id, status, alias FROM chats "
+            "WHERE status != 'discovered' OR alias IS NOT NULL"
+        ).fetchall()
+    )
+
+
+def clear_all_data(conn: sqlite3.Connection) -> None:
+    """Wipe every derived/cache table so a reprocess can rebuild from scratch.
+
+    Deletes children before parents so the wipe holds whether or not SQLite's
+    per-connection foreign-key enforcement happens to be on. Run/analysis history
+    is intentionally discarded — it cannot be re-keyed to the rebuilt chat ids.
+    """
+    for table in (
+        "notifications",
+        "analysis_items",
+        "analysis_trace",
+        "chat_review_state",
+        "messages",
+        "review_runs",
+        "chats",
+    ):
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()

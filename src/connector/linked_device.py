@@ -122,6 +122,15 @@ class LinkedDeviceConnector:
         messages.sort(key=lambda m: (m.message_timestamp, m.source_message_id))
         return messages
 
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        """Public canonicalization for reprocess: normalize + fold alias rows.
+
+        Maps a stored ``source_chat_id`` (possibly keyed by an older reader) onto
+        the identity key the current reader uses, so operator state survives a
+        rebuild even when the keying rules changed (e.g. ``@lid`` folding).
+        """
+        return self._canonical_jid(source_chat_id)
+
     def stop(self) -> None:
         # The reader does not own the sidecar's lifecycle, so there is nothing to
         # release. The sidecar is started and stopped as its own process.

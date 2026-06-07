@@ -46,6 +46,16 @@ class MessageConnector(Protocol):
         """
         ...
 
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        """Normalize a stored ``source_chat_id`` to this connector's canonical key.
+
+        Reprocess uses this to re-map operator state captured under an *older*
+        reader's keying onto the chat the *current* reader produces. A connector
+        with no notion of identity aliasing returns the id unchanged; None means
+        the id can't be canonicalized (and so can't be re-mapped).
+        """
+        ...
+
     def stop(self) -> None:
         """Release any resources held by the connector."""
         ...

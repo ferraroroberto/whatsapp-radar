@@ -105,10 +105,103 @@
     </section>
 
     <section id="paneExecution" class="pane" hidden>
-      <div class="card placeholder">
-        <h2>▶ Execution</h2>
-        <p class="muted">Trigger scans and watch them run here in Step 6 (#11).</p>
+      <div id="execHealth" class="exec-health" title="WhatsApp sidecar connection">
+        <span id="execHealthDot" class="exec-health-dot unknown"></span>
+        <span id="execHealthLabel" class="exec-health-label">WhatsApp</span>
+        <span id="execHealthDetail" class="exec-health-detail muted small">checking…</span>
       </div>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>▶ Run</h2>
+          <div id="execMode" class="segmented exec-mode-seg" role="radiogroup" aria-label="Run mode">
+            <button id="execModeLive" type="button" class="active" data-mode="live">Live</button>
+            <button id="execModeDry" type="button" data-mode="dry_run">Dry&nbsp;run</button>
+          </div>
+        </div>
+        <p id="execModeHint" class="muted small">Live runs the steps for real.</p>
+
+        <div id="execDryOpts" class="exec-dry-opts" hidden>
+          <div id="execWindow" class="segmented" role="radiogroup" aria-label="Dry-run window">
+            <button id="execWinNew" type="button" class="active" data-window="new">New only</button>
+            <button id="execWinDays" type="button" data-window="days">Last N days</button>
+          </div>
+          <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
+                 value="7" inputmode="numeric" aria-label="Days to replay" hidden>
+        </div>
+
+        <p class="muted small exec-stages-hint">Choose the steps to run, then Run.</p>
+        <fieldset class="exec-stages" aria-label="Pipeline steps to run">
+          <label class="exec-stage-check">
+            <input type="checkbox" id="execStageSync" checked>
+            <span class="exec-stage-icon">⟳</span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Sync</span>
+              <span class="exec-stage-desc">pull the latest into the store</span></span>
+          </label>
+          <label class="exec-stage-check">
+            <input type="checkbox" id="execStageProcess" checked>
+            <span class="exec-stage-icon">▷</span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Process</span>
+              <span class="exec-stage-desc">classify new messages</span></span>
+          </label>
+          <label class="exec-stage-check">
+            <input type="checkbox" id="execStageMessage" checked>
+            <span class="exec-stage-icon">✉</span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Message</span>
+              <span class="exec-stage-desc">send the alerts</span></span>
+          </label>
+        </fieldset>
+
+        <button id="execRunScan" type="button" class="run-btn">▶ Run</button>
+        <p id="execBusy" class="muted small" hidden></p>
+      </section>
+
+      <details id="execRunsCard" class="card coding-card" open>
+        <summary class="coding-summary">
+          <div class="coding-summary-row">
+            <span class="coding-summary-title">🗂️ Recent runs</span>
+            <button id="execRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
+          </div>
+        </summary>
+        <ul id="execRuns" class="card-list exec-runs" aria-label="Recent runs"></ul>
+        <p id="execRunsEmpty" class="muted small" hidden>No runs yet.</p>
+      </details>
+
+      <details id="execViewerCard" class="card coding-card">
+        <summary class="coding-summary">
+          <div class="coding-summary-row">
+            <span class="coding-summary-title">⚙️ Selected run detail</span>
+            <button id="execKill" type="button" class="ghost-btn" title="Stop this run" hidden>⏹ Stop</button>
+          </div>
+        </summary>
+        <div id="execViewer">
+          <p id="execViewerTitle" class="exec-viewer-kind"></p>
+          <p id="execViewerMeta" class="muted small"></p>
+          <div id="execFunnel" class="exec-funnel" aria-label="Funnel"></div>
+          <div id="execPreview" class="exec-preview" hidden>
+            <h4 class="opt-group-title">Telegram message</h4>
+            <pre id="execPreviewText" class="codebox"></pre>
+          </div>
+          <h4 class="opt-group-title">Output</h4>
+          <pre id="execOutput" class="codebox exec-output" title="Tap to copy">(no output)</pre>
+        </div>
+        <p id="execViewerEmpty" class="muted small">Select a run above to see its detail.</p>
+      </details>
+
+      <details class="card coding-card">
+        <summary class="coding-summary">
+          <div class="coding-summary-row"><span class="coding-summary-title">🛠️ Maintenance</span></div>
+        </summary>
+        <div class="opt-group">
+          <p class="muted small">
+            Rebuild the local store from the connector buffer. The <strong>Sync</strong> step
+            above is incremental and safe to run often. <strong>Rebuild</strong> is a full
+            rebuild for when the reader logic changed — it backs up the DB and preserves your
+            monitored/ignored/alias choices, but <strong>run history resets</strong>.
+          </p>
+          <button id="execReprocess" type="button" class="run-btn danger">♻️ Rebuild full cache</button>
+        </div>
+      </details>
     </section>
 
     <section id="paneAudit" class="pane" hidden>

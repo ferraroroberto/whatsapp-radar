@@ -73,6 +73,10 @@ class FixtureConnector:
         messages.sort(key=lambda m: (m.message_timestamp, m.source_message_id))
         return messages
 
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        # The fixture has no JID aliasing — ids are already canonical.
+        return source_chat_id
+
     def stop(self) -> None:
         self._data = {}
         self._loaded = False

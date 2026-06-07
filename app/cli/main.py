@@ -1,7 +1,13 @@
 """Command-line entry point.
 
-Commands: status | ingest | chats | monitor | ignore | review | scan | notify.
-The CLI wires the boundaries together but holds no business logic of its own.
+Commands: status | ingest | chats | monitor | ignore | review | scan | notify |
+resync | reprocess. The CLI wires the boundaries together but holds no business
+logic of its own.
+
+``scan``, ``resync`` and ``reprocess`` are the launchable Execution-tab pieces:
+each streams human-readable progress to stdout and prints one final structured
+``__WR_RESULT__`` sentinel line the webapp parses for the funnel/counts. They run
+identically whether fired here, from App Launcher Jobs, or spawned by the webapp.
 """
 
 from __future__ import annotations
@@ -11,14 +17,27 @@ import sqlite3
 import sys
 
 from src.analysis.classifier import build_classifier
-from src.analysis.pipeline import Mode, scan
+from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
 from src.analysis.review import review_monitored_chats
 from src.config import Config, load_config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
 from src.db import store
+from src.db.reprocess import reprocess, reprocess_outcome_to_dict
+from src.db.sync import resync, resync_outcome_to_dict
 from src.notify import deliver_digest
 from src.report.digest import Digest, build_digest
+from src.runresult import format_result
+
+
+def _progress(line: str) -> None:
+    """Stream one progress line to stdout (captured into the run's output.log)."""
+    print(line, flush=True)
+
+
+def _emit_result(payload: dict[str, object]) -> None:
+    """Print the final structured result sentinel the webapp parses."""
+    print(format_result(payload), flush=True)
 
 
 def _build_connector(config: Config) -> MessageConnector:
@@ -84,28 +103,44 @@ def _cmd_set_status(conn: sqlite3.Connection, chat_id: int, status: str) -> int:
 
 
 def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
+    """Process piece: analyze monitored deltas since each cursor (no sync)."""
     classifier = build_classifier(config.classifier, config.hub)
+    _progress("▶ process starting — analyzing monitored chats since last cursor")
     outcome = review_monitored_chats(conn, classifier)
     digest = build_digest(conn, outcome.run_id)
 
-    print(digest.to_json())
-    print(
-        f"\nRun {outcome.run_id}: {outcome.chats_with_delta} chats with new messages, "
-        f"{outcome.messages_processed} messages processed, "
-        f"{outcome.actionable_chats} actionable.",
-        file=sys.stderr,
-    )
     for chat_id, err in outcome.errors:
         print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
 
     if not digest.has_actionable_items:
-        print("No actionable items — no notification.", file=sys.stderr)
-        return 0
+        notif, rc = "none", 0
+    elif dry_run:
+        notif, rc = "dry_run", 0
+    else:
+        notif, rc = _deliver(conn, config, outcome.run_id, digest)
 
-    if dry_run:
-        print("Dry run — digest not delivered.", file=sys.stderr)
-        return 0
-    return _deliver(conn, config, outcome.run_id, digest)
+    _progress(
+        f"✓ process done — {outcome.chats_with_delta} chat(s) with delta, "
+        f"{outcome.messages_processed} msg(s) processed, "
+        f"{outcome.actionable_chats} actionable, notify {notif}"
+    )
+    _emit_result(
+        {
+            "kind": "process",
+            "ok": notif != "failed",
+            "run_id": outcome.run_id,
+            "funnel": {
+                "chats_with_delta": outcome.chats_with_delta,
+                "messages_processed": outcome.messages_processed,
+                "actionable": outcome.actionable_chats,
+            },
+            "notification_status": notif,
+            "telegram_text": (
+                digest.to_telegram_text() if digest.has_actionable_items else None
+            ),
+        }
+    )
+    return rc
 
 
 def _cmd_scan(
@@ -114,48 +149,93 @@ def _cmd_scan(
     """Unified pipeline: sync -> Stage 1 -> Stage 2 -> digest -> deliver, with a trace."""
     mode: Mode = "dry_run" if dry_run else "live"
     connector = None if dry_run else _build_connector(config)
-    outcome = scan(conn, config, mode=mode, days=days, connector=connector)
+    outcome = scan(conn, config, mode=mode, days=days, connector=connector, progress=_progress)
 
-    if outcome.digest is not None:
-        print(outcome.digest.to_json())
-    print(
-        f"\nRun {outcome.run_id} [{mode}]: synced {outcome.chats_synced} chats / "
-        f"{outcome.messages_synced} msgs, {outcome.chats_monitored} monitored, "
-        f"{outcome.chats_with_delta} with delta, stage1={outcome.stage1_passed}, "
-        f"llm={outcome.stage2_llm_calls}, actionable={outcome.actionable}, "
-        f"notify={outcome.notification_status}.",
-        file=sys.stderr,
-    )
     for chat_id, err in outcome.errors:
         print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
+    _emit_result(scan_outcome_to_dict(outcome))
     return 1 if outcome.notification_status == "failed" else 0
 
 
-def _deliver(conn: sqlite3.Connection, config: Config, run_id: int, digest: Digest) -> int:
-    """Deliver a run's digest, recording the outcome. Retryable via 'wr notify'."""
-    status, detail = deliver_digest(conn, config, run_id, digest)
-    if status == "failed":
-        print(f"Delivery failed (retry with 'wr notify'): {detail}", file=sys.stderr)
-        return 1
-    if status == "skipped":
-        print("Notifier is 'none' — digest recorded as skipped (set WR_NOTIFIER=telegram).",
-              file=sys.stderr)
-        return 0
-    print(f"Digest delivered via {config.notifier}.", file=sys.stderr)
+def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
+    """Incremental upsert from the connector buffer (the Resync action)."""
+    connector = _build_connector(config)
+    _progress("▶ resync starting — pulling latest from the connector buffer")
+    outcome = resync(conn, connector)
+    _progress(
+        f"✓ resync done — {outcome.chats_added} chats added, "
+        f"{outcome.chats_updated} updated, {outcome.messages_added} new messages"
+        + (" (no changes)" if outcome.is_noop else "")
+    )
+    _emit_result(resync_outcome_to_dict(outcome))
     return 0
 
 
+def _cmd_reprocess(conn: sqlite3.Connection, config: Config, confirm: bool) -> int:
+    """Full cache rebuild preserving operator state (the guarded Reprocess action)."""
+    if not confirm:
+        print(
+            "reprocess is destructive (run history resets). Re-run with --confirm.",
+            file=sys.stderr,
+        )
+        return 2
+    connector = _build_connector(config)
+    _progress("▶ reprocess starting — backing up DB, then rebuilding from the buffer")
+    outcome = reprocess(conn, connector, config.db_path)
+    _progress(f"  • backed up to {outcome.backup_path}")
+    _progress(
+        f"✓ reprocess done — {outcome.chats_after} chats / {outcome.messages_after} msgs; "
+        f"preserved {outcome.monitored_preserved} monitored, "
+        f"{outcome.ignored_preserved} ignored, {outcome.aliases_preserved} aliases"
+        + (f"; {len(outcome.unmapped)} unmapped" if outcome.unmapped else "")
+    )
+    _emit_result(reprocess_outcome_to_dict(outcome))
+    return 0
+
+
+def _deliver(
+    conn: sqlite3.Connection, config: Config, run_id: int, digest: Digest
+) -> tuple[str, int]:
+    """Deliver a run's digest, recording the outcome. Returns (status, exit_code)."""
+    status, detail = deliver_digest(conn, config, run_id, digest)
+    if status == "failed":
+        print(f"Delivery failed (retry with 'wr notify'): {detail}", file=sys.stderr)
+        return status, 1
+    if status == "skipped":
+        print("Notifier is 'none' — digest recorded as skipped (set WR_NOTIFIER=telegram).",
+              file=sys.stderr)
+        return status, 0
+    print(f"Digest delivered via {config.notifier}.", file=sys.stderr)
+    return status, 0
+
+
 def _cmd_notify(conn: sqlite3.Connection, config: Config, run_id: int | None) -> int:
-    """(Re)deliver the digest for a run — the latest run by default."""
+    """Message piece: (re)deliver the digest for a run — the latest by default."""
     rid = run_id if run_id is not None else store.latest_run_id(conn)
     if rid is None:
         print("No review run to deliver. Run 'wr review' first.", file=sys.stderr)
+        _emit_result({"kind": "notify", "ok": False, "error": "no run to deliver"})
         return 1
     digest = build_digest(conn, rid)
     if not digest.has_actionable_items:
-        print(f"Run {rid} has no actionable items — nothing to deliver.", file=sys.stderr)
+        _progress(f"notify: run {rid} has no actionable items — nothing to deliver")
+        _emit_result(
+            {"kind": "notify", "ok": True, "run_id": rid, "notification_status": "none"}
+        )
         return 0
-    return _deliver(conn, config, rid, digest)
+    _progress(f"▶ message starting — delivering digest for run {rid}")
+    status, rc = _deliver(conn, config, rid, digest)
+    _progress(f"✓ message done — notify {status}")
+    _emit_result(
+        {
+            "kind": "notify",
+            "ok": status != "failed",
+            "run_id": rid,
+            "notification_status": status,
+            "telegram_text": digest.to_telegram_text(),
+        }
+    )
+    return rc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -197,6 +277,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--run", type=int, default=None, help="run id to deliver (default: latest)"
     )
 
+    sub.add_parser(
+        "resync", help="incremental upsert of chats/messages from the connector buffer"
+    )
+    p_reproc = sub.add_parser(
+        "reprocess",
+        help="rebuild the local cache from the buffer (destructive; preserves operator state)",
+    )
+    p_reproc.add_argument(
+        "--confirm",
+        action="store_true",
+        help="required: acknowledge that run history resets before rebuilding",
+    )
+
     sub.add_parser("tray", help="run the system-tray surface that owns the admin webapp")
     return parser
 
@@ -234,6 +327,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_scan(conn, config, args.dry_run, args.days)
         if args.command == "notify":
             return _cmd_notify(conn, config, args.run)
+        if args.command == "resync":
+            return _cmd_resync(conn, config)
+        if args.command == "reprocess":
+            return _cmd_reprocess(conn, config, args.confirm)
     finally:
         conn.close()
     return 2

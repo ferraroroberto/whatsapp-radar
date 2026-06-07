@@ -431,12 +431,17 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .settings-card summary.settings-summary::before {
   content: "\203A";
   display: inline-block;
+  width: 1em;
+  text-align: center;
   margin-right: 8px;
   color: var(--muted);
   transition: transform 0.15s ease;
 }
 .settings-card[open] summary.settings-summary::before { transform: rotate(90deg); }
-.webauthn-section h3 { margin: 0 0 6px; font-size: 14px; }
+/* Indent the body so its icons (🔐 …) line up under the gear in the summary
+   (which the collapse chevron pushes right), and give it room to breathe. */
+.settings-card .webauthn-section { padding: 10px 0 4px calc(1em + 8px); }
+.webauthn-section h3 { margin: 0 0 8px; font-size: 14px; }
 .webauthn-devices {
   list-style: none;
   margin: 8px 0;
@@ -515,3 +520,116 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   border-radius: 8px;
   font-size: 13px;
 }
+
+/* ------------------------------------------------------------ execution (#11) */
+/* A full-width action that reads as a clear button without a heavy blue fill. */
+.run-btn {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 11px;
+  cursor: pointer;
+  min-height: 44px;
+}
+.run-btn:active { background: rgba(74, 138, 243, 0.12); }
+.run-btn:disabled { opacity: 0.45; cursor: default; }
+.run-btn.danger { color: #ff7a8a; border-color: var(--danger); }
+.run-btn.danger:active { background: rgba(204, 51, 68, 0.12); }
+
+.exec-mode-seg button { white-space: nowrap; }
+.exec-dry-opts { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
+.exec-dry-opts .segmented { flex: 1; }
+.exec-days { width: 84px; }
+.exec-stages-hint { margin: 0 0 8px; }
+
+/* Pipeline steps as a checklist: tick the steps to run, then Run. */
+.exec-stages { border: 0; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.exec-stage-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+}
+.exec-stage-check input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.exec-stage-check .exec-stage-icon { font-size: 17px; flex: none; }
+.exec-stage-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.exec-stage-label { font-size: 14px; color: var(--fg); }
+.exec-stage-desc { font-size: 11px; color: var(--muted); }
+
+/* Funnel strip in the run viewer: small labelled value cells. */
+.exec-funnel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.exec-funnel-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  flex: 1 0 auto;
+  padding: 8px 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.exec-funnel-val { font-size: 17px; font-weight: 700; color: var(--fg); }
+.exec-funnel-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.exec-preview { margin: 0 0 4px; }
+.exec-output { max-height: 280px; cursor: pointer; }
+.exec-viewer-kind { font-size: 14px; font-weight: 600; color: var(--fg); margin: 0 0 2px; }
+
+/* WhatsApp connection health pill (green dot + name, like local-llm-hub). */
+.exec-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.exec-health-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--muted); }
+.exec-health-dot.up { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.exec-health-dot.down { background: var(--danger); }
+.exec-health-dot.unknown { background: var(--muted); }
+.exec-health-label { font-size: 13px; font-weight: 600; color: var(--fg); flex: none; }
+.exec-health-detail { margin-left: auto; text-align: right; }
+
+/* Recent-runs list: one lean line each — OK/KO · kind · when. */
+.exec-runs { gap: 0; padding: 0 16px 8px; margin: 0; }
+#execRunsEmpty, #execViewer, #execViewerEmpty { padding: 4px 16px 14px; }
+#execViewer { padding-top: 8px; }
+.exec-run-li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.exec-run-li:last-child { border-bottom: 0; }
+.exec-run-li.selected { background: rgba(74, 138, 243, 0.10); border-radius: 8px; }
+.exec-run-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  min-width: 24px;
+  text-align: center;
+  flex: none;
+}
+.exec-run-badge.ok { color: var(--good); }
+.exec-run-badge.ko { color: var(--danger); }
+.exec-run-badge.run { color: var(--warn); }
+.exec-run-name { font-size: 14px; color: var(--fg); flex: 1; min-width: 0; }
+.exec-run-when { flex: none; }

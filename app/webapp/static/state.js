@@ -24,7 +24,20 @@ export const state = {
   chatsFilter: 'monitored',  // 'monitored' | 'all'
   chatsSearch: '',
   config: null,
+  // Execution (#11)
+  execution: {
+    mode: 'live',          // 'live' | 'dry_run'  (applies to scan + process)
+    window: 'new',         // 'new' | 'days'      (dry-run scan only)
+    days: 7,
+    runs: [],
+    active: null,          // {kind, run_id} of the in-flight run, or null
+    selected: null,        // {kind, run_id} the viewer is showing, or null
+    detail: null,          // last fetched run detail
+    queue: [],             // pending chained actions (multi-step run), fired in order
+  },
 };
+
+export const EXECUTION_POLL_MS = 1500;
 
 // "All" can be ~900 chats on a real account; cap the DOM rows we render and
 // nudge the operator to search instead of scrolling a phone forever.
@@ -86,6 +99,40 @@ export const els = {
   cfgTgToken: document.getElementById('cfgTgToken'),
   cfgTgChatId: document.getElementById('cfgTgChatId'),
   cfgNote: document.getElementById('cfgNote'),
+
+  // Execution (#11)
+  execMode: document.getElementById('execMode'),
+  execModeLive: document.getElementById('execModeLive'),
+  execModeDry: document.getElementById('execModeDry'),
+  execModeHint: document.getElementById('execModeHint'),
+  execDryOpts: document.getElementById('execDryOpts'),
+  execWindow: document.getElementById('execWindow'),
+  execWinNew: document.getElementById('execWinNew'),
+  execWinDays: document.getElementById('execWinDays'),
+  execDays: document.getElementById('execDays'),
+  execStageSync: document.getElementById('execStageSync'),
+  execStageProcess: document.getElementById('execStageProcess'),
+  execStageMessage: document.getElementById('execStageMessage'),
+  execRunScan: document.getElementById('execRunScan'),
+  execBusy: document.getElementById('execBusy'),
+  execReprocess: document.getElementById('execReprocess'),
+  execHealthDot: document.getElementById('execHealthDot'),
+  execHealthLabel: document.getElementById('execHealthLabel'),
+  execHealthDetail: document.getElementById('execHealthDetail'),
+  execRunsCard: document.getElementById('execRunsCard'),
+  execViewerCard: document.getElementById('execViewerCard'),
+  execViewer: document.getElementById('execViewer'),
+  execViewerTitle: document.getElementById('execViewerTitle'),
+  execViewerMeta: document.getElementById('execViewerMeta'),
+  execViewerEmpty: document.getElementById('execViewerEmpty'),
+  execKill: document.getElementById('execKill'),
+  execFunnel: document.getElementById('execFunnel'),
+  execPreview: document.getElementById('execPreview'),
+  execPreviewText: document.getElementById('execPreviewText'),
+  execOutput: document.getElementById('execOutput'),
+  execRuns: document.getElementById('execRuns'),
+  execRunsEmpty: document.getElementById('execRunsEmpty'),
+  execRefresh: document.getElementById('execRefresh'),
 
   settingsPanel: document.getElementById('settingsPanel'),
   webauthnStatus: document.getElementById('webauthnStatus'),

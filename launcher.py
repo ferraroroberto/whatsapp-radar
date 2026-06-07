@@ -7,7 +7,10 @@ Usage:
     python launcher.py monitor <chat_id>
     python launcher.py ignore <chat_id>
     python launcher.py review [--dry-run]
+    python launcher.py scan [--dry-run] [--days N]
     python launcher.py notify [--run N]
+    python launcher.py resync                  # incremental upsert from the buffer
+    python launcher.py reprocess --confirm     # full rebuild (preserves operator state)
 
 The launcher puts its own folder on ``sys.path`` so the top-level packages
 (``src``, ``app``) resolve without any outer namespace — clone the repo,

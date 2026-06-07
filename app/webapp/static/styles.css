@@ -713,7 +713,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .exec-run-when { flex: none; }
 
 /* Recent-syncs list: one lean line each — when · +msgs/+chats · source (#31). */
-.exec-syncs { gap: 0; padding: 0 16px 8px; margin: 0; }
+/* max-height ≈ 5 rows (each ~37 px); scroll reveals older entries. */
+.exec-syncs { gap: 0; padding: 0 16px 8px; margin: 0; max-height: 195px; overflow-y: auto; }
 #execSyncsEmpty { padding: 4px 16px 14px; }
 .exec-sync-li {
   display: flex;

@@ -10,6 +10,8 @@ ordering bug that strips the header) surfaces here.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page, Response
 
@@ -17,7 +19,10 @@ pytestmark = pytest.mark.smoke
 
 
 def test_index_cache_control_visible_to_webkit(
-    page: Page, base_url: str, browser_name: str
+    page: Page,
+    base_url: str,
+    browser_name: str,
+    scaled: Callable[[float], int],
 ) -> None:
     if browser_name != "webkit":
         pytest.skip("WebKit projection only (iOS Safari is the original regression)")
@@ -34,7 +39,7 @@ def test_index_cache_control_visible_to_webkit(
 
     page.on("response", _on_response)
     page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    page.wait_for_selector("#tabDashboard", state="attached", timeout=5_000)
+    page.wait_for_selector("#tabDashboard", state="attached", timeout=scaled(5_000))
 
     assert captured.get("status") == 200, (
         f"GET / returned {captured.get('status')!r} under WebKit"

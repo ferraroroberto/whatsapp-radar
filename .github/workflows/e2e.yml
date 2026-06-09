@@ -56,6 +56,13 @@ jobs:
         run: Copy-Item config/webapp_config.sample.json config/webapp_config.json
 
       - name: Run pre-ship gate
+        # The hosted runner is markedly slower than a local box, and the
+        # WebKit/iPhone e2e leg is the flaky one (issue #64 — it wedged PR #62
+        # for 11+ min). Give every e2e wait budget 3x headroom on CI; local
+        # runs leave this unset and keep Playwright's native budgets. Paired
+        # with a bounded WebKit-only rerun in tests/e2e/conftest.py.
+        env:
+          WR_E2E_TIMEOUT_SCALE: "3"
         run: pwsh -File scripts/verify-before-ship.ps1
 
       - name: Upload e2e diagnostic log

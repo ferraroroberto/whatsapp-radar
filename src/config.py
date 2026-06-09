@@ -33,6 +33,9 @@ class HubConfig:
     # Max characters of the rendered message delta sent in one prompt. Caps a
     # whole-history scan so a single request can't blow the model's context.
     max_prompt_chars: int = 24000
+    # How many days of already-surfaced actionable alerts to feed Stage 2 as
+    # short-term memory, so a repeated to-do isn't re-alerted every run (#66).
+    recent_alert_days: int = 7
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,9 @@ def load_config(root: Path | None = None) -> Config:
         max_tokens=int(os.environ.get("WR_HUB_MAX_TOKENS", hub_raw.get("max_tokens", 8192))),
         max_prompt_chars=int(
             os.environ.get("WR_HUB_MAX_PROMPT_CHARS", hub_raw.get("max_prompt_chars", 24000))
+        ),
+        recent_alert_days=int(
+            os.environ.get("WR_HUB_RECENT_ALERT_DAYS", hub_raw.get("recent_alert_days", 7))
         ),
     )
     # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)

@@ -8,7 +8,8 @@
     "base_url": "http://127.0.0.1:8000",
     "model": "claude_sonnet",
     "max_tokens": 8192,
-    "max_prompt_chars": 24000
+    "max_prompt_chars": 24000,
+    "recent_alert_days": 7
   },
   "telegram": {
     "bot_token": "",

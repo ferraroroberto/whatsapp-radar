@@ -94,6 +94,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE chats ADD COLUMN parent_chat_id INTEGER "
             "REFERENCES chats(id) ON DELETE SET NULL"
         )
+    # `chats.source` (#57) lets a second connector (Gmail, #46) share these tables:
+    # chat identity becomes (source, source_chat_id). Existing rows backfill to
+    # 'whatsapp' via the column default. SQLite can't add a composite table
+    # constraint or drop the legacy column-level UNIQUE(source_chat_id) after the
+    # fact without a full table rebuild, so composite uniqueness is enforced by a
+    # unique *index* instead. The legacy single-column UNIQUE stays — harmless for
+    # whatsapp-only rows (the only source until #46 lands) and dropped only if a
+    # future rebuild is ever warranted. The fresh schema (schema.sql) declares the
+    # composite as a table constraint; both forms back the same ON CONFLICT target.
+    if "source" not in chat_cols:
+        conn.execute("ALTER TABLE chats ADD COLUMN source TEXT NOT NULL DEFAULT 'whatsapp'")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_source_key "
+        "ON chats(source, source_chat_id)"
+    )
     # `analysis_trace.messages_json` (per-message audit record: id/sender/text and
     # the Stage-1 keyword roots each message matched) was added after the initial
     # trace schema (#12). Additive, non-destructive; old rows stay NULL and the
@@ -110,19 +125,20 @@ def upsert_chat(conn: sqlite3.Connection, chat: ChatRecord) -> int:
     now = _now()
     conn.execute(
         """
-        INSERT INTO chats (source_chat_id, display_name, chat_type, status,
+        INSERT INTO chats (source, source_chat_id, display_name, chat_type, status,
                            first_seen_at, last_seen_at)
-        VALUES (?, ?, ?, 'discovered', ?, ?)
-        ON CONFLICT(source_chat_id) DO UPDATE SET
+        VALUES (?, ?, ?, ?, 'discovered', ?, ?)
+        ON CONFLICT(source, source_chat_id) DO UPDATE SET
             display_name = excluded.display_name,
             chat_type    = excluded.chat_type,
             last_seen_at = excluded.last_seen_at
         """,
-        (chat.source_chat_id, chat.display_name, chat.chat_type, now, now),
+        (chat.source, chat.source_chat_id, chat.display_name, chat.chat_type, now, now),
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id FROM chats WHERE source_chat_id = ?", (chat.source_chat_id,)
+        "SELECT id FROM chats WHERE source = ? AND source_chat_id = ?",
+        (chat.source, chat.source_chat_id),
     ).fetchone()
     return int(row["id"])
 
@@ -238,8 +254,8 @@ def list_chats(
     )
     return list(
         conn.execute(
-            "SELECT id, source_chat_id, display_name, alias, chat_type, status, last_message_at "
-            f"FROM chats {order}"
+            "SELECT id, source, source_chat_id, display_name, alias, chat_type, status, "
+            f"last_message_at FROM chats {order}"
         ).fetchall()
     )
 
@@ -257,15 +273,20 @@ def monitored_chats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     )
 
 
-def chat_id_for_source(conn: sqlite3.Connection, source_chat_id: str) -> int | None:
-    """Return the internal id for a chat's ``source_chat_id``, or None if absent.
+def chat_id_for_source(
+    conn: sqlite3.Connection, source_chat_id: str, *, source: str = "whatsapp"
+) -> int | None:
+    """Return the internal id for a chat's ``(source, source_chat_id)``, or None.
 
+    Chat identity is the composite ``(source, source_chat_id)`` (#57); ``source``
+    defaults to ``'whatsapp'`` so existing single-source callers are unchanged.
     The resync path uses this to classify an incoming chat as new (insert) vs
     existing (compare-then-maybe-update) without an upsert that would always
     touch ``last_seen_at`` and so report a phantom change on a no-op run.
     """
     row = conn.execute(
-        "SELECT id FROM chats WHERE source_chat_id = ?", (source_chat_id,)
+        "SELECT id FROM chats WHERE source = ? AND source_chat_id = ?",
+        (source, source_chat_id),
     ).fetchone()
     return int(row["id"]) if row else None
 
@@ -764,8 +785,8 @@ def chats_overview(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     )
     return list(
         conn.execute(
-            "SELECT c.id, c.source_chat_id, c.display_name, c.alias, c.chat_type, c.status, "
-            "c.parent_chat_id, "
+            "SELECT c.id, c.source, c.source_chat_id, c.display_name, c.alias, c.chat_type, "
+            "c.status, c.parent_chat_id, "
             f"(SELECT COUNT(*) FROM messages m WHERE {family}) AS message_count, "
             f"(SELECT MAX(m.message_timestamp) FROM messages m WHERE {family}) AS last_message_at, "
             f"(SELECT m.text FROM messages m WHERE {family} "
@@ -840,7 +861,7 @@ def recent_messages_family(
 def get_chat(conn: sqlite3.Connection, chat_id: int) -> sqlite3.Row | None:
     """Return a single chat row by internal id, or None if it doesn't exist."""
     row: sqlite3.Row | None = conn.execute(
-        "SELECT id, source_chat_id, display_name, alias, chat_type, status, "
+        "SELECT id, source, source_chat_id, display_name, alias, chat_type, status, "
         "last_message_at, parent_chat_id FROM chats WHERE id = ?",
         (chat_id,),
     ).fetchone()

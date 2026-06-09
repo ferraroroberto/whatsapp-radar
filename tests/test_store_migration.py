@@ -114,6 +114,61 @@ def test_connect_migrates_analysis_trace_messages_json(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_connect_migrates_chats_source(tmp_path: Path) -> None:
+    """A pre-#57 chats table gains `source`, backfills to 'whatsapp', stays idempotent."""
+    db = tmp_path / "legacy_source.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_CHATS)
+    raw.execute(
+        "INSERT INTO chats (source_chat_id, display_name, first_seen_at, last_seen_at) "
+        "VALUES ('g1', 'Class 4A Group', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(chats)")}
+        assert "source" in cols
+        # The pre-existing row backfills to 'whatsapp' via the column default.
+        chat = store.get_chat(conn, 1)
+        assert chat is not None and chat["source"] == "whatsapp"
+        # The composite-uniqueness index is in place and reachable by the default source.
+        idx = {row["name"] for row in conn.execute("PRAGMA index_list(chats)")}
+        assert "idx_chats_source_key" in idx
+        assert store.chat_id_for_source(conn, "g1") == 1
+        assert store.chat_id_for_source(conn, "g1", source="gmail") is None
+
+        # Idempotent: a second open neither errors nor duplicates the row.
+        conn.close()
+        conn2 = store.connect(db)
+        assert store.count_chats(conn2) == 1
+        assert store.get_chat(conn2, 1)["source"] == "whatsapp"
+        conn2.close()
+    finally:
+        conn.close()
+
+
+def test_fresh_db_allows_same_source_chat_id_across_sources(tmp_path: Path) -> None:
+    """On a fresh schema, identity is composite: a Gmail id may equal a WhatsApp JID."""
+    from src.models import ChatRecord
+
+    conn = store.connect(tmp_path / "fresh.sqlite3")
+    try:
+        wa = store.upsert_chat(conn, ChatRecord("shared-id", "WhatsApp Group"))
+        gm = store.upsert_chat(conn, ChatRecord("shared-id", "Gmail Thread", source="gmail"))
+        assert wa != gm
+        assert store.count_chats(conn) == 2
+        assert store.chat_id_for_source(conn, "shared-id") == wa
+        assert store.chat_id_for_source(conn, "shared-id", source="gmail") == gm
+        # Re-upserting the same identity updates in place — no third row.
+        again = store.upsert_chat(conn, ChatRecord("shared-id", "WhatsApp Group v2"))
+        assert again == wa
+        assert store.count_chats(conn) == 2
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_chats_alias(tmp_path: Path) -> None:
     db = tmp_path / "legacy_chats.sqlite3"
     raw = sqlite3.connect(db)

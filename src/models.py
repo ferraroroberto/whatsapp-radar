@@ -17,6 +17,9 @@ class ChatRecord:
     source_chat_id: str
     display_name: str
     chat_type: str = "group"
+    # Which connector produced this chat. Connectors keep the default; a second
+    # source (Gmail, #46) sets its own so identity is (source, source_chat_id).
+    source: str = "whatsapp"
 
 
 @dataclass(frozen=True)

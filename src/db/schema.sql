@@ -8,7 +8,12 @@ PRAGMA foreign_keys = ON;
 -- Discovered chats with sanitized metadata. status: 'discovered' | 'monitored' | 'ignored'.
 CREATE TABLE IF NOT EXISTS chats (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_chat_id           TEXT NOT NULL UNIQUE,
+    -- Which connector a chat came from: 'whatsapp' (default) or a future source
+    -- (e.g. 'gmail', #46). Chat identity is (source, source_chat_id) so a Gmail
+    -- sender/label id can't collide with a WhatsApp JID. Messages stay source-less
+    -- and inherit their chat's source.
+    source                   TEXT NOT NULL DEFAULT 'whatsapp',
+    source_chat_id           TEXT NOT NULL,
     display_name             TEXT NOT NULL,
     -- Operator-supplied label that overrides display_name in the UI. The human
     -- fallback for chats the connector can only name as a bare number/JID.
@@ -25,7 +30,8 @@ CREATE TABLE IF NOT EXISTS chats (
     -- link API. Pure metadata over the per-chat rows — no message data moves, and
     -- each chat keeps its own cursor. ON DELETE SET NULL so dropping a parent
     -- frees its children rather than cascading.
-    parent_chat_id           INTEGER REFERENCES chats(id) ON DELETE SET NULL
+    parent_chat_id           INTEGER REFERENCES chats(id) ON DELETE SET NULL,
+    UNIQUE (source, source_chat_id)
 );
 
 -- Raw-but-local message records. Idempotent on (chat_id, source_message_id).

@@ -33,6 +33,7 @@ from pathlib import Path
 
 import yaml
 
+from app.tray.single_instance import SingleInstance
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
 from src.webapp_config import append_auth_token, load_webapp_config
 
@@ -158,6 +159,15 @@ def run_tray() -> int:
     except ImportError as exc:
         logger.error(f"❌ pystray not installed ({exc}); pip install -r requirements.txt")
         return 1
+
+    # In-process single-instance guard (project-scaffolding#39): the tray.bat CIM
+    # pre-check can let two near-simultaneous launches through, so the guarantee
+    # must live in the process. Held for the tray's lifetime; the OS frees the
+    # named mutex on exit. `instance` is intentionally kept referenced below.
+    instance = SingleInstance(r"Global\whatsapp-radar-tray")
+    if not instance.acquired:
+        logger.info("ℹ️  Another whatsapp-radar tray is already running; exiting.")
+        return 0
 
     wcfg = load_webapp_config()
     manager = WebappManager(
@@ -317,6 +327,7 @@ def run_tray() -> int:
             manager.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"⚠️  stop failed: {exc}")
+        instance.release()
         icon.stop()  # type: ignore[attr-defined]
 
     menu = Menu(

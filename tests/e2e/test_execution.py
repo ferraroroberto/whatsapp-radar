@@ -7,12 +7,16 @@ rendered — the issue's "dry-run shows the funnel" acceptance, through the UI.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page, expect
 
 
 @pytest.mark.smoke
-def test_execution_dry_run_shows_funnel(page: Page, base_url: str) -> None:
+def test_execution_dry_run_shows_funnel(
+    page: Page, base_url: str, scaled: Callable[[float], int]
+) -> None:
     page.goto(base_url)
     page.locator("#tabExecution").click()
     expect(page.locator("#paneExecution")).to_be_visible()
@@ -25,8 +29,10 @@ def test_execution_dry_run_shows_funnel(page: Page, base_url: str) -> None:
     # The viewer appears and the run reaches a terminal state (stub classifier →
     # a couple of seconds; allow generous headroom for the cold subprocess).
     viewer = page.locator("#execViewer")
-    expect(viewer).to_be_visible(timeout=15_000)
-    expect(page.locator("#execViewerMeta")).to_contain_text("completed", timeout=45_000)
+    expect(viewer).to_be_visible(timeout=scaled(15_000))
+    expect(page.locator("#execViewerMeta")).to_contain_text(
+        "completed", timeout=scaled(45_000)
+    )
 
     # Funnel strip rendered, and the live output captured the dry-run banner.
     expect(page.locator("#execFunnel")).to_contain_text("Notify")
@@ -37,7 +43,9 @@ def test_execution_dry_run_shows_funnel(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
-def test_execution_offline_shows_reconnect(page: Page, base_url: str) -> None:
+def test_execution_offline_shows_reconnect(
+    page: Page, base_url: str, scaled: Callable[[float], int]
+) -> None:
     """With an empty sidecar buffer the health pill offers a relaunch (#29).
 
     Asserts the offline affordance *renders* — it never clicks Reconnect, so no
@@ -49,6 +57,6 @@ def test_execution_offline_shows_reconnect(page: Page, base_url: str) -> None:
 
     # The throwaway buffer (conftest) has no status.json → 'stopped' → red dot
     # and a visible Reconnect button.
-    expect(page.locator("#execReconnect")).to_be_visible(timeout=10_000)
+    expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
     expect(page.locator("#execReconnectBtn")).to_be_visible()
     expect(page.locator("#execHealthDot")).to_have_class("exec-health-dot down")

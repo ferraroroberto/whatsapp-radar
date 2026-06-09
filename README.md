@@ -127,7 +127,7 @@ powershell -File scripts\verify-before-ship.ps1   # all of the above + Playwrigh
 
 The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on a free port and require `playwright install chromium webkit` once.
 
-The same gate runs in CI on every branch push and PR to `main` ([`.github/workflows/e2e.yml`](.github/workflows/e2e.yml)) — the local gate stays the contract; the workflow just creates the `.venv` it expects and calls it unmodified.
+The same gate runs in CI on every branch push and PR to `main` ([`.github/workflows/e2e.yml`](.github/workflows/e2e.yml)) — the local gate stays the contract; the workflow just creates the `.venv` it expects and calls it unmodified. The WebKit/iPhone e2e leg is the flaky one on the hosted runner, so CI sets `WR_E2E_TIMEOUT_SCALE=3` to give every browser wait budget 3× headroom (local runs leave it unset and keep Playwright's native budgets) and gives only the WebKit projection a bounded rerun.
 
 ## Home-stack wiring (App Launcher)
 

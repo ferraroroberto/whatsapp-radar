@@ -18,13 +18,34 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 TRAY_PORT = 8455
+
+# Env-aware wait budget (issue #64). The hosted Windows runner is markedly
+# slower than a local dev box, and the WebKit/iPhone projection is the
+# notoriously flaky leg (it wedged PR #62 for 11+ min). Every browser wait
+# budget is multiplied by WR_E2E_TIMEOUT_SCALE so CI can buy headroom
+# (e2e.yml sets it >1) while local runs keep Playwright's native budgets
+# (default scale 1.0). One source of truth for the multiplier.
+_TIMEOUT_SCALE_ENV = "WR_E2E_TIMEOUT_SCALE"
+# Playwright's native default action/navigation budget. Capping it explicitly
+# (rather than leaving it implicit) lets a wedged WebKit interaction fail at a
+# deterministic, scaled deadline that rerunfailures can retry — instead of
+# hanging until the CI job's 30-min cap.
+_DEFAULT_TIMEOUT_MS = 30_000
+
+
+def _timeout_scale() -> float:
+    try:
+        scale = float(os.environ.get(_TIMEOUT_SCALE_ENV, "1"))
+    except ValueError:
+        return 1.0
+    return scale if scale > 0 else 1.0
 
 
 def _reachable(port: int, *, timeout: float = 0.3) -> bool:
@@ -56,15 +77,25 @@ def pytest_collection_modifyitems(
 
     A sub-conftest hook still receives every collected item, so scope the skip
     to tests under this directory — never touch the offline unit suite.
+
+    Also give the WebKit/iPhone projection a bounded retry (issue #64): it is
+    the known-flaky leg on the hosted runner, so a one-off slow round-trip
+    self-heals rather than red-lighting an unrelated PR — while the Chromium
+    projection stays loud (a Chromium failure is a real product bug). Needs
+    pytest-rerunfailures (requirements-dev).
     """
-    if _autoboot() or _reachable(TRAY_PORT):
-        return
+    serve = _autoboot() or _reachable(TRAY_PORT)
     skip = pytest.mark.skip(
         reason="e2e disabled: set WR_E2E_AUTOBOOT=1 or run a tray on :8455"
     )
+    flaky = pytest.mark.flaky(reruns=2, reruns_delay=1)
     for item in items:
-        if _E2E_DIR in Path(item.fspath).parents:
+        if _E2E_DIR not in Path(item.fspath).parents:
+            continue
+        if not serve:
             item.add_marker(skip)
+        if "[webkit" in item.nodeid:
+            item.add_marker(flaky)
 
 
 def _seed_e2e_db(db_path: Path) -> None:
@@ -162,7 +193,10 @@ def base_url() -> Iterator[str]:
         stderr=subprocess.STDOUT,
     )
     try:
-        deadline = time.time() + 20
+        # Scale the readiness budget too (issue #64): a cold hosted runner can
+        # take longer than 20s to import + bind uvicorn. Local scale=1 keeps 20s.
+        ready_budget = 20 * _timeout_scale()
+        deadline = time.time() + ready_budget
         while time.time() < deadline:
             if proc.poll() is not None:
                 raise RuntimeError("uvicorn exited before becoming ready")
@@ -170,7 +204,9 @@ def base_url() -> Iterator[str]:
                 break
             time.sleep(0.3)
         else:
-            raise RuntimeError("webapp did not become ready within 20s")
+            raise RuntimeError(
+                f"webapp did not become ready within {ready_budget:.0f}s"
+            )
         yield f"http://127.0.0.1:{port}"
     finally:
         proc.terminate()
@@ -178,3 +214,38 @@ def base_url() -> Iterator[str]:
             proc.wait(timeout=5)
         log.close()
         shutil.rmtree(db_dir, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def scaled() -> Callable[[float], int]:
+    """Return ``scale(base_ms)`` → env-scaled milliseconds (issue #64).
+
+    Use it on every explicit Playwright wait budget so a slow hosted runner
+    gets headroom (CI sets WR_E2E_TIMEOUT_SCALE>1) while local runs keep the
+    base value (default scale 1.0).
+    """
+    factor = _timeout_scale()
+
+    def _scale(base_ms: float) -> int:
+        return int(base_ms * factor)
+
+    return _scale
+
+
+@pytest.fixture(autouse=True)
+def _scaled_page_timeouts(request: pytest.FixtureRequest) -> None:
+    """Cap + scale Playwright's default action/navigation budget (issue #64).
+
+    Only configures tests that actually use a ``page`` (the cache-busting
+    server-side checks drive ``requests`` and never launch a browser). Capping
+    the default budget means a wedged WebKit interaction fails at a
+    deterministic, scaled deadline that the per-test rerun can retry — instead
+    of hanging until the CI job's 30-min cap. Local scale=1 keeps Playwright's
+    native 30s budget, so a green local run is unchanged.
+    """
+    if "page" not in request.fixturenames:
+        return
+    budget = int(_DEFAULT_TIMEOUT_MS * _timeout_scale())
+    page = request.getfixturevalue("page")
+    page.set_default_timeout(budget)
+    page.set_default_navigation_timeout(budget)

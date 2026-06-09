@@ -14,3 +14,8 @@ httpx>=0.27
 # Chromium catches markup/JS regressions; WebKit projects the suite onto an
 # iPhone viewport so iOS-engine bugs get caught on Windows.
 pytest-playwright>=0.5
+
+# Bounded retry for the known-flaky WebKit/iPhone e2e leg (issue #64): a slow
+# hosted runner occasionally wedges that projection, so tests/e2e/conftest.py
+# gives only the WebKit items a couple of reruns. Chromium stays loud.
+pytest-rerunfailures>=14

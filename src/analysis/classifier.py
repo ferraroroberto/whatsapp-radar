@@ -197,7 +197,10 @@ class HubClassifier:
     ) -> str:
         header = [f"Chat: {chat_display_name}"]
         if prior_context:
-            header.append(f"Prior context: {prior_context}")
+            # A self-describing block (the recent-alert memory, #66) — appended
+            # verbatim rather than inline-labelled so its own heading carries the
+            # "don't repeat unless new/escalated" instruction to the model.
+            header.append(prior_context)
         header.append("New messages:")
 
         formatted = [

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from src.analysis.classifier import Classifier
 from src.analysis.contract import ContractError, parse_analysis
@@ -28,15 +29,52 @@ class ReviewOutcome:
     errors: list[tuple[int, str]] = field(default_factory=list)
 
 
-def prior_context(rolling_context_json: str | None) -> str | None:
-    """Extract the last rolling summary from a chat's stored context JSON, if any."""
-    if not rolling_context_json:
+_RECENT_ALERT_HEADER = (
+    "Previously surfaced to the user (already alerted — do NOT raise these again "
+    "unless the information is genuinely new/different, or the user must still act "
+    "because a deadline is now imminent):"
+)
+
+
+def format_recent_alerts(items: list[sqlite3.Row]) -> str | None:
+    """Render already-surfaced actionable items as a Stage-2 memory block (#66).
+
+    Returns ``None`` for an empty window so the prompt simply omits the section.
+    Each line carries the run date and the stated deadline (when present) so the
+    model can both suppress a stale repeat and escalate one whose deadline is now
+    imminent.
+    """
+    if not items:
         return None
-    try:
-        value = json.loads(rolling_context_json).get("last_summary")
-    except (json.JSONDecodeError, AttributeError):
-        return None
-    return value if isinstance(value, str) else None
+    lines = [_RECENT_ALERT_HEADER]
+    for it in items:
+        day = (it["started_at"] or "")[:10]
+        entry = f"- [{day}] {it['summary']}"
+        if it["deadline"]:
+            entry += f" — deadline: {it['deadline']}"
+        lines.append(entry)
+    return "\n".join(lines)
+
+
+def recent_alert_context(
+    conn: sqlite3.Connection,
+    head_id: int,
+    *,
+    since_days: int,
+    now: datetime | None = None,
+    exclude_run_id: int | None = None,
+) -> str | None:
+    """Short-term alert memory for a family's Stage-2 prompt (#66).
+
+    Built fresh from ``analysis_items`` every run rather than the single, easily
+    null-wiped ``rolling_context`` summary, so a noise delta no longer erases the
+    memory of a still-relevant earlier alert.
+    """
+    return format_recent_alerts(
+        store.recent_actionable_items(
+            conn, head_id, since_days=since_days, now=now, exclude_run_id=exclude_run_id
+        )
+    )
 
 
 def advance_family_cursors(
@@ -69,7 +107,9 @@ def advance_family_cursors(
         store.advance_cursor(conn, cid, last.id, last.message_timestamp, rolling)
 
 
-def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> ReviewOutcome:
+def review_monitored_chats(
+    conn: sqlite3.Connection, classifier: Classifier, *, since_days: int = 7
+) -> ReviewOutcome:
     """Review every monitored family's delta and persist results within one run.
 
     Iterates *family heads* (``store.monitored_chats`` already excludes linked
@@ -86,7 +126,9 @@ def review_monitored_chats(conn: sqlite3.Connection, classifier: Classifier) -> 
             continue
 
         outcome.chats_with_delta += 1
-        prior = prior_context(store.get_rolling_context(conn, chat_id))
+        prior = recent_alert_context(
+            conn, chat_id, since_days=since_days, exclude_run_id=run_id
+        )
 
         try:
             raw = classifier.classify(chat["display_name"], delta, prior)

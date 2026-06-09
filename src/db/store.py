@@ -485,12 +485,46 @@ def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
     return True
 
 
-def get_rolling_context(conn: sqlite3.Connection, chat_id: int) -> str | None:
-    row = conn.execute(
-        "SELECT rolling_context_json FROM chat_review_state WHERE chat_id = ?",
-        (chat_id,),
-    ).fetchone()
-    return row["rolling_context_json"] if row else None
+def recent_actionable_items(
+    conn: sqlite3.Connection,
+    head_id: int,
+    *,
+    since_days: int,
+    now: datetime | None = None,
+    exclude_run_id: int | None = None,
+) -> list[sqlite3.Row]:
+    """Actionable items already surfaced for a family within the last ``since_days``.
+
+    The short-term alert memory (#66): every actionable ``analysis_items`` row for
+    the family (head + children, :func:`family_member_ids`), within the window
+    measured from each row's run ``started_at``, ordered oldest-first. ``summary``
+    is required (it's what we'd re-surface). ``exclude_run_id`` drops the
+    in-progress run so a run can never feed itself. The cutoff is compared as a
+    UTC-ISO string, matching :func:`_now`, so lexicographic order is chronological.
+    """
+    members = family_member_ids(conn, head_id)
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=since_days)).isoformat()
+    placeholders = ",".join("?" for _ in members)
+    params: list[object] = [*members, cutoff]
+    exclude_clause = ""
+    if exclude_run_id is not None:
+        exclude_clause = " AND ai.run_id != ?"
+        params.append(exclude_run_id)
+    return list(
+        conn.execute(
+            f"""
+            SELECT ai.summary, ai.priority, ai.deadline, rr.started_at
+            FROM analysis_items ai
+            JOIN review_runs rr ON rr.id = ai.run_id
+            WHERE ai.action_required = 1
+              AND ai.chat_id IN ({placeholders})
+              AND ai.summary IS NOT NULL
+              AND rr.started_at >= ?{exclude_clause}
+            ORDER BY rr.started_at, ai.id
+            """,
+            params,
+        ).fetchall()
+    )
 
 
 def advance_cursor(

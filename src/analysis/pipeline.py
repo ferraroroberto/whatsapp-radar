@@ -36,7 +36,7 @@ from src.analysis.classifier import (
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_roots
-from src.analysis.review import advance_family_cursors, prior_context
+from src.analysis.review import advance_family_cursors, recent_alert_context
 from src.config import Config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
@@ -322,7 +322,9 @@ def scan(
             f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
             f"(keywords: {', '.join(signal.roots) or 'n/a'}) → Stage 2",
         )
-        prior = prior_context(store.get_rolling_context(conn, chat_id))
+        prior = recent_alert_context(
+            conn, chat_id, since_days=config.hub.recent_alert_days, exclude_run_id=run_id
+        )
         co = stage2.classify_traced(chat["display_name"], delta, prior)
         if co.llm_called:
             outcome.stage2_llm_calls += 1

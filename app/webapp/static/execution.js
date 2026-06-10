@@ -234,7 +234,8 @@ function syncRow(s) {
   const delta = document.createElement('span');
   delta.className = 'exec-sync-delta';
   const chatBit = s.chats_added ? ` · +${s.chats_added} chat${s.chats_added > 1 ? 's' : ''}` : '';
-  delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${chatBit}`;
+  const voiceBit = s.voice_notes_added ? ` (${s.voice_notes_added} voice)` : '';
+  delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${voiceBit}${chatBit}`;
   const src = document.createElement('span');
   src.className = 'exec-sync-src muted small';
   src.textContent = s.source;
@@ -413,7 +414,7 @@ function funnelCells(result) {
   if (!result) return null;
   const f = result.funnel || {};
   if (result.kind === 'scan') {
-    return [
+    const cells = [
       { label: 'Synced', value: f.messages_synced },
       { label: 'Monitored', value: f.chats_monitored },
       { label: 'New (Δ)', value: f.chats_with_delta },
@@ -422,6 +423,10 @@ function funnelCells(result) {
       { label: 'Actionable', value: f.actionable },
       { label: 'Notify', value: result.notification_status },
     ];
+    if (f.voice_transcribed) cells.push({ label: 'Transcribed', value: f.voice_transcribed });
+    if (f.voice_failed) cells.push({ label: 'Voice failed', value: f.voice_failed });
+    if (f.voice_skipped_old) cells.push({ label: 'Voice skipped', value: f.voice_skipped_old });
+    return cells;
   }
   if (result.kind === 'process') {
     return [
@@ -432,11 +437,15 @@ function funnelCells(result) {
     ];
   }
   if (result.kind === 'resync') {
-    return [
+    const cells = [
       { label: 'Chats +', value: result.chats_added },
       { label: 'Chats ~', value: result.chats_updated },
       { label: 'Messages +', value: result.messages_added },
     ];
+    if (result.voice_notes_added) {
+      cells.push({ label: 'Voice +', value: result.voice_notes_added });
+    }
+    return cells;
   }
   if (result.kind === 'reprocess') {
     return [

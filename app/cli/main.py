@@ -69,9 +69,10 @@ def _cmd_ingest(conn: sqlite3.Connection, config: Config) -> int:
     for chat in connector.list_chats():
         chat_id = store.upsert_chat(conn, chat)
         new_chats += 1
-        new_messages += store.insert_messages(conn, chat_id, connector.fetch_messages(
+        added, _voice = store.insert_messages(conn, chat_id, connector.fetch_messages(
             chat.source_chat_id
         ))
+        new_messages += added
     connector.stop()
     print(f"Ingested {new_chats} chats, {new_messages} new messages.")
     return 0

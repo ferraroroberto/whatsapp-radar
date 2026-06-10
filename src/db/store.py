@@ -9,13 +9,15 @@ after analysis has been persisted.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.models import ChatRecord, MessageRecord, StoredMessage
 
 _MESSAGE_COLUMNS = (
-    "id, chat_id, source_message_id, message_timestamp, text, sender_label, message_type"
+    "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
+    "message_type, transcription_status"
 )
 
 
@@ -28,6 +30,7 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
         text=row["text"],
         sender_label=row["sender_label"],
         message_type=row["message_type"],
+        transcription_status=row["transcription_status"],
     )
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -46,6 +49,18 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("stage2_llm_calls", "INTEGER NOT NULL DEFAULT 0"),
     ("actionable", "INTEGER NOT NULL DEFAULT 0"),
     ("notification_status", "TEXT"),
+    ("voice_transcribed", "INTEGER NOT NULL DEFAULT 0"),
+    ("voice_failed", "INTEGER NOT NULL DEFAULT 0"),
+    ("voice_skipped_old", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+_MESSAGES_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("transcription_status", "TEXT NOT NULL DEFAULT 'none'"),
+    ("media_path", "TEXT"),
+)
+
+_SYNC_LOG_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("voice_notes_added", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 
@@ -109,6 +124,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_source_key "
         "ON chats(source, source_chat_id)"
     )
+    msg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    for name, declaration in _MESSAGES_ADDED_COLUMNS:
+        if name not in msg_cols:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {name} {declaration}")
     # `analysis_trace.messages_json` (per-message audit record: id/sender/text and
     # the Stage-1 keyword roots each message matched) was added after the initial
     # trace schema (#12). Additive, non-destructive; old rows stay NULL and the
@@ -116,6 +135,44 @@ def _migrate(conn: sqlite3.Connection) -> None:
     trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
+    sync_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sync_log)")}
+    for name, declaration in _SYNC_LOG_ADDED_COLUMNS:
+        if name not in sync_cols:
+            conn.execute(f"ALTER TABLE sync_log ADD COLUMN {name} {declaration}")
+
+
+def _count_new_pending_voice(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> int:
+    """How many voice rows in ``msgs`` would be newly inserted as pending."""
+    candidates = [
+        m.source_message_id
+        for m in msgs
+        if m.message_type == "voice" and _voice_ingest_fields(m)[0] == "pending"
+    ]
+    if not candidates:
+        return 0
+    placeholders = ",".join("?" * len(candidates))
+    existing = {
+        row[0]
+        for row in conn.execute(
+            f"SELECT source_message_id FROM messages WHERE chat_id = ? "
+            f"AND source_message_id IN ({placeholders})",
+            (chat_id, *candidates),
+        )
+    }
+    return sum(1 for sid in candidates if sid not in existing)
+
+
+def _voice_ingest_fields(msg: MessageRecord) -> tuple[str, str | None]:
+    """Derive transcription_status and media_path for ingest."""
+    if msg.message_type != "voice":
+        return "none", None
+    raw = msg.raw or {}
+    media_path = raw.get("media_path")
+    if media_path:
+        return "pending", str(media_path)
+    return "failed", None
 
 
 # --- chats -----------------------------------------------------------------
@@ -297,12 +354,13 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
     """Insert a message idempotently. Returns True if a new row was created."""
     import json
 
+    transcription_status, media_path = _voice_ingest_fields(msg)
     cur = conn.execute(
         """
         INSERT OR IGNORE INTO messages
             (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             text, message_type, transcription_status, media_path, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             chat_id,
@@ -311,6 +369,8 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
             msg.message_timestamp,
             msg.text,
             msg.message_type,
+            transcription_status,
+            media_path,
             json.dumps(msg.raw, ensure_ascii=False) if msg.raw else None,
             _now(),
         ),
@@ -321,50 +381,163 @@ def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -
             "WHERE id = ?",
             (msg.message_timestamp, chat_id),
         )
-    conn.commit()
+        conn.commit()
+    else:
+        reconcile_voice_media(conn, chat_id, [msg])
     return cur.rowcount > 0
 
 
-def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]) -> int:
-    """Bulk-insert messages idempotently in one transaction. Returns rows created.
+def insert_messages(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> tuple[int, int]:
+    """Bulk-insert messages idempotently in one transaction.
 
-    The ingest path can deliver tens of thousands of messages; committing per row
-    (as :func:`insert_message` does for the single-message review path) is far too
-    slow at that scale, so this batches the whole chat into one commit.
+    Returns ``(rows_created, voice_notes_added)`` where ``voice_notes_added`` counts
+    newly inserted voice rows with ``transcription_status='pending'``.
     """
     import json
 
     if not msgs:
-        return 0
+        return 0, 0
+    voice_notes_added = _count_new_pending_voice(conn, chat_id, msgs)
     before = conn.total_changes
+    rows = [
+        (
+            chat_id,
+            m.source_message_id,
+            m.sender_label,
+            m.message_timestamp,
+            m.text,
+            m.message_type,
+            *_voice_ingest_fields(m),
+            json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
+            _now(),
+        )
+        for m in msgs
+    ]
     conn.executemany(
         """
         INSERT OR IGNORE INTO messages
             (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             text, message_type, transcription_status, media_path, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [
-            (
-                chat_id,
-                m.source_message_id,
-                m.sender_label,
-                m.message_timestamp,
-                m.text,
-                m.message_type,
-                json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
-                _now(),
-            )
-            for m in msgs
-        ],
+        rows,
     )
     inserted = conn.total_changes - before
+    reconcile_voice_media(conn, chat_id, msgs)
     conn.execute(
         "UPDATE chats SET last_message_at = MAX(COALESCE(last_message_at, ''), ?) WHERE id = ?",
         (max(m.message_timestamp for m in msgs), chat_id),
     )
     conn.commit()
-    return inserted
+    return inserted, voice_notes_added
+
+
+def reconcile_voice_media(
+    conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]
+) -> int:
+    """Backfill media_path on existing voice rows when the sidecar later delivers audio."""
+    import json
+
+    updated = 0
+    for m in msgs:
+        if m.message_type != "voice":
+            continue
+        raw = m.raw or {}
+        media_path = raw.get("media_path")
+        if not media_path:
+            continue
+        cur = conn.execute(
+            """
+            UPDATE messages SET media_path = ?, transcription_status = 'pending',
+                   raw_json = ?
+            WHERE chat_id = ? AND source_message_id = ?
+              AND message_type = 'voice'
+              AND transcription_status IN ('none', 'failed')
+              AND (media_path IS NULL OR media_path = '')
+            """,
+            (
+                str(media_path),
+                json.dumps(raw, ensure_ascii=False),
+                chat_id,
+                m.source_message_id,
+            ),
+        )
+        updated += cur.rowcount
+    if updated:
+        conn.commit()
+    return updated
+
+
+@dataclass(frozen=True)
+class PendingTranscription:
+    """A voice row awaiting hub transcription."""
+
+    id: int
+    media_path: str
+    raw_json: str | None
+
+
+def skip_old_voice_notes(conn: sqlite3.Connection, window_days: int) -> int:
+    """Mark voice notes outside the transcription window as skipped_old."""
+    cutoff = (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
+    cur = conn.execute(
+        """
+        UPDATE messages SET transcription_status = 'skipped_old'
+        WHERE message_type = 'voice'
+          AND transcription_status NOT IN ('done', 'skipped_old')
+          AND message_timestamp < ?
+        """,
+        (cutoff,),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def list_pending_transcriptions(
+    conn: sqlite3.Connection, window_days: int
+) -> list[PendingTranscription]:
+    """Voice rows with pending status and a media file, within the window."""
+    cutoff = (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT id, media_path, raw_json FROM messages
+        WHERE transcription_status = 'pending'
+          AND media_path IS NOT NULL
+          AND message_timestamp >= ?
+        ORDER BY message_timestamp, id
+        """,
+        (cutoff,),
+    ).fetchall()
+    return [
+        PendingTranscription(int(r["id"]), r["media_path"], r["raw_json"]) for r in rows
+    ]
+
+
+def apply_transcription_done(
+    conn: sqlite3.Connection,
+    message_id: int,
+    transcript: str,
+    raw_json: str,
+) -> None:
+    """Persist a successful transcription and overwrite message text."""
+    conn.execute(
+        """
+        UPDATE messages SET text = ?, transcription_status = 'done', raw_json = ?
+        WHERE id = ?
+        """,
+        (transcript, raw_json, message_id),
+    )
+    conn.commit()
+
+
+def apply_transcription_failed(conn: sqlite3.Connection, message_id: int) -> None:
+    conn.execute(
+        "UPDATE messages SET transcription_status = 'failed' WHERE id = ?",
+        (message_id,),
+    )
+    conn.commit()
 
 
 def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[StoredMessage]:
@@ -577,11 +750,15 @@ def record_run_funnel(
     stage2_llm_calls: int,
     actionable: int,
     notification_status: str,
+    voice_transcribed: int = 0,
+    voice_failed: int = 0,
+    voice_skipped_old: int = 0,
 ) -> None:
     """Persist a run's funnel counters and final notification status."""
     conn.execute(
         "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
-        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ? "
+        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ?, "
+        "voice_transcribed = ?, voice_failed = ?, voice_skipped_old = ? "
         "WHERE id = ?",
         (
             chats_synced,
@@ -591,6 +768,9 @@ def record_run_funnel(
             stage2_llm_calls,
             actionable,
             notification_status,
+            voice_transcribed,
+            voice_failed,
+            voice_skipped_old,
             run_id,
         ),
     )
@@ -926,7 +1106,8 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
         conn.execute(
             "SELECT id, started_at, completed_at, status, mode, params_json, "
             "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
-            "stage1_passed, stage2_llm_calls, actionable, notification_status, error "
+            "stage1_passed, stage2_llm_calls, actionable, notification_status, error, "
+            "voice_transcribed, voice_failed, voice_skipped_old "
             "FROM review_runs ORDER BY id DESC LIMIT ?",
             (max(1, limit),),
         ).fetchall()
@@ -984,6 +1165,7 @@ def record_sync(
     chats_added: int,
     chats_updated: int,
     messages_added: int,
+    voice_notes_added: int = 0,
 ) -> int:
     """Record one sync's delta + the running totals afterwards. Returns its id.
 
@@ -993,13 +1175,15 @@ def record_sync(
     """
     cur = conn.execute(
         "INSERT INTO sync_log (ran_at, source, chats_added, chats_updated, "
-        "messages_added, total_chats, total_messages) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "messages_added, voice_notes_added, total_chats, total_messages) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             _now(),
             source,
             chats_added,
             chats_updated,
             messages_added,
+            voice_notes_added,
             count_chats(conn),
             count_messages(conn),
         ),
@@ -1012,7 +1196,7 @@ def recent_syncs(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]
     """The most recent sync_log rows, newest first."""
     return conn.execute(
         "SELECT id, ran_at, source, chats_added, chats_updated, messages_added, "
-        "total_chats, total_messages FROM sync_log ORDER BY id DESC LIMIT ?",
+        "voice_notes_added, total_chats, total_messages FROM sync_log ORDER BY id DESC LIMIT ?",
         (max(1, limit),),
     ).fetchall()
 

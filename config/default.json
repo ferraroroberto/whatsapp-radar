@@ -11,6 +11,12 @@
     "max_prompt_chars": 24000,
     "recent_alert_days": 7
   },
+  "transcription": {
+    "enabled": true,
+    "window_days": 7,
+    "hub_base_url": "http://127.0.0.1:8090",
+    "model": "whisper-1"
+  },
   "telegram": {
     "bot_token": "",
     "chat_id": ""

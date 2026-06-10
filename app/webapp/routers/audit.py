@@ -71,6 +71,9 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
             "stage1_passed": int(row["stage1_passed"]),
             "stage2_llm_calls": int(row["stage2_llm_calls"]),
             "actionable": int(row["actionable"]),
+            "voice_transcribed": int(row["voice_transcribed"]),
+            "voice_failed": int(row["voice_failed"]),
+            "voice_skipped_old": int(row["voice_skipped_old"]),
         },
     }
 
@@ -115,6 +118,7 @@ async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
                 "chats_added": int(s["chats_added"]),
                 "chats_updated": int(s["chats_updated"]),
                 "messages_added": int(s["messages_added"]),
+                "voice_notes_added": int(s["voice_notes_added"]),
             }
             for s in store.recent_syncs(conn, limit)
             if s["source"] in _MAINTENANCE_SOURCES

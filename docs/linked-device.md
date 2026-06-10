@@ -21,7 +21,8 @@ WhatsApp  ──▶  Node sidecar (Baileys)  ──▶  data/linked_device/*.ndj
 The sidecar appends NDJSON (one JSON object per line) under the ignored `data/linked_device/` directory. Append-only files are crash-safe and need no cross-language locking; duplicates are expected and resolved by last-write-wins on read, then again by storage dedupe.
 
 - `chats.ndjson` — `{ "jid", "name", "type", "ts" }` (`type` is `group` or `dm`), plus *alias* rows `{ "jid", "alias_for", "ts" }` (see JID identity below).
-- `messages.ndjson` — `{ "jid", "msg_id", "ts", "sender", "text", "type", "raw" }`.
+- `messages.ndjson` — `{ "jid", "msg_id", "ts", "sender", "text", "type", "raw" }`. Voice notes (PTT) may also carry top-level `"media_path"` (relative to `data/linked_device/`) when download succeeded; `raw` may include `media_path`, `media_mimetype`, `seconds`, `ptt`, `placeholder_text`, or `media_error`.
+- `media/<msg_id>.ogg` — decrypted PTT voice-note bytes (read-only download via Baileys `downloadMediaMessage`). Idempotent: skipped if the file already exists. **Unofficial-protocol risk:** media re-request can fail or change across Baileys releases; the sidecar degrades gracefully (placeholder text only, optional `media_error` in `raw`).
 - `status.json` — heartbeat `{ "paired", "connected", "last_update", "chats", "messages" }`, rewritten on every event and every 30s. The Python reader treats a `last_update` older than 120s as a dead sidecar.
 
 The Python reader (`connector/linked_device.py`) maps `jid → ChatRecord.source_chat_id` and `msg_id → MessageRecord.source_message_id`, sorts messages by `(ts, msg_id)`, and exposes only read methods.
@@ -46,12 +47,15 @@ This handling is unofficial-protocol behavior and may shift across Baileys relea
 | Reply (quoted message) | `reply` | the reply body (quoted ref kept in `raw`) |
 | Image / video with caption | `image` / `video` | the caption, or `[image]`/`[video]` |
 | Document | `document` | `[document: <filename>]` |
-| Voice note / audio | `voice` | `[voice note]` |
+| Voice note (PTT) | `voice` | `[voice note]` (transcript overwrites in DB after hub transcription) |
+| Non-PTT audio | `voice` | `[voice note]` (no media download in v1) |
 | Edited message | `edited` | the new body (last-write-wins over the original) |
 | Deleted message (revoke) | `deleted` | `[deleted]` |
 | Reactions, poll votes | — | dropped (not actionable content in v1) |
 
-**No media bytes are downloaded** — read-only, privacy-preserving, and unnecessary for text classification. Voice-note transcription (via the hub's whisper endpoint) is a possible follow-up, not part of v1.
+**PTT voice notes:** the sidecar downloads encrypted audio read-only to `media/<msg_id>.ogg` and records `media_path` in the buffer. Non-PTT audio and other media types still store placeholder text only. Transcription (via the hub's Whisper endpoint on `:8090`) runs in Python after sync — see issue #36.
+
+**Other media bytes are not downloaded** — read-only, privacy-preserving, and unnecessary for text classification of images/video/documents.
 
 ## Connector design questions — answers
 

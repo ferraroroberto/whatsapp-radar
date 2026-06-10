@@ -93,6 +93,10 @@
               <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
             <label class="stacked"><span>Hub model</span>
               <input id="cfgHubModel" type="text" class="input-native"></label>
+            <label class="stacked row-check"><input id="cfgTranscriptionEnabled" type="checkbox">
+              <span>Transcribe voice notes (Whisper via local-llm-hub)</span></label>
+            <label class="stacked"><span>Transcription window (days)</span>
+              <input id="cfgTranscriptionWindow" type="number" class="input-native" min="1" max="365"></label>
             <label class="stacked"><span>Telegram bot token</span>
               <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
             <label class="stacked"><span>Telegram chat ID</span>

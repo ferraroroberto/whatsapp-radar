@@ -38,6 +38,8 @@ class ConfigUpdate(BaseModel):
     notifier: str | None = None
     hub_base_url: str | None = None
     hub_model: str | None = None
+    transcription_enabled: bool | None = None
+    transcription_window_days: int | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
 
@@ -64,6 +66,10 @@ async def get_config() -> dict[str, Any]:
             "classifier": cfg.classifier,
             "notifier": cfg.notifier,
             "hub": {"base_url": cfg.hub.base_url, "model": cfg.hub.model},
+            "transcription": {
+                "enabled": cfg.transcription.enabled,
+                "window_days": cfg.transcription.window_days,
+            },
         },
         "telegram": {
             "token": _mask(wcfg.telegram_bot_token),
@@ -87,6 +93,8 @@ async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"invalid classifier {payload.classifier!r}")
     if payload.notifier is not None and payload.notifier not in _VALID_NOTIFIERS:
         raise HTTPException(status_code=400, detail=f"invalid notifier {payload.notifier!r}")
+    if payload.transcription_window_days is not None and payload.transcription_window_days < 1:
+        raise HTTPException(status_code=400, detail="transcription_window_days must be >= 1")
 
     # Safe runtime knobs → config/local.json (gitignored per-host override).
     overrides: dict[str, Any] = {}
@@ -103,6 +111,13 @@ async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
         hub["model"] = payload.hub_model
     if hub:
         overrides["hub"] = hub
+    tx: dict[str, Any] = {}
+    if payload.transcription_enabled is not None:
+        tx["enabled"] = payload.transcription_enabled
+    if payload.transcription_window_days is not None:
+        tx["window_days"] = payload.transcription_window_days
+    if tx:
+        overrides["transcription"] = tx
     if overrides:
         save_local_overrides(overrides)
 

@@ -117,6 +117,8 @@ export const els = {
   cfgNotifier: document.getElementById('cfgNotifier'),
   cfgHubBaseUrl: document.getElementById('cfgHubBaseUrl'),
   cfgHubModel: document.getElementById('cfgHubModel'),
+  cfgTranscriptionEnabled: document.getElementById('cfgTranscriptionEnabled'),
+  cfgTranscriptionWindow: document.getElementById('cfgTranscriptionWindow'),
   cfgTgToken: document.getElementById('cfgTgToken'),
   cfgTgChatId: document.getElementById('cfgTgChatId'),
   cfgNote: document.getElementById('cfgNote'),

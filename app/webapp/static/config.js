@@ -42,6 +42,9 @@ function render(d) {
   fillSelect(els.cfgNotifier, opts.notifier || [], s.notifier);
   els.cfgHubBaseUrl.value = (s.hub && s.hub.base_url) || '';
   els.cfgHubModel.value = (s.hub && s.hub.model) || '';
+  const tx = s.transcription || {};
+  els.cfgTranscriptionEnabled.checked = tx.enabled !== false;
+  els.cfgTranscriptionWindow.value = String(tx.window_days != null ? tx.window_days : 7);
 
   // Token never arrives in clear: placeholder reflects whether one is stored.
   const tg = d.telegram || {};
@@ -63,6 +66,8 @@ async function submit(ev) {
     notifier: els.cfgNotifier.value,
     hub_base_url: els.cfgHubBaseUrl.value.trim(),
     hub_model: els.cfgHubModel.value.trim(),
+    transcription_enabled: els.cfgTranscriptionEnabled.checked,
+    transcription_window_days: Number(els.cfgTranscriptionWindow.value) || 7,
     telegram_chat_id: els.cfgTgChatId.value.trim(),
   };
   // Only send a token when the operator typed a new one (blank = keep stored).

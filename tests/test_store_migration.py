@@ -45,6 +45,22 @@ CREATE TABLE analysis_trace (
 );
 """
 
+_LEGACY_ANALYSIS_ITEMS = """
+CREATE TABLE analysis_items (
+    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id                    INTEGER NOT NULL,
+    chat_id                   INTEGER NOT NULL,
+    action_required           INTEGER NOT NULL,
+    priority                  TEXT,
+    summary                   TEXT,
+    suggested_next_action     TEXT,
+    deadline                  TEXT,
+    confidence                REAL,
+    evidence_message_ids_json TEXT,
+    created_at                TEXT NOT NULL
+);
+"""
+
 _LEGACY_CHATS = """
 CREATE TABLE chats (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,6 +126,39 @@ def test_connect_migrates_analysis_trace_messages_json(tmp_path: Path) -> None:
         # view falls back to the rendered input blob for it).
         row = conn.execute("SELECT messages_json FROM analysis_trace WHERE id = 1").fetchone()
         assert row["messages_json"] is None
+    finally:
+        conn.close()
+
+
+def test_connect_migrates_analysis_items_deadline_date(tmp_path: Path) -> None:
+    """A pre-#71 analysis_items table gains `deadline_date`; old rows stay NULL."""
+    db = tmp_path / "legacy_items.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_ANALYSIS_ITEMS)
+    raw.execute(
+        "INSERT INTO analysis_items (run_id, chat_id, action_required, summary, created_at) "
+        "VALUES (1, 1, 1, 'Pay the fee', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
+        assert "deadline_date" in cols
+        # The pre-existing row survives with a NULL resolved date and accepts a new one.
+        row = conn.execute("SELECT deadline_date FROM analysis_items WHERE id = 1").fetchone()
+        assert row["deadline_date"] is None
+        item_id = store.insert_analysis_item(
+            conn, 1, 1,
+            action_required=True, priority="high", summary="Trip tomorrow",
+            suggested_next_action="Pack", deadline="tomorrow", deadline_date="2026-06-09",
+            confidence=0.9, evidence_message_ids_json="[]",
+        )
+        got = conn.execute(
+            "SELECT deadline_date FROM analysis_items WHERE id = ?", (item_id,)
+        ).fetchone()
+        assert got["deadline_date"] == "2026-06-09"
     finally:
         conn.close()
 

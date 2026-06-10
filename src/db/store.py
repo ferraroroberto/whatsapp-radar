@@ -116,6 +116,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
+    # `analysis_items.deadline_date` (#71): the model-resolved absolute date that
+    # sits beside the free-text `deadline`, letting the digest flag today/overdue
+    # deterministically. Additive, non-destructive; old rows stay NULL.
+    item_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
+    if "deadline_date" not in item_cols:
+        conn.execute("ALTER TABLE analysis_items ADD COLUMN deadline_date TEXT")
 
 
 # --- chats -----------------------------------------------------------------
@@ -630,14 +636,15 @@ def insert_analysis_item(
     deadline: str | None,
     confidence: float | None,
     evidence_message_ids_json: str | None,
+    deadline_date: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
         INSERT INTO analysis_items
             (run_id, chat_id, action_required, priority, summary,
-             suggested_next_action, deadline, confidence,
+             suggested_next_action, deadline, deadline_date, confidence,
              evidence_message_ids_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -647,6 +654,7 @@ def insert_analysis_item(
             summary,
             suggested_next_action,
             deadline,
+            deadline_date,
             confidence,
             evidence_message_ids_json,
             _now(),

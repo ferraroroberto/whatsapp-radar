@@ -340,6 +340,42 @@ def test_trace_captures_prompt_and_raw_response(
     assert any(m["roots"] for m in messages)
 
 
+def test_resolved_deadline_date_round_trips_to_digest(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # A model that resolves a relative date to an absolute one (#71): the
+    # deadline_date must persist on the analysis item and reach the digest item,
+    # so the human sees an absolute date, not a relative word.
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    resolved = json.dumps(
+        {
+            "action_required": True,
+            "priority": "high",
+            "summary": "Bring long trousers — was 'tomorrow' on Jun 8, that is today",
+            "suggested_next_action": "Pack them now",
+            "deadline": "tomorrow",
+            "deadline_date": "2026-06-09",
+            "confidence": 0.95,
+            "evidence_message_ids": ["c4a-0002"],
+        }
+    )
+
+    outcome = scan(
+        ingested_conn, _config(tmp_path), mode="live",
+        connector=FixtureConnector(), classifier=_FakeTraced(resolved),
+    )
+
+    assert outcome.digest is not None
+    item = next(i for i in outcome.digest.items if i.chat == "Class 4A Group")
+    assert item.deadline_date == "2026-06-09"
+    # Persisted on the row, not just carried in memory.
+    row = ingested_conn.execute(
+        "SELECT deadline_date FROM analysis_items WHERE run_id = ? AND chat_id = ?",
+        (outcome.run_id, chat_id),
+    ).fetchone()
+    assert row["deadline_date"] == "2026-06-09"
+
+
 def test_stage1_noise_skips_the_llm(
     ingested_conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

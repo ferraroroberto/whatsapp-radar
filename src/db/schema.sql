@@ -116,7 +116,8 @@ CREATE TABLE IF NOT EXISTS analysis_items (
     priority                  TEXT,
     summary                   TEXT,
     suggested_next_action     TEXT,
-    deadline                  TEXT,
+    deadline                  TEXT,            -- free-text date/time as stated (prose)
+    deadline_date             TEXT,            -- model-resolved absolute date 'YYYY-MM-DD' (#71)
     confidence                REAL,
     evidence_message_ids_json TEXT,
     created_at                TEXT NOT NULL

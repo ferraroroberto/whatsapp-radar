@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from src.analysis.keywords import has_actionable_signal
@@ -58,6 +59,26 @@ _ACTION_KEYWORDS = (
 _HIGH_PRIORITY_KEYWORDS = ("urgent", "today", "asap", "immediately", "now")
 
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _format_clock(iso_or_now: str | datetime) -> str:
+    """Render a timestamp as ``YYYY-MM-DD Ddd HH:MM`` for the LLM date anchor (#71).
+
+    A compact, locale-stable form carrying the weekday so the model can resolve
+    relative words ("this Friday", "tomorrow") against it. ISO strings are parsed
+    and converted to local time so a message's send time and the run's "now" anchor
+    sit in the same frame; an unparseable string is returned verbatim rather than
+    dropped, so the model still sees *something* and the prompt never crashes.
+    """
+    if isinstance(iso_or_now, datetime):
+        dt = iso_or_now
+    else:
+        try:
+            parsed = datetime.fromisoformat(iso_or_now)
+        except ValueError:
+            return iso_or_now
+        dt = parsed.astimezone() if parsed.tzinfo is not None else parsed
+    return dt.strftime("%Y-%m-%d %a %H:%M")
 
 
 def _extract_json_object(text: str) -> str:
@@ -193,18 +214,33 @@ class HubClassifier:
         self._hub = hub
 
     def _build_user_prompt(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        now: datetime | None = None,
     ) -> str:
-        header = [f"Chat: {chat_display_name}"]
+        # The "now" anchor (#71): the scan time the model resolves relative dates
+        # *to*. Injectable so tests are deterministic; defaults to the real clock.
+        anchor = _format_clock(now if now is not None else datetime.now().astimezone())
+        header = [
+            f"Chat: {chat_display_name}",
+            f"Current time (this scan runs now): {anchor}",
+        ]
         if prior_context:
             # A self-describing block (the recent-alert memory, #66) — appended
             # verbatim rather than inline-labelled so its own heading carries the
             # "don't repeat unless new/escalated" instruction to the model.
             header.append(prior_context)
-        header.append("New messages:")
+        header.append("New messages (each line is prefixed with its send time):")
 
+        # Each line carries the message's send time so the model can anchor any
+        # relative date word ("tomorrow") to *when that message was sent*, not to
+        # the scan time — a stale message's "tomorrow" may already be today (#71).
         formatted = [
-            f"- [{msg.source_message_id}] {msg.sender_label or 'unknown'}: {msg.text or ''}"
+            f"- [{msg.source_message_id}] {_format_clock(msg.message_timestamp)} "
+            f"{msg.sender_label or 'unknown'}: {msg.text or ''}"
             for msg in delta
         ]
         # Cap the delta so a whole-history scan can't build a single prompt that

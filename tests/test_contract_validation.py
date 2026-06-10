@@ -32,6 +32,22 @@ def test_minimal_payload_parses() -> None:
     result = parse_analysis(json.dumps({"action_required": False}))
     assert result.action_required is False
     assert result.evidence_message_ids == []
+    assert result.deadline_date is None
+
+
+def test_resolved_deadline_date_parses() -> None:
+    result = parse_analysis(
+        json.dumps(
+            {
+                "action_required": True,
+                "deadline": "tomorrow",
+                "deadline_date": "2026-06-09",
+                "evidence_message_ids": ["c4a-0002"],
+            }
+        )
+    )
+    assert result.deadline == "tomorrow"
+    assert result.deadline_date == "2026-06-09"
 
 
 @pytest.mark.parametrize(
@@ -46,6 +62,7 @@ def test_minimal_payload_parses() -> None:
         json.dumps({"action_required": True, "evidence_message_ids": "sp-0002"}),  # not a list
         json.dumps({"action_required": True, "evidence_message_ids": [1, 2]}),  # non-string ids
         json.dumps({"action_required": True, "summary": 5}),  # wrong type
+        json.dumps({"action_required": True, "deadline_date": 20260609}),  # wrong type
     ],
 )
 def test_invalid_payloads_raise(payload: str) -> None:

@@ -92,6 +92,13 @@ Run the gate from the repo root with the project venv:
 
 The suite runs entirely offline against sanitized fixtures (no WhatsApp credentials, no network, no Telegram). Do not claim tests pass without running them.
 
+## CI expectations
+
+- Workflow `.github/workflows/e2e.yml`, job `verify-before-ship`, on every PR. **Advisory, not required** (no branch protection) — the local gate (`pytest` / `ruff` / `mypy`) is the contract.
+- Typical green: **~2 min**. Investigate at **>5 min**; treat as wedged at **>8 min**.
+- Flaky leg: the Playwright **WebKit/iPhone** e2e projection can wedge the browser on the hosted runner. `timeout-minutes: 30` caps a wedge. A wedge is a flake, not the diff.
+- CI's only signal beyond the local gate is the **e2e suite** (skipped locally — `pytest` shows ~13 skipped). Its e2e surface = `app/webapp/`, `app/tray/`, `tests/e2e/`, static assets under `app/webapp/static/`. A diff touching **none** of these (e.g. `src/db/`, `src/analysis/`, `src/notify/`, docs) gains nothing from CI.
+
 ## Planning Discipline
 
 Future work belongs in GitHub issues, not dated planning files. Durable reference material may live under `docs/` when it will still be useful next quarter.

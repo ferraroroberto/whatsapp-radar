@@ -365,6 +365,7 @@ def scan(
             summary=result.summary,
             suggested_next_action=result.suggested_next_action,
             deadline=result.deadline,
+            deadline_date=result.deadline_date,
             confidence=result.confidence,
             evidence_message_ids_json=json.dumps(result.evidence_message_ids),
         )
@@ -381,6 +382,7 @@ def scan(
                     summary=result.summary,
                     suggested_next_action=result.suggested_next_action,
                     deadline=result.deadline,
+                    deadline_date=result.deadline_date,
                     confidence=result.confidence,
                     evidence_message_ids=result.evidence_message_ids,
                 )

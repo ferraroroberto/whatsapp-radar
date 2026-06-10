@@ -27,6 +27,11 @@ class AnalysisResult:
     deadline: str | None
     confidence: float | None
     evidence_message_ids: list[str]
+    # The relative date the model resolved to an absolute ``YYYY-MM-DD`` (#71), or
+    # null when no date applies. Lets the digest flag today/overdue deterministically
+    # instead of re-interpreting a relative word ("tomorrow") at reading time. The
+    # free-text ``deadline`` above stays for prose; this is the machine-readable form.
+    deadline_date: str | None = None
 
 
 def _require(condition: bool, message: str) -> None:
@@ -78,10 +83,14 @@ def parse_analysis(payload: str | dict[str, object]) -> AnalysisResult:
         "'evidence_message_ids' must contain only strings",
     )
 
-    for key in ("summary", "suggested_next_action", "deadline"):
+    for key in ("summary", "suggested_next_action", "deadline", "deadline_date"):
         value = data.get(key)
         _require(value is None or isinstance(value, str), f"'{key}' must be a string or null")
 
+    # ``deadline_date`` is validated for *type* only here, not strict ISO parseability:
+    # an auxiliary, model-resolved date must never fail the whole contract (which would
+    # stall the cursor and retry the delta forever) just because the model emitted a
+    # slightly off string. The digest parses it defensively when flagging today/overdue.
     return AnalysisResult(
         action_required=action_required,
         priority=priority,
@@ -90,4 +99,5 @@ def parse_analysis(payload: str | dict[str, object]) -> AnalysisResult:
         deadline=data.get("deadline"),
         confidence=confidence,
         evidence_message_ids=list(evidence),
+        deadline_date=data.get("deadline_date"),
     )

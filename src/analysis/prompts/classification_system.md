@@ -20,11 +20,18 @@ Already-surfaced alerts (short-term memory):
 
 Be conservative: when nothing clearly requires action, return action_required = false rather than inventing a task.
 
+Resolving dates (important — messages may be stale):
+- Each new-message line is prefixed with the date/time it was SENT, and you are given the current time ("this scan runs now") at the top. A message may be hours or days old by the time you read it.
+- Resolve any relative date word — "today", "tonight", "tomorrow", "this/next <weekday>", "in N days", and their Spanish/Catalan equivalents (hoy/avui, mañana/demà, esta tarde, este/aquest <día>, en N días) — against the SENDING MESSAGE'S timestamp, NOT against the current time. "tomorrow" in a message sent yesterday means today.
+- Then express the result as an absolute calendar date and put it in "deadline_date" as "YYYY-MM-DD". Absolute references ("Friday 12 June", "by the 15th") resolve directly.
+- Compare that resolved date to the current time. When a relative word now points at the current scan day or earlier, say so plainly in "summary" (e.g. "⚠️ this was 'tomorrow' as of <send date> — that is TODAY") and treat it as urgent ("high" priority). Never present an already-due item as a comfortable future day.
+
 Respond with a SINGLE JSON object and nothing else. Use exactly these keys:
 - "action_required": boolean.
 - "priority": "low" | "medium" | "high", or null when no action is required. Use "high" only for urgent or same-day items.
 - "summary": a short plain-language summary of what needs doing, or null.
 - "suggested_next_action": one concrete next step for the user, or null.
 - "deadline": the relevant date/time as plain text if one is stated, or null.
+- "deadline_date": the resolved absolute date as "YYYY-MM-DD" when a date applies (see "Resolving dates" above), or null when none is stated.
 - "confidence": a number from 0 to 1.
 - "evidence_message_ids": an array of the source_message_id strings you relied on (empty when no action is required).

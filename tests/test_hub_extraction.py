@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from src.analysis.classifier import HubClassifier, _extract_json_object
 from src.analysis.contract import parse_analysis
@@ -10,12 +11,12 @@ from src.config import HubConfig
 from src.models import StoredMessage
 
 
-def _msg(i: int, text: str) -> StoredMessage:
+def _msg(i: int, text: str, *, ts: str = "2026-01-01T00:00:00+00:00") -> StoredMessage:
     return StoredMessage(
         id=i,
         chat_id=1,
         source_message_id=f"m{i}",
-        message_timestamp="2026-01-01T00:00:00+00:00",
+        message_timestamp=ts,
         text=text,
         sender_label="Parent",
         message_type="text",
@@ -82,3 +83,37 @@ def test_single_message_larger_than_budget_is_truncated() -> None:
     hub = _hub(200)
     prompt = hub._build_user_prompt("One", [_msg(1, "y" * 5000)], None)
     assert len(prompt) <= 200 + 200  # header slack; the lone message is truncated
+
+
+# --- date anchoring (#71) --------------------------------------------------
+
+def test_prompt_carries_send_time_and_now_anchor() -> None:
+    hub = _hub(24000)
+    prompt = hub._build_user_prompt(
+        "Class 4A",
+        [_msg(1, "tomorrow bring long trousers", ts="2026-06-08T18:00:00+02:00")],
+        None,
+        now=datetime.fromisoformat("2026-06-09T19:30:00+02:00"),
+    )
+    # The "now" anchor and the message's own send date both appear, so the model
+    # can resolve "tomorrow" against the send time rather than reading time.
+    assert "Current time (this scan runs now): 2026-06-09" in prompt
+    assert "2026-06-08" in prompt  # the message's send date is on its line
+
+
+def test_relative_date_in_stale_message_is_anchorable_from_prompt() -> None:
+    # The 2026-06-09 miss reproduced at the prompt layer: a message sent on D-1
+    # saying "tomorrow", scanned on D. The prompt must give the model both dates
+    # so it can compute that "tomorrow" is the scan day, not D+1.
+    hub = _hub(24000)
+    prompt = hub._build_user_prompt(
+        "Class 4A",
+        [_msg(1, "mañana traer pantalón largo — excursión", ts="2026-06-08T20:00:00+02:00")],
+        None,
+        now=datetime.fromisoformat("2026-06-09T08:00:00+02:00"),
+    )
+    lines = prompt.splitlines()
+    anchor_line = next(line for line in lines if line.startswith("Current time"))
+    msg_line = next(line for line in lines if "[m1]" in line)
+    assert "2026-06-09" in anchor_line  # now = D
+    assert "2026-06-08" in msg_line  # message sent D-1, so its "tomorrow" == D

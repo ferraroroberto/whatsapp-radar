@@ -9,6 +9,7 @@ relaunch-then-poll loop are asserted with a fake clock so there is no real wait.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -177,3 +178,177 @@ def test_ensure_running_gives_up_when_qr_needed(tmp_path: Path) -> None:
     )
     assert info.state == sidecar.STATE_NEEDS_QR
     assert not info.is_live
+
+
+# --- supervise_once: the keep-alive decision (#73) -------------------------
+
+def test_supervise_once_noop_when_live(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    _write_status(buffer_dir, paired=True, connected=True, last_update=_fresh())
+
+    def spawner(*a: Any, **k: Any) -> _FakeProc:
+        raise AssertionError("must not relaunch a live sidecar")
+
+    res = sidecar.supervise_once(
+        buffer_dir, sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=spawner
+    )
+    assert res["action"] == sidecar.ACTION_LIVE
+
+
+def test_supervise_once_relaunches_when_stale(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    _write_status(buffer_dir, paired=True, connected=True, last_update=_old())
+    called = False
+
+    def spawner(*a: Any, **k: Any) -> _FakeProc:
+        nonlocal called
+        called = True
+        return _FakeProc()
+
+    res = sidecar.supervise_once(
+        buffer_dir, sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=spawner
+    )
+    assert res["action"] == sidecar.ACTION_RELAUNCHED
+    assert called is True
+
+
+def test_supervise_once_relaunches_when_stopped(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"  # no status.json at all → stopped
+    called = False
+
+    def spawner(*a: Any, **k: Any) -> _FakeProc:
+        nonlocal called
+        called = True
+        return _FakeProc()
+
+    res = sidecar.supervise_once(
+        buffer_dir, sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=spawner
+    )
+    assert res["action"] == sidecar.ACTION_RELAUNCHED
+    assert called is True
+
+
+def test_supervise_once_refuses_to_spawn_when_needs_qr(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    _write_status(buffer_dir, paired=False, connected=False, last_update=_fresh())
+
+    def spawner(*a: Any, **k: Any) -> _FakeProc:
+        raise AssertionError("relaunching cannot help an unpaired session")
+
+    res = sidecar.supervise_once(
+        buffer_dir, sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=spawner
+    )
+    assert res["action"] == sidecar.ACTION_NEEDS_QR
+
+
+def test_supervise_once_leaves_a_linking_session_alone(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    _write_status(buffer_dir, paired=True, connected=False, last_update=_fresh())
+
+    def spawner(*a: Any, **k: Any) -> _FakeProc:
+        raise AssertionError("a fresh, linking session is making progress")
+
+    res = sidecar.supervise_once(
+        buffer_dir, sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=spawner
+    )
+    assert res["action"] == sidecar.ACTION_LINKING
+
+
+def test_supervise_once_reports_launch_failure_without_raising(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"  # stopped
+    # Deps missing → launch_sidecar raises SidecarLaunchError, which the supervisor
+    # swallows into the detail so the loop survives to retry.
+    res = sidecar.supervise_once(
+        buffer_dir,
+        sidecar_root=_sidecar_root(tmp_path, with_deps=False),
+        spawner=lambda *a, **k: _FakeProc(),
+    )
+    assert res["action"] == sidecar.ACTION_RELAUNCHED
+    assert "launch failed" in res["detail"]
+
+
+# --- run_supervisor: the loop ----------------------------------------------
+
+def test_run_supervisor_ticks_then_stops(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    _write_status(buffer_dir, paired=True, connected=True, last_update=_fresh())
+    stop = threading.Event()
+    ticks: list[str] = []
+
+    def on_tick(result: dict[str, Any]) -> None:
+        ticks.append(str(result["action"]))
+        if len(ticks) >= 3:
+            stop.set()  # end the loop after three checks
+
+    # Each wait is a no-op that returns False (not stopped) so the loop proceeds;
+    # the stop is driven by on_tick instead, so there is no real sleeping.
+    sidecar.run_supervisor(
+        buffer_dir, stop, interval=0.0,
+        sidecar_root=_sidecar_root(tmp_path, with_deps=True),
+        spawner=lambda *a, **k: _FakeProc(), on_tick=on_tick,
+    )
+    assert ticks == [sidecar.ACTION_LIVE, sidecar.ACTION_LIVE, sidecar.ACTION_LIVE]
+
+
+def test_run_supervisor_exits_immediately_when_already_stopped(tmp_path: Path) -> None:
+    buffer_dir = tmp_path / "buf"
+    stop = threading.Event()
+    stop.set()
+    calls = 0
+
+    def on_tick(_result: dict[str, Any]) -> None:
+        nonlocal calls
+        calls += 1
+
+    sidecar.run_supervisor(buffer_dir, stop, interval=0.0, on_tick=on_tick)
+    assert calls == 0  # a pre-set stop means no tick runs
+
+
+# --- wait_for_settled: the buffer quiescence gate (#73) --------------------
+
+def _append(buffer_dir: Path, name: str, line: str) -> None:
+    buffer_dir.mkdir(parents=True, exist_ok=True)
+    with (buffer_dir / name).open("a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
+def test_wait_for_settled_disabled_returns_immediately(tmp_path: Path) -> None:
+    def clock() -> float:
+        raise AssertionError("must not consult the clock when disabled")
+
+    assert sidecar.wait_for_settled(
+        tmp_path, settle_seconds=0, timeout_seconds=90, clock=clock
+    ) is True
+
+
+def test_wait_for_settled_returns_true_once_quiet(tmp_path: Path) -> None:
+    # The buffer grows on the first two polls, then goes quiet long enough to settle.
+    _append(tmp_path, "messages.ndjson", "a")
+    times = iter([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+
+    grew = {"polls": 0}
+
+    def sleep(_s: float) -> None:
+        grew["polls"] += 1
+        if grew["polls"] <= 2:
+            _append(tmp_path, "messages.ndjson", "more")
+
+    settled = sidecar.wait_for_settled(
+        tmp_path, settle_seconds=2.0, timeout_seconds=100.0,
+        poll_interval=1.0, sleep=sleep, clock=lambda: next(times),
+    )
+    assert settled is True
+
+
+def test_wait_for_settled_times_out_while_growing(tmp_path: Path) -> None:
+    # The buffer never stops growing → the hard cap fires and we proceed anyway.
+    times = iter([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def sleep(_s: float) -> None:
+        _append(tmp_path, "messages.ndjson", "x")
+
+    settled = sidecar.wait_for_settled(
+        tmp_path, settle_seconds=2.0, timeout_seconds=3.0,
+        poll_interval=1.0, sleep=sleep, clock=lambda: next(times),
+    )
+    assert settled is False

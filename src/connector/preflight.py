@@ -20,7 +20,7 @@ from collections.abc import Callable
 
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
-from src.connector.sidecar import ensure_running
+from src.connector.sidecar import ensure_running, wait_for_settled
 
 Progress = Callable[[str], None]
 
@@ -63,9 +63,16 @@ def preflight(
     the linked-device connector) ``sidecar_autostart`` is enabled, it relaunches
     the sidecar once and re-checks; a session that still can't connect (e.g. it
     needs a fresh QR) raises :class:`ConnectorOffline`.
+
+    Before returning a live linked-device status it also waits for the buffer to
+    *settle* (#73): a (re)connect streams history in asynchronously, so reading
+    immediately would under-report — and a live scan advances cursors over what it
+    read, permanently skipping the un-synced tail. The gate is a fast no-op once
+    the buffer is quiet (the steady state with the tray keep-alive running).
     """
     status = connector.connect()
     if status.connected:
+        _settle(config, progress)
         return status
 
     if config.connector == "linked_device" and config.sidecar_autostart:
@@ -74,7 +81,29 @@ def preflight(
         status = connector.connect()
         if status.connected:
             _emit(progress, "✓ sidecar back online")
+            _settle(config, progress)
             return status
         _emit(progress, f"✗ sidecar still offline ({info.state}: {info.detail})")
 
     raise ConnectorOffline(status)
+
+
+def _settle(config: Config, progress: Progress | None) -> None:
+    """Wait for the linked-device buffer to stop growing before it is read.
+
+    Only the linked-device connector has a streaming buffer; every other connector
+    (the fixture) loads synchronously and needs no gate. A non-positive
+    ``sync_settle_seconds`` disables it entirely.
+    """
+    if config.connector != "linked_device" or config.sync_settle_seconds <= 0:
+        return
+    _emit(progress, "• waiting for the message buffer to settle…")
+    settled = wait_for_settled(
+        config.linked_device_dir,
+        settle_seconds=config.sync_settle_seconds,
+        timeout_seconds=config.sync_settle_timeout,
+    )
+    if settled:
+        _emit(progress, "✓ buffer settled — reading")
+    else:
+        _emit(progress, "• buffer still active after settle timeout — reading anyway")

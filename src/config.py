@@ -57,6 +57,12 @@ class Config:
     # it automatically if it has stopped (issue #29). Off skips the self-heal and
     # simply aborts the run loudly when the source is offline.
     sidecar_autostart: bool = True
+    # Settled-buffer gate (#73): before a cursor-advancing scan reads the buffer,
+    # wait until it has stopped growing for ``sync_settle_seconds`` (history
+    # backfill done), hard-capped at ``sync_settle_timeout``. ``0`` disables the
+    # gate. Linked-device only; the fixture has no streaming buffer.
+    sync_settle_seconds: float = 12.0
+    sync_settle_timeout: float = 90.0
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -149,6 +155,12 @@ def load_config(root: Path | None = None) -> Config:
     sidecar_autostart = _as_bool(
         os.environ.get("WR_SIDECAR_AUTOSTART"), merged.get("sidecar_autostart", True)
     )
+    sync_settle_seconds = float(
+        os.environ.get("WR_SYNC_SETTLE_SECONDS", merged.get("sync_settle_seconds", 12.0))
+    )
+    sync_settle_timeout = float(
+        os.environ.get("WR_SYNC_SETTLE_TIMEOUT", merged.get("sync_settle_timeout", 90.0))
+    )
     hub = HubConfig(
         base_url=os.environ.get(
             "WR_HUB_BASE_URL", hub_raw.get("base_url", "http://127.0.0.1:8000")
@@ -192,4 +204,6 @@ def load_config(root: Path | None = None) -> Config:
         telegram=telegram,
         linked_device_dir=resolved_buffer,
         sidecar_autostart=sidecar_autostart,
+        sync_settle_seconds=sync_settle_seconds,
+        sync_settle_timeout=sync_settle_timeout,
     )

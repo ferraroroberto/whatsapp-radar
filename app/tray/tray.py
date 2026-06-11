@@ -35,6 +35,8 @@ import yaml
 
 from app.tray.single_instance import SingleInstance
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
+from src.config import load_config
+from src.connector import sidecar
 from src.webapp_config import append_auth_token, load_webapp_config
 
 logger = logging.getLogger(__name__)
@@ -170,6 +172,7 @@ def run_tray() -> int:
         return 0
 
     wcfg = load_webapp_config()
+    cfg = load_config()
     manager = WebappManager(
         WebappManagerConfig(enabled=wcfg.enabled, host=wcfg.host, port=wcfg.port)
     )
@@ -254,6 +257,37 @@ def run_tray() -> int:
     if tunnel_hostname is not None:
         threading.Thread(target=_start_tunnel, daemon=True).start()
 
+    # Keep-alive supervisor (#73): while the tray is open, keep the read-only
+    # WhatsApp sidecar running so the buffer stays warm and a scan never reads a
+    # cold/half-loaded source. Linked-device only (the fixture has no process),
+    # and gated on the same self-heal flag as the scan preflight.
+    supervisor_stop = threading.Event()
+    last_supervisor_state: dict[str, str | None] = {"state": None}
+
+    def _on_supervise(result: dict[str, object]) -> None:
+        state = str(result.get("state"))
+        action = str(result.get("action"))
+        # Toast only on the *transition* into needs_qr — a human must re-pair, and
+        # relaunching can't help, so nag once rather than every 90 s tick.
+        if action == sidecar.ACTION_NEEDS_QR and last_supervisor_state["state"] != state:
+            _notify(
+                "WhatsApp Radar: re-pair needed",
+                "The linked device was logged out — open the webapp to scan a new QR.",
+            )
+        last_supervisor_state["state"] = state
+
+    def _run_supervisor() -> None:
+        try:
+            sidecar.run_supervisor(
+                cfg.linked_device_dir, supervisor_stop, on_tick=_on_supervise
+            )
+        except Exception as exc:  # noqa: BLE001 — a supervisor crash must not kill the tray
+            logger.error(f"❌ sidecar supervisor stopped: {exc}")
+
+    if cfg.connector == "linked_device" and cfg.sidecar_autostart:
+        logger.info("🩺 sidecar keep-alive supervisor starting")
+        threading.Thread(target=_run_supervisor, daemon=True).start()
+
     def copy_local(icon: object, item: object) -> None:
         url = append_auth_token(manager.base_url, load_webapp_config().auth_token)
         _notify("Copied local URL" if _clipboard_copy(url) else "Local URL", url)
@@ -322,6 +356,7 @@ def run_tray() -> int:
 
     def quit_app(icon: object, item: object) -> None:
         logger.info("👋 Tray quit requested")
+        supervisor_stop.set()
         _stop_tunnel()
         try:
             manager.stop()

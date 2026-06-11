@@ -44,6 +44,8 @@ Live `scan` advances each chat's cursor only **after** that chat's analysis and 
 
 A live `scan` / `resync` **preflights the source**: if the sidecar's heartbeat is stale it first tries to relaunch the sidecar (when the device is still paired) and re-checks; set `WR_SIDECAR_AUTOSTART=0` to disable the self-heal. If the source still isn't live it **aborts loudly** — exits non-zero, records the run failed, advances no cursor, and fires an alert — so a scheduled job against a dead sidecar can never report green while checking nothing.
 
+A live `scan` then waits for the **buffer to settle** before it reads: a freshly (re)connected sidecar streams history in asynchronously, so reading mid-stream would under-report — and because a live scan advances cursors over what it read, the un-synced tail would be skipped for good. The gate waits until the buffer stops growing for `WR_SYNC_SETTLE_SECONDS` (default 12), hard-capped at `WR_SYNC_SETTLE_TIMEOUT` (default 90, then it reads anyway); set `WR_SYNC_SETTLE_SECONDS=0` to disable. With the tray keep-alive (below) holding the buffer warm this is a near-instant no-op — it only does real waiting right after a reconnect. `resync` skips the gate by design: it is idempotent and never advances a cursor, so a mid-backfill resync simply finishes on the next run. **Net effect: one `scan` whenever you like is enough — no pre-warming syncs, never a stale or half-loaded read.**
+
 `review` remains for analyzing an already-ingested buffer without a sync; `notify` re-delivers if a send failed (the analysis and cursors are already saved):
 
 ```powershell
@@ -68,7 +70,7 @@ The hub call pins `temperature=0` so identical messages classify identically. Us
 
 ## Routine operation
 
-- Keep the **sidecar running** — it captures live messages and history. App Launcher supervises it; see [`bootstrapping.md`](bootstrapping.md) Step 7.
+- Keep the **sidecar running** — it captures live messages and history. While the **tray** is open it keeps itself alive: a keep-alive supervisor re-checks the sidecar every `WR_SIDECAR_SUPERVISE_SECONDS` (default 90) and relaunches it if the process died (never killing a live one; on a phone-side logout it toasts you to re-pair rather than crash-looping). So the buffer stays warm continuously and a scan reads an already-current source. App Launcher can also supervise it headlessly; see [`bootstrapping.md`](bootstrapping.md) Step 7.
 - The scheduled **`wr scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace.
 - For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): the Execution tab runs the pipeline live with a connection-health dot and one-tap reconnect/re-pair; the Audit tab is the read-only trust surface over every run's trace.
 - Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from the Execution tab).

@@ -15,9 +15,8 @@ Routes (split across ``app/webapp/routers/``):
     /api/execution/*            → run pipeline pieces + run log   (execution)
     /api/sidecar/*              → WhatsApp connection state/QR    (sidecar)
 
-Dashboard (#9), Chats & Config (#10) and Execution (#11) are live; Audit is
-still an empty shell that Step 7 (#12) fills. The sidecar routes (#29) back the
-Execution health pill's relaunch / re-pair affordances.
+All four tabs are live. Routers under ``app/webapp/routers/``. The sidecar
+routes back the Execution health pill's relaunch / re-pair affordances.
 """
 
 from __future__ import annotations

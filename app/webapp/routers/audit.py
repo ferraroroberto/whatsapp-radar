@@ -18,12 +18,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src.config import load_config
+from app.webapp.routers._helpers import db_path
 from src.db import store
 
 router = APIRouter()
@@ -32,12 +31,6 @@ router = APIRouter()
 # Surfaced in the audit timeline so resync/reprocess are visible alongside runs;
 # 'scan'-sourced syncs are omitted because scans already appear as review_runs.
 _MAINTENANCE_SOURCES = {"resync", "reprocess"}
-
-
-def _db_path(request: Request) -> Path:
-    # Tests/e2e inject a fixture DB via app.state.db_path; fall back to config.
-    path = getattr(request.app.state, "db_path", None)
-    return Path(path) if path is not None else load_config().db_path
 
 
 def _loads(value: Any) -> Any:
@@ -105,7 +98,7 @@ async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
     timeline (read-only, no schema beyond the existing sync_log).
     """
     limit = max(1, min(limit, 200))
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         runs = [_run_list_row(r) for r in store.list_review_runs(conn, limit)]
         syncs = [
@@ -127,7 +120,7 @@ async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
 @router.get("/api/audit/runs/{run_id}")
 async def get_run(request: Request, run_id: int) -> dict[str, Any]:
     """One run's header + funnel and its per-chat audit trace (the drill-down)."""
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         run = store.review_run(conn, run_id)
         if run is None:

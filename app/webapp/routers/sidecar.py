@@ -15,22 +15,15 @@ not a WhatsApp write.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from src.config import load_config
+from app.webapp.routers._helpers import buffer_dir
 from src.connector import sidecar
 
 router = APIRouter()
-
-
-def _buffer_dir(request: Request) -> Path:
-    # Tests/e2e inject the buffer dir via app.state; fall back to config.
-    path = getattr(request.app.state, "linked_device_dir", None)
-    return Path(path) if path is not None else load_config().linked_device_dir
 
 
 @router.get("/api/sidecar/status")
@@ -39,7 +32,7 @@ async def sidecar_status(request: Request) -> dict[str, Any]:
 
     Never raises: a missing/stale sidecar is itself a valid state the UI renders.
     """
-    return sidecar.sidecar_state(_buffer_dir(request)).to_dict()
+    return sidecar.sidecar_state(buffer_dir(request)).to_dict()
 
 
 @router.post("/api/sidecar/start")
@@ -51,19 +44,19 @@ async def start_sidecar(request: Request) -> dict[str, Any]:
     session links. A missing Node runtime / uninstalled deps surface as 503 with
     an actionable message rather than a generic 500.
     """
-    buffer_dir = _buffer_dir(request)
+    buf_dir = buffer_dir(request)
     try:
-        result = sidecar.launch_sidecar(buffer_dir)
+        result = sidecar.launch_sidecar(buf_dir)
     except sidecar.SidecarLaunchError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    result["state"] = sidecar.sidecar_state(buffer_dir).to_dict()
+    result["state"] = sidecar.sidecar_state(buf_dir).to_dict()
     return result
 
 
 @router.get("/api/sidecar/qr")
 async def sidecar_qr(request: Request) -> FileResponse:
     """Serve the current pairing QR PNG (no-cache), or 404 when none is pending."""
-    qr_path = _buffer_dir(request) / "qr.png"
+    qr_path = buffer_dir(request) / "qr.png"
     if not qr_path.is_file():
         raise HTTPException(status_code=404, detail="no pairing QR available")
     return FileResponse(

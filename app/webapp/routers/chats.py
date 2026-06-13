@@ -8,13 +8,12 @@ the first review classifies only *new* messages, never months of backlog.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from src.config import load_config
+from app.webapp.routers._helpers import db_path
 from src.db import store
 
 router = APIRouter()
@@ -22,12 +21,6 @@ router = APIRouter()
 _VALID_STATUSES = {"discovered", "monitored", "ignored"}
 _HISTORY_MAX = 200
 _ALIAS_MAX = 100
-
-
-def _db_path(request: Request) -> Path:
-    # Tests/e2e inject a fixture DB via app.state.db_path; fall back to config.
-    path = getattr(request.app.state, "db_path", None)
-    return Path(path) if path is not None else load_config().db_path
 
 
 class StatusUpdate(BaseModel):
@@ -46,7 +39,7 @@ class LinkUpdate(BaseModel):
 
 @router.get("/api/chats")
 async def list_chats(request: Request) -> dict[str, Any]:
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         rows = store.chats_overview(conn)
         return {
@@ -82,7 +75,7 @@ async def chat_history(
     before_id: int | None = None,
 ) -> dict[str, Any]:
     limit = max(1, min(limit, _HISTORY_MAX))
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         chat = store.get_chat(conn, chat_id)
         if chat is None:
@@ -130,7 +123,7 @@ async def set_status(request: Request, chat_id: int, payload: StatusUpdate) -> d
             status_code=400,
             detail=f"invalid status {payload.status!r} (expected one of {sorted(_VALID_STATUSES)})",
         )
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         if store.get_chat(conn, chat_id) is None:
             raise HTTPException(status_code=404, detail="chat not found")
@@ -148,7 +141,7 @@ async def set_status(request: Request, chat_id: int, payload: StatusUpdate) -> d
 @router.post("/api/chats/{chat_id}/alias")
 async def set_alias(request: Request, chat_id: int, payload: AliasUpdate) -> dict[str, Any]:
     cleaned = (payload.alias or "").strip()[:_ALIAS_MAX] or None
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         if store.get_chat(conn, chat_id) is None:
             raise HTTPException(status_code=404, detail="chat not found")
@@ -166,7 +159,7 @@ async def link_chat(request: Request, chat_id: int, payload: LinkUpdate) -> dict
     if the link would break the depth-1 rules (self-link, linking under a child,
     or linking a chat that already has children).
     """
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         if store.get_chat(conn, chat_id) is None:
             raise HTTPException(status_code=404, detail="chat not found")
@@ -188,7 +181,7 @@ async def unlink_chat(request: Request, chat_id: int) -> dict[str, Any]:
     Used both to detach a child and to unlink one child from a parent's overlay
     (the call targets the child either way). No message data or cursor is touched.
     """
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         if store.get_chat(conn, chat_id) is None:
             raise HTTPException(status_code=404, detail="chat not found")

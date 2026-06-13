@@ -9,6 +9,8 @@ from typing import Any
 
 from fastapi import Request
 
+from src.config import load_config
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -32,3 +34,25 @@ def cert_present() -> bool:
 
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
+
+
+def db_path(request: Request) -> Path:
+    """Return the DB path for this request.
+
+    Tests and e2e inject a fixture DB via ``app.state.db_path``; production
+    falls back to the loaded config.  Centralised here so a change to the
+    override mechanism (e.g. an env-override layer) only touches one place.
+    """
+    path = getattr(request.app.state, "db_path", None)
+    return Path(path) if path is not None else load_config().db_path
+
+
+def buffer_dir(request: Request) -> Path:
+    """Return the sidecar buffer directory for this request.
+
+    Tests and e2e inject the directory via ``app.state.linked_device_dir``;
+    production falls back to the loaded config.  Same override pattern as
+    :func:`db_path`.
+    """
+    path = getattr(request.app.state, "linked_device_dir", None)
+    return Path(path) if path is not None else load_config().linked_device_dir

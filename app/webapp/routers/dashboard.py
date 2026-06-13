@@ -9,21 +9,14 @@ no cursor changes — so it is safe on the request path.
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
 
-from src.config import load_config
+from app.webapp.routers._helpers import db_path
 from src.db import store
 
 router = APIRouter()
-
-
-def _db_path(request: Request) -> Path:
-    # Tests/e2e inject a fixture DB via app.state.db_path; fall back to config.
-    path = getattr(request.app.state, "db_path", None)
-    return Path(path) if path is not None else load_config().db_path
 
 
 def _run_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -44,7 +37,7 @@ def _run_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 @router.get("/api/dashboard")
 async def dashboard(request: Request) -> dict[str, Any]:
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         chats = store.count_chats_by_status(conn)
         per_chat = store.messages_per_chat(conn, monitored_only=True)

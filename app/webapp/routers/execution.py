@@ -24,13 +24,12 @@ a second request returns 409.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.webapp import runs
-from app.webapp.routers._helpers import maybe_json
+from app.webapp.routers._helpers import db_path, maybe_json
 from src.config import load_config
 from src.connector.factory import build_connector
 from src.db import store
@@ -41,12 +40,6 @@ router = APIRouter()
 _MODAL_ACTIONS = {"scan", "process"}
 _VALID_MODES = {"live", "dry_run"}
 _DAYS_MAX = 3650  # a generous ceiling; the UI offers small windows
-
-
-def _db_path(request: Request) -> Path:
-    # Tests/e2e inject a fixture DB via app.state.db_path; fall back to config.
-    path = getattr(request.app.state, "db_path", None)
-    return Path(path) if path is not None else load_config().db_path
 
 
 def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
@@ -113,7 +106,7 @@ async def start_execution_run(request: Request) -> dict[str, Any]:
     try:
         # Pin the child to the same DB the webapp reads (also keeps tests hermetic).
         started = runs.start_run(
-            action, argv, env_overrides={"WR_DB_PATH": str(_db_path(request))}
+            action, argv, env_overrides={"WR_DB_PATH": str(db_path(request))}
         )
     except runs.RunBusyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -150,7 +143,7 @@ async def list_syncs(request: Request, limit: int = 20) -> dict[str, Any]:
     actually growing.
     """
     limit = max(1, min(limit, 100))
-    conn = store.connect(_db_path(request))
+    conn = store.connect(db_path(request))
     try:
         rows = [dict(r) for r in store.recent_syncs(conn, limit)]
         totals = {"chats": store.count_chats(conn), "messages": store.count_messages(conn)}

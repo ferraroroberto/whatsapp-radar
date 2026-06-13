@@ -10,7 +10,7 @@ It follows the fleet's standard layout (as in `E:\automation\app-launcher`): UI 
 
 ```
 whatsapp-radar/
-  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|notify|tray)
+  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|notify|resync|reprocess|tray)
   app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py,
                          #   routers/ (misc, auth, webauthn), static/ (vanilla-JS shell)
   app/tray/tray.py       # pystray surface that owns the webapp lifecycle
@@ -37,7 +37,7 @@ Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <comman
 
 ### Admin webapp & tray
 
-The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. The four tabs (Dashboard · Chats & Config · Execution · Audit) are empty shells until Steps 4–7 (#9–#12).
+The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All four tabs (Dashboard · Chats & Config · Execution · Audit) are live; see `README.md` §"Admin Webapp" for per-tab endpoint lists.
 
 **Safe restart (never blanket-kill python):** the tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill, which would take down sister apps (App Launcher, local-llm-hub, …). To restart by hand, find the owner with `Get-NetTCPConnection -LocalPort 8455` and stop that PID, then relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart the `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 

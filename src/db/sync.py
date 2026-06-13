@@ -37,13 +37,23 @@ class ResyncOutcome:
         return (self.chats_added, self.chats_updated, self.messages_added) == (0, 0, 0)
 
 
-def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutcome:
+def resync(
+    conn: sqlite3.Connection,
+    connector: MessageConnector,
+    *,
+    source: str = "resync",
+) -> ResyncOutcome:
     """Upsert the connector's chats/messages into the store, reporting the delta.
 
     Idempotent: a second run over an unchanged buffer is a no-op (all zeros). A
     chat counts as *updated* only when its display name or type actually differs
     from what is stored — re-seeing an unchanged chat writes nothing, so the
     no-op guarantee holds even though every chat is re-read each run.
+
+    ``source`` tags the ``sync_log`` row this run writes. It defaults to
+    ``"resync"``; a full rebuild (:func:`src.db.reprocess.reprocess`) passes
+    ``"reprocess"`` so its ingest is distinguishable from an incremental resync
+    in the Audit timeline.
     """
     # Liveness gate (#29): never upsert from a dead/stale source. Raises
     # ConnectorOffline if the connector isn't connected (the fixture, which loads
@@ -72,10 +82,11 @@ def resync(conn: sqlite3.Connection, connector: MessageConnector) -> ResyncOutco
         connector.stop()
     # One sync_log row per resync — visible whether fired from the CLI, a
     # scheduled Job, or the webapp (the per-message ingest time is on
-    # messages.ingested_at; this is the per-run summary).
+    # messages.ingested_at; this is the per-run summary). ``source`` lets a
+    # reprocess tag its rebuild ingest distinctly from an incremental resync.
     store.record_sync(
         conn,
-        source="resync",
+        source=source,
         chats_added=outcome.chats_added,
         chats_updated=outcome.chats_updated,
         messages_added=outcome.messages_added,

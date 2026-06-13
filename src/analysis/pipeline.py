@@ -180,12 +180,26 @@ def _sync(
     """Pull all chats + messages from the connector into the store (live mode)."""
     connector.connect()
     chats_added = 0
+    chats_updated = 0
     for chat in connector.list_chats():
-        is_new = store.chat_id_for_source(conn, chat.source_chat_id) is None
-        chat_id = store.upsert_chat(conn, chat)
-        outcome.chats_synced += 1
-        if is_new:
+        existing_id = store.chat_id_for_source(conn, chat.source_chat_id)
+        if existing_id is None:
+            chat_id = store.upsert_chat(conn, chat)
             chats_added += 1
+        else:
+            # Count a chat as *updated* only when its display name or type
+            # actually differs — mirrors resync (src/db/sync.py) so the two sync
+            # paths' sync_log bookkeeping agree instead of inflating updates with
+            # every unchanged chat re-seen.
+            chat_id = existing_id
+            existing = store.get_chat(conn, existing_id)
+            if existing is not None and (
+                existing["display_name"] != chat.display_name
+                or existing["chat_type"] != chat.chat_type
+            ):
+                store.upsert_chat(conn, chat)
+                chats_updated += 1
+        outcome.chats_synced += 1
         outcome.messages_synced += store.insert_messages(
             conn, chat_id, connector.fetch_messages(chat.source_chat_id)
         )
@@ -195,7 +209,7 @@ def _sync(
         conn,
         source="scan",
         chats_added=chats_added,
-        chats_updated=outcome.chats_synced - chats_added,
+        chats_updated=chats_updated,
         messages_added=outcome.messages_synced,
     )
     _emit(

@@ -134,13 +134,14 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- One row per sync (ingest) so the operator can see, at a glance, that syncing is
 -- pulling new data: when it ran, how many chats/messages it added, and the running
--- totals afterwards. Written by every sync path (resync + live scan) so a scheduled
--- job is as visible as a webapp click. Per-message ingest time lives on
--- messages.ingested_at; this is the per-run summary on top of it.
+-- totals afterwards. Written by every sync path (resync + live scan + the resync
+-- a reprocess wraps) so a scheduled job is as visible as a webapp click.
+-- Per-message ingest time lives on messages.ingested_at; this is the per-run
+-- summary on top of it.
 CREATE TABLE IF NOT EXISTS sync_log (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     ran_at         TEXT NOT NULL,
-    source         TEXT NOT NULL,                  -- 'resync' | 'scan'
+    source         TEXT NOT NULL,                  -- 'resync' | 'scan' | 'reprocess'
     chats_added    INTEGER NOT NULL DEFAULT 0,
     chats_updated  INTEGER NOT NULL DEFAULT 0,
     messages_added INTEGER NOT NULL DEFAULT 0,

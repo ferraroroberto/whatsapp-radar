@@ -81,7 +81,9 @@ def reprocess(
     backup = _backup_db(conn, db_path)
 
     store.clear_all_data(conn)
-    resync(conn, connector)
+    # Tag this rebuild's ingest as 'reprocess' so the Audit timeline can tell a
+    # full rebuild apart from an incremental resync (both are maintenance runs).
+    resync(conn, connector, source="reprocess")
 
     outcome = ReprocessOutcome(
         backup_path=str(backup),

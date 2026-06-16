@@ -61,7 +61,7 @@ if defined WANT_RESTART (
     REM subtree above. Matching on CommandLine (not the image path) keeps the
     REM sweep scoped to THIS repo's children only.
     set "RECLAIM_VENV=%SCRIPT_DIR%.venv"
-    %PS% -NoProfile -NonInteractive -File "%TRAY_PS%" reclaim -VenvDir "%RECLAIM_VENV%" -Ports "8455"
+    %PS% -NoProfile -NonInteractive -File "%TRAY_PS%" reclaim -VenvDir "!RECLAIM_VENV!" -Ports "8455"
     REM Give Windows a moment to release :8455 before rebinding.
     ping 127.0.0.1 -n 3 >nul
 )

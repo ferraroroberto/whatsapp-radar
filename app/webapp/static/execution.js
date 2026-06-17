@@ -237,7 +237,7 @@ function syncRow(s) {
   delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${chatBit}`;
   const src = document.createElement('span');
   src.className = 'exec-sync-src muted small';
-  src.textContent = s.source;
+  src.textContent = kindLabel(s.source);
   li.append(when, delta, src);
   return li;
 }

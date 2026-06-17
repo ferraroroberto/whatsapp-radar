@@ -64,6 +64,14 @@ class TranscriptionConfig:
     language: str = "auto"
     # Per-file transcription request timeout, seconds.
     timeout_seconds: float = 120.0
+    # How many days a transcribed voice note's audio is retained on disk so it can
+    # be played back in the Chats overlay (#86). After this many days from the
+    # note's send time a sweep at the start of each transcription phase deletes the
+    # audio and clears its ``media_path``. ``0`` reverts to #36's behaviour: delete
+    # the audio immediately on a successful transcription, keep nothing. Audio is
+    # more sensitive than text, so this is deliberately short by default and the
+    # files never leave the gitignored linked-device buffer dir.
+    audio_retention_days: int = 7
 
 
 @dataclass(frozen=True)
@@ -221,6 +229,11 @@ def load_config(root: Path | None = None) -> Config:
         language=os.environ.get("WR_TRANSCRIPTION_LANGUAGE", tr_raw.get("language", "auto")),
         timeout_seconds=float(
             os.environ.get("WR_TRANSCRIPTION_TIMEOUT", tr_raw.get("timeout_seconds", 120.0))
+        ),
+        audio_retention_days=int(
+            os.environ.get(
+                "WR_TRANSCRIPTION_RETAIN_DAYS", tr_raw.get("audio_retention_days", 7)
+            )
         ),
     )
     # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)

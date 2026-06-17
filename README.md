@@ -94,7 +94,9 @@ The connection is **read-only by construction** — no send/react/read-receipt s
 
 ### Voice-note transcription
 
-Voice notes used to be a blind spot — they flowed through as the literal text `[voice note]`, so any actionable content spoken (not typed) was silently missed. With transcription enabled, the sidecar downloads each voice note's audio to the ignored `data/linked_device/media/`, and a transcription phase in every live `scan` (between sync and analysis) sends it to the local LLM Hub's Whisper endpoint, writes the real text back into the message, and deletes the audio. The transcript then flows through the **unchanged** Stage-1/Stage-2 pipeline exactly like a typed message; the Chats and Audit views mark it 🎤 and show the transcript, and the run/sync summary counts transcriptions.
+Voice notes used to be a blind spot — they flowed through as the literal text `[voice note]`, so any actionable content spoken (not typed) was silently missed. With transcription enabled, the sidecar downloads each voice note's audio to the ignored `data/linked_device/media/`, and a transcription phase in every live `scan` (between sync and analysis) sends it to the local LLM Hub's Whisper endpoint and writes the real text back into the message. The transcript then flows through the **unchanged** Stage-1/Stage-2 pipeline exactly like a typed message; the Chats and Audit views mark it 🎤 and show the transcript, and the run/sync summary counts transcriptions.
+
+The transcribed audio is **retained for playback** for `audio_retention_days` (default 7): in the Chats overlay the 🎤 marker becomes a tap-to-play/stop control that streams the note from an authenticated, read-only endpoint (`GET /api/messages/{id}/audio`, gated by the same auth as the rest of the API; the `<audio>` element passes the token via `?token=`, and loopback bypasses). WhatsApp voice notes are OGG/Opus, which iOS Safari can't play in an `<audio>` element, so the endpoint **transcodes to MP3 on the fly** with ffmpeg for universal playback (falling back to the original bytes if ffmpeg is unavailable). The control appears on any voice note whose audio is still on disk — so a note can be played back even before (or if) its transcription completes. A sweep at the start of each transcription phase deletes audio past the window and clears its `media_path`, after which the control disappears and the endpoint 404s — the transcript is kept either way. Audio is more sensitive than text, so the window is short by default and the files never leave the gitignored buffer dir. Set `audio_retention_days: 0` to revert to deleting the audio immediately on a successful transcription (the original #36 behaviour).
 
 It is **off by default** and opt-in (like the hub classifier), routing through the hub directly — no extra dependency, no detour through voice-transcriber. Configure it under `transcription` in `config/default.json` (override per-host in `config/local.json` or via `WR_TRANSCRIPTION_*` env):
 
@@ -106,6 +108,7 @@ It is **off by default** and opt-in (like the hub classifier), routing through t
 | `model` | `whisper-1` | OpenAI-shape model id sent in the multipart form. |
 | `language` | `auto` | `auto` **infers each chat's language from its text** (chats are single-language) and passes it as the Whisper hint — so a note transcribes in its real language regardless of any backend auto-detect bias. Falls back to the backend's own auto-detect when a chat has too little text. Pin to an ISO code (e.g. `es`) to force one language for every note. |
 | `timeout_seconds` | `120` | Per-file transcription request timeout. |
+| `audio_retention_days` | `7` | Days a transcribed note's audio is kept on disk for playback before the sweep deletes it. `0` deletes the audio immediately on success (no playback). |
 
 Transcribe-only (never translation). Failures are isolated and **retried next run**: a voice note whose transcription errors is held back from analysis and the cursor never advances past it, so its real transcript is never skipped — analysis of the other chats proceeds regardless. The unofficial media-download risk and graceful-degradation behaviour are documented in [`docs/linked-device.md`](docs/linked-device.md).
 
@@ -129,6 +132,7 @@ Pick which chats are watched via a searchable Monitored/Ignored/All list ordered
 
 - `GET /api/chats`, `GET /api/chats/{id}/history`, `POST /api/chats/{id}/status`
 - `POST /api/chats/{id}/alias`, `POST /api/chats/{id}/link`, `POST /api/chats/{id}/unlink`
+- `GET /api/messages/{id}/audio` — streams a voice note's retained audio for in-overlay playback (#86)
 - `GET`/`POST /api/config`
 
 ### Execution

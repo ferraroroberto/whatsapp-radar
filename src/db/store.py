@@ -619,6 +619,56 @@ def stale_voice_notes(
     )
 
 
+def expired_retained_audio(
+    conn: sqlite3.Connection, *, retain_days: int, now: datetime | None = None
+) -> list[sqlite3.Row]:
+    """Transcribed voice notes whose retained audio is past the retention window.
+
+    The retention sweep (#86): rows already transcribed ('done') whose audio is
+    still on disk (``media_path`` set) and whose send time is older than
+    ``retain_days``. The caller deletes each file and calls :func:`clear_media_path`
+    so the audio leaves disk while the transcript and 'done' status remain. Status
+    is untouched, so the cursor barrier is unaffected.
+    """
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=retain_days)).isoformat()
+    return list(
+        conn.execute(
+            "SELECT id, media_path FROM messages "
+            "WHERE transcription_status = 'done' AND media_path IS NOT NULL "
+            "AND message_timestamp < ?",
+            (cutoff,),
+        ).fetchall()
+    )
+
+
+def clear_media_path(conn: sqlite3.Connection, message_id: int) -> None:
+    """Forget a message's retained audio path (after its file is swept). #86.
+
+    Only clears ``media_path``; ``transcription_status`` and ``text`` are left as
+    they are, so a swept 'done' note keeps its transcript and simply loses playback.
+    """
+    conn.execute("UPDATE messages SET media_path = NULL WHERE id = ?", (message_id,))
+    conn.commit()
+
+
+def voice_audio_path(conn: sqlite3.Connection, message_id: int) -> str | None:
+    """Relative audio path for a voice message, or ``None`` if there is no audio.
+
+    Returns the retained ``media_path`` only for a ``message_type = 'voice'`` row
+    whose audio is still on disk (#86 playback endpoint). ``None`` for a missing
+    message, a non-voice message, or a note whose audio was never downloaded or has
+    been swept — the caller maps that to a clean 404.
+    """
+    row = conn.execute(
+        "SELECT media_path FROM messages WHERE id = ? AND message_type = 'voice'",
+        (message_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    media_path = row["media_path"]
+    return str(media_path) if media_path is not None else None
+
+
 def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> str:
     """Tuck a voice note's original ``[voice note]`` placeholder into raw_json.
 
@@ -638,16 +688,25 @@ def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> st
 
 
 def mark_transcription(
-    conn: sqlite3.Connection, message_id: int, *, status: str, transcript: str | None = None
+    conn: sqlite3.Connection,
+    message_id: int,
+    *,
+    status: str,
+    transcript: str | None = None,
+    keep_media: bool = False,
 ) -> None:
     """Record a voice note's transcription outcome on its existing message row.
 
     ``status='done'`` overwrites ``messages.text`` with ``transcript`` in place (the
     original placeholder is preserved under ``raw_json.placeholder_text``) so the
-    analysis pipeline — which reads only ``text`` — treats it as a normal message,
-    and clears the transient ``media_path`` (the audio file is deleted by the
-    caller). ``'failed'`` leaves ``text`` and ``media_path`` intact so the next
-    live scan retries. ``'skipped_old'`` just clears ``media_path``.
+    analysis pipeline — which reads only ``text`` — treats it as a normal message.
+    With ``keep_media=False`` (the default) it also clears the transient
+    ``media_path`` and the caller deletes the audio (#36). With ``keep_media=True``
+    the audio is retained for playback (#86): ``media_path`` keeps pointing at the
+    file and a later retention sweep deletes it. A retained ``done`` row never trips
+    the cursor barrier, which only holds 'pending'/'failed' notes. ``'failed'``
+    leaves ``text`` and ``media_path`` intact so the next live scan retries.
+    ``'skipped_old'`` just clears ``media_path``.
     """
     row = conn.execute(
         "SELECT text, raw_json FROM messages WHERE id = ?", (message_id,)
@@ -655,9 +714,10 @@ def mark_transcription(
     if row is None:
         return
     if status == "done" and transcript is not None:
+        media_clause = "" if keep_media else "media_path = NULL, "
         conn.execute(
-            "UPDATE messages SET text = ?, transcription_status = 'done', "
-            "media_path = NULL, raw_json = ? WHERE id = ?",
+            f"UPDATE messages SET text = ?, transcription_status = 'done', "
+            f"{media_clause}raw_json = ? WHERE id = ?",
             (transcript, _merge_placeholder(row["raw_json"], row["text"]), message_id),
         )
     elif status == "skipped_old":

@@ -29,7 +29,12 @@ from src.models import ChatRecord, MessageRecord
 
 
 def _config(
-    tmp_path: Path, *, enabled: bool = True, window_days: int = 7, language: str = "auto"
+    tmp_path: Path,
+    *,
+    enabled: bool = True,
+    window_days: int = 7,
+    language: str = "auto",
+    audio_retention_days: int = 7,
 ) -> Config:
     return Config(
         db_path=tmp_path / "unused.sqlite3",
@@ -40,7 +45,10 @@ def _config(
         telegram=TelegramConfig(bot_token="", chat_id=""),
         linked_device_dir=tmp_path / "ld",
         transcription=TranscriptionConfig(
-            enabled=enabled, window_days=window_days, language=language
+            enabled=enabled,
+            window_days=window_days,
+            language=language,
+            audio_retention_days=audio_retention_days,
         ),
     )
 
@@ -91,10 +99,10 @@ def _monitor_with_voice(
     return chat_id, msg_id, audio
 
 
-def test_transcript_overwrites_text_deletes_audio_and_preserves_placeholder(
+def test_transcript_overwrites_text_retains_audio_and_preserves_placeholder(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    cfg = _config(tmp_path)
+    cfg = _config(tmp_path)  # retention on by default (7 days)
     chat_id, msg_id, audio = _monitor_with_voice(conn, cfg.linked_device_dir)
 
     outcome = run_transcription_phase(
@@ -107,14 +115,96 @@ def test_transcript_overwrites_text_deletes_audio_and_preserves_placeholder(
         "FROM messages WHERE chat_id = ? AND source_message_id = ?",
         (chat_id, msg_id),
     ).fetchone()
-    # Transcript landed in `text`; type stays 'voice' as a UI marker; audio cleared.
+    # Transcript landed in `text`; type stays 'voice' as a UI marker.
     assert row["text"] == "Please bring the signed form tomorrow"
     assert row["message_type"] == "voice"
     assert row["transcription_status"] == "done"
-    assert row["media_path"] is None
-    assert not audio.exists()  # audio deleted after success
+    # Retention on (#86): media_path keeps pointing at the still-present audio so it
+    # can be played back; the file survives a successful transcription.
+    assert row["media_path"] is not None
+    assert audio.exists()
     # Original placeholder preserved out-of-band in raw_json.
     assert json.loads(row["raw_json"])["placeholder_text"] == "[voice note]"
+
+
+def test_retention_zero_deletes_audio_immediately_on_success(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # audio_retention_days=0 reverts to #36's delete-immediately behaviour.
+    cfg = _config(tmp_path, audio_retention_days=0)
+    chat_id, msg_id, audio = _monitor_with_voice(conn, cfg.linked_device_dir)
+
+    run_transcription_phase(conn, cfg, transcriber=lambda _p, _lang: "done")
+
+    row = conn.execute(
+        "SELECT transcription_status, media_path FROM messages "
+        "WHERE chat_id = ? AND source_message_id = ?",
+        (chat_id, msg_id),
+    ).fetchone()
+    assert row["transcription_status"] == "done"
+    assert row["media_path"] is None
+    assert not audio.exists()
+
+
+def test_retention_sweep_deletes_expired_audio_but_keeps_in_window(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # Two already-transcribed notes with retained audio: one within the window, one
+    # past it. The sweep at the phase start drops only the expired one's audio and
+    # clears its media_path; both keep their transcript and 'done' status.
+    cfg = _config(tmp_path, audio_retention_days=7)
+    buffer_dir = cfg.linked_device_dir
+    chat_id = store.upsert_chat(conn, ChatRecord(source_chat_id="c-ret", display_name="Class 4A"))
+    store.set_chat_status(conn, chat_id, "monitored")
+
+    fresh = _voice_note(
+        conn, chat_id, msg_id="fresh", buffer_dir=buffer_dir,
+        when=datetime.now(UTC) - timedelta(days=1), text="fresh transcript",
+    )
+    expired = _voice_note(
+        conn, chat_id, msg_id="expired", buffer_dir=buffer_dir,
+        when=datetime.now(UTC) - timedelta(days=30), text="expired transcript",
+    )
+    # Promote both to retained 'done' rows (transcript in text, media_path kept).
+    for sid in ("fresh", "expired"):
+        mid = conn.execute(
+            "SELECT id FROM messages WHERE source_message_id = ?", (sid,)
+        ).fetchone()["id"]
+        store.mark_transcription(
+            conn, int(mid), status="done", transcript=f"{sid} transcript", keep_media=True
+        )
+
+    outcome = run_transcription_phase(conn, cfg, transcriber=lambda _p, _lang: "unused")
+
+    assert outcome.swept == 1
+    rows = {
+        r["source_message_id"]: r
+        for r in conn.execute(
+            "SELECT source_message_id, transcription_status, media_path FROM messages"
+        ).fetchall()
+    }
+    assert rows["fresh"]["media_path"] is not None and fresh.exists()
+    assert rows["expired"]["media_path"] is None and not expired.exists()
+    # The expired note keeps its transcript — only playback expires.
+    assert rows["expired"]["transcription_status"] == "done"
+
+
+def test_retained_done_note_does_not_trip_cursor_barrier(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # A retained 'done' note has a media_path but must NOT be held back: the barrier
+    # only holds 'pending'/'failed' notes, so retention can't regress #36's gating.
+    from src.analysis.transcription import hold_back_untranscribed
+
+    cfg = _config(tmp_path, audio_retention_days=7)
+    chat_id, msg_id, _ = _monitor_with_voice(conn, cfg.linked_device_dir)
+    run_transcription_phase(conn, cfg, transcriber=lambda _p, _lang: "Bring the form")
+
+    messages = store.messages_since_cursor(conn, chat_id)
+    assert messages  # the transcribed note is present
+    assert all(m.transcription_status == "done" and m.media_path for m in messages)
+    # Nothing is trimmed — a retained done note flows straight into analysis.
+    assert hold_back_untranscribed(messages) == messages
 
 
 def test_transcribed_voice_note_flows_through_pipeline_as_actionable(

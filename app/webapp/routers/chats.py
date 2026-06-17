@@ -8,15 +8,46 @@ the first review classifies only *new* messages, never months of backlog.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import shutil
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.webapp.routers._helpers import db_path
+from app.webapp.routers._helpers import buffer_dir, db_path
 from src.db import store
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# Audio content types by extension for the playback endpoint. WhatsApp voice
+# notes arrive as OGG/Opus; WAV appears only if a note was transcoded in place.
+_AUDIO_MEDIA_TYPES = {".ogg": "audio/ogg", ".opus": "audio/ogg", ".wav": "audio/wav"}
+
+
+def _transcode_to_mp3(src: Path) -> bytes:
+    """Transcode an audio file to mono 24 kHz MP3 bytes via ffmpeg (#86).
+
+    WhatsApp voice notes are OGG/Opus, which iOS Safari's ``<audio>`` element can't
+    play; MP3 plays on every target browser. Raises ``FileNotFoundError`` when
+    ffmpeg isn't on PATH and ``subprocess.CalledProcessError`` on a transcode error,
+    both of which the endpoint catches to fall back to the original bytes.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise FileNotFoundError("ffmpeg not on PATH")
+    proc = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(src),
+         "-vn", "-ac", "1", "-ar", "24000", "-b:a", "64k", "-f", "mp3", "pipe:1"],
+        capture_output=True, check=True,
+    )
+    return proc.stdout
 
 _VALID_STATUSES = {"discovered", "monitored", "ignored"}
 _HISTORY_MAX = 200
@@ -109,6 +140,10 @@ async def chat_history(
                     # Voice-note transcription state (#36) so the UI can mark a voice
                     # note and label it when it isn't (yet) transcribed.
                     "transcription_status": m.transcription_status,
+                    # True when this voice note still has retained audio on disk, so
+                    # the overlay can offer a play control wired to the audio endpoint
+                    # (#86). False once the audio is swept past the retention window.
+                    "has_audio": m.message_type == "voice" and m.media_path is not None,
                     # Only on a merged family view (>1 member); absent for a lone chat.
                     **({"origin": origin.get(m.chat_id)} if multi else {}),
                 }
@@ -192,3 +227,47 @@ async def unlink_chat(request: Request, chat_id: int) -> dict[str, Any]:
         return {"id": chat_id, "unlinked": unlinked}
     finally:
         conn.close()
+
+
+@router.get("/api/messages/{message_id}/audio")
+async def message_audio(request: Request, message_id: int) -> Response:
+    """Stream a voice note's retained audio for playback in the Chats overlay (#86).
+
+    Read-only and gated by the same bearer-token middleware as the rest of the API
+    (the ``<audio>`` element passes the token via ``?token=``; loopback bypasses).
+    404s cleanly when the message has no retained audio — not a voice note, audio
+    never downloaded, or swept past the retention window. The served path is
+    confined to the linked-device buffer dir: a ``media_path`` that resolves outside
+    it (traversal) is refused.
+
+    WhatsApp voice notes are OGG/Opus, which iOS Safari can't play in an ``<audio>``
+    element, so anything non-WAV is transcoded to MP3 on the fly for universal
+    playback. If ffmpeg is unavailable or fails, the original file is served as a
+    fallback (still plays on Chrome/Android/desktop). WAV is passed through with
+    Range support so the player can seek.
+    """
+    conn = store.connect(db_path(request))
+    try:
+        media_path = store.voice_audio_path(conn, message_id)
+    finally:
+        conn.close()
+    if not media_path:
+        raise HTTPException(status_code=404, detail="no audio for this message")
+
+    base = buffer_dir(request).resolve()
+    target = (base / media_path).resolve()
+    if not target.is_relative_to(base):
+        raise HTTPException(status_code=404, detail="no audio for this message")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="audio file not found")
+
+    suffix = target.suffix.lower()
+    if suffix == ".wav":
+        return FileResponse(target, media_type="audio/wav")
+    try:
+        mp3 = await asyncio.to_thread(_transcode_to_mp3, target)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        logger.warning("⚠️ audio transcode failed for message %s: %s", message_id, exc)
+        media_type = _AUDIO_MEDIA_TYPES.get(suffix, "application/octet-stream")
+        return FileResponse(target, media_type=media_type)
+    return Response(content=mp3, media_type="audio/mpeg")

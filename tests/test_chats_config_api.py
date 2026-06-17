@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from app.webapp.routers import chats
 from app.webapp.server import create_app
 from src.db import store
 from src.models import ChatRecord, MessageRecord
@@ -163,10 +164,12 @@ def test_set_chat_alias_set_and_clear(conn: sqlite3.Connection) -> None:
 
 # --- /api/chats endpoints ---------------------------------------------------
 
-def _app_with_db(db: Path, *, token: str = "") -> Any:
+def _app_with_db(db: Path, *, token: str = "", buffer: Path | None = None) -> Any:
     app = create_app()
     app.state.webapp_config = WebappConfig(auth_token=token)
     app.state.db_path = db
+    if buffer is not None:
+        app.state.linked_device_dir = buffer
     return app
 
 
@@ -202,6 +205,153 @@ def test_history_endpoint(tmp_path: Path) -> None:
     # 404 for an unknown chat.
     with TestClient(_app_with_db(db), client=LOOPBACK) as client:
         assert client.get("/api/chats/99999/history").status_code == 404
+
+
+# --- voice-note audio playback endpoint (#86) -------------------------------
+
+def _seed_voice(conn: sqlite3.Connection, buffer: Path, *, media_path: str | None) -> int:
+    """Insert a transcribed voice note and return its message id.
+
+    With ``media_path`` set, a stub audio file is dropped under ``buffer`` and the
+    row retains its path (playable). ``None`` models a swept/never-downloaded note.
+    """
+    chat = store.upsert_chat(conn, ChatRecord(source_chat_id="v", display_name="Class 4A Group"))
+    # insert_messages (plural) persists transcription_status + media_path; the
+    # singular insert_message omits them.
+    store.insert_messages(
+        conn,
+        chat,
+        [
+            MessageRecord(
+                source_message_id="vn1",
+                message_timestamp="2026-06-01T10:00:00+00:00",
+                text="[voice note]",
+                sender_label="X",
+                message_type="voice",
+                transcription_status="done",
+                media_path=media_path,
+            )
+        ],
+    )
+    if media_path is not None:
+        f = buffer / media_path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"OggS-fake-audio")
+    return conn.execute(
+        "SELECT id FROM messages WHERE source_message_id = 'vn1'"
+    ).fetchone()["id"]
+
+
+def conn_chat_id(db: Path) -> int:
+    conn = store.connect(db)
+    try:
+        return conn.execute("SELECT id FROM chats LIMIT 1").fetchone()["id"]
+    finally:
+        conn.close()
+
+
+def test_audio_endpoint_streams_wav_passthrough(tmp_path: Path) -> None:
+    # A WAV note is served as-is (no transcode) with Range support.
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path="media/vn1.wav")
+    conn.close()
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        r = client.get(f"/api/messages/{mid}/audio")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "audio/wav"
+        assert r.content == b"OggS-fake-audio"
+        # The history response flags the note as playable.
+        chat = conn_chat_id(db)
+        body = client.get(f"/api/chats/{chat}/history").json()
+        assert body["messages"][0]["has_audio"] is True
+
+
+def test_audio_endpoint_transcodes_ogg_to_mp3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # WhatsApp voice notes are OGG/Opus (unplayable in iOS Safari), so the endpoint
+    # transcodes to MP3 via ffmpeg. ffmpeg is faked so the test stays offline.
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path="media/vn1.ogg")
+    conn.close()
+
+    monkeypatch.setattr(chats.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    ran: dict[str, Any] = {}
+
+    class _Proc:
+        stdout = b"ID3-fake-mp3"
+
+    def _fake_run(cmd: list[str], **kw: Any) -> _Proc:
+        ran["cmd"] = cmd
+        return _Proc()
+
+    monkeypatch.setattr(chats.subprocess, "run", _fake_run)
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        r = client.get(f"/api/messages/{mid}/audio")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "audio/mpeg"
+        assert r.content == b"ID3-fake-mp3"
+    assert "ffmpeg" in str(ran["cmd"][0]) and "mp3" in ran["cmd"]
+
+
+def test_audio_endpoint_falls_back_to_original_when_ffmpeg_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No ffmpeg → serve the original OGG so non-Safari clients still play it.
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path="media/vn1.ogg")
+    conn.close()
+
+    monkeypatch.setattr(chats.shutil, "which", lambda _name: None)
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        r = client.get(f"/api/messages/{mid}/audio")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "audio/ogg"
+        assert r.content == b"OggS-fake-audio"
+
+
+def test_audio_endpoint_404_when_swept(tmp_path: Path) -> None:
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path=None)  # audio gone / never retained
+    conn.close()
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        assert client.get(f"/api/messages/{mid}/audio").status_code == 404
+        assert client.get("/api/messages/99999/audio").status_code == 404
+
+
+def test_audio_endpoint_404_when_file_missing(tmp_path: Path) -> None:
+    # media_path is set but the file isn't on disk (cleared out of band).
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path="media/vn1.ogg")
+    (buffer / "media" / "vn1.ogg").unlink()
+    conn.close()
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        assert client.get(f"/api/messages/{mid}/audio").status_code == 404
+
+
+def test_audio_endpoint_rejects_path_traversal(tmp_path: Path) -> None:
+    # A media_path escaping the buffer dir must never be served, even if the file
+    # exists outside it.
+    db, buffer = tmp_path / "a.sqlite3", tmp_path / "buf"
+    buffer.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_bytes(b"top secret")
+    conn = store.connect(db)
+    mid = _seed_voice(conn, buffer, media_path="../secret.txt")
+    conn.close()
+
+    with TestClient(_app_with_db(db, buffer=buffer), client=LOOPBACK) as client:
+        assert client.get(f"/api/messages/{mid}/audio").status_code == 404
 
 
 def test_history_endpoint_paginates(tmp_path: Path) -> None:

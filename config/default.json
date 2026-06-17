@@ -17,7 +17,8 @@
     "audio_base_url": "http://127.0.0.1:8000",
     "model": "whisper-1",
     "language": "auto",
-    "timeout_seconds": 120
+    "timeout_seconds": 120,
+    "audio_retention_days": 7
   },
   "telegram": {
     "bot_token": "",

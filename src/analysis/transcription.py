@@ -5,8 +5,14 @@ text so the existing pipeline — which reads only ``messages.text`` — picks i
 unchanged. The flow per note:
 
     pending (sidecar downloaded audio)  ->  POST to the hub's Whisper proxy
-      -> success: overwrite ``text`` with the transcript, mark 'done', delete audio
+      -> success: overwrite ``text`` with the transcript, mark 'done', retain audio
       -> failure: mark 'failed' (audio kept) so the next live scan retries
+
+On success the audio is retained for ``transcription.audio_retention_days`` so it
+can be played back in the Chats overlay (#86); a sweep at the start of each phase
+deletes audio past that window. Set ``audio_retention_days = 0`` to revert to #36's
+delete-immediately behaviour. A retained 'done' note never trips the cursor barrier
+(which only holds 'pending'/'failed' notes), so retention doesn't change gating.
 
 A voice note older than the configured window is marked 'skipped_old' and never
 fetched, so a fresh pairing never transcribes a long backlog. Transcription runs
@@ -68,6 +74,7 @@ class TranscriptionOutcome:
     done: int = 0
     failed: int = 0
     skipped_old: int = 0
+    swept: int = 0  # retained audio files deleted past the retention window (#86)
 
 
 def _emit(progress: Progress | None, line: str) -> None:
@@ -274,6 +281,17 @@ def run_transcription_phase(
 
     buffer_dir = config.linked_device_dir
     window = cfg.window_days
+    retain_days = cfg.audio_retention_days
+
+    # 0) Retention sweep (#86): drop audio for notes transcribed more than
+    # `retain_days` ago. The transcript and 'done' status stay; only the file and
+    # `media_path` go, so playback expires cleanly. Skipped when retention is off
+    # (then no audio is ever retained in the first place).
+    if retain_days > 0:
+        for row in store.expired_retained_audio(conn, retain_days=retain_days, now=now):
+            _delete_audio(buffer_dir, row["media_path"])
+            store.clear_media_path(conn, int(row["id"]))
+            outcome.swept += 1
 
     # 1) Backlog guard: voice notes older than the window are never transcribed.
     for row in store.stale_voice_notes(conn, within_days=window, now=now):
@@ -283,8 +301,13 @@ def run_transcription_phase(
 
     pending = store.pending_transcriptions(conn, within_days=window, now=now)
     if not pending:
+        notes = []
         if outcome.skipped_old:
-            _emit(progress, f"• transcription: skipped {outcome.skipped_old} old voice note(s)")
+            notes.append(f"skipped {outcome.skipped_old} old voice note(s)")
+        if outcome.swept:
+            notes.append(f"swept {outcome.swept} expired audio file(s)")
+        if notes:
+            _emit(progress, "• transcription: " + ", ".join(notes))
         return outcome
 
     transcribe = transcriber if transcriber is not None else _build_transcriber(cfg)
@@ -307,13 +330,18 @@ def run_transcription_phase(
             store.mark_transcription(conn, msg_id, status="failed")
             outcome.failed += 1
             continue
-        store.mark_transcription(conn, msg_id, status="done", transcript=transcript)
-        _delete_audio(buffer_dir, row["media_path"])
+        keep_media = retain_days > 0
+        store.mark_transcription(
+            conn, msg_id, status="done", transcript=transcript, keep_media=keep_media
+        )
+        if not keep_media:
+            _delete_audio(buffer_dir, row["media_path"])
         outcome.done += 1
 
     _emit(
         progress,
         f"• transcription: {outcome.done} done, {outcome.failed} failed"
-        + (f", {outcome.skipped_old} skipped (old)" if outcome.skipped_old else ""),
+        + (f", {outcome.skipped_old} skipped (old)" if outcome.skipped_old else "")
+        + (f", {outcome.swept} audio swept" if outcome.swept else ""),
     )
     return outcome

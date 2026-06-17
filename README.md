@@ -92,6 +92,27 @@ The fixture path above needs no credentials. To run against real chats and deliv
 
 The connection is **read-only by construction** — no send/react/read-receipt surface exists. The unofficial-library risk (Baileys), the buffer contract, the message-normalization set, and answers to the spike questions are documented in [`docs/linked-device.md`](docs/linked-device.md). Credentials/session live only under ignored `auth/`; Telegram secrets live in the gitignored `config/webapp_config.json` (or the ignored `.env` via `WR_TELEGRAM_*`).
 
+### Voice-note transcription
+
+Voice notes used to be a blind spot — they flowed through as the literal text `[voice note]`, so any actionable content spoken (not typed) was silently missed. With transcription enabled, the sidecar downloads each voice note's audio to the ignored `data/linked_device/media/`, and a transcription phase in every live `scan` (between sync and analysis) sends it to the local LLM Hub's Whisper endpoint, writes the real text back into the message, and deletes the audio. The transcript then flows through the **unchanged** Stage-1/Stage-2 pipeline exactly like a typed message; the Chats and Audit views mark it 🎤 and show the transcript, and the run/sync summary counts transcriptions.
+
+It is **off by default** and opt-in (like the hub classifier), routing through the hub directly — no extra dependency, no detour through voice-transcriber. Configure it under `transcription` in `config/default.json` (override per-host in `config/local.json` or via `WR_TRANSCRIPTION_*` env):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Master switch; `false` makes the phase a no-op (voice notes stay `[voice note]`). |
+| `window_days` | `7` | Only voice notes from the last N days are transcribed; older ones are marked `skipped_old` and never fetched — so a fresh pairing never transcribes years of backlog. |
+| `audio_base_url` | `http://127.0.0.1:8000` | The hub's audio base URL (its `:8000` proxy keeps the call in the hub's observability ring); `/v1/audio/transcriptions` is appended. |
+| `model` | `whisper-1` | OpenAI-shape model id sent in the multipart form. |
+| `language` | `auto` | `auto` **infers each chat's language from its text** (chats are single-language) and passes it as the Whisper hint — so a note transcribes in its real language regardless of any backend auto-detect bias. Falls back to the backend's own auto-detect when a chat has too little text. Pin to an ISO code (e.g. `es`) to force one language for every note. |
+| `timeout_seconds` | `120` | Per-file transcription request timeout. |
+
+Transcribe-only (never translation). Failures are isolated and **retried next run**: a voice note whose transcription errors is held back from analysis and the cursor never advances past it, so its real transcript is never skipped — analysis of the other chats proceeds regardless. The unofficial media-download risk and graceful-degradation behaviour are documented in [`docs/linked-device.md`](docs/linked-device.md).
+
+> **Requires `ffmpeg` on PATH.** WhatsApp voice notes are OGG/Opus, but the hub's whisper backend only decodes WAV, so the transcription client transcodes each note to 16 kHz mono WAV with ffmpeg before sending. Without ffmpeg, transcription fails with a clear error (and the note is retried) — analysis is unaffected.
+
+**Language inference.** The hub's shared turbo whisper-server carries an English tech-dictation glossary as its initial prompt, which biases pure audio auto-detect toward English (a Spanish note comes back Englishized). Rather than personalize anything app-side, we pass the correct standard `language` hint: each chat's language is detected from its own text (chats don't mix languages) and forwarded per note. The proper fix — a plain-vanilla, glossary-free transcription option in the hub, reusable by any caller — is tracked in [`ferraroroberto/local-llm-hub#128`](https://github.com/ferraroroberto/local-llm-hub/issues/128); once it lands, `language: auto` can rely on unbiased audio detection directly.
+
 ## Admin Webapp (phone-first PWA)
 
 A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), Tailscale TLS, and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.

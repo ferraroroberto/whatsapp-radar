@@ -182,9 +182,24 @@ function histMsg(m) {
   meta.textContent = (m.origin ? m.origin + ' · ' : '') + who + ' · ' + fmtTsFull(m.ts);
   const text = document.createElement('div');
   text.className = 'hist-text';
-  text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
+  if (m.type === 'voice') {
+    // 🎤 marks a voice note; once transcribed, m.text *is* the transcript (#36).
+    text.textContent = '🎤 ' + voiceText(m);
+  } else {
+    text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
+  }
   item.append(meta, text);
   return item;
+}
+
+// What to show for a voice note: the transcript when done, else an honest label
+// for its transcription state (pending / failed / skipped / not enabled).
+function voiceText(m) {
+  if (m.transcription_status === 'done' && m.text) return m.text;
+  if (m.transcription_status === 'failed') return '[voice note — transcription failed]';
+  if (m.transcription_status === 'skipped_old') return '[voice note — not transcribed]';
+  if (m.transcription_status === 'pending') return '[voice note — awaiting transcription]';
+  return m.text != null ? m.text : '[voice note]';
 }
 
 // The API returns a page oldest→newest; the overlay shows newest-first, so each

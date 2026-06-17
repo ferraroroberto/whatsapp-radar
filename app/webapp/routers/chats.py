@@ -106,6 +106,9 @@ async def chat_history(
                     "sender": m.sender_label,
                     "text": m.text,
                     "type": m.message_type,
+                    # Voice-note transcription state (#36) so the UI can mark a voice
+                    # note and label it when it isn't (yet) transcribed.
+                    "transcription_status": m.transcription_status,
                     # Only on a merged family view (>1 member); absent for a lone chat.
                     **({"origin": origin.get(m.chat_id)} if multi else {}),
                 }

@@ -15,7 +15,8 @@ from pathlib import Path
 from src.models import ChatRecord, MessageRecord, StoredMessage
 
 _MESSAGE_COLUMNS = (
-    "id, chat_id, source_message_id, message_timestamp, text, sender_label, message_type"
+    "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
+    "message_type, transcription_status, media_path"
 )
 
 
@@ -28,6 +29,8 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
         text=row["text"],
         sender_label=row["sender_label"],
         message_type=row["message_type"],
+        transcription_status=row["transcription_status"],
+        media_path=row["media_path"],
     )
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -44,6 +47,7 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("chats_monitored", "INTEGER NOT NULL DEFAULT 0"),
     ("stage1_passed", "INTEGER NOT NULL DEFAULT 0"),
     ("stage2_llm_calls", "INTEGER NOT NULL DEFAULT 0"),
+    ("transcriptions", "INTEGER NOT NULL DEFAULT 0"),
     ("actionable", "INTEGER NOT NULL DEFAULT 0"),
     ("notification_status", "TEXT"),
 )
@@ -122,6 +126,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     item_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
     if "deadline_date" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN deadline_date TEXT")
+    # `messages.transcription_status` + `messages.media_path` (#36): the voice-note
+    # transcription lifecycle and a transient ref to the downloaded audio. Additive,
+    # non-destructive; old rows (and every non-voice message) stay NULL, so the
+    # analysis pipeline — which reads only `messages.text` — is untouched.
+    msg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "transcription_status" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN transcription_status TEXT")
+    if "media_path" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN media_path TEXT")
 
 
 # --- chats -----------------------------------------------------------------
@@ -347,8 +360,8 @@ def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRe
         """
         INSERT OR IGNORE INTO messages
             (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             text, message_type, transcription_status, media_path, raw_json, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -358,6 +371,8 @@ def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRe
                 m.message_timestamp,
                 m.text,
                 m.message_type,
+                m.transcription_status,
+                m.media_path,
                 json.dumps(m.raw, ensure_ascii=False) if m.raw else None,
                 _now(),
             )
@@ -558,6 +573,107 @@ def advance_cursor(
     conn.commit()
 
 
+# --- voice-note transcription (#36) ----------------------------------------
+
+def pending_transcriptions(
+    conn: sqlite3.Connection, *, within_days: int, now: datetime | None = None
+) -> list[sqlite3.Row]:
+    """Voice notes awaiting transcription within the recent window, oldest-first.
+
+    Rows whose audio was downloaded (``media_path`` set) and whose status is
+    'pending' or 'failed' — a failed row retries on the next live scan — limited to
+    the last ``within_days`` of send time. Older notes are handled by
+    :func:`stale_voice_notes` so a first pairing never transcribes a long backlog.
+    """
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=within_days)).isoformat()
+    return list(
+        conn.execute(
+            "SELECT id, chat_id, source_message_id, message_timestamp, media_path "
+            "FROM messages "
+            "WHERE message_type = 'voice' AND media_path IS NOT NULL "
+            "AND transcription_status IN ('pending', 'failed') AND message_timestamp >= ? "
+            "ORDER BY message_timestamp, id",
+            (cutoff,),
+        ).fetchall()
+    )
+
+
+def stale_voice_notes(
+    conn: sqlite3.Connection, *, within_days: int, now: datetime | None = None
+) -> list[sqlite3.Row]:
+    """Pending voice notes older than the window — to skip (not transcribe).
+
+    The first-run backlog guard: a freshly paired device can surface years of
+    voice notes, so we transcribe only the last ``within_days`` and skip the rest.
+    Returns id + ``media_path`` so the caller can delete any already-downloaded
+    audio before marking the row :func:`mark_transcription` 'skipped_old'.
+    """
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=within_days)).isoformat()
+    return list(
+        conn.execute(
+            "SELECT id, media_path FROM messages "
+            "WHERE message_type = 'voice' "
+            "AND transcription_status IN ('pending', 'failed') AND message_timestamp < ?",
+            (cutoff,),
+        ).fetchall()
+    )
+
+
+def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> str:
+    """Tuck a voice note's original ``[voice note]`` placeholder into raw_json.
+
+    Preserves what the message held before transcription overwrote ``text``, so the
+    original is recoverable. Tolerant of a NULL or non-dict legacy raw_json.
+    """
+    import json
+
+    try:
+        data = json.loads(raw_json) if raw_json else {}
+    except (ValueError, TypeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {"_raw": data}
+    data["placeholder_text"] = placeholder_text
+    return json.dumps(data, ensure_ascii=False)
+
+
+def mark_transcription(
+    conn: sqlite3.Connection, message_id: int, *, status: str, transcript: str | None = None
+) -> None:
+    """Record a voice note's transcription outcome on its existing message row.
+
+    ``status='done'`` overwrites ``messages.text`` with ``transcript`` in place (the
+    original placeholder is preserved under ``raw_json.placeholder_text``) so the
+    analysis pipeline — which reads only ``text`` — treats it as a normal message,
+    and clears the transient ``media_path`` (the audio file is deleted by the
+    caller). ``'failed'`` leaves ``text`` and ``media_path`` intact so the next
+    live scan retries. ``'skipped_old'`` just clears ``media_path``.
+    """
+    row = conn.execute(
+        "SELECT text, raw_json FROM messages WHERE id = ?", (message_id,)
+    ).fetchone()
+    if row is None:
+        return
+    if status == "done" and transcript is not None:
+        conn.execute(
+            "UPDATE messages SET text = ?, transcription_status = 'done', "
+            "media_path = NULL, raw_json = ? WHERE id = ?",
+            (transcript, _merge_placeholder(row["raw_json"], row["text"]), message_id),
+        )
+    elif status == "skipped_old":
+        conn.execute(
+            "UPDATE messages SET transcription_status = 'skipped_old', media_path = NULL "
+            "WHERE id = ?",
+            (message_id,),
+        )
+    else:  # 'failed' (or any non-terminal state) — keep text + audio for retry
+        conn.execute(
+            "UPDATE messages SET transcription_status = ? WHERE id = ?",
+            (status, message_id),
+        )
+    conn.commit()
+
+
 # --- runs / analysis / notifications --------------------------------------
 
 def start_run(
@@ -583,18 +699,20 @@ def record_run_funnel(
     stage2_llm_calls: int,
     actionable: int,
     notification_status: str,
+    transcriptions: int = 0,
 ) -> None:
     """Persist a run's funnel counters and final notification status."""
     conn.execute(
         "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
-        "stage1_passed = ?, stage2_llm_calls = ?, actionable = ?, notification_status = ? "
-        "WHERE id = ?",
+        "stage1_passed = ?, stage2_llm_calls = ?, transcriptions = ?, actionable = ?, "
+        "notification_status = ? WHERE id = ?",
         (
             chats_synced,
             messages_synced,
             chats_monitored,
             stage1_passed,
             stage2_llm_calls,
+            transcriptions,
             actionable,
             notification_status,
             run_id,
@@ -934,7 +1052,8 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
         conn.execute(
             "SELECT id, started_at, completed_at, status, mode, params_json, "
             "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
-            "stage1_passed, stage2_llm_calls, actionable, notification_status, error "
+            "stage1_passed, stage2_llm_calls, transcriptions, actionable, "
+            "notification_status, error "
             "FROM review_runs ORDER BY id DESC LIMIT ?",
             (max(1, limit),),
         ).fetchall()

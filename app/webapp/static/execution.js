@@ -417,6 +417,7 @@ function funnelCells(result) {
       { label: 'Synced', value: f.messages_synced },
       { label: 'Monitored', value: f.chats_monitored },
       { label: 'New (Δ)', value: f.chats_with_delta },
+      { label: '🎤 Transcribed', value: f.transcriptions },
       { label: 'Stage 1', value: f.stage1_passed },
       { label: 'LLM', value: f.stage2_llm_calls },
       { label: 'Actionable', value: f.actionable },

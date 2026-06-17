@@ -43,6 +43,18 @@ CREATE TABLE IF NOT EXISTS messages (
     message_timestamp TEXT NOT NULL,
     text              TEXT,
     message_type      TEXT NOT NULL DEFAULT 'text',
+    -- Voice-note transcription (#36). Lifecycle for a voice note's audio:
+    --   'pending'      audio downloaded by the sidecar, awaiting transcription
+    --   'done'         transcribed; `text` now holds the transcript (placeholder
+    --                  preserved in raw_json), audio file deleted
+    --   'failed'       transcription errored — retried on the next live scan
+    --   'skipped_old'  voice note older than the transcription window; never fetched
+    -- NULL for every non-voice message, so the analysis pipeline (which reads only
+    -- `text`) is untouched and a transcript flows through exactly like typed text.
+    transcription_status TEXT,
+    -- Relative path (under the linked-device buffer dir) to the downloaded voice
+    -- audio while it awaits transcription; cleared/deleted once transcribed.
+    media_path        TEXT,
     raw_json          TEXT,
     ingested_at       TEXT NOT NULL,
     UNIQUE (chat_id, source_message_id)
@@ -76,6 +88,7 @@ CREATE TABLE IF NOT EXISTS review_runs (
     chats_monitored     INTEGER NOT NULL DEFAULT 0,      -- monitored chats considered
     stage1_passed       INTEGER NOT NULL DEFAULT 0,      -- deltas that passed the keyword prefilter
     stage2_llm_calls    INTEGER NOT NULL DEFAULT 0,      -- LLM classifications actually made
+    transcriptions      INTEGER NOT NULL DEFAULT 0,      -- voice notes transcribed this run (#36)
     actionable          INTEGER NOT NULL DEFAULT 0,      -- chats with an actionable verdict
     notification_status TEXT,                            -- 'sent'|'failed'|'skipped'|'dry_run'|'none'
     error               TEXT

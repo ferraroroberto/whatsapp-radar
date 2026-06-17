@@ -36,6 +36,12 @@ class MessageRecord:
     text: str | None = None
     sender_label: str | None = None
     message_type: str = "text"
+    # Voice-note transcription (#36): the sidecar sets these on a voice note —
+    # ``transcription_status`` ('pending'|'failed'|…) and ``media_path`` (relative
+    # path to the downloaded audio). Both stay ``None`` for typed messages and the
+    # fixture, so the rest of the pipeline is unaffected.
+    transcription_status: str | None = None
+    media_path: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -50,3 +56,9 @@ class StoredMessage:
     text: str | None
     sender_label: str | None
     message_type: str
+    # Voice-note transcription state (#36); ``None`` for non-voice messages.
+    transcription_status: str | None = None
+    # Relative path to the downloaded audio while it awaits transcription; ``None``
+    # once transcribed/skipped or when the download never succeeded. Distinguishes a
+    # recoverable not-yet-transcribed note (audio on disk) from an unrecoverable one.
+    media_path: str | None = None

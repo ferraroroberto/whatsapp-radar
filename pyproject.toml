@@ -35,5 +35,6 @@ module = [
     "winotify",
     "requests.*",
     "urllib3.*",
+    "langdetect.*",
 ]
 ignore_missing_imports = true

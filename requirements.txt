@@ -6,6 +6,11 @@
 # (base_url http://127.0.0.1:8000). No direct provider/subprocess wrappers.
 anthropic>=0.40
 
+# Voice-note transcription (#36): infer each chat's language from its text (chats
+# are single-language) to pass the right Whisper `language` hint. Market-standard
+# offline detector; seeded for deterministic results.
+langdetect>=1.0.9
+
 # --- Admin webapp (Step 3 / issue #8) ---------------------------------------
 # FastAPI + uvicorn serve the phone-first PWA; same stack as App Launcher.
 fastapi>=0.110

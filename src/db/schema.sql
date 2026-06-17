@@ -46,14 +46,18 @@ CREATE TABLE IF NOT EXISTS messages (
     -- Voice-note transcription (#36). Lifecycle for a voice note's audio:
     --   'pending'      audio downloaded by the sidecar, awaiting transcription
     --   'done'         transcribed; `text` now holds the transcript (placeholder
-    --                  preserved in raw_json), audio file deleted
+    --                  preserved in raw_json); audio retained for playback until the
+    --                  retention sweep, then deleted (#86)
     --   'failed'       transcription errored — retried on the next live scan
     --   'skipped_old'  voice note older than the transcription window; never fetched
     -- NULL for every non-voice message, so the analysis pipeline (which reads only
     -- `text`) is untouched and a transcript flows through exactly like typed text.
     transcription_status TEXT,
     -- Relative path (under the linked-device buffer dir) to the downloaded voice
-    -- audio while it awaits transcription; cleared/deleted once transcribed.
+    -- audio. Set while awaiting transcription and, with retention on (#86), kept
+    -- pointing at the retained file so it can be played back; cleared when the audio
+    -- is swept past `transcription.audio_retention_days` (or immediately on success
+    -- when retention is 0).
     media_path        TEXT,
     raw_json          TEXT,
     ingested_at       TEXT NOT NULL,

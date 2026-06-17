@@ -9,7 +9,7 @@
  * in as you scroll up. All chat-derived text goes in via textContent. */
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
-import { jsonApi, toast } from './api.js';
+import { jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime } from './format.js';
 
 // Thousands separator with a period (29999 → "29.999"), locale-independent.
@@ -184,12 +184,55 @@ function histMsg(m) {
   text.className = 'hist-text';
   if (m.type === 'voice') {
     // 🎤 marks a voice note; once transcribed, m.text *is* the transcript (#36).
-    text.textContent = '🎤 ' + voiceText(m);
+    // With retained audio (#86) the marker becomes a tap-to-play/stop control.
+    if (m.has_audio) {
+      text.append(voicePlayer(m.id), document.createTextNode(' ' + voiceText(m)));
+    } else {
+      text.textContent = '🎤 ' + voiceText(m);
+    }
   } else {
     text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
   }
   item.append(meta, text);
   return item;
+}
+
+// URL for a voice note's retained audio. The token rides as ?token= so the
+// <audio> element (which can't set an Authorization header) authenticates; on
+// loopback there's no token and the endpoint bypasses auth anyway.
+function audioUrl(id) {
+  const t = readToken();
+  return '/api/messages/' + id + '/audio' + (t ? '?token=' + encodeURIComponent(t) : '');
+}
+
+// A tap-to-play/stop button for one voice note. The <audio> is created lazily on
+// first tap (so a long history doesn't open dozens of connections) and reset to
+// the start when stopped, so the next tap replays from the top.
+function voicePlayer(id) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'voice-play';
+  const idle = '🎤 ▶';
+  btn.textContent = idle;
+  let audio = null;
+  btn.addEventListener('click', function () {
+    if (!audio) {
+      audio = new Audio(audioUrl(id));
+      audio.addEventListener('ended', function () { btn.textContent = idle; });
+      audio.addEventListener('error', function () {
+        btn.textContent = idle;
+        toast('Could not play this voice note.', 'error');
+      });
+    }
+    if (audio.paused) {
+      audio.play().then(function () { btn.textContent = '🎤 ⏹'; }).catch(function () {});
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+      btn.textContent = idle;
+    }
+  });
+  return btn;
 }
 
 // What to show for a voice note: the transcript when done, else an honest label

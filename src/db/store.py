@@ -669,6 +669,23 @@ def voice_audio_path(conn: sqlite3.Connection, message_id: int) -> str | None:
     return str(media_path) if media_path is not None else None
 
 
+def message_text(conn: sqlite3.Connection, message_id: int) -> str | None:
+    """The displayed text of a message, or ``None`` if missing/empty (#86 summarize).
+
+    For a transcribed voice note ``text`` already holds the transcript (the
+    transcription phase overwrites it in place), so this is the same content the
+    Chats overlay shows. Returns ``None`` for a missing row or a row with no text
+    (e.g. an untranscribed voice note), which the caller maps to a clean 404/400.
+    """
+    row = conn.execute(
+        "SELECT text FROM messages WHERE id = ?", (message_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    text = row["text"]
+    return str(text) if text is not None and str(text).strip() else None
+
+
 def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> str:
     """Tuck a voice note's original ``[voice note]`` placeholder into raw_json.
 

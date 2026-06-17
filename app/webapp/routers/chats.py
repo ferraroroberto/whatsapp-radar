@@ -19,12 +19,18 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.webapp.routers._helpers import buffer_dir, db_path
+from app.webapp.routers._helpers import buffer_dir, db_path, hub_base_url
+from src.analysis import summarize as summarize_client
 from src.db import store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Minimum characters of message text before a summary is worth a hub call. Mirrors
+# the frontend's SUMMARIZE_MIN_CHARS in chats.js (the button only shows past this);
+# the backend re-checks so a hand-crafted request can't burn a hub call on a one-liner.
+_SUMMARIZE_MIN_CHARS = 280
 
 # Audio content types by extension for the playback endpoint. WhatsApp voice
 # notes arrive as OGG/Opus; WAV appears only if a note was transcoded in place.
@@ -271,3 +277,38 @@ async def message_audio(request: Request, message_id: int) -> Response:
         media_type = _AUDIO_MEDIA_TYPES.get(suffix, "application/octet-stream")
         return FileResponse(target, media_type=media_type)
     return Response(content=mp3, media_type="audio/mpeg")
+
+
+@router.post("/api/messages/{message_id}/summarize")
+async def summarize_message(request: Request, message_id: int) -> dict[str, Any]:
+    """Summarize one long message's text on demand via the hub's Haiku (#86).
+
+    The Chats overlay shows a Summarize control on any message past
+    :data:`_SUMMARIZE_MIN_CHARS`; this condenses it to its essence plus any action
+    the reader must take. Read-only and gated by the same bearer-token middleware
+    as the rest of the API. The summary is **ephemeral** — computed per click,
+    never stored — so no schema change and nothing extra committed.
+
+    404 when the message is missing or has no text (e.g. an untranscribed voice
+    note); 400 when the text is too short to be worth a hub call; the hub's own
+    status (503 unreachable / upstream error / 502 empty) is surfaced verbatim.
+    """
+    conn = store.connect(db_path(request))
+    try:
+        text = store.message_text(conn, message_id)
+    finally:
+        conn.close()
+    if text is None:
+        raise HTTPException(status_code=404, detail="no text for this message")
+    if len(text) < _SUMMARIZE_MIN_CHARS:
+        raise HTTPException(status_code=400, detail="message is too short to summarize")
+
+    # Injectable so the offline suite never dials the hub; production uses the
+    # real hub-backed client bound to the configured :8000 base.
+    summarizer = getattr(request.app.state, "summarizer", None) or summarize_client.summarize
+    base = hub_base_url(request)
+    try:
+        summary = await asyncio.to_thread(summarizer, base, text)
+    except summarize_client.SummarizeError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return {"message_id": message_id, "summary": summary}

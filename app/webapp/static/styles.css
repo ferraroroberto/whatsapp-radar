@@ -476,6 +476,24 @@ hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 .voice-play:active { opacity: 0.7; }
 
+/* On-demand summarize control (#86): a small pill under a long message, with the
+   returned summary shown in a muted block beneath it. */
+.msg-summary-wrap { margin-top: 6px; }
+.summarize-action {
+  display: inline-block; padding: 2px 10px;
+  font-size: 13px; line-height: 1.4; cursor: pointer;
+  color: var(--fg); background: var(--bg-elev-2);
+  border: 1px solid var(--border); border-radius: 12px;
+}
+.summarize-action:active { opacity: 0.7; }
+.summarize-action:disabled { opacity: 0.6; cursor: default; }
+.msg-summary {
+  margin-top: 6px; padding: 8px 10px;
+  white-space: pre-wrap; word-break: break-word;
+  font-size: 14px; color: var(--muted);
+  background: var(--bg-elev-2); border-radius: 8px;
+}
+
 /* ---------------------------------------------------------------- settings */
 .settings-card { margin-top: 12px; }
 .settings-card summary.settings-summary {

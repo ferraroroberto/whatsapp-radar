@@ -133,6 +133,25 @@ def _seed_e2e_db(db_path: Path) -> None:
                     sender_label="Parent",
                 ),
             )
+        # One long message so the on-demand Summarize control (#86) has something
+        # to attach to (it only shows past SUMMARIZE_MIN_CHARS). Sanitized/invented
+        # content per the privacy rule — never real WhatsApp data.
+        store.insert_message(
+            conn,
+            mon,
+            MessageRecord(
+                source_message_id="e2e-long",
+                message_timestamp="2026-06-01T10:05:00+00:00",
+                text=(
+                    "Reminder for the class trip on Friday: please send the signed "
+                    "permission form and 12 euros with your child by Thursday morning. "
+                    "Bring a packed lunch, a refillable water bottle, comfortable shoes, "
+                    "and a light raincoat. The coach leaves at 8:30 sharp and returns "
+                    "around 16:00. Let me know if anyone can volunteer to help supervise."
+                ),
+                sender_label="Teacher",
+            ),
+        )
     finally:
         conn.close()
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +36,34 @@ class HubConfig:
     # How many days of already-surfaced actionable alerts to feed Stage 2 as
     # short-term memory, so a repeated to-do isn't re-alerted every run (#66).
     recent_alert_days: int = 7
+
+
+@dataclass(frozen=True)
+class TranscriptionConfig:
+    """Voice-note transcription via the local-llm-hub audio endpoint (#36).
+
+    Off by default so the suite stays fully offline and the feature is opt-in (like
+    the hub classifier). When enabled, the scan's transcription phase POSTs each
+    downloaded voice note to ``{audio_base_url}/v1/audio/transcriptions`` (the hub's
+    OpenAI-shape Whisper proxy), transcribe-only.
+    """
+
+    # Master switch. When false the transcription phase is a no-op.
+    enabled: bool = False
+    # Only voice notes from the last N days are transcribed; older ones are marked
+    # 'skipped_old' so a fresh pairing never chews through a long backlog.
+    window_days: int = 7
+    # The hub's audio base URL (its :8000 proxy keeps the call in the hub's
+    # observability ring); ``/v1/audio/transcriptions`` is appended by the client.
+    audio_base_url: str = "http://127.0.0.1:8000"
+    # OpenAI-shape model id sent in the multipart form.
+    model: str = "whisper-1"
+    # Whisper language hint. ``"auto"`` (the default) sends none, so each note's
+    # language is detected independently — right for mixed ES/EN content. Pin to an
+    # ISO code (e.g. ``"es"``) only if auto-detect proves unreliable.
+    language: str = "auto"
+    # Per-file transcription request timeout, seconds.
+    timeout_seconds: float = 120.0
 
 
 @dataclass(frozen=True)
@@ -63,6 +91,9 @@ class Config:
     # gate. Linked-device only; the fixture has no streaming buffer.
     sync_settle_seconds: float = 12.0
     sync_settle_timeout: float = 90.0
+    # Voice-note transcription (#36). Defaulted (disabled) so library/test callers
+    # that build a Config without it get the offline-safe no-op behaviour.
+    transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -142,6 +173,7 @@ def load_config(root: Path | None = None) -> Config:
         _load_json(root / "config" / "local.json"),
     )
     hub_raw = merged.get("hub", {})
+    tr_raw = merged.get("transcription", {})
 
     tg_raw = merged.get("telegram", {})
 
@@ -174,6 +206,23 @@ def load_config(root: Path | None = None) -> Config:
             os.environ.get("WR_HUB_RECENT_ALERT_DAYS", hub_raw.get("recent_alert_days", 7))
         ),
     )
+    transcription = TranscriptionConfig(
+        enabled=_as_bool(
+            os.environ.get("WR_TRANSCRIPTION_ENABLED"), tr_raw.get("enabled", False)
+        ),
+        window_days=int(
+            os.environ.get("WR_TRANSCRIPTION_WINDOW_DAYS", tr_raw.get("window_days", 7))
+        ),
+        audio_base_url=os.environ.get(
+            "WR_TRANSCRIPTION_AUDIO_BASE_URL",
+            tr_raw.get("audio_base_url", "http://127.0.0.1:8000"),
+        ),
+        model=os.environ.get("WR_TRANSCRIPTION_MODEL", tr_raw.get("model", "whisper-1")),
+        language=os.environ.get("WR_TRANSCRIPTION_LANGUAGE", tr_raw.get("language", "auto")),
+        timeout_seconds=float(
+            os.environ.get("WR_TRANSCRIPTION_TIMEOUT", tr_raw.get("timeout_seconds", 120.0))
+        ),
+    )
     # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)
     # so the webapp UI owns them. Precedence: WR_TELEGRAM_* env > webapp_config >
     # local.json/default.json. Imported lazily to avoid a config import cycle.
@@ -200,6 +249,7 @@ def load_config(root: Path | None = None) -> Config:
         connector=connector,
         classifier=classifier,
         hub=hub,
+        transcription=transcription,
         notifier=notifier,
         telegram=telegram,
         linked_device_dir=resolved_buffer,

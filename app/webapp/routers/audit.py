@@ -61,6 +61,7 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
             "messages_synced": int(row["messages_synced"]),
             "chats_monitored": int(row["chats_monitored"]),
             "chats_reviewed": int(row["chats_reviewed"]),
+            "transcriptions": int(row["transcriptions"]),
             "stage1_passed": int(row["stage1_passed"]),
             "stage2_llm_calls": int(row["stage2_llm_calls"]),
             "actionable": int(row["actionable"]),

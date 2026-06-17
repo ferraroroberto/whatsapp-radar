@@ -130,6 +130,80 @@ def test_connect_migrates_analysis_trace_messages_json(tmp_path: Path) -> None:
         conn.close()
 
 
+_LEGACY_MESSAGES = """
+CREATE TABLE chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_chat_id TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL, chat_type TEXT NOT NULL DEFAULT 'group',
+    status TEXT NOT NULL DEFAULT 'discovered', first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL, last_message_at TEXT
+);
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    source_message_id TEXT NOT NULL,
+    sender_label TEXT,
+    message_timestamp TEXT NOT NULL,
+    text TEXT,
+    message_type TEXT NOT NULL DEFAULT 'text',
+    raw_json TEXT,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (chat_id, source_message_id)
+);
+"""
+
+
+def test_connect_migrates_messages_transcription_columns(tmp_path: Path) -> None:
+    """A pre-#36 messages table gains transcription_status + media_path; rows stay NULL."""
+    db = tmp_path / "legacy_messages.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_MESSAGES)
+    raw.execute(
+        "INSERT INTO chats (source_chat_id, display_name, first_seen_at, last_seen_at) "
+        "VALUES ('g1', 'Class 4A', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.execute(
+        "INSERT INTO messages (chat_id, source_message_id, message_timestamp, text, ingested_at) "
+        "VALUES (1, 'm1', '2026-01-01T00:00:00+00:00', 'hi', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        assert {"transcription_status", "media_path"} <= cols
+        # The pre-existing row survives with NULLs (a normal non-voice message).
+        row = conn.execute(
+            "SELECT transcription_status, media_path FROM messages WHERE id = 1"
+        ).fetchone()
+        assert row["transcription_status"] is None
+        assert row["media_path"] is None
+    finally:
+        conn.close()
+
+
+def test_connect_migrates_review_runs_transcriptions(tmp_path: Path) -> None:
+    """A pre-#36 review_runs gains the transcriptions counter, defaulting to 0."""
+    db = tmp_path / "legacy_runs_tr.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_REVIEW_RUNS)
+    raw.execute(
+        "INSERT INTO review_runs (started_at, status, chats_reviewed) "
+        "VALUES ('2026-01-01T00:00:00+00:00', 'completed', 1)"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(review_runs)")}
+        assert "transcriptions" in cols
+        last = store.last_run(conn)
+        assert last is not None and last["transcriptions"] == 0
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_analysis_items_deadline_date(tmp_path: Path) -> None:
     """A pre-#71 analysis_items table gains `deadline_date`; old rows stay NULL."""
     db = tmp_path / "legacy_items.sqlite3"

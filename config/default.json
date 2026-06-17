@@ -11,6 +11,14 @@
     "max_prompt_chars": 24000,
     "recent_alert_days": 7
   },
+  "transcription": {
+    "enabled": false,
+    "window_days": 7,
+    "audio_base_url": "http://127.0.0.1:8000",
+    "model": "whisper-1",
+    "language": "auto",
+    "timeout_seconds": 120
+  },
   "telegram": {
     "bot_token": "",
     "chat_id": ""

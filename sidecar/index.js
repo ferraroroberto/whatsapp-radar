@@ -40,6 +40,7 @@ import makeWASocket, {
   isJidGroup,
   isJidUser,
   isLidUser,
+  downloadMediaMessage,
 } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
@@ -55,8 +56,13 @@ const chatsFile = join(bufferDir, "chats.ndjson");
 const messagesFile = join(bufferDir, "messages.ndjson");
 const statusFile = join(bufferDir, "status.json");
 const qrPngFile = join(bufferDir, "qr.png");
+// Voice-note audio is downloaded here so the Python core can transcribe it (#36);
+// the transcription phase deletes each file once transcribed. Under the ignored
+// buffer dir — audio, like every other buffered payload, is never committed.
+const mediaDir = join(bufferDir, "media");
 
 mkdirSync(bufferDir, { recursive: true });
+mkdirSync(mediaDir, { recursive: true });
 
 let chatsSeen = 0;
 let messagesSeen = 0;
@@ -153,7 +159,10 @@ function normalizeMessage(m) {
     return { text: `[document: ${name}]`, type: "document" };
   }
   if (inner.audioMessage) {
-    return { text: "[voice note]", type: "voice" };
+    // Carry the audio node so appendMessage can download it for transcription
+    // (#36). The placeholder text is kept until the Python core overwrites it
+    // with the real transcript, so a never-downloaded note still reads sanely.
+    return { text: "[voice note]", type: "voice", audio: inner.audioMessage };
   }
   if (inner.protocolMessage) {
     // type 0 = REVOKE (deleted); editedMessage carries an edit.
@@ -172,7 +181,33 @@ function normalizeMessage(m) {
   return null;
 }
 
-function appendMessage(m) {
+/**
+ * Download a voice note's encrypted audio to the ignored media dir so the Python
+ * core can transcribe it (#36). Read-only: a media fetch is not a send/reaction/
+ * read-receipt, so the read-only guarantee holds. ``reuploadRequest`` lets Baileys
+ * re-request the media from WhatsApp's servers if the cached download has expired.
+ * Returns the relative path (forward-slashed, joined under the buffer dir by the
+ * Python reader) plus a little voice metadata. Caller handles failures.
+ */
+async function downloadVoiceAudio(m, sock, msgId, audioMsg) {
+  const safeId = msgId.replace(/[^A-Za-z0-9_-]/g, "_");
+  const relPath = `media/${safeId}.ogg`;
+  const buffer = await downloadMediaMessage(
+    m,
+    "buffer",
+    {},
+    { reuploadRequest: sock.updateMediaMessage.bind(sock) },
+  );
+  writeFileSync(join(bufferDir, relPath), buffer);
+  return {
+    relPath,
+    seconds: audioMsg.seconds ?? null,
+    ptt: Boolean(audioMsg.ptt),
+    mimetype: audioMsg.mimetype || null,
+  };
+}
+
+async function appendMessage(m, sock) {
   const jid = m.key?.remoteJid;
   const msgId = m.key?.id;
   if (!jid || !msgId || jid === "status@broadcast") return;
@@ -193,6 +228,24 @@ function appendMessage(m) {
       participant,
     },
   };
+
+  // A voice note: download its audio so the transcription phase can turn it into
+  // real text. Unofficial-protocol behaviour — a media re-request can fail or
+  // change across Baileys releases — so degrade gracefully: never crash the
+  // sidecar; record the note as 'failed' (the audio is unrecoverable later) and
+  // leave the placeholder text so it still surfaces as a voice note.
+  if (norm.type === "voice" && norm.audio) {
+    try {
+      const meta = await downloadVoiceAudio(m, sock, msgId, norm.audio);
+      record.media_path = meta.relPath;
+      record.transcription_status = "pending";
+      record.raw.voice = { seconds: meta.seconds, ptt: meta.ptt, mimetype: meta.mimetype };
+    } catch (e) {
+      console.error(`⚠️ Could not download voice note ${msgId}:`, e?.message || e);
+      record.transcription_status = "failed";
+    }
+  }
+
   appendFileSync(messagesFile, JSON.stringify(record) + "\n", "utf-8");
   messagesSeen += 1;
 }
@@ -266,10 +319,10 @@ async function start() {
   sock.ev.on("contacts.update", onContacts);
 
   // History sync after pairing: chats, contacts, and their messages.
-  sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+  sock.ev.on("messaging-history.set", async ({ chats, contacts, messages }) => {
     for (const c of chats || []) appendChat(c.id, c.name || c.subject, chatType(c.id));
     onContacts(contacts);
-    for (const m of messages || []) appendMessage(m);
+    for (const m of messages || []) await appendMessage(m, sock);
     writeStatus(true, true);
   });
 
@@ -282,7 +335,7 @@ async function start() {
   });
 
   // Live messages.
-  sock.ev.on("messages.upsert", ({ messages }) => {
+  sock.ev.on("messages.upsert", async ({ messages }) => {
     for (const m of messages || []) {
       const rj = m.key?.remoteJid;
       // On a 1:1 chat the remote's push name *is* the contact name, so feed it in
@@ -290,7 +343,7 @@ async function start() {
       const dmName =
         rj && !isJidGroup(rj) && !m.key?.fromMe ? m.pushName || undefined : undefined;
       appendChat(rj, dmName, chatType(rj));
-      appendMessage(m);
+      await appendMessage(m, sock);
     }
     writeStatus(true, true);
   });

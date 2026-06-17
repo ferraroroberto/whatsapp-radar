@@ -117,6 +117,10 @@ class LinkedDeviceConnector:
                 text=row.get("text"),
                 sender_label=self._sender_label(row),
                 message_type=row.get("type", "text"),
+                # Voice-note transcription (#36): the sidecar tags voice notes with
+                # a download status and a relative path to the audio it fetched.
+                transcription_status=row.get("transcription_status"),
+                media_path=row.get("media_path"),
                 raw=row,
             )
             for row in latest.values()

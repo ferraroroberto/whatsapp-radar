@@ -47,6 +47,7 @@ function funnelSummary(f) {
   return [
     `${f.messages_synced} synced`,
     `${f.chats_monitored} monitored`,
+    ...(f.transcriptions ? [`🎤 ${f.transcriptions}`] : []),
     `${f.stage1_passed} Stage 1`,
     `${f.stage2_llm_calls} LLM`,
     `${f.actionable} actionable`,
@@ -136,6 +137,7 @@ function funnelCells(run) {
     { label: 'Synced', value: f.messages_synced },
     { label: 'Monitored', value: f.chats_monitored },
     { label: 'Reviewed', value: f.chats_reviewed },
+    { label: '🎤 Transcribed', value: f.transcriptions },
     { label: 'Stage 1', value: f.stage1_passed },
     { label: 'LLM', value: f.stage2_llm_calls },
     { label: 'Actionable', value: f.actionable },
@@ -192,6 +194,14 @@ function messageRow(m, llmCalled, evidence) {
   sender.className = 'audit-msg-sender small';
   sender.textContent = m.sender || 'unknown';
   head.appendChild(sender);
+
+  // 🎤 marks a voice note whose text is the transcription fed into analysis (#36).
+  if (m.type === 'voice') {
+    const voice = document.createElement('span');
+    voice.className = 'audit-msg-badge muted';
+    voice.textContent = '🎤 voice';
+    head.appendChild(voice);
+  }
 
   const roots = Array.isArray(m.roots) ? m.roots : [];
   const s1 = document.createElement('span');

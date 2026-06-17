@@ -46,12 +46,14 @@ This handling is unofficial-protocol behavior and may shift across Baileys relea
 | Reply (quoted message) | `reply` | the reply body (quoted ref kept in `raw`) |
 | Image / video with caption | `image` / `video` | the caption, or `[image]`/`[video]` |
 | Document | `document` | `[document: <filename>]` |
-| Voice note / audio | `voice` | `[voice note]` |
+| Voice note / audio | `voice` | `[voice note]` placeholder, replaced by the transcript once transcribed (#36) |
 | Edited message | `edited` | the new body (last-write-wins over the original) |
 | Deleted message (revoke) | `deleted` | `[deleted]` |
 | Reactions, poll votes | — | dropped (not actionable content in v1) |
 
-**No media bytes are downloaded** — read-only, privacy-preserving, and unnecessary for text classification. Voice-note transcription (via the hub's whisper endpoint) is a possible follow-up, not part of v1.
+**Only voice-note audio is downloaded** (#36) — every other media type stays text-only (caption or placeholder), read-only and privacy-preserving. For a voice note the sidecar downloads the encrypted audio (`downloadMediaMessage`, a read-only fetch — not a send/reaction/receipt) to the ignored `data/linked_device/media/`, tags the row `transcription_status='pending'` + `media_path`, and keeps the `[voice note]` placeholder. The Python core's transcription phase then turns it into real text (see the README's "Voice-note transcription" section); on success the transcript overwrites `text`, the placeholder is preserved in `raw_json`, and the audio file is deleted. WhatsApp delivers voice notes as OGG/Opus and the hub's whisper backend only decodes WAV, so the transcription client transcodes each note to 16 kHz mono WAV with **ffmpeg** before sending (verified against the live hub: it 400s on raw OGG).
+
+**Media-download risk (unofficial protocol).** `downloadMediaMessage` can fail or change across Baileys releases (an expired media key forces a re-request from WhatsApp's servers via `reuploadRequest`, which can itself fail). The sidecar degrades gracefully: a failed download never crashes it — the note is recorded `transcription_status='failed'` with the placeholder text intact, so a voice note is at worst surfaced un-transcribed, never lost. This is the same "churn is isolated to `sidecar/index.js`" containment as the rest of the connector.
 
 ## Connector design questions — answers
 

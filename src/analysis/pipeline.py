@@ -37,6 +37,7 @@ from src.analysis.classifier import (
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_roots
 from src.analysis.review import advance_family_cursors, recent_alert_context
+from src.analysis.transcription import hold_back_untranscribed, run_transcription_phase
 from src.config import Config
 from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
@@ -80,6 +81,7 @@ class ScanOutcome:
     messages_synced: int = 0
     chats_monitored: int = 0
     chats_with_delta: int = 0
+    transcriptions: int = 0
     stage1_passed: int = 0
     stage2_llm_calls: int = 0
     actionable: int = 0
@@ -108,6 +110,7 @@ def _messages_record(delta: list[StoredMessage]) -> str:
                 "id": m.source_message_id,
                 "sender": m.sender_label,
                 "text": m.text,
+                "type": m.message_type,
                 "roots": matched_roots(m.text),
             }
             for m in delta
@@ -289,6 +292,13 @@ def scan(
         except ConnectorOffline as exc:
             return _abort_offline(conn, config, outcome, exc, progress)
         _sync(conn, live_connector, outcome, progress)
+        # Transcribe downloaded voice notes BEFORE analysis so a voice note is never
+        # classified as its "[voice note]" placeholder and the cursor never skips
+        # real content (#36). No-op unless transcription is enabled; failures are
+        # isolated per note and never block the analysis that follows. Dry-run skips
+        # this — it replays stored messages with no network and no side effects.
+        tr = run_transcription_phase(conn, config, progress=progress)
+        outcome.transcriptions = tr.done
     else:
         _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
@@ -303,6 +313,11 @@ def scan(
             if mode == "live"
             else store.family_delta_replay(conn, chat_id, since_days=days)
         )
+        # Hold the live delta before any voice note still awaiting transcription so
+        # it is never analysed as a placeholder and the cursor never skips it (#36).
+        # Gated on the feature flag: disabled → voice notes are ordinary messages.
+        if mode == "live" and config.transcription.enabled:
+            delta = hold_back_untranscribed(delta)
         if not delta:
             continue
         outcome.chats_with_delta += 1
@@ -432,11 +447,13 @@ def scan(
         stage2_llm_calls=outcome.stage2_llm_calls,
         actionable=outcome.actionable,
         notification_status=outcome.notification_status,
+        transcriptions=outcome.transcriptions,
     )
     _emit(
         progress,
-        f"✓ done — Stage 1 {outcome.stage1_passed}, LLM {outcome.stage2_llm_calls}, "
-        f"actionable {outcome.actionable}, notify {outcome.notification_status}",
+        f"✓ done — transcribed {outcome.transcriptions}, Stage 1 {outcome.stage1_passed}, "
+        f"LLM {outcome.stage2_llm_calls}, actionable {outcome.actionable}, "
+        f"notify {outcome.notification_status}",
     )
     return outcome
 
@@ -459,6 +476,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
             "messages_synced": outcome.messages_synced,
             "chats_monitored": outcome.chats_monitored,
             "chats_with_delta": outcome.chats_with_delta,
+            "transcriptions": outcome.transcriptions,
             "stage1_passed": outcome.stage1_passed,
             "stage2_llm_calls": outcome.stage2_llm_calls,
             "actionable": outcome.actionable,

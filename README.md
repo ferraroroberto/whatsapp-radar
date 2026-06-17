@@ -105,7 +105,7 @@ It is **off by default** and opt-in (like the hub classifier), routing through t
 | `enabled` | `false` | Master switch; `false` makes the phase a no-op (voice notes stay `[voice note]`). |
 | `window_days` | `7` | Only voice notes from the last N days are transcribed; older ones are marked `skipped_old` and never fetched — so a fresh pairing never transcribes years of backlog. |
 | `audio_base_url` | `http://127.0.0.1:8000` | The hub's audio base URL (its `:8000` proxy keeps the call in the hub's observability ring); `/v1/audio/transcriptions` is appended. |
-| `model` | `whisper-1` | OpenAI-shape model id sent in the multipart form. |
+| `model` | `whisper-vanilla` | OpenAI-shape model id sent in the multipart form. `whisper-vanilla` is the hub's glossary-free turbo path that auto-detects the source language; the plain turbo (`whisper-1`) carries an English glossary and defaults to `en`, Englishizing non-English notes — don't use it here ([#88](https://github.com/ferraroroberto/whatsapp-radar/issues/88)). |
 | `language` | `auto` | `auto` **infers each chat's language from its text** (chats are single-language) and passes it as the Whisper hint — so a note transcribes in its real language regardless of any backend auto-detect bias. Falls back to the backend's own auto-detect when a chat has too little text. Pin to an ISO code (e.g. `es`) to force one language for every note. |
 | `timeout_seconds` | `120` | Per-file transcription request timeout. |
 | `audio_retention_days` | `7` | Days a transcribed note's audio is kept on disk for playback before the sweep deletes it. `0` deletes the audio immediately on success (no playback). |

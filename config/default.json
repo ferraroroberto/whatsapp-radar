@@ -15,7 +15,7 @@
     "enabled": false,
     "window_days": 7,
     "audio_base_url": "http://127.0.0.1:8000",
-    "model": "whisper-1",
+    "model": "whisper-vanilla",
     "language": "auto",
     "timeout_seconds": 120,
     "audio_retention_days": 7

@@ -56,11 +56,17 @@ class TranscriptionConfig:
     # The hub's audio base URL (its :8000 proxy keeps the call in the hub's
     # observability ring); ``/v1/audio/transcriptions`` is appended by the client.
     audio_base_url: str = "http://127.0.0.1:8000"
-    # OpenAI-shape model id sent in the multipart form.
-    model: str = "whisper-1"
-    # Whisper language hint. ``"auto"`` (the default) sends none, so each note's
-    # language is detected independently — right for mixed ES/EN content. Pin to an
-    # ISO code (e.g. ``"es"``) only if auto-detect proves unreliable.
+    # OpenAI-shape model id sent in the multipart form. ``"whisper-vanilla"`` is the
+    # hub's glossary-free turbo path (local-llm-hub#128): it carries no initial
+    # prompt and injects ``language=auto`` server-side for requests that omit one, so
+    # the source language is auto-detected. The plain turbo (``"whisper-1"`` / no
+    # model row) instead carries an English tech-dictation glossary and defaults each
+    # languageless request to ``en``, which Englishizes non-English notes into
+    # translations — never use it here. See #88.
+    model: str = "whisper-vanilla"
+    # Whisper language hint. ``"auto"`` (the default) sends none, so whisper-vanilla
+    # auto-detects each note's language independently — right for mixed ES/EN content.
+    # Pin to an ISO code (e.g. ``"es"``) only if auto-detect proves unreliable.
     language: str = "auto"
     # Per-file transcription request timeout, seconds.
     timeout_seconds: float = 120.0
@@ -225,7 +231,7 @@ def load_config(root: Path | None = None) -> Config:
             "WR_TRANSCRIPTION_AUDIO_BASE_URL",
             tr_raw.get("audio_base_url", "http://127.0.0.1:8000"),
         ),
-        model=os.environ.get("WR_TRANSCRIPTION_MODEL", tr_raw.get("model", "whisper-1")),
+        model=os.environ.get("WR_TRANSCRIPTION_MODEL", tr_raw.get("model", "whisper-vanilla")),
         language=os.environ.get("WR_TRANSCRIPTION_LANGUAGE", tr_raw.get("language", "auto")),
         timeout_seconds=float(
             os.environ.get("WR_TRANSCRIPTION_TIMEOUT", tr_raw.get("timeout_seconds", 120.0))

@@ -56,3 +56,15 @@ def buffer_dir(request: Request) -> Path:
     """
     path = getattr(request.app.state, "linked_device_dir", None)
     return Path(path) if path is not None else load_config().linked_device_dir
+
+
+def hub_base_url(request: Request) -> str:
+    """Return the local-llm-hub base URL for this request (#86 summarize).
+
+    Tests inject an override via ``app.state.hub_base_url`` (and the summarize
+    endpoint also injects a fake summarizer, so the URL is never dialled in the
+    offline suite); production falls back to the loaded config's hub block — the
+    same ``:8000`` proxy the classifier and transcription already use.
+    """
+    base = getattr(request.app.state, "hub_base_url", None)
+    return str(base) if base is not None else load_config().hub.base_url

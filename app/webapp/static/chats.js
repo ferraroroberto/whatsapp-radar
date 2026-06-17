@@ -25,6 +25,12 @@ function fmtTsFull(ts) {
 
 const HISTORY_PAGE = 30;
 
+// Past this many characters a message is worth an on-demand hub summary (#86):
+// the Summarize control shows in the overlay and POSTs to the hub's Haiku. Keep
+// in sync with _SUMMARIZE_MIN_CHARS in app/webapp/routers/chats.py (the server
+// re-checks). Applies to long transcribed voice notes and long typed messages alike.
+const SUMMARIZE_MIN_CHARS = 280;
+
 // The label shown for a chat: the operator alias takes precedence, with the
 // connector-derived name kept in parentheses so both are visible — e.g.
 // "Tom (+44123…)". Without an alias it's just the derived name.
@@ -194,7 +200,54 @@ function histMsg(m) {
     text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
   }
   item.append(meta, text);
+  // A long message (long voice-note transcript or long typed message) gets an
+  // on-demand Summarize control wired to the hub (#86). The server reads the same
+  // messages.text, so gate on m.text length here too.
+  if (m.text && m.text.length >= SUMMARIZE_MIN_CHARS) item.append(summarizeControl(m.id));
   return item;
+}
+
+// An on-demand "Summarize" control for one long message. Tapping it POSTs to the
+// hub-backed summarize endpoint and renders the returned summary inline beneath
+// the message. The result is cached on first fetch so a second tap just re-shows
+// it (toggling visibility) rather than dialling the hub again.
+function summarizeControl(id) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-summary-wrap';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'summarize-action';
+  btn.textContent = '📝 Summarize';
+  const out = document.createElement('div');
+  out.className = 'msg-summary';
+  out.hidden = true;
+  let cached = null;
+  let busy = false;
+  btn.addEventListener('click', async function () {
+    if (busy) return;
+    if (cached !== null) {  // already fetched — just toggle the panel
+      out.hidden = !out.hidden;
+      return;
+    }
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = '📝 Summarizing…';
+    try {
+      const body = await jsonApi('/api/messages/' + id + '/summarize', { method: 'POST' });
+      cached = (body && body.summary) || '';
+      out.textContent = '📝 ' + cached;
+      out.hidden = false;
+      btn.textContent = '📝 Summary';
+    } catch (exc) {
+      toast(String((exc && exc.message) || 'Could not summarize this message.'), 'error');
+      btn.textContent = '📝 Summarize';
+    } finally {
+      busy = false;
+      btn.disabled = false;
+    }
+  });
+  wrap.append(btn, out);
+  return wrap;
 }
 
 // URL for a voice note's retained audio. The token rides as ?token= so the

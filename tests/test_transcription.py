@@ -407,13 +407,14 @@ def test_transcribe_file_posts_wav_directly_and_flattens(tmp_path: Path) -> None
     sess = _FakeSession()
 
     text = transcribe_file(
-        wav, base_url="http://hub:8000/", model="whisper-1", language="auto", session=sess  # type: ignore[arg-type]
+        wav, base_url="http://hub:8000/", model="whisper-vanilla", language="auto", session=sess  # type: ignore[arg-type]
     )
 
     assert text == "hello world"  # whitespace runs flattened
     call = sess.calls[0]
     assert call["url"] == "http://hub:8000/v1/audio/transcriptions"
-    assert call["data"] == {"model": "whisper-1", "response_format": "json"}  # no language hint
+    # No language hint → whisper-vanilla auto-detects the source language server-side.
+    assert call["data"] == {"model": "whisper-vanilla", "response_format": "json"}
     name, content, mime = call["files"]["file"]  # type: ignore[index]
     assert name == "note.wav" and content == b"RIFF....WAVE" and mime == "audio/wav"
 
@@ -462,6 +463,23 @@ def test_transcribe_file_errors_clearly_without_ffmpeg(
     monkeypatch.setattr(tr.shutil, "which", lambda _name: None)
     with pytest.raises(TranscriptionError, match="ffmpeg"):
         transcribe_file(ogg, base_url="http://hub:8000", model="m")
+
+
+# --- glossary-free transcription default (#88) -----------------------------
+
+
+def test_default_model_is_glossary_free_auto_detect() -> None:
+    """The shipped default must be ``whisper-vanilla`` so non-English notes
+    auto-detect their source language instead of being Englishized by the plain
+    turbo's English glossary (local-llm-hub#128 / #88). Asserts both the dataclass
+    default and the committed ``config/default.json``."""
+    assert TranscriptionConfig().model == "whisper-vanilla"
+    assert TranscriptionConfig().language == "auto"  # send none → auto-detect
+
+    default_json = Path(__file__).resolve().parents[1] / "config" / "default.json"
+    tr_cfg = json.loads(default_json.read_text(encoding="utf-8"))["transcription"]
+    assert tr_cfg["model"] == "whisper-vanilla"
+    assert tr_cfg["language"] == "auto"
 
 
 # --- helpers ---------------------------------------------------------------

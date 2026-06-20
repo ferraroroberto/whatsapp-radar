@@ -43,6 +43,7 @@ from src.connector.base import MessageConnector
 from src.connector.factory import build_connector
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
+from src.db.sync import ingest_chats
 from src.models import StoredMessage
 from src.notify.alert import send_alert
 from src.notify.delivery import deliver_digest
@@ -182,42 +183,25 @@ def _sync(
 ) -> None:
     """Pull all chats + messages from the connector into the store (live mode)."""
     connector.connect()
-    chats_added = 0
-    chats_updated = 0
-    for chat in connector.list_chats():
-        existing_id = store.chat_id_for_source(conn, chat.source_chat_id)
-        if existing_id is None:
-            chat_id = store.upsert_chat(conn, chat)
-            chats_added += 1
-        else:
-            # Count a chat as *updated* only when its display name or type
-            # actually differs — mirrors resync (src/db/sync.py) so the two sync
-            # paths' sync_log bookkeeping agree instead of inflating updates with
-            # every unchanged chat re-seen.
-            chat_id = existing_id
-            existing = store.get_chat(conn, existing_id)
-            if existing is not None and (
-                existing["display_name"] != chat.display_name
-                or existing["chat_type"] != chat.chat_type
-            ):
-                store.upsert_chat(conn, chat)
-                chats_updated += 1
-        outcome.chats_synced += 1
-        outcome.messages_synced += store.insert_messages(
-            conn, chat_id, connector.fetch_messages(chat.source_chat_id)
-        )
+    # Shared connector→store ingest loop (the add/update diff + INSERT-OR-IGNORE
+    # semantics live once in src/db/sync.py so this path can never silently
+    # diverge from resync's sync_log bookkeeping). This path owns its own
+    # connector lifecycle (connect/stop), "scan" source tag, and progress line.
+    delta = ingest_chats(conn, connector)
     connector.stop()
+    outcome.chats_synced += delta.chats_seen
+    outcome.messages_synced += delta.messages_added
     # A sync_log row so a live scan's ingest is as visible as a resync's (#31).
     store.record_sync(
         conn,
         source="scan",
-        chats_added=chats_added,
-        chats_updated=chats_updated,
-        messages_added=outcome.messages_synced,
+        chats_added=delta.chats_added,
+        chats_updated=delta.chats_updated,
+        messages_added=delta.messages_added,
     )
     _emit(
         progress,
-        f"✓ synced {outcome.chats_synced} chats ({chats_added} new) / "
+        f"✓ synced {outcome.chats_synced} chats ({delta.chats_added} new) / "
         f"{outcome.messages_synced} new messages",
     )
 

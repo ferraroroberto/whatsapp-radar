@@ -25,7 +25,7 @@ from src.connector.factory import build_connector
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
-from src.db.sync import resync, resync_outcome_to_dict
+from src.db.sync import ingest_chats, resync, resync_outcome_to_dict
 from src.notify import deliver_digest
 from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
@@ -64,16 +64,9 @@ def _cmd_status(conn: sqlite3.Connection, config: Config) -> int:
 def _cmd_ingest(conn: sqlite3.Connection, config: Config) -> int:
     connector = _build_connector(config)
     connector.connect()
-    new_chats = 0
-    new_messages = 0
-    for chat in connector.list_chats():
-        chat_id = store.upsert_chat(conn, chat)
-        new_chats += 1
-        new_messages += store.insert_messages(conn, chat_id, connector.fetch_messages(
-            chat.source_chat_id
-        ))
+    delta = ingest_chats(conn, connector)
     connector.stop()
-    print(f"Ingested {new_chats} chats, {new_messages} new messages.")
+    print(f"Ingested {delta.chats_seen} chats, {delta.messages_added} new messages.")
     return 0
 
 

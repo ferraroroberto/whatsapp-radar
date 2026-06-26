@@ -117,3 +117,50 @@ def test_resync_outcome_to_dict_shape(conn: sqlite3.Connection) -> None:
     assert payload["kind"] == "resync"
     assert payload["ok"] is True
     assert set(payload) >= {"chats_added", "chats_updated", "messages_added", "noop"}
+
+
+class _MultiSourceConnector:
+    """Reports a single chat with a non-default source ('gmail').
+
+    Used to verify that ingest_chats passes chat.source to chat_id_for_source so
+    the composite identity (source, source_chat_id) is honoured — the bug in #102
+    was that the call always used the default source='whatsapp', causing a
+    non-whatsapp chat to be re-inserted as new on every run instead of being
+    recognised as already-stored.
+    """
+
+    def connect(self) -> ConnectorStatus:
+        return ConnectorStatus(name="gmail-fixture", connected=True, detail="1 chat")
+
+    def status(self) -> ConnectorStatus:
+        return self.connect()
+
+    def list_chats(self) -> list[ChatRecord]:
+        return [ChatRecord(source_chat_id="thread-001", display_name="Thread One", source="gmail")]
+
+    def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
+        return []
+
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        return source_chat_id
+
+    def stop(self) -> None:
+        return None
+
+
+def test_ingest_chats_uses_chat_source_for_lookup(conn: sqlite3.Connection) -> None:
+    """Second ingest of a non-whatsapp chat must be a no-op (regression for #102).
+
+    Before the fix, chat_id_for_source was called without source=chat.source so
+    it fell back to source='whatsapp'.  A 'gmail' chat therefore always got
+    existing_id=None → chats_added incremented on every run instead of 0.
+    """
+    first = resync(conn, _MultiSourceConnector())
+    assert first.chats_added == 1
+    assert first.chats_updated == 0
+
+    second = resync(conn, _MultiSourceConnector())
+    assert second.chats_added == 0, (
+        "non-whatsapp chat was re-inserted as new — source param not forwarded (#102)"
+    )
+    assert second.is_noop

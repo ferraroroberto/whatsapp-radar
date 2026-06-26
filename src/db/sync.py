@@ -75,7 +75,7 @@ def ingest_chats(
     """
     delta = IngestDelta()
     for chat in connector.list_chats():
-        existing_id = store.chat_id_for_source(conn, chat.source_chat_id)
+        existing_id = store.chat_id_for_source(conn, chat.source_chat_id, source=chat.source)
         if existing_id is None:
             chat_id = store.upsert_chat(conn, chat)
             delta.chats_added += 1

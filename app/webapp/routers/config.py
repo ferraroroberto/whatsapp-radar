@@ -12,7 +12,6 @@ last-4 hint — and a blank token field on save never overwrites a stored one.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -44,8 +43,7 @@ class ConfigUpdate(BaseModel):
 
 def _read_roots_text() -> str:
     """Verbatim contents of the keyword-roots file (shown read-only)."""
-    path = Path(keywords.__file__).with_name("prompts") / keywords._ROOTS_FILE
-    return path.read_text(encoding="utf-8")
+    return keywords.roots_file_path().read_text(encoding="utf-8")
 
 
 def _mask(token: str) -> dict[str, Any]:

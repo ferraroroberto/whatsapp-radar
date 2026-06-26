@@ -44,6 +44,37 @@ from src.models import ChatRecord, MessageRecord
 _STALE_AFTER_SECONDS = 120
 
 
+def read_status_file(buffer_dir: Path) -> dict[str, Any] | None:
+    """Parse the sidecar's ``status.json`` heartbeat, or ``None`` if absent/torn.
+
+    The single reader of the heartbeat schema, shared by the connector and the
+    sidecar supervisor (:mod:`src.connector.sidecar`) so there is one owner.
+    """
+    status_file = buffer_dir / "status.json"
+    if not status_file.exists():
+        return None
+    try:
+        data: dict[str, Any] = json.loads(status_file.read_text(encoding="utf-8"))
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def is_heartbeat_fresh(last_update: Any) -> bool:
+    """True when ``last_update`` is within :data:`_STALE_AFTER_SECONDS` of now.
+
+    The single definition of "stale" across the codebase (the connector's status
+    view and the sidecar supervisor both call it)."""
+    if not isinstance(last_update, str):
+        return False
+    try:
+        seen = datetime.fromisoformat(last_update.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    age = (datetime.now(UTC) - seen).total_seconds()
+    return age <= _STALE_AFTER_SECONDS
+
+
 class LinkedDeviceConnector:
     """A read-only :class:`MessageConnector` backed by the sidecar's NDJSON buffer."""
 
@@ -51,7 +82,6 @@ class LinkedDeviceConnector:
         self._dir = buffer_dir
         self._chats_file = buffer_dir / "chats.ndjson"
         self._messages_file = buffer_dir / "messages.ndjson"
-        self._status_file = buffer_dir / "status.json"
         # Lazily-built {jid: {msg_id: row}} index so the (potentially large)
         # messages file is parsed once per connector, not once per chat.
         self._index: dict[str, dict[str, dict[str, Any]]] | None = None
@@ -64,14 +94,14 @@ class LinkedDeviceConnector:
         return self.status()
 
     def status(self) -> ConnectorStatus:
-        raw = self._read_status()
+        raw = read_status_file(self._dir)
         if raw is None:
             return ConnectorStatus(
                 name="linked_device",
                 connected=False,
                 detail="sidecar not started (no status.json) — run the Node sidecar",
             )
-        fresh = self._is_fresh(raw.get("last_update"))
+        fresh = is_heartbeat_fresh(raw.get("last_update"))
         connected = bool(raw.get("connected")) and bool(raw.get("paired")) and fresh
         if not raw.get("paired"):
             detail = "not paired — scan the QR printed by the sidecar"
@@ -259,26 +289,6 @@ class LinkedDeviceConnector:
         return self._humanize_jid(participant) if participant else None
 
     # --- internals ---------------------------------------------------------
-
-    def _read_status(self) -> dict[str, Any] | None:
-        if not self._status_file.exists():
-            return None
-        try:
-            data: dict[str, Any] = json.loads(self._status_file.read_text(encoding="utf-8"))
-            return data
-        except (json.JSONDecodeError, OSError):
-            return None
-
-    @staticmethod
-    def _is_fresh(last_update: Any) -> bool:
-        if not isinstance(last_update, str):
-            return False
-        try:
-            seen = datetime.fromisoformat(last_update.replace("Z", "+00:00"))
-        except ValueError:
-            return False
-        age = (datetime.now(UTC) - seen).total_seconds()
-        return age <= _STALE_AFTER_SECONDS
 
     @staticmethod
     def _read_ndjson(path: Path) -> list[dict[str, Any]]:

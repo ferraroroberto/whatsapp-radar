@@ -27,3 +27,12 @@ class Notifier(Protocol):
     def send(self, digest: Digest) -> None:
         """Deliver a consolidated digest. Raises :class:`NotifierError` on failure."""
         ...
+
+    def send_text(self, text: str) -> None:
+        """Deliver a one-line operational alert (not a digest).
+
+        Part of the contract so :func:`src.notify.alert.send_alert` reaches every
+        notifier without a concrete-type gate — a new notifier that omits it fails
+        type-checking rather than silently dropping alerts.
+        """
+        ...

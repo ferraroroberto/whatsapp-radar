@@ -11,9 +11,9 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends
 
-from app.webapp.routers._helpers import db_path
+from app.webapp.routers._helpers import get_conn
 from src.db import store
 
 router = APIRouter()
@@ -36,37 +36,33 @@ def _run_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 @router.get("/api/dashboard")
-async def dashboard(request: Request) -> dict[str, Any]:
-    conn = store.connect(db_path(request))
-    try:
-        chats = store.count_chats_by_status(conn)
-        per_chat = store.messages_per_chat(conn, monitored_only=True)
-        last = store.last_run(conn)
-        backlog = store.count_messages_since(conn, last["started_at"]) if last else 0
-        return {
-            "chats": {**chats, "total": sum(chats.values())},
-            "messages": {
-                "total": store.message_count_total(conn),
-                "per_channel": [
-                    {
-                        "chat_id": int(row["id"]),
-                        "name": row["display_name"],
-                        "status": row["status"],
-                        "count": int(row["message_count"]),
-                        "last_message_at": row["last_message_at"],
-                    }
-                    for row in per_chat
-                ],
-            },
-            "scans": {
-                "count": store.count_runs(conn),
-                "messages_since_last": backlog,
-                "last": _run_summary(last),
-            },
-            "alerts": {
-                "actionable": store.count_actionable_items(conn),
-                "notifications_sent": store.count_notifications_sent(conn),
-            },
-        }
-    finally:
-        conn.close()
+async def dashboard(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
+    chats = store.count_chats_by_status(conn)
+    per_chat = store.messages_per_chat(conn, monitored_only=True)
+    last = store.last_run(conn)
+    backlog = store.count_messages_since(conn, last["started_at"]) if last else 0
+    return {
+        "chats": {**chats, "total": sum(chats.values())},
+        "messages": {
+            "total": store.message_count_total(conn),
+            "per_channel": [
+                {
+                    "chat_id": int(row["id"]),
+                    "name": row["display_name"],
+                    "status": row["status"],
+                    "count": int(row["message_count"]),
+                    "last_message_at": row["last_message_at"],
+                }
+                for row in per_chat
+            ],
+        },
+        "scans": {
+            "count": store.count_runs(conn),
+            "messages_since_last": backlog,
+            "last": _run_summary(last),
+        },
+        "alerts": {
+            "actionable": store.count_actionable_items(conn),
+            "notifications_sent": store.count_notifications_sent(conn),
+        },
+    }

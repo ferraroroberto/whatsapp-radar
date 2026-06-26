@@ -51,8 +51,18 @@ class TranscriptionConfig:
     # Master switch. When false the transcription phase is a no-op.
     enabled: bool = False
     # Only voice notes from the last N days are transcribed; older ones are marked
-    # 'skipped_old' so a fresh pairing never chews through a long backlog.
+    # 'skipped_old' so a fresh pairing never chews through a long backlog. This gates
+    # only *never-attempted* ('pending') notes — see ``failed_retry_days`` for notes
+    # we already tried and that failed.
     window_days: int = 7
+    # How long a note that already *failed* transcription keeps being retried (and its
+    # audio kept on disk) before we give up, mark it 'skipped_old' and delete the audio.
+    # A failed note means a transient outage (e.g. the whisper backend was down, #99 /
+    # local-llm-hub#147), not first-pairing backlog, so it retries on every full sync
+    # regardless of ``window_days`` — but bounded here so sensitive audio isn't kept
+    # forever. Deliberately longer than ``window_days`` so a multi-day outage always
+    # recovers; never below it in practice (#104).
+    failed_retry_days: int = 30
     # The hub's audio base URL (its :8000 proxy keeps the call in the hub's
     # observability ring); ``/v1/audio/transcriptions`` is appended by the client.
     audio_base_url: str = "http://127.0.0.1:8000"
@@ -226,6 +236,11 @@ def load_config(root: Path | None = None) -> Config:
         ),
         window_days=int(
             os.environ.get("WR_TRANSCRIPTION_WINDOW_DAYS", tr_raw.get("window_days", 7))
+        ),
+        failed_retry_days=int(
+            os.environ.get(
+                "WR_TRANSCRIPTION_FAILED_RETRY_DAYS", tr_raw.get("failed_retry_days", 30)
+            )
         ),
         audio_base_url=os.environ.get(
             "WR_TRANSCRIPTION_AUDIO_BASE_URL",

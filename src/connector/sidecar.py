@@ -39,7 +39,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from src.connector.linked_device import LinkedDeviceConnector
+from src.connector.linked_device import is_heartbeat_fresh, read_status_file
 
 # States, ordered roughly worst → best for the UI to colour.
 STATE_STOPPED = "stopped"
@@ -103,11 +103,11 @@ def _qr_path(buffer_dir: Path) -> Path:
 def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
     """Derive the coarse lifecycle state from the sidecar's heartbeat file.
 
-    Reuses :class:`LinkedDeviceConnector`'s status reader and freshness rule so
-    there is exactly one definition of "stale" across the codebase.
+    Reuses :func:`read_status_file` and :func:`is_heartbeat_fresh` from the
+    linked-device reader so there is exactly one definition of "stale" across the
+    codebase.
     """
-    reader = LinkedDeviceConnector(buffer_dir)
-    raw = reader._read_status()  # noqa: SLF001 — one owner of the status schema
+    raw = read_status_file(buffer_dir)
     has_qr = _qr_path(buffer_dir).is_file()
     if raw is None:
         return SidecarStateInfo(
@@ -125,7 +125,7 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
     paired = bool(raw.get("paired"))
     connected = bool(raw.get("connected"))
     last_update = raw.get("last_update")
-    fresh = LinkedDeviceConnector._is_fresh(last_update)  # noqa: SLF001
+    fresh = is_heartbeat_fresh(last_update)
     chats = int(raw.get("chats", 0) or 0)
     messages = int(raw.get("messages", 0) or 0)
     last = last_update if isinstance(last_update, str) else None

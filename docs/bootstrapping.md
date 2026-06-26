@@ -135,7 +135,7 @@ The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**.
 .\tray.bat                                             # adopt-or-spawn the webapp behind a tray icon (daily use)
 ```
 
-- `gen_ssl_cert.py` mints a local CA (10-year) + a leaf cert covering `localhost`, the hostname, and the **Tailscale** name, and installs the CA into your Windows trust store. It prints an **iOS trust profile** — install it on the phone so Safari trusts the tailnet HTTPS endpoint. The PWA then serves HTTPS on `:8455` over the tailnet.
+- `gen_ssl_cert.py` mints a local CA (10-year) + a leaf cert covering `localhost`, the hostname, and the **Tailscale** name, and installs the CA into your Windows trust store. It writes an **iOS trust profile** served by the webapp — once the tray is running, open `https://<machine>.<tailnet>.ts.net:8455/install-ca` in **iPhone Safari** and tap **Install** so Safari trusts the tailnet HTTPS endpoint. The PWA then serves HTTPS on `:8455` over the tailnet.
 - `gen_token.py` turns on the bearer gate; the tray bakes the token into the copied URL (`?token=…`). Open that URL once on the phone and it stashes the token in localStorage.
 - Reach the PWA from the phone at `https://<machine>.<tailnet>.ts.net:8455` (on the tailnet).
 

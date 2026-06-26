@@ -4,12 +4,15 @@ lives here instead.
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from fastapi import Request
 
 from src.config import load_config
+from src.db import store
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -45,6 +48,30 @@ def db_path(request: Request) -> Path:
     """
     path = getattr(request.app.state, "db_path", None)
     return Path(path) if path is not None else load_config().db_path
+
+
+async def get_conn(request: Request) -> AsyncIterator[sqlite3.Connection]:
+    """FastAPI dependency yielding a store connection scoped to the request.
+
+    The single home for the open/close lifecycle that the read/write handlers
+    used to repeat as ``conn = store.connect(db_path(request))`` / ``try: …
+    finally: conn.close()``.  The connection *setup* itself (row factory, WAL
+    pragmas, schema + migrate) already lives in :func:`src.db.store.connect`;
+    this dependency owns only the lifecycle, so handlers inject it with
+    ``conn: sqlite3.Connection = Depends(get_conn)`` and the connection is
+    closed when the request finishes (including on an ``HTTPException``).
+
+    Deliberately ``async``: every consuming handler is ``async`` and runs in the
+    event-loop thread, so the connection must be opened (and closed) on that same
+    thread — a sync dependency would run in Starlette's threadpool and trip
+    sqlite3's ``check_same_thread`` guard. This matches the prior behaviour, where
+    each handler called :func:`store.connect` inline on the event-loop thread.
+    """
+    conn = store.connect(db_path(request))
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def buffer_dir(request: Request) -> Path:

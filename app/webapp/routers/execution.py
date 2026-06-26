@@ -24,12 +24,13 @@ a second request returns 409.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.webapp import runs
-from app.webapp.routers._helpers import db_path, maybe_json
+from app.webapp.routers._helpers import db_path, get_conn, maybe_json
 from src.config import load_config
 from src.connector.factory import build_connector
 from src.db import store
@@ -134,7 +135,10 @@ async def execution_health(request: Request) -> dict[str, Any]:
 
 
 @router.get("/api/execution/syncs")
-async def list_syncs(request: Request, limit: int = 20) -> dict[str, Any]:
+async def list_syncs(
+    limit: int = 20,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
     """Recent sync deltas + current stored totals (the 'is it working?' view).
 
     Every sync path writes a ``sync_log`` row, so this lists when each ran and how
@@ -143,12 +147,8 @@ async def list_syncs(request: Request, limit: int = 20) -> dict[str, Any]:
     actually growing.
     """
     limit = max(1, min(limit, 100))
-    conn = store.connect(db_path(request))
-    try:
-        rows = [dict(r) for r in store.recent_syncs(conn, limit)]
-        totals = {"chats": store.count_chats(conn), "messages": store.count_messages(conn)}
-    finally:
-        conn.close()
+    rows = [dict(r) for r in store.recent_syncs(conn, limit)]
+    totals = {"chats": store.count_chats(conn), "messages": store.count_messages(conn)}
     return {"syncs": rows, "totals": totals}
 
 

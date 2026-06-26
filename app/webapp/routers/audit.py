@@ -20,9 +20,9 @@ import json
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.webapp.routers._helpers import db_path
+from app.webapp.routers._helpers import get_conn
 from src.db import store
 
 router = APIRouter()
@@ -91,7 +91,10 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
 
 
 @router.get("/api/audit/runs")
-async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
+async def list_runs(
+    limit: int = 50,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
     """Recent review/scan runs (with funnel) plus maintenance sync markers.
 
     ``runs`` are the inspectable review/scan runs, newest first; ``syncs`` are the
@@ -99,34 +102,29 @@ async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
     timeline (read-only, no schema beyond the existing sync_log).
     """
     limit = max(1, min(limit, 200))
-    conn = store.connect(db_path(request))
-    try:
-        runs = [_run_list_row(r) for r in store.list_review_runs(conn, limit)]
-        syncs = [
-            {
-                "ran_at": s["ran_at"],
-                "source": s["source"],
-                "chats_added": int(s["chats_added"]),
-                "chats_updated": int(s["chats_updated"]),
-                "messages_added": int(s["messages_added"]),
-            }
-            for s in store.recent_syncs(conn, limit)
-            if s["source"] in _MAINTENANCE_SOURCES
-        ]
-    finally:
-        conn.close()
+    runs = [_run_list_row(r) for r in store.list_review_runs(conn, limit)]
+    syncs = [
+        {
+            "ran_at": s["ran_at"],
+            "source": s["source"],
+            "chats_added": int(s["chats_added"]),
+            "chats_updated": int(s["chats_updated"]),
+            "messages_added": int(s["messages_added"]),
+        }
+        for s in store.recent_syncs(conn, limit)
+        if s["source"] in _MAINTENANCE_SOURCES
+    ]
     return {"runs": runs, "syncs": syncs}
 
 
 @router.get("/api/audit/runs/{run_id}")
-async def get_run(request: Request, run_id: int) -> dict[str, Any]:
+async def get_run(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
     """One run's header + funnel and its per-chat audit trace (the drill-down)."""
-    conn = store.connect(db_path(request))
-    try:
-        run = store.review_run(conn, run_id)
-        if run is None:
-            raise HTTPException(status_code=404, detail="run not found")
-        traces = [_trace_row(t) for t in store.traces_for_run(conn, run_id)]
-        return {"run": _run_list_row(run), "traces": traces}
-    finally:
-        conn.close()
+    run = store.review_run(conn, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    traces = [_trace_row(t) for t in store.traces_for_run(conn, run_id)]
+    return {"run": _run_list_row(run), "traces": traces}

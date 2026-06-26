@@ -14,8 +14,13 @@ deletes audio past that window. Set ``audio_retention_days = 0`` to revert to #3
 delete-immediately behaviour. A retained 'done' note never trips the cursor barrier
 (which only holds 'pending'/'failed' notes), so retention doesn't change gating.
 
-A voice note older than the configured window is marked 'skipped_old' and never
-fetched, so a fresh pairing never transcribes a long backlog. Transcription runs
+A never-attempted voice note older than ``transcription.window_days`` is marked
+'skipped_old' and never fetched, so a fresh pairing never transcribes a long backlog.
+A note that already *failed* (a transient backend outage, not backlog) keeps retrying
+on every full sync up to the longer ``transcription.failed_retry_days``, so an outage
+that outlasts the transcribe window still recovers; only past that does it give up
+(marked 'skipped_old', audio deleted) so sensitive audio isn't kept forever (#104).
+Transcription runs
 *before* analysis and advances no cursor, so a voice note is never analysed as a
 placeholder and the cursor never skips real content. Each note is isolated: one
 failing transcription never blocks the rest — nor analysis of the other chats.
@@ -281,6 +286,7 @@ def run_transcription_phase(
 
     buffer_dir = config.linked_device_dir
     window = cfg.window_days
+    failed_window = cfg.failed_retry_days
     retain_days = cfg.audio_retention_days
 
     # 0) Retention sweep (#86): drop audio for notes transcribed more than
@@ -293,13 +299,19 @@ def run_transcription_phase(
             store.clear_media_path(conn, int(row["id"]))
             outcome.swept += 1
 
-    # 1) Backlog guard: voice notes older than the window are never transcribed.
-    for row in store.stale_voice_notes(conn, within_days=window, now=now):
+    # 1) Backlog guard: never-attempted notes older than the window are skipped; a
+    # note that already *failed* is given a longer leash (it's a transient outage, not
+    # backlog) and only skipped once it's older than `failed_window` (#104).
+    for row in store.stale_voice_notes(
+        conn, within_days=window, failed_within_days=failed_window, now=now
+    ):
         _delete_audio(buffer_dir, row["media_path"])
         store.mark_transcription(conn, int(row["id"]), status="skipped_old")
         outcome.skipped_old += 1
 
-    pending = store.pending_transcriptions(conn, within_days=window, now=now)
+    pending = store.pending_transcriptions(
+        conn, within_days=window, failed_within_days=failed_window, now=now
+    )
     if not pending:
         notes = []
         if outcome.skipped_old:

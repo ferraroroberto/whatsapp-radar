@@ -576,45 +576,74 @@ def advance_cursor(
 # --- voice-note transcription (#36) ----------------------------------------
 
 def pending_transcriptions(
-    conn: sqlite3.Connection, *, within_days: int, now: datetime | None = None
+    conn: sqlite3.Connection,
+    *,
+    within_days: int,
+    failed_within_days: int | None = None,
+    now: datetime | None = None,
 ) -> list[sqlite3.Row]:
-    """Voice notes awaiting transcription within the recent window, oldest-first.
+    """Voice notes awaiting transcription, oldest-first.
 
-    Rows whose audio was downloaded (``media_path`` set) and whose status is
-    'pending' or 'failed' — a failed row retries on the next live scan — limited to
-    the last ``within_days`` of send time. Older notes are handled by
-    :func:`stale_voice_notes` so a first pairing never transcribes a long backlog.
+    Rows whose audio was downloaded (``media_path`` set) and that still need a
+    transcript, split by status so a transient failure isn't treated as backlog (#104):
+
+    - 'pending' (never attempted) is gated by ``within_days`` — the first-pairing
+      backlog guard, so a fresh device never transcribes years of notes.
+    - 'failed' (we tried, it errored — e.g. the whisper backend was down) retries on
+      every live scan up to ``failed_within_days``, *regardless* of ``within_days``, so
+      an outage that outlasts the transcribe window still recovers. Defaults to
+      ``within_days`` when not given (legacy behaviour: both gated identically).
+
+    Older notes of each kind are handled by :func:`stale_voice_notes`.
     """
-    cutoff = ((now or datetime.now(UTC)) - timedelta(days=within_days)).isoformat()
+    base = now or datetime.now(UTC)
+    failed_within_days = within_days if failed_within_days is None else failed_within_days
+    pending_cutoff = (base - timedelta(days=within_days)).isoformat()
+    failed_cutoff = (base - timedelta(days=failed_within_days)).isoformat()
     return list(
         conn.execute(
             "SELECT id, chat_id, source_message_id, message_timestamp, media_path "
             "FROM messages "
             "WHERE message_type = 'voice' AND media_path IS NOT NULL "
-            "AND transcription_status IN ('pending', 'failed') AND message_timestamp >= ? "
+            "AND ((transcription_status = 'pending' AND message_timestamp >= ?) "
+            "     OR (transcription_status = 'failed' AND message_timestamp >= ?)) "
             "ORDER BY message_timestamp, id",
-            (cutoff,),
+            (pending_cutoff, failed_cutoff),
         ).fetchall()
     )
 
 
 def stale_voice_notes(
-    conn: sqlite3.Connection, *, within_days: int, now: datetime | None = None
+    conn: sqlite3.Connection,
+    *,
+    within_days: int,
+    failed_within_days: int | None = None,
+    now: datetime | None = None,
 ) -> list[sqlite3.Row]:
-    """Pending voice notes older than the window — to skip (not transcribe).
+    """Voice notes too old to (keep) transcribing — to skip and drop audio for.
 
-    The first-run backlog guard: a freshly paired device can surface years of
-    voice notes, so we transcribe only the last ``within_days`` and skip the rest.
-    Returns id + ``media_path`` so the caller can delete any already-downloaded
-    audio before marking the row :func:`mark_transcription` 'skipped_old'.
+    Two backlog guards, by status (#104):
+
+    - 'pending' (never attempted) older than ``within_days`` — the first-run guard so
+      a freshly paired device doesn't transcribe years of notes.
+    - 'failed' (already retried) older than ``failed_within_days`` — give up on a note
+      whose backend outage never recovered, so its retained audio isn't kept forever.
+      Defaults to ``within_days`` (legacy behaviour) when not given.
+
+    Returns id + ``media_path`` so the caller can delete any already-downloaded audio
+    before marking the row :func:`mark_transcription` 'skipped_old'.
     """
-    cutoff = ((now or datetime.now(UTC)) - timedelta(days=within_days)).isoformat()
+    base = now or datetime.now(UTC)
+    failed_within_days = within_days if failed_within_days is None else failed_within_days
+    pending_cutoff = (base - timedelta(days=within_days)).isoformat()
+    failed_cutoff = (base - timedelta(days=failed_within_days)).isoformat()
     return list(
         conn.execute(
             "SELECT id, media_path FROM messages "
             "WHERE message_type = 'voice' "
-            "AND transcription_status IN ('pending', 'failed') AND message_timestamp < ?",
-            (cutoff,),
+            "AND ((transcription_status = 'pending' AND message_timestamp < ?) "
+            "     OR (transcription_status = 'failed' AND message_timestamp < ?))",
+            (pending_cutoff, failed_cutoff),
         ).fetchall()
     )
 

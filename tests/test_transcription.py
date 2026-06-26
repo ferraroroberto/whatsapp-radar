@@ -33,6 +33,7 @@ def _config(
     *,
     enabled: bool = True,
     window_days: int = 7,
+    failed_retry_days: int = 30,
     language: str = "auto",
     audio_retention_days: int = 7,
 ) -> Config:
@@ -47,6 +48,7 @@ def _config(
         transcription=TranscriptionConfig(
             enabled=enabled,
             window_days=window_days,
+            failed_retry_days=failed_retry_days,
             language=language,
             audio_retention_days=audio_retention_days,
         ),
@@ -62,8 +64,9 @@ def _voice_note(
     when: datetime,
     audio: bool = True,
     text: str = "[voice note]",
+    status: str = "pending",
 ) -> Path:
-    """Insert a pending voice-note row and (optionally) drop a stub audio file."""
+    """Insert a voice-note row (default 'pending') and (optionally) a stub audio file."""
     rel = f"media/{msg_id}.ogg"
     audio_path = buffer_dir / rel
     if audio:
@@ -79,7 +82,7 @@ def _voice_note(
                 text=text,
                 sender_label="Parent",
                 message_type="voice",
-                transcription_status="pending",
+                transcription_status=status,
                 media_path=rel if audio else None,
             )
         ],
@@ -309,6 +312,93 @@ def test_failure_isolated_keeps_audio_and_holds_cursor(
     out2 = _scan_with_transcriber(conn, cfg, lambda _p, _lang: "Please bring the form")
     assert out2.transcriptions == 1
     assert out2.actionable == 1
+
+
+# --- failed-note retry leash (#104) ----------------------------------------
+
+
+def _chat(conn: sqlite3.Connection, sid: str = "c-retry") -> int:
+    return store.upsert_chat(conn, ChatRecord(source_chat_id=sid, display_name="Class 4A"))
+
+
+def test_failed_note_retried_beyond_transcribe_window(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # A note that already FAILED, older than window_days (7) but within
+    # failed_retry_days (30): it is not backlog — its audio must survive the stale
+    # sweep and it must be retried (the outage outlasted the transcribe window). #104
+    cfg = _config(tmp_path, window_days=7, failed_retry_days=30)
+    chat_id = _chat(conn)
+    audio = _voice_note(
+        conn, chat_id, msg_id="f14", buffer_dir=cfg.linked_device_dir,
+        when=datetime.now(UTC) - timedelta(days=14), status="failed",
+    )
+
+    outcome = run_transcription_phase(
+        conn, cfg, transcriber=lambda _p, _lang: "Please bring the form tomorrow"
+    )
+
+    assert (outcome.done, outcome.failed, outcome.skipped_old) == (1, 0, 0)
+    row = conn.execute(
+        "SELECT text, transcription_status, media_path FROM messages "
+        "WHERE source_message_id = 'f14'"
+    ).fetchone()
+    assert row["transcription_status"] == "done"
+    assert row["text"] == "Please bring the form tomorrow"
+    assert row["media_path"] is not None and audio.exists()  # not swept before retry
+
+
+def test_failed_note_given_up_past_failed_retry_window(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # A failed note older than failed_retry_days (30): the outage never recovered, so
+    # we give up — skip it and delete its audio (bounded retention of sensitive data).
+    cfg = _config(tmp_path, window_days=7, failed_retry_days=30)
+    chat_id = _chat(conn)
+    audio = _voice_note(
+        conn, chat_id, msg_id="f40", buffer_dir=cfg.linked_device_dir,
+        when=datetime.now(UTC) - timedelta(days=40), status="failed",
+    )
+    calls: list[Path] = []
+
+    outcome = run_transcription_phase(
+        conn, cfg, transcriber=lambda p, _lang: calls.append(p) or "never"
+    )
+
+    assert calls == []  # past the leash → never retried
+    assert (outcome.done, outcome.skipped_old) == (0, 1)
+    row = conn.execute(
+        "SELECT transcription_status, media_path FROM messages WHERE source_message_id = 'f40'"
+    ).fetchone()
+    assert row["transcription_status"] == "skipped_old"
+    assert row["media_path"] is None and not audio.exists()
+
+
+def test_pending_backlog_still_gated_by_window_not_failed_leash(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # The longer leash is ONLY for 'failed' notes. A never-attempted 'pending' note
+    # older than window_days (7) — even within failed_retry_days (30) — is still
+    # skipped as first-pairing backlog, never transcribed. Guards the status split.
+    cfg = _config(tmp_path, window_days=7, failed_retry_days=30)
+    chat_id = _chat(conn)
+    audio = _voice_note(
+        conn, chat_id, msg_id="p14", buffer_dir=cfg.linked_device_dir,
+        when=datetime.now(UTC) - timedelta(days=14), status="pending",
+    )
+    calls: list[Path] = []
+
+    outcome = run_transcription_phase(
+        conn, cfg, transcriber=lambda p, _lang: calls.append(p) or "never"
+    )
+
+    assert calls == []  # pending backlog past the window is not retried
+    assert (outcome.done, outcome.skipped_old) == (0, 1)
+    row = conn.execute(
+        "SELECT transcription_status, media_path FROM messages WHERE source_message_id = 'p14'"
+    ).fetchone()
+    assert row["transcription_status"] == "skipped_old"
+    assert row["media_path"] is None and not audio.exists()
 
 
 # --- per-chat language inference (#36) -------------------------------------

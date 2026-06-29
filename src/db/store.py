@@ -1203,11 +1203,6 @@ def count_chats(conn: sqlite3.Connection) -> int:
     return int(conn.execute("SELECT COUNT(*) AS n FROM chats").fetchone()["n"])
 
 
-def count_messages(conn: sqlite3.Connection) -> int:
-    """Total messages stored across all chats."""
-    return int(conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"])
-
-
 # --- sync log (per-ingest visibility) --------------------------------------
 
 def record_sync(
@@ -1234,7 +1229,7 @@ def record_sync(
             chats_updated,
             messages_added,
             count_chats(conn),
-            count_messages(conn),
+            message_count_total(conn),
         ),
     )
     conn.commit()

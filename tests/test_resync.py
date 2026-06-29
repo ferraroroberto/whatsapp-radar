@@ -100,7 +100,7 @@ def test_resync_records_a_sync_log_row(conn: sqlite3.Connection) -> None:
     assert row["messages_added"] == out.messages_added > 0
     assert row["chats_added"] == out.chats_added
     # Totals are the running store size after the sync.
-    assert row["total_messages"] == store.count_messages(conn)
+    assert row["total_messages"] == store.message_count_total(conn)
     assert row["total_chats"] == store.count_chats(conn)
 
 

@@ -148,7 +148,7 @@ async def list_syncs(
     """
     limit = max(1, min(limit, 100))
     rows = [dict(r) for r in store.recent_syncs(conn, limit)]
-    totals = {"chats": store.count_chats(conn), "messages": store.count_messages(conn)}
+    totals = {"chats": store.count_chats(conn), "messages": store.message_count_total(conn)}
     return {"syncs": rows, "totals": totals}
 
 

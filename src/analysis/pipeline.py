@@ -25,10 +25,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
+from src.analysis._common import Progress, _emit
 from src.analysis.classifier import (
     ClassificationOutcome,
     TracedClassifier,
@@ -50,16 +50,6 @@ from src.notify.delivery import deliver_digest
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
 Mode = Literal["live", "dry_run"]
-
-# A sink for human-readable progress lines. The CLI wires it to stdout so a
-# launched run streams its funnel as it happens; tests/library callers may omit
-# it. Kept deliberately string-in/None-out so it can't affect control flow.
-Progress = Callable[[str], None]
-
-
-def _emit(progress: Progress | None, line: str) -> None:
-    if progress is not None:
-        progress(line)
 
 _NOT_ACTIONABLE = AnalysisResult(
     action_required=False,

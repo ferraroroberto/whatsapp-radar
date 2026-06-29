@@ -44,6 +44,7 @@ from pathlib import Path
 
 import requests
 
+from src.analysis._common import Progress, _emit
 from src.config import Config, TranscriptionConfig
 from src.db import store
 from src.models import StoredMessage
@@ -54,8 +55,6 @@ logger = logging.getLogger(__name__)
 # its real text is still pending, so it must not be analysed as a placeholder.
 _UNTRANSCRIBED = ("pending", "failed")
 
-# A sink for human-readable progress lines (mirrors the scan pipeline's ``Progress``).
-Progress = Callable[[str], None]
 # Maps ``(audio_path, language)`` to transcript text. Injectable so the scan phase
 # is testable with no network; the default implementation hits the hub. ``language``
 # is the resolved per-chat hint (``None`` → let the backend auto-detect).
@@ -80,11 +79,6 @@ class TranscriptionOutcome:
     failed: int = 0
     skipped_old: int = 0
     swept: int = 0  # retained audio files deleted past the retention window (#86)
-
-
-def _emit(progress: Progress | None, line: str) -> None:
-    if progress is not None:
-        progress(line)
 
 
 def _flatten(text: str) -> str:

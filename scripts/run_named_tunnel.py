@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -23,16 +22,15 @@ import threading
 import time
 from pathlib import Path
 
-import yaml
-
 logger = logging.getLogger("run_named_tunnel")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.tray import cloudflared_proc  # noqa: E402 — needs PROJECT_ROOT on sys.path
+
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "config" / "cloudflared.sample.yml"
-TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
 DEFAULT_PORT = 8455
 
 
@@ -108,18 +106,6 @@ def _spawn_cloudflared(config_path: Path) -> subprocess.Popen[str]:
     )
 
 
-def _read_hostname(config_path: Path) -> str | None:
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
-        logger.warning(f"⚠️  Could not parse {config_path}: {exc}")
-        return None
-    for entry in data.get("ingress") or []:
-        if isinstance(entry, dict) and entry.get("hostname"):
-            return str(entry["hostname"]).strip()
-    return None
-
-
 def _read_auth_token() -> str:
     try:
         from src.webapp_config import load_webapp_config
@@ -128,22 +114,6 @@ def _read_auth_token() -> str:
     except Exception as exc:
         logger.debug(f"could not read auth_token: {exc}")
         return ""
-
-
-def _persist_tunnel_url(hostname: str) -> None:
-    url = f"https://{hostname}"
-    token = _read_auth_token()
-    if token:
-        from src.webapp_config import append_auth_token
-
-        url = append_auth_token(url, token)
-    try:
-        TUNNEL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
-        TUNNEL_URL_FILE.write_text(url + "\n", encoding="utf-8")
-        logger.info(f"📡 Tunnel URL → {TUNNEL_URL_FILE}")
-        logger.info(f"   {url}")
-    except OSError as exc:
-        logger.warning(f"⚠️  Could not write {TUNNEL_URL_FILE}: {exc}")
 
 
 def _stream(proc: subprocess.Popen[str]) -> None:
@@ -167,7 +137,7 @@ def main() -> int:
         )
         return 1
 
-    hostname = _read_hostname(config_path)
+    hostname = cloudflared_proc.read_hostname(config_path)
     if hostname:
         logger.info(f"🌍 Public hostname: https://{hostname}")
 
@@ -187,7 +157,7 @@ def main() -> int:
     threading.Thread(target=_stream, args=(cloudflared,), daemon=True).start()
 
     if hostname:
-        _persist_tunnel_url(hostname)
+        cloudflared_proc.persist_tunnel_url(hostname, _read_auth_token())
 
     try:
         cloudflared.wait()
@@ -197,25 +167,8 @@ def main() -> int:
         for proc, name in ((cloudflared, "cloudflared"), (uvicorn_proc, "uvicorn")):
             if proc is None:
                 continue
-            try:
-                logger.info(f"🛑 Stopping {name} (pid={proc.pid})")
-                if sys.platform == "win32":
-                    try:
-                        proc.send_signal(signal.CTRL_BREAK_EVENT)
-                    except Exception:
-                        pass
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-            except Exception as exc:
-                logger.debug(f"{name} stop failed: {exc}")
-        try:
-            if TUNNEL_URL_FILE.exists():
-                TUNNEL_URL_FILE.unlink()
-        except OSError:
-            pass
+            cloudflared_proc.stop_proc(proc, name)
+        cloudflared_proc.cleanup_url_file()
 
     return 0
 

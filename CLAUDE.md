@@ -80,6 +80,16 @@ The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors 
 - Advance a per-chat cursor only after analysis state is persisted.
 - Notification delivery should be retryable independently of message analysis.
 
+## UX surface
+*The design-conformance gate the `/issue-{start,finish,yolo}` skills read (convention: `project-scaffolding#83`). This is a live, parseable block — the product is the FastAPI + static PWA under `app/webapp/`.*
+
+- design spec applies: yes        # `no` would make the gate a permanent no-op; this repo serves a real PWA
+- paths:
+  - app/webapp/static/**/*.css
+  - app/webapp/static/**/*.{js,html}
+- key views:                      # single tabbed SPA served at `/`
+  - /          (Dashboard · Chats · Run · Audit tabs)
+
 ## Verification
 
 Run the gate from the repo root with the project venv:

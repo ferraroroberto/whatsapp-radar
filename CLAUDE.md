@@ -65,17 +65,15 @@ The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors 
 
 ## Fleet Integration
 
-- Reuse `E:\automation\local-llm-hub` for LLM calls. Do not implement direct `claude -p`, `agy`, or provider-specific subprocess wrappers in this repo.
+- Reuse `E:\automation\local-llm-hub` for LLM calls.
 - Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI.
 - The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8; see "Admin webapp & tray" above). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in the gitignored `config/webapp_config.json`; `WR_TELEGRAM_*` env / `config/local.json` still override it.
-- If a reusable convention emerges, route the general rule back to `E:\automation\project-scaffolding` instead of creating fleet drift here.
 
 ## Implementation Conventions
 
 - Prefer a small, explicit architecture over framework ceremony.
 - Keep connector, storage, analysis, notification, and UI boundaries separate.
 - Store durable state in SQLite unless a later issue justifies something heavier.
-- Public functions should have type hints.
 - Use structured JSON outputs for LLM classification and validate them before advancing cursors.
 - Advance a per-chat cursor only after analysis state is persisted.
 - Notification delivery should be retryable independently of message analysis.
@@ -108,7 +106,3 @@ The suite runs entirely offline against sanitized fixtures (no WhatsApp credenti
 - Typical green: **~2 min**. Investigate at **>5 min**; treat as wedged at **>8 min**.
 - Flaky leg: the Playwright **WebKit/iPhone** e2e projection can wedge the browser on the hosted runner. `timeout-minutes: 30` caps a wedge. A wedge is a flake, not the diff.
 - CI's only signal beyond the local gate is the **e2e suite** (skipped locally — `pytest` shows ~13 skipped). Its e2e surface = `app/webapp/`, `app/tray/`, `tests/e2e/`, static assets under `app/webapp/static/`. A diff touching **none** of these (e.g. `src/db/`, `src/analysis/`, `src/notify/`, docs) gains nothing from CI.
-
-## Planning Discipline
-
-Future work belongs in GitHub issues, not dated planning files. Durable reference material may live under `docs/` when it will still be useful next quarter.

@@ -35,6 +35,10 @@ whatsapp-radar/
 
 Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <command>`, or the `wr.bat <command>` wrapper.
 
+### Internal architecture
+
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the CLI/tray/webapp entry points, the connector boundary, the scan pipeline, storage, notify, and the external dependencies) — the per-repo counterpart to the fleet-wide diagram `fleet-config`'s `/system-map` generates. Update it in the same PR as any material structural change (a connector added, a pipeline stage moved, a router split) — same anti-staleness contract as this repo's `.fleet.toml` `description` field. It is not auto-generated and not covered by `scripts/verify-before-ship.ps1`.
+
 ### Admin webapp & tray
 
 The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All four tabs (Dashboard · Chats & Config · Execution · Audit) are live; see `README.md` §"Admin Webapp" for per-tab endpoint lists.

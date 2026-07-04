@@ -1,0 +1,131 @@
+%% docs/architecture.mmd — whatsapp-radar's own internal structure.
+%% Hand-authored, not generated (unlike fleet-config's mechanically-aggregated
+%% fleet-wide `/system-map`) — this repo's own internal shape is semantic and
+%% can't be crawled the same way. Update this diagram in the same PR as any
+%% material structural change (a connector added, a pipeline stage moved, a
+%% router split) — same anti-staleness contract as this repo's `.fleet.toml`
+%% `description` field. See fleet-config's `CLAUDE.md` ("Every repo carries a
+%% `.fleet.toml`") for the general convention (ferraroroberto/fleet-config#256).
+
+flowchart TB
+  subgraph entry["Entry points"]
+    LAUNCHER["launcher.py / wr.bat"]
+    TRAYBAT["tray.bat / webapp.bat"]
+  end
+
+  subgraph cli["app/cli/main.py — argparse CLI"]
+    CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · tray"]
+  end
+  LAUNCHER --> CLICMDS
+
+  subgraph tray["app/tray/tray.py — pystray surface"]
+    TRAYPY["owns webapp lifecycle + sidecar keep-alive\n+ optional cloudflared tunnel"]
+    SINGLEINST["single_instance.py"]
+    CLOUDFLARED["cloudflared_proc.py"]
+  end
+  TRAYBAT --> TRAYPY
+  TRAYPY --> SINGLEINST
+  TRAYPY --> CLOUDFLARED
+
+  subgraph webapp["app/webapp/ — FastAPI + vanilla-JS PWA (:8455)"]
+    SERVER["server.py — app assembly, static mount"]
+    MANAGER["manager.py — WebappManager (start/stop/restart)"]
+    MIDDLEWARE["middleware.py — bearer-token gate"]
+    RUNS["runs.py — spawns CLI pieces, streams output"]
+    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · misc"]
+  end
+  TRAYPY --> MANAGER
+  MANAGER --> SERVER
+  SERVER --> MIDDLEWARE
+  SERVER --> ROUTERS
+  ROUTERS --> RUNS
+
+  subgraph pipeline["src/analysis/pipeline.py — scan (the one callable App Launcher's Jobs tab fires)"]
+    SCAN["scan(mode: live | dry_run)"]
+    TRANSCRIBE["transcription.py — voice notes -> hub Whisper"]
+    KEYWORDS["keywords.py — Stage 1 prefilter"]
+    CLASSIFIER["classifier.py — Stage 2 (stub | hub | cascade)"]
+    CONTRACT["contract.py — parse_analysis / AnalysisResult"]
+    REVIEW["review.py — cursor advance + alert memory"]
+  end
+  CLICMDS --> SCAN
+  RUNS --> SCAN
+  SCAN --> TRANSCRIBE
+  SCAN --> KEYWORDS
+  SCAN --> CLASSIFIER
+  CLASSIFIER --> CONTRACT
+  SCAN --> REVIEW
+
+  subgraph connector["src/connector/ — read-only connector boundary"]
+    CFACTORY["factory.py — build_connector(config)"]
+    FIXTURE["fixture.py — deterministic offline fixture"]
+    LINKED["linked_device.py — reads sidecar NDJSON buffer"]
+    SIDECARPY["sidecar.py — Node lifecycle supervisor\n(wait/relaunch, never kill)"]
+    PREFLIGHT["preflight.py — abort loud if source is down"]
+  end
+  SCAN --> CFACTORY
+  CFACTORY --> FIXTURE
+  CFACTORY --> LINKED
+  SCAN --> PREFLIGHT
+  TRAYPY -->|keep-alive supervise| SIDECARPY
+  LINKED --> SIDECARPY
+
+  subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
+    BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
+  end
+  SIDECARPY -->|spawn / heartbeat poll| BAILEYS
+  LINKED -->|read buffer| BAILEYS
+
+  subgraph db["src/db/ — SQLite store"]
+    STORE["store.py — typed repository functions"]
+    SYNC["sync.py — ingest_chats / resync"]
+    REPROCESS["reprocess.py — full rebuild, preserves operator state"]
+  end
+  CFACTORY --> SYNC
+  SYNC --> STORE
+  REPROCESS --> STORE
+  REVIEW --> STORE
+  SCAN --> STORE
+  ROUTERS --> STORE
+
+  subgraph report["src/report/digest.py"]
+    DIGEST["build_digest — one consolidated Digest per run"]
+  end
+  SCAN --> DIGEST
+
+  subgraph notify["src/notify/"]
+    NFACTORY["factory.py — build_notifier(none | telegram)"]
+    DELIVERY["delivery.py — deliver_digest"]
+    ALERT["alert.py — send_alert (preflight/pipeline failures)"]
+    TELEGRAM["telegram.py — TelegramNotifier"]
+  end
+  DIGEST --> DELIVERY
+  DELIVERY --> NFACTORY
+  NFACTORY --> TELEGRAM
+  PREFLIGHT --> ALERT
+  ALERT --> NFACTORY
+
+  subgraph config["src/config.py + config/"]
+    CONFIGPY["Config — default.json -> local.json -> WR_* env/.env"]
+    DEFAULTJSON["config/default.json (committed)"]
+    LOCALJSON["config/local.json + webapp_config.json\n(gitignored secrets/local overrides)"]
+  end
+  CLICMDS --> CONFIGPY
+  SCAN --> CONFIGPY
+  ROUTERS --> CONFIGPY
+  CONFIGPY --> DEFAULTJSON
+  CONFIGPY --> LOCALJSON
+
+  subgraph ext["External dependencies"]
+    HUB["local-llm-hub (127.0.0.1:8000)\nclassification (claude_sonnet) + Whisper transcription"]
+    TELEGRAMAPI["Telegram Bot API — digest delivery"]
+    APPLAUNCHER["App Launcher — Jobs (scan/resync/reprocess)\n+ Apps tab (webapp URL)"]
+    TAILSCALE["Tailscale — TLS for the tunnel"]
+    FFMPEG["ffmpeg — voice-note transcode (OGG -> WAV/MP3)"]
+  end
+  CLASSIFIER -->|hub / cascade mode| HUB
+  TRANSCRIBE --> HUB
+  TELEGRAM --> TELEGRAMAPI
+  APPLAUNCHER --> CLICMDS
+  SERVER --> TAILSCALE
+  TRANSCRIBE --> FFMPEG

@@ -26,8 +26,12 @@ requests>=2.31
 PyYAML>=6.0
 # Process introspection for the tray's port-owner reclaim.
 psutil>=5.9
-# PWA icon generation.
+# PWA icon generation — dev-only: scripts/gen_icons.py calls
+# project-scaffolding's shared brand_gen.py, which rasterizes the vendored
+# Lucide master SVG with resvg-py (prebuilt wheel, no system deps).
+# Generated assets are committed; the runtime webapp never imports this.
 Pillow>=10.0
+resvg-py>=0.3.0
 # Tray icon surface (app/tray/).
 pystray>=0.19
 # Windows toast notifications for tray lifecycle events.

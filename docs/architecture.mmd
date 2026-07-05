@@ -77,7 +77,7 @@ flowchart TB
   LINKED -->|read buffer| BAILEYS
 
   subgraph db["src/db/ — SQLite store"]
-    STORE["store.py — typed repository functions"]
+    STORE["store.py — re-export facade over\nconnection/chats/messages/runs/\ndashboard/sync_log/reprocess_support.py"]
     SYNC["sync.py — ingest_chats / resync"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
   end

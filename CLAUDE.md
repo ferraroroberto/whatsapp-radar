@@ -17,7 +17,8 @@ whatsapp-radar/
   src/                   # logic, imported as `from src.…`
     config.py  models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     connector/ (base, fixture, linked_device)
-    db/ (store.py, schema.sql)
+    db/ (store.py facade over connection/chats/messages/runs/dashboard/
+         sync_log/reprocess_support.py, schema.sql)
     analysis/ (classifier, contract, keywords, review, prompts/)
     notify/ (base, factory, telegram)   report/digest.py
     fixtures/sample_chats.json

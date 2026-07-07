@@ -600,7 +600,6 @@ async function renameChat() {
 
 // --------------------------------------------------------- wiring
 export function wireChats() {
-  els.chatsRefresh.addEventListener('click', function () { fetchChats().catch(function () {}); });
   els.chatsFilterMonitored.addEventListener('click', function () { setFilter('monitored'); });
   els.chatsFilterIgnored.addEventListener('click', function () { setFilter('ignored'); });
   els.chatsFilterAll.addEventListener('click', function () { setFilter('all'); });

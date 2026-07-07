@@ -71,7 +71,6 @@ export const els = {
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
 
   // Chats (#10)
-  chatsRefresh: document.getElementById('chatsRefresh'),
   chatsFilterMonitored: document.getElementById('chatsFilterMonitored'),
   chatsFilterIgnored: document.getElementById('chatsFilterIgnored'),
   chatsFilterAll: document.getElementById('chatsFilterAll'),
@@ -113,6 +112,7 @@ export const els = {
   cfgTgToken: document.getElementById('cfgTgToken'),
   cfgTgChatId: document.getElementById('cfgTgChatId'),
   cfgNote: document.getElementById('cfgNote'),
+  cfgSave: document.getElementById('cfgSave'),
 
   // Execution (#11)
   execMode: document.getElementById('execMode'),
@@ -130,7 +130,7 @@ export const els = {
   execRunScan: document.getElementById('execRunScan'),
   execBusy: document.getElementById('execBusy'),
   execReprocess: document.getElementById('execReprocess'),
-  execHealthDot: document.getElementById('execHealthDot'),
+  execHealthStatus: document.getElementById('execHealthStatus'),
   execHealthLabel: document.getElementById('execHealthLabel'),
   execHealthDetail: document.getElementById('execHealthDetail'),
   execReconnect: document.getElementById('execReconnect'),
@@ -153,10 +153,8 @@ export const els = {
   execOutput: document.getElementById('execOutput'),
   execRuns: document.getElementById('execRuns'),
   execRunsEmpty: document.getElementById('execRunsEmpty'),
-  execRefresh: document.getElementById('execRefresh'),
 
   // Audit (#12)
-  auditRefresh: document.getElementById('auditRefresh'),
   auditRuns: document.getElementById('auditRuns'),
   auditRunsEmpty: document.getElementById('auditRunsEmpty'),
   auditDetailCard: document.getElementById('auditDetailCard'),
@@ -167,7 +165,7 @@ export const els = {
   auditTraces: document.getElementById('auditTraces'),
   auditTracesEmpty: document.getElementById('auditTracesEmpty'),
 
-  settingsPanel: document.getElementById('settingsPanel'),
+  enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),
   webauthnDevices: document.getElementById('webauthnDevices'),
   enrollDeviceBtn: document.getElementById('enrollDeviceBtn'),

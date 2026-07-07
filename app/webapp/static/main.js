@@ -15,15 +15,24 @@ import { fetchExecution, wireExecution } from './execution.js';
 import { fetchAudit, wireAudit } from './audit.js';
 
 // --------------------------------------------------------- build identity
+// Identical text + format to home-automation's footer readout.
+function fmtBuildTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).replace('T', ' ').slice(0, 16);
+  const pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
 async function fetchVersion() {
   // Visible proof of which build the PWA is running. Catches stale-cache
   // confusion before it costs a debugging session.
   try {
     const body = await jsonApi('/api/version');
     const sha = body.git_sha || 'unknown';
-    const ts = (body.built_at || '').replace('T', ' ').slice(0, 16);
-    const hash = body.asset_hash ? ' · assets ' + body.asset_hash : '';
-    els.buildReadout.textContent = (ts ? 'Build: ' + sha + ' · ' + ts : 'Build: ' + sha) + hash;
+    const ts = fmtBuildTime(body.built_at || '');
+    els.buildReadout.textContent = ts ? ('Build: ' + sha + ' · ' + ts) : ('Build: ' + sha);
   } catch (_) {
     els.buildReadout.textContent = '';
   }

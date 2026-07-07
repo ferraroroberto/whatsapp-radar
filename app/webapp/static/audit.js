@@ -303,7 +303,11 @@ function renderDetail(data) {
   const run = data.run;
   els.auditDetailCard.hidden = false;
   const mm = modeMeta(run.mode);
-  els.auditDetailTitle.textContent = `${mm.label} run #${run.id}`;
+  // "Live run #40" / "Dry run #3" — don't double the word when the mode label
+  // already ends in "run".
+  els.auditDetailTitle.textContent = mm.label.toLowerCase().endsWith('run')
+    ? `${mm.label} #${run.id}`
+    : `${mm.label} run #${run.id}`;
 
   const bits = [run.status];
   if (run.started_at) bits.push('started ' + fmtLocalDateTime(run.started_at));
@@ -342,7 +346,7 @@ async function selectRun(runId) {
     ax.detail = data;
     renderDetail(data);
   } catch (_) {
-    /* transient — the refresh button retries */
+    /* transient — re-tapping the run retries */
   }
 }
 
@@ -375,7 +379,6 @@ export async function fetchAudit() {
 }
 
 export function wireAudit() {
-  els.auditRefresh.addEventListener('click', function () { fetchAudit().catch(function () {}); });
   els.auditDetailClose.addEventListener('click', closeDetail);
   els.auditDetailCard.hidden = true;
 }

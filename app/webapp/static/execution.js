@@ -146,11 +146,18 @@ async function killSelected() {
 
 // ----------------------------------------------------------- polling + render
 
-// Connection liveness dot (mirrors local-llm-hub's green-dot health pill): is
-// the WhatsApp sidecar paired & fresh? When it isn't, the pill grows a one-tap
-// relaunch and — if a fresh QR is needed — the pairing image, so the connection
-// can be recovered from a phone without a terminal (#29). Refreshed with the poll.
-const DOT_CLASS = { running: 'up', connecting: 'warn', stale: 'down', needs_qr: 'warn', stopped: 'down' };
+// Connection liveness (home-automation's Internet-tile pattern): a bold status
+// word — Online / Offline / Connecting / Needs QR — instead of a dot. When the
+// source is down, the card below grows a one-tap relaunch and — if a fresh QR
+// is needed — the pairing image, so the connection can be recovered from a
+// phone without a terminal (#29). Refreshed with the poll.
+const STATUS_META = {
+  running: { word: 'Online', cls: 'is-online' },
+  connecting: { word: 'Connecting', cls: 'is-warn' },
+  stale: { word: 'Offline', cls: 'is-offline' },
+  needs_qr: { word: 'Needs QR', cls: 'is-warn' },
+  stopped: { word: 'Offline', cls: 'is-offline' },
+};
 
 // Re-stamp the QR src at most every 20s (the pairing code rotates ~that often)
 // so the <img> doesn't flicker on every 1.5s poll.
@@ -176,13 +183,13 @@ function fmtSyncWhen(iso) {
 
 // When the source is live, show what's actually *stored* and the last sync delta
 // (truthful) instead of the sidecar's session counters, which reset on reconnect
-// and misread as "empty" (#31).
+// and misread as "empty" (#31). Abbreviated ("msg") so the line never wraps.
 function healthDetail(s) {
   const ex = execState();
   if (s.is_live && ex.syncTotals) {
     const last = ex.syncs && ex.syncs[0];
-    const lastBit = last ? ` · last sync ${fmtClock(last.ran_at)} +${last.messages_added}` : '';
-    return `${fmtCount(ex.syncTotals.messages)} messages stored${lastBit}`;
+    const lastBit = last ? ` · sync ${fmtClock(last.ran_at)} +${last.messages_added}` : '';
+    return `${fmtCount(ex.syncTotals.messages)} msg${lastBit}`;
   }
   return s.detail || s.state;
 }
@@ -200,8 +207,9 @@ export async function fetchHealth() {
     return;
   }
   execState().sidecar = s;
-  els.execHealthDot.classList.remove('up', 'down', 'unknown', 'warn');
-  els.execHealthDot.classList.add(DOT_CLASS[s.state] || 'unknown');
+  const m = STATUS_META[s.state] || { word: '— no data', cls: '' };
+  els.execHealthStatus.textContent = m.word;
+  els.execHealthStatus.className = ('exec-health-status ' + m.cls).trim();
   refreshHealthDetail();
   renderReconnect(s);
 }
@@ -543,13 +551,10 @@ export function wireExecution() {
   els.execRunScan.addEventListener('click', runSelection);
   els.execReprocess.addEventListener('click', confirmReprocess);
   els.execReconnectBtn.addEventListener('click', reconnectSidecar);
-  // Refresh + Stop live inside <summary> elements; stop their clicks from
-  // toggling the surrounding <details>.
+  // Stop lives inside a <summary> element; stop its click from toggling the
+  // surrounding <details>.
   els.execKill.addEventListener('click', function (ev) {
     ev.preventDefault(); ev.stopPropagation(); killSelected();
-  });
-  els.execRefresh.addEventListener('click', function (ev) {
-    ev.preventDefault(); ev.stopPropagation(); fetchExecution().catch(function () {});
   });
 
   // Pipeline-step switches (vendored switch component): flip on tap, then

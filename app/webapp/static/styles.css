@@ -34,8 +34,10 @@
   --toggle-knob: #ffffff;
   --close-bg: var(--card-off);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
   --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
   --deficit-soft: color-mix(in srgb, var(--deficit) 12%, transparent);
+  --deficit-border-soft: color-mix(in srgb, var(--deficit) 30%, transparent);
   /* theme-invariant surfaces: a scrim dims content; the QR matte frames a
      black-on-white pairing code — neither is a themed surface. */
   --scrim: rgba(0, 0, 0, 0.5);
@@ -222,37 +224,55 @@ html, body {
 a { color: var(--accent); }
 hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
-/* ============================================================ page head */
-/* Dashboard header row: app title left, theme toggle right (first page). */
-.page-head {
+/* ============================================================ app head */
+/* Dashboard identity card: radar icon + app name left, theme toggle right —
+   a standard card row at the disclosure closed-height (52px), so it aligns
+   with every other card (home-automation weather-tile pattern). */
+.app-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  margin: var(--gap) 0;
+  /* Same horizontal padding as a regular card so the radar icon lines up
+     with the title icons of the cards below. 54px = the 52px title row plus
+     the card's own 2px of border (border-box) — keeps the title at exactly
+     the same y as .card-head titles and disclosure summaries. */
+  padding: 0 var(--space-md);
+  min-height: 54px;
 }
-.page-title { margin: 0; font-size: var(--font-heading-lg); font-weight: 700; letter-spacing: -0.02em; }
+.app-head-title { font-size: var(--font-body); }
 
 /* ============================================================ buttons */
+/* Ghost accent action (home-automation .big-btn recipe): accent tint + text +
+   soft border — never a solid fill. Disabled = the flat card-off/muted/line
+   trio so it reads identically greyed-out in both themes. */
 .big-btn {
   width: 100%;
-  padding: 14px 18px;
-  font-size: var(--font-label);
-  font-weight: 600;
+  padding: 13px 18px;
+  font-size: var(--font-body);
+  font-weight: 700;
   font-family: inherit;
-  background: var(--accent);
-  color: var(--accent-fg);
-  border: 1px solid var(--accent-border-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border-soft);
   border-radius: var(--radius-md);
   cursor: pointer;
   min-height: 48px;
 }
-.big-btn:active { filter: brightness(0.9); }
-/* Quiet square icon button (refresh, search, theme toggle, close). */
+.big-btn:active { transform: scale(0.98); }
+.big-btn:disabled {
+  background: var(--card-off);
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: default;
+  transform: none;
+}
+/* Quiet square icon button (search, theme toggle, close): a subtle contrast
+   background instead of the card's own bg (home-automation weather-icon-btn). */
 .icon-btn {
   appearance: none;
-  border: 1px solid var(--line);
-  background: var(--card-off);
+  border: none;
+  background: var(--close-bg);
   color: var(--muted);
   border-radius: var(--radius-md);
   width: 34px;
@@ -265,9 +285,9 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   flex: none;
 }
 .icon-btn .icon { width: var(--icon-title); height: var(--icon-title); }
-.icon-btn:active { color: var(--ink); }
-.icon-btn.danger { color: var(--deficit); border-color: var(--deficit); }
-.icon-btn.active { color: var(--accent); border-color: var(--accent); }
+.icon-btn:active { transform: scale(0.92); }
+.icon-btn.danger { color: var(--deficit); }
+.icon-btn.active { color: var(--accent); background: var(--accent-soft); }
 /* Small text action inside a disclosure summary (Stop). */
 .ghost-btn {
   background: transparent;
@@ -287,35 +307,68 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
    (.input-native/.select-native); the app only stretches them for stacked
    forms and search fields. */
 .input-native, .select-native { width: 100%; }
-.stacked { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
-.stacked > span { font-size: var(--font-caption); color: var(--muted); }
+.stacked { display: flex; flex-direction: column; gap: var(--space-xs); margin: 10px 0; }
+.stacked > span { font-size: var(--font-caption); color: var(--muted); font-weight: 600; }
+/* Settings form: labelled-field grid, home-automation schedule-fields style. */
+.cfg-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cfg-fields .stacked { margin: 0; }
+.cfg-fields .cfg-span { grid-column: 1 / -1; }
+@media (max-width: 420px) {
+  .cfg-fields { grid-template-columns: 1fr; }
+}
+#configForm .big-btn { margin-top: 12px; }
 
-/* ============================================================ segmented */
-.segmented {
-  display: flex;
+/* ============================================================ range tabs */
+/* Canonical ghost segmented control (home-automation .range-tab): one height
+   everywhere (--control-h); active = accent tint + text + strong soft border.
+   The ::before extends the tap target to >=44px vertically without inflating
+   the visual pill. */
+.range-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
+.range-tab {
+  position: relative;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h);
   background: var(--card-off);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 3px;
-  gap: 2px;
-}
-.segmented button {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 8px 10px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-caption);
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: var(--font-label);
   font-weight: 600;
   font-family: inherit;
-  color: var(--muted);
   cursor: pointer;
 }
-.segmented button.active { background: var(--card); color: var(--accent); }
+.range-tab::before { content: ""; position: absolute; inset: -4px 0; }
+.range-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border-strong);
+}
+.range-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Inside a card header the tabs are compact pills pinned right, not a
+   full-width strip. */
+.card-head .range-tabs { margin-bottom: 0; flex: none; }
+.card-head .range-tab { flex: none; }
 
 /* ============================================================ cards (app) */
 /* Base .card comes from the vendored card.css; app-side layout only. */
 .card { margin: 0 0 var(--gap); }
+/* One header geometry for every card: the title row occupies the card's top
+   52px (the disclosure closed-height), vertically centered — so switching
+   tabs keeps the leading title in the exact same position and only the text/
+   icon change. Negative margins pull the row into the card's own padding. */
+.card-head {
+  min-height: 52px;
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
+  padding: 0 var(--space-md);
+}
 .card-actions { display: inline-flex; align-items: center; gap: var(--space-sm); flex: none; }
 .card-title .icon { color: var(--muted); }
 
@@ -341,12 +394,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ------------------------------------------------------------- last scan */
-.lastrun-card { padding: 12px var(--space-md); }
-.lastrun-head { margin: 0; font-size: var(--font-label); }
-.lastrun-head strong { margin-right: 6px; }
-#lastRunSummary { margin: 4px 0 0; }
-
 /* ============================================================ tables */
 .data-table {
   width: 100%;
@@ -367,13 +414,15 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .data-table .when { width: 104px; white-space: nowrap; text-align: right; }
 
 /* ============================================================ chats */
+/* Breathing room on both sides of the filter row: below the card head (the
+   search button) and above the count + chat list. */
 .chats-toolbar {
   display: flex;
   gap: var(--space-sm);
   align-items: center;
-  margin-bottom: 10px;
+  margin: var(--gap) 0;
 }
-.chats-toolbar .segmented { flex: 1; }
+.chats-toolbar .range-tabs { flex: 1; margin-bottom: 0; }
 .chats-search { margin-bottom: 10px; }
 #chatsCount { margin: 0 2px 10px; }
 
@@ -597,12 +646,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   background: var(--card-off); border-radius: var(--radius-md);
 }
 
-/* ============================================================ settings */
-.settings-card .collapse-body h3 {
-  display: flex; align-items: center; gap: 6px;
-  margin: 0 0 8px; font-size: var(--font-label);
-}
-.settings-card .collapse-body h3 .icon { width: var(--icon-title); height: var(--icon-title); color: var(--muted); }
+/* ============================================================ passkeys */
 .webauthn-devices {
   list-style: none;
   margin: 8px 0;
@@ -675,28 +719,32 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 
 /* ============================================================ execution (#11) */
-/* A full-width action that reads as a clear button without a heavy blue fill. */
+/* Full-width action, same ghost accent recipe as .big-btn (home-automation Net
+   tab). The danger variant swaps the tint to --deficit at the same recipe. */
 .run-btn {
   width: 100%;
   padding: 12px 16px;
-  font-size: var(--font-label);
-  font-weight: 600;
+  font-size: var(--font-body);
+  font-weight: 700;
   font-family: inherit;
-  background: transparent;
+  background: var(--accent-soft);
   color: var(--accent);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-border-soft);
   border-radius: var(--radius-md);
   cursor: pointer;
   min-height: 44px;
 }
-.run-btn:active { background: var(--accent-soft); }
-.run-btn:disabled { opacity: 0.45; cursor: default; }
-.run-btn.danger { color: var(--deficit); border-color: var(--deficit); }
-.run-btn.danger:active { background: var(--deficit-soft); }
+.run-btn:active { transform: scale(0.98); }
+.run-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.run-btn.danger {
+  background: var(--deficit-soft);
+  color: var(--deficit);
+  border-color: var(--deficit-border-soft);
+}
 
-.exec-mode-seg button { white-space: nowrap; }
+.exec-mode-seg .range-tab { white-space: nowrap; }
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }
-.exec-dry-opts .segmented { flex: 1; }
+.exec-dry-opts .range-tabs { flex: 1; margin-bottom: 0; }
 .exec-days { width: 84px; }
 .exec-stages-hint { margin: 0 0 4px; }
 
@@ -740,24 +788,42 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-output { max-height: 280px; cursor: pointer; }
 .exec-viewer-kind { font-size: var(--font-label); font-weight: 600; color: var(--ink); margin: 0 0 2px; }
 
-/* WhatsApp connection health pill (green dot + name). */
+/* WhatsApp connection health: home-automation's Net-tab "Internet" tile —
+   icon + name left, muted message-count in the middle, bold status word right
+   (green Online / red Offline / attention while connecting or pairing). Same
+   52px row + horizontal padding as every other card head. */
 .exec-health {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 8px 12px;
-  margin: 0 0 var(--gap);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  padding: 0 var(--space-md);
+  /* 54px = 52px row + 2px border (border-box), same as .app-head. */
+  min-height: 54px;
 }
-.exec-health-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--muted); }
-.exec-health-dot.up { background: var(--on); box-shadow: 0 0 6px var(--on); }
-.exec-health-dot.down { background: var(--deficit); }
-.exec-health-dot.unknown { background: var(--muted); }
-.exec-health-dot.warn { background: var(--attention); box-shadow: 0 0 6px var(--attention); }
-.exec-health-label { font-size: var(--font-caption); font-weight: 600; color: var(--ink); flex: none; }
-.exec-health-detail { margin-left: auto; text-align: right; }
+.exec-health-title { flex: none; }
+.exec-health-detail {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Box-centering a caption-size box next to body-size neighbors leaves its
+     baseline ~1.4px high (ascent scales with font size — Segoe ~1.4px, iOS
+     SF ~1.7px); nudge it onto the shared baseline so the middle text reads
+     vertically aligned with the label and status word. */
+  position: relative;
+  top: 1.5px;
+}
+.exec-health-status {
+  flex: none;
+  font-size: var(--font-body);
+  font-weight: 700;
+  text-align: right;
+}
+.exec-health-status.is-online { color: var(--on); }
+.exec-health-status.is-offline { color: var(--deficit); }
+.exec-health-status.is-warn { color: var(--attention); }
 
 /* Reconnect / re-pair panel: shown under the pill when the source is down (#29). */
 .exec-reconnect {
@@ -795,7 +861,9 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   cursor: pointer;
 }
 .exec-run-li:last-child { border-bottom: 0; }
-.exec-run-li.selected { background: var(--accent-soft); border-radius: var(--radius-md); }
+/* Selected row: a square full-row shade consistent with the divider-separated
+   list (no rounded pill inside a flat list). */
+.exec-run-li.selected { background: var(--accent-soft); }
 .exec-run-badge {
   font-size: var(--font-caption);
   font-weight: 700;
@@ -835,7 +903,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   cursor: pointer;
 }
 .audit-run-li:last-child { border-bottom: 0; }
-.audit-run-li.selected { background: var(--accent-soft); border-radius: var(--radius-md); }
+/* Selected row: square full-row shade, matching the flat separator list. */
+.audit-run-li.selected { background: var(--accent-soft); }
 .audit-run-top { display: flex; align-items: center; gap: 10px; }
 .audit-run-when { flex: 1; min-width: 0; }
 .audit-run-funnel { margin: 0; padding-left: 34px; }
@@ -867,7 +936,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .audit-sync-delta { flex: 1; min-width: 0; text-align: right; }
 
 /* Run detail: header + funnel (reuses .exec-funnel) + per-chat trace blocks. */
-.audit-detail-kind { margin: 0; font-size: var(--font-label); }
 .audit-traces { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-trace { margin: 0; }
 .audit-trace-body { display: flex; flex-direction: column; gap: var(--space-sm); }
@@ -906,3 +974,12 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .audit-msg-badge.act { color: var(--on); border-color: var(--on); }
 .audit-msg-badge.muted { color: var(--muted); }
 .audit-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* ============================================================ footer */
+/* Build-identity footer (which build the PWA is running) — the one element
+   visible under every tab. */
+.page-foot {
+  margin: var(--space-md) var(--space-xs);
+  text-align: center;
+}
+.page-foot p { margin: 2px 0; }

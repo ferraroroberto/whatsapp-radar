@@ -9,6 +9,26 @@
 import { els, state } from './state.js';
 import { jsonApi, toast } from './api.js';
 
+// Save is gated on an actual change: the rendered values are snapshotted and
+// the button stays disabled until the form diverges from that snapshot.
+let baseline = '';
+
+function formSnapshot() {
+  return JSON.stringify([
+    els.cfgConnector.value,
+    els.cfgClassifier.value,
+    els.cfgNotifier.value,
+    els.cfgHubBaseUrl.value.trim(),
+    els.cfgHubModel.value.trim(),
+    els.cfgTgToken.value.trim(),
+    els.cfgTgChatId.value.trim(),
+  ]);
+}
+
+function refreshDirty() {
+  els.cfgSave.disabled = formSnapshot() === baseline;
+}
+
 function fillSelect(sel, options, current) {
   sel.textContent = '';
   for (const opt of options) {
@@ -53,6 +73,9 @@ function render(d) {
   els.cfgTgChatId.value = tg.chat_id || '';
 
   els.cfgNote.textContent = d.note || '';
+
+  baseline = formSnapshot();
+  refreshDirty();
 }
 
 async function submit(ev) {
@@ -84,4 +107,6 @@ async function submit(ev) {
 
 export function wireConfig() {
   els.configForm.addEventListener('submit', submit);
+  els.configForm.addEventListener('input', refreshDirty);
+  els.configForm.addEventListener('change', refreshDirty);
 }

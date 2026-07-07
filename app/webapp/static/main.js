@@ -3,8 +3,9 @@
  * boot() fetches build identity, passkey status, and the Dashboard metrics
  * (#9). Steps 5–7 add the remaining tab fetchers here. */
 
-import { els, state, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
+import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
+import { icon } from './_vendored/icons/icons.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
 import { fetchDashboard } from './dashboard.js';
@@ -27,6 +28,28 @@ async function fetchVersion() {
     els.buildReadout.textContent = '';
   }
 }
+
+// --------------------------------------------------------- theme toggle
+// The inline <head> script applied the stored/OS theme before first paint;
+// this re-applies it so the toggle glyph matches, and owns the click flip.
+function applyTheme(dark) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // Show the glyph for the action: sun to switch to light, moon to switch to dark.
+  if (els.themeToggle) els.themeToggle.innerHTML = icon(dark ? 'sun' : 'moon');
+  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme !== 'dark');
+}
+
+(function initTheme() {
+  const stored = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(stored ? stored === 'dark' : prefersDark);
+})();
+
+els.themeToggle.addEventListener('click', toggleTheme);
 
 // --------------------------------------------------------- boot
 async function boot() {

@@ -9,29 +9,26 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
+import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
 let firing = false;
 
-// Per-kind display: the chip label + an icon for the runs list and viewer title.
+// Per-kind display label for the runs list and viewer title.
 const KIND_META = {
-  scan: { label: 'Full pipeline', icon: '▶' },
-  process: { label: 'Process', icon: '▷' },
-  notify: { label: 'Message', icon: '✉' },
-  resync: { label: 'Sync', icon: '⟳' },
-  reprocess: { label: 'Reprocess', icon: '♻️' },
+  scan: { label: 'Full pipeline' },
+  process: { label: 'Process' },
+  notify: { label: 'Message' },
+  resync: { label: 'Sync' },
+  reprocess: { label: 'Reprocess' },
 };
 
 function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
-function kindIcon(kind) { return (KIND_META[kind] || { icon: '•' }).icon; }
 
-function statusIcon(status) {
-  if (status === 'running' || status === 'pending') return '⏳';
-  if (status === 'completed') return '✅';
-  if (status === 'failed') return '❌';
-  return '•';
-}
+// The vendored switch stores its state in aria-checked (class + aria move
+// together through setSwitch — the one write path).
+function stageOn(btn) { return btn.getAttribute('aria-checked') === 'true'; }
 
 function fmtTs(ts) {
   if (!ts) return '';
@@ -46,9 +43,9 @@ function execState() { return state.execution; }
 
 function selection() {
   return {
-    sync: els.execStageSync.checked,
-    process: els.execStageProcess.checked,
-    message: els.execStageMessage.checked,
+    sync: stageOn(els.execStageSync),
+    process: stageOn(els.execStageProcess),
+    message: stageOn(els.execStageMessage),
   };
 }
 
@@ -262,7 +259,7 @@ function renderReconnect(s) {
   if (s.state === 'needs_qr') {
     els.execReconnectMsg.textContent =
       'Open WhatsApp → Linked devices → Link a device, then scan this code.';
-    els.execReconnectBtn.textContent = s.has_qr ? '🔄 Refresh QR' : '🔌 Start & show QR';
+    els.execReconnectBtn.textContent = s.has_qr ? 'Refresh QR' : 'Start & show QR';
     if (s.has_qr) {
       const next = qrSrc();
       if (els.execQr.dataset.src !== next) { els.execQr.src = next; els.execQr.dataset.src = next; }
@@ -272,7 +269,7 @@ function renderReconnect(s) {
     }
   } else {
     els.execReconnectMsg.textContent = s.detail || 'The WhatsApp sidecar is not connected.';
-    els.execReconnectBtn.textContent = '🔌 Reconnect WhatsApp';
+    els.execReconnectBtn.textContent = 'Reconnect WhatsApp';
     els.execQr.hidden = true;
   }
   els.execReconnectBtn.disabled = (s.state === 'connecting');
@@ -336,12 +333,12 @@ async function fetchDetail(sel) {
 
 function updateRunLabel() {
   const ex = execState();
-  if (ex.mode === 'dry_run') { els.execRunScan.textContent = '🧪 Run dry-run'; return; }
+  if (ex.mode === 'dry_run') { els.execRunScan.textContent = 'Run dry-run'; return; }
   const sel = selection();
   const n = (sel.sync ? 1 : 0) + (sel.process ? 1 : 0) + (sel.message ? 1 : 0);
-  if (n === 3) els.execRunScan.textContent = '▶ Run full pipeline';
-  else if (n === 0) els.execRunScan.textContent = '▶ Run';
-  else els.execRunScan.textContent = '▶ Run ' + n + ' step' + (n > 1 ? 's' : '');
+  if (n === 3) els.execRunScan.textContent = 'Run full pipeline';
+  else if (n === 0) els.execRunScan.textContent = 'Run';
+  else els.execRunScan.textContent = 'Run ' + n + ' step' + (n > 1 ? 's' : '');
 }
 
 function renderControls() {
@@ -359,7 +356,7 @@ function renderControls() {
   if (busy) {
     const label = ex.active ? kindLabel(ex.active.kind) : 'next step';
     const queued = ex.queue.length ? ` (+${ex.queue.length} queued)` : '';
-    els.execBusy.textContent = '⏳ ' + label + ' in progress…' + queued;
+    els.execBusy.textContent = label + ' in progress…' + queued;
   }
   updateRunLabel();
 }
@@ -417,7 +414,7 @@ function funnelCells(result) {
       { label: 'Synced', value: f.messages_synced },
       { label: 'Monitored', value: f.chats_monitored },
       { label: 'New (Δ)', value: f.chats_with_delta },
-      { label: '🎤 Transcribed', value: f.transcriptions },
+      { label: 'Transcribed', value: f.transcriptions },
       { label: 'Stage 1', value: f.stage1_passed },
       { label: 'LLM', value: f.stage2_llm_calls },
       { label: 'Actionable', value: f.actionable },
@@ -484,10 +481,9 @@ function renderViewer(run) {
   els.execViewer.hidden = false;
   els.execViewerEmpty.hidden = true;
   els.execViewerCard.open = true;  // reveal the detail when a run is selected
-  els.execViewerTitle.textContent =
-    kindIcon(run.kind) + ' ' + kindLabel(run.kind);
+  els.execViewerTitle.textContent = kindLabel(run.kind);
 
-  const bits = [statusIcon(run.status) + ' ' + (run.status || '?')];
+  const bits = [run.status || '?'];
   if (run.started_at) bits.push('started ' + fmtTs(run.started_at));
   if (run.result && run.result.backup_path) bits.push('backup: ' + run.result.backup_path);
   if (run.result && Array.isArray(run.result.unmapped) && run.result.unmapped.length) {
@@ -556,8 +552,13 @@ export function wireExecution() {
     ev.preventDefault(); ev.stopPropagation(); fetchExecution().catch(function () {});
   });
 
+  // Pipeline-step switches (vendored switch component): flip on tap, then
+  // recompute the run button's label. setSwitch keeps class + aria in sync.
   for (const c of [els.execStageSync, els.execStageProcess, els.execStageMessage]) {
-    c.addEventListener('change', updateRunLabel);
+    c.addEventListener('click', function () {
+      setSwitch(c, !stageOn(c));
+      updateRunLabel();
+    });
   }
 
   // Viewer starts empty until a run is selected.

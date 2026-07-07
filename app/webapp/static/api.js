@@ -55,12 +55,16 @@ export async function jsonApi(path, opts) {
 export function showLogin() {
   if (!els.loginOverlay) return;
   els.loginOverlay.hidden = false;
+  // The login overlay is not a <dialog>, so the nav's body:has(dialog[open])
+  // rule can't see it — the vendored nav hides on this class instead.
+  document.body.classList.add('nav-hidden');
   els.loginPassword.value = '';
   els.loginPassword.focus();
 }
 
 export function hideLogin() {
   if (els.loginOverlay) els.loginOverlay.hidden = true;
+  document.body.classList.remove('nav-hidden');
 }
 
 // Boot hook called from main.js — passed `onLoginSuccess` so this module stays

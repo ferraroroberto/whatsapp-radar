@@ -9,6 +9,7 @@
  */
 
 export const TOKEN_KEY = 'wa-radar.token';
+export const THEME_KEY = 'wa-radar.theme';
 export const UNLOCK_KEY = 'wa-radar.unlock';
 export const UNLOCK_EXP_KEY = 'wa-radar.unlock.exp';
 
@@ -56,16 +57,8 @@ export const CHATS_RENDER_CAP = 150;
 // ES modules are deferred — they execute after DOMContentLoaded, so
 // document.getElementById is safe at module top level.
 export const els = {
-  tabDashboard: document.getElementById('tabDashboard'),
-  tabChats: document.getElementById('tabChats'),
-  tabExecution: document.getElementById('tabExecution'),
-  tabAudit: document.getElementById('tabAudit'),
-  paneDashboard: document.getElementById('paneDashboard'),
-  paneChats: document.getElementById('paneChats'),
-  paneExecution: document.getElementById('paneExecution'),
-  paneAudit: document.getElementById('paneAudit'),
-
-  // Dashboard (#9) metrics
+  // Dashboard (#9) header + metrics
+  themeToggle: document.getElementById('themeToggle'),
   mChannels: document.getElementById('mChannels'),
   mMessages: document.getElementById('mMessages'),
   mScans: document.getElementById('mScans'),

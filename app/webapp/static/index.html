@@ -2,28 +2,177 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WA Radar">
-  <meta name="theme-color" content="#0a0a0a">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/static/icon-180.png">
   <link rel="icon" href="/static/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" href="/static/icon-512.png">
+  <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
+  <link rel="stylesheet" href="/static/_vendored/card/card.css">
+  <link rel="stylesheet" href="/static/_vendored/disclosure/disclosure.css">
+  <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
+  <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
+  <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/styles.css">
-  <title>📡 WhatsApp Radar</title>
+  <title>WhatsApp Radar</title>
+  <script>
+    // No-FOUC theme boot: resolve the stored choice (or the OS preference)
+    // before first paint so the page never flashes the wrong theme.
+    (function () {
+      var t = localStorage.getItem('wa-radar.theme');
+      var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
 </head>
 <body>
-  <main class="app">
-    <nav class="tabs">
-      <button id="tabDashboard" type="button" class="tab active" data-tab="dashboard">Dashboard</button>
-      <button id="tabChats" type="button" class="tab" data-tab="chats">Chats</button>
-      <button id="tabExecution" type="button" class="tab" data-tab="execution">Run</button>
-      <button id="tabAudit" type="button" class="tab" data-tab="audit">Audit</button>
-    </nav>
+  <!-- Lucide icon sprite — the single source for every app icon. Vendored from
+       lucide-static (ISC) via _vendored/icons/; inline (not an external .svg)
+       because iOS Safari does not resolve external <use> references. Hidden via
+       the 0-size/absolute idiom, NOT display:none (which suppresses <use>
+       rendering in some engines). -->
+  <svg width="0" height="0" aria-hidden="true" focusable="false"
+       style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="i-gauge" viewBox="0 0 24 24" fill="none">
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </symbol>
+    <symbol id="i-message-circle" viewBox="0 0 24 24" fill="none">
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none">
+      <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none">
+      <path d="m21 21-4.34-4.34" />
+      <circle cx="11" cy="11" r="8" />
+    </symbol>
+    <symbol id="i-refresh-cw" viewBox="0 0 24 24" fill="none">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none">
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+      <path d="m15 5 4 4" />
+    </symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none">
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+      <circle cx="12" cy="12" r="3" />
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none">
+      <path d="M12 19v3" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <rect x="9" y="2" width="6" height="13" rx="3" />
+    </symbol>
+    <symbol id="i-square" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+    </symbol>
+    <symbol id="i-send-horizontal" viewBox="0 0 24 24" fill="none">
+      <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18-8.5a.5.5 0 0 0 0-.904z" />
+      <path d="M6 12h16" />
+    </symbol>
+    <symbol id="i-history" viewBox="0 0 24 24" fill="none">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none">
+      <path d="M12 15V3" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
+    </symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </symbol>
+    <symbol id="i-scroll-text" viewBox="0 0 24 24" fill="none">
+      <path d="M15 12h-5" />
+      <path d="M15 8h-5" />
+      <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+      <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
+    </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
+      <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+      <circle cx="12" cy="12" r="3" />
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none">
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </symbol>
+    <symbol id="i-smartphone" viewBox="0 0 24 24" fill="none">
+      <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+      <path d="M12 18h.01" />
+    </symbol>
+    <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none">
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m6.34 17.66-1.41 1.41" />
+      <path d="m19.07 4.93-1.41 1.41" />
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none">
+      <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+    </symbol>
+  </svg>
 
-    <section id="paneDashboard" class="pane">
+  <!-- Fleet navigation (vendored nav component): a body-level sibling of .app —
+       desktop renders a sticky top segmented control, coarse pointers get the
+       floating bottom-tab pill. nav-tabs.js discovers the tabs from this markup. -->
+  <nav class="tabs" role="tablist" aria-label="Sections" data-active-tab="dashboard">
+    <button id="tabDashboard" type="button" class="tab active" data-tab="dashboard"
+            role="tab" aria-selected="true" aria-controls="paneDashboard">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
+      <span class="tab-label">Dashboard</span>
+    </button>
+    <button id="tabChats" type="button" class="tab" data-tab="chats"
+            role="tab" aria-selected="false" aria-controls="paneChats" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-message-circle"></use></svg>
+      <span class="tab-label">Chats</span>
+    </button>
+    <button id="tabExecution" type="button" class="tab" data-tab="execution"
+            role="tab" aria-selected="false" aria-controls="paneExecution" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>
+      <span class="tab-label">Run</span>
+    </button>
+    <button id="tabAudit" type="button" class="tab" data-tab="audit"
+            role="tab" aria-selected="false" aria-controls="paneAudit" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+      <span class="tab-label">Audit</span>
+    </button>
+  </nav>
+
+  <main class="app">
+    <section id="paneDashboard" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
+      <div class="page-head">
+        <h1 class="page-title">WhatsApp Radar</h1>
+        <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme"
+                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+      </div>
       <div class="metric-grid">
         <div class="card metric"><span class="metric-value" id="mChannels">–</span><span class="metric-label">Channels monitored</span></div>
         <div class="card metric"><span class="metric-value" id="mMessages">–</span><span class="metric-label">Messages stored</span></div>
@@ -37,7 +186,9 @@
         <p id="lastRunSummary" class="muted small">Loading…</p>
       </div>
       <div class="card">
-        <h3>Monitored channels</h3>
+        <div class="card-head">
+          <h3 class="card-title">Monitored channels</h3>
+        </div>
         <table class="data-table" id="dashChannelsTable">
           <thead><tr><th>Channel</th><th class="num">Msgs</th><th class="when">Last msg</th></tr></thead>
           <tbody id="dashChannelsBody"></tbody>
@@ -46,11 +197,19 @@
       </div>
     </section>
 
-    <section id="paneChats" class="pane" hidden>
+    <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
       <section class="card">
-        <div class="card-header">
-          <h2>💬 Chats</h2>
-          <button id="chatsRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+            Chats
+          </h2>
+          <span class="card-actions">
+            <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name"
+                    aria-label="Search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></button>
+            <button id="chatsRefresh" type="button" class="icon-btn" title="Refresh"
+                    aria-label="Refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
+          </span>
         </div>
         <div class="chats-toolbar">
           <div id="chatsFilter" class="segmented" role="radiogroup" aria-label="Chat filter">
@@ -58,53 +217,58 @@
             <button id="chatsFilterIgnored" type="button" data-filter="ignored">Ignored</button>
             <button id="chatsFilterAll" type="button" data-filter="all">All</button>
           </div>
-          <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name" aria-label="Search">🔍</button>
         </div>
         <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search chats by name…" autocomplete="off" hidden>
         <p id="chatsCount" class="muted small"></p>
         <ul id="chatsList" class="card-list" aria-label="Chats"></ul>
-        <div id="chatsEmpty" class="empty" hidden>No chats to show.</div>
+        <div id="chatsEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+          <p class="empty-state-message">No chats to show.</p>
+        </div>
       </section>
 
-      <details id="configCard" class="card coding-card">
-        <summary class="coding-summary">
-          <div class="coding-summary-row">
-            <span class="coding-summary-title">🛠️ Classifier &amp; settings</span>
-          </div>
+      <details id="configCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
+            <h3 class="collapse-title">Classifier &amp; settings</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
         </summary>
+        <div class="collapse-body">
+          <div class="opt-group">
+            <h3 class="opt-group-title">System prompt <span class="opt-tag">(read-only — edit the file)</span></h3>
+            <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
+            <h3 class="opt-group-title">Keyword roots <span class="opt-tag">(read-only — edit the file)</span></h3>
+            <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
+          </div>
 
-        <div class="opt-group">
-          <h3 class="opt-group-title">System prompt <span class="opt-tag">(read-only — edit the file)</span></h3>
-          <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
-          <h3 class="opt-group-title">Keyword roots <span class="opt-tag">(read-only — edit the file)</span></h3>
-          <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
-        </div>
-
-        <div class="opt-group">
-          <h3 class="opt-group-title">Safe settings</h3>
-          <form id="configForm" autocomplete="off">
-            <label class="stacked"><span>Connector</span>
-              <select id="cfgConnector" class="select-native"></select></label>
-            <label class="stacked"><span>Classifier</span>
-              <select id="cfgClassifier" class="select-native"></select></label>
-            <label class="stacked"><span>Notifier</span>
-              <select id="cfgNotifier" class="select-native"></select></label>
-            <label class="stacked"><span>Hub base URL</span>
-              <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
-            <label class="stacked"><span>Hub model</span>
-              <input id="cfgHubModel" type="text" class="input-native"></label>
-            <label class="stacked"><span>Telegram bot token</span>
-              <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
-            <label class="stacked"><span>Telegram chat ID</span>
-              <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
-            <p id="cfgNote" class="opt-hint"></p>
-            <button type="submit" class="big-btn">💾 Save settings</button>
-          </form>
+          <div class="opt-group">
+            <h3 class="opt-group-title">Safe settings</h3>
+            <form id="configForm" autocomplete="off">
+              <label class="stacked"><span>Connector</span>
+                <select id="cfgConnector" class="select-native"></select></label>
+              <label class="stacked"><span>Classifier</span>
+                <select id="cfgClassifier" class="select-native"></select></label>
+              <label class="stacked"><span>Notifier</span>
+                <select id="cfgNotifier" class="select-native"></select></label>
+              <label class="stacked"><span>Hub base URL</span>
+                <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
+              <label class="stacked"><span>Hub model</span>
+                <input id="cfgHubModel" type="text" class="input-native"></label>
+              <label class="stacked"><span>Telegram bot token</span>
+                <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
+              <label class="stacked"><span>Telegram chat ID</span>
+                <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+              <p id="cfgNote" class="opt-hint"></p>
+              <button type="submit" class="big-btn">Save settings</button>
+            </form>
+          </div>
         </div>
       </details>
     </section>
 
-    <section id="paneExecution" class="pane" hidden>
+    <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
       <div id="execHealth" class="exec-health" title="WhatsApp sidecar connection">
         <span id="execHealthDot" class="exec-health-dot unknown"></span>
         <span id="execHealthLabel" class="exec-health-label">WhatsApp</span>
@@ -114,12 +278,15 @@
       <div id="execReconnect" class="exec-reconnect" hidden>
         <p id="execReconnectMsg" class="muted small"></p>
         <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-        <button id="execReconnectBtn" type="button" class="run-btn">🔌 Reconnect WhatsApp</button>
+        <button id="execReconnectBtn" type="button" class="run-btn">Reconnect WhatsApp</button>
       </div>
 
       <section class="card">
-        <div class="card-header">
-          <h2>▶ Run</h2>
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
+            Run
+          </h2>
           <div id="execMode" class="segmented exec-mode-seg" role="radiogroup" aria-label="Run mode">
             <button id="execModeLive" type="button" class="active" data-mode="live">Live</button>
             <button id="execModeDry" type="button" data-mode="dry_run">Dry&nbsp;run</button>
@@ -138,94 +305,120 @@
 
         <p class="muted small exec-stages-hint">Choose the steps to run, then Run.</p>
         <fieldset class="exec-stages" aria-label="Pipeline steps to run">
-          <label class="exec-stage-check">
-            <input type="checkbox" id="execStageSync" checked>
-            <span class="exec-stage-icon">⟳</span>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
             <span class="exec-stage-text"><span class="exec-stage-label">Sync</span>
               <span class="exec-stage-desc">pull the latest into the store</span></span>
-          </label>
-          <label class="exec-stage-check">
-            <input type="checkbox" id="execStageProcess" checked>
-            <span class="exec-stage-icon">▷</span>
+            <button type="button" id="execStageSync" class="toggle on" role="switch"
+                    aria-checked="true" aria-label="Sync step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
             <span class="exec-stage-text"><span class="exec-stage-label">Process</span>
               <span class="exec-stage-desc">classify new messages</span></span>
-          </label>
-          <label class="exec-stage-check">
-            <input type="checkbox" id="execStageMessage" checked>
-            <span class="exec-stage-icon">✉</span>
+            <button type="button" id="execStageProcess" class="toggle on" role="switch"
+                    aria-checked="true" aria-label="Process step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
             <span class="exec-stage-text"><span class="exec-stage-label">Message</span>
               <span class="exec-stage-desc">send the alerts</span></span>
-          </label>
+            <button type="button" id="execStageMessage" class="toggle on" role="switch"
+                    aria-checked="true" aria-label="Message step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
         </fieldset>
 
-        <button id="execRunScan" type="button" class="run-btn">▶ Run</button>
+        <button id="execRunScan" type="button" class="run-btn">Run</button>
         <p id="execBusy" class="muted small" hidden></p>
       </section>
 
-      <details id="execRunsCard" class="card coding-card" open>
-        <summary class="coding-summary">
-          <div class="coding-summary-row">
-            <span class="coding-summary-title">🗂️ Recent runs</span>
-            <button id="execRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
-          </div>
+      <details id="execRunsCard" class="card card--collapsible" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
+            <h3 class="collapse-title">Recent runs</h3>
+            <button id="execRefresh" type="button" class="icon-btn" title="Refresh"
+                    aria-label="Refresh runs"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
         </summary>
-        <ul id="execRuns" class="card-list exec-runs" aria-label="Recent runs"></ul>
-        <p id="execRunsEmpty" class="muted small" hidden>No runs yet.</p>
-      </details>
-
-      <details id="execSyncsCard" class="card coding-card" open>
-        <summary class="coding-summary">
-          <div class="coding-summary-row">
-            <span class="coding-summary-title">📥 Recent syncs</span>
-            <span id="execSyncTotals" class="muted small"></span>
-          </div>
-        </summary>
-        <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
-        <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
-      </details>
-
-      <details id="execViewerCard" class="card coding-card">
-        <summary class="coding-summary">
-          <div class="coding-summary-row">
-            <span class="coding-summary-title">⚙️ Selected run detail</span>
-            <button id="execKill" type="button" class="ghost-btn" title="Stop this run" hidden>⏹ Stop</button>
-          </div>
-        </summary>
-        <div id="execViewer">
-          <p id="execViewerTitle" class="exec-viewer-kind"></p>
-          <p id="execViewerMeta" class="muted small"></p>
-          <div id="execFunnel" class="exec-funnel" aria-label="Funnel"></div>
-          <div id="execPreview" class="exec-preview" hidden>
-            <h4 class="opt-group-title">Telegram message</h4>
-            <pre id="execPreviewText" class="codebox"></pre>
-          </div>
-          <h4 class="opt-group-title">Output</h4>
-          <pre id="execOutput" class="codebox exec-output" title="Tap to copy">(no output)</pre>
+        <div class="collapse-body">
+          <ul id="execRuns" class="card-list exec-runs" aria-label="Recent runs"></ul>
+          <p id="execRunsEmpty" class="muted small" hidden>No runs yet.</p>
         </div>
-        <p id="execViewerEmpty" class="muted small">Select a run above to see its detail.</p>
       </details>
 
-      <details class="card coding-card">
-        <summary class="coding-summary">
-          <div class="coding-summary-row"><span class="coding-summary-title">🛠️ Maintenance</span></div>
+      <details id="execSyncsCard" class="card card--collapsible" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+            <h3 class="collapse-title">Recent syncs</h3>
+            <span id="execSyncTotals" class="collapse-count"></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
         </summary>
-        <div class="opt-group">
+        <div class="collapse-body">
+          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
+          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+        </div>
+      </details>
+
+      <details id="execViewerCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+            <h3 class="collapse-title">Selected run detail</h3>
+            <button id="execKill" type="button" class="ghost-btn" title="Stop this run" hidden>Stop</button>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <div id="execViewer">
+            <p id="execViewerTitle" class="exec-viewer-kind"></p>
+            <p id="execViewerMeta" class="muted small"></p>
+            <div id="execFunnel" class="exec-funnel" aria-label="Funnel"></div>
+            <div id="execPreview" class="exec-preview" hidden>
+              <h4 class="opt-group-title">Telegram message</h4>
+              <pre id="execPreviewText" class="codebox"></pre>
+            </div>
+            <h4 class="opt-group-title">Output</h4>
+            <pre id="execOutput" class="codebox exec-output" title="Tap to copy">(no output)</pre>
+          </div>
+          <p id="execViewerEmpty" class="muted small">Select a run above to see its detail.</p>
+        </div>
+      </details>
+
+      <details class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
+            <h3 class="collapse-title">Maintenance</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
           <p class="muted small">
             Rebuild the local store from the connector buffer. The <strong>Sync</strong> step
             above is incremental and safe to run often. <strong>Rebuild</strong> is a full
             rebuild for when the reader logic changed — it backs up the DB and preserves your
             monitored/ignored/alias choices, but <strong>run history resets</strong>.
           </p>
-          <button id="execReprocess" type="button" class="run-btn danger">♻️ Rebuild full cache</button>
+          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
         </div>
       </details>
     </section>
 
-    <section id="paneAudit" class="pane" hidden>
+    <section id="paneAudit" class="pane" role="tabpanel" aria-labelledby="tabAudit" hidden>
       <section class="card">
-        <div class="card-header">
-          <h2>🔍 Audit</h2>
-          <button id="auditRefresh" type="button" class="ghost-btn" title="Refresh">🔄</button>
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            Audit
+          </h2>
+          <span class="card-actions">
+            <button id="auditRefresh" type="button" class="icon-btn" title="Refresh"
+                    aria-label="Refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
+          </span>
         </div>
         <p class="muted small">Every run is listed and fully drillable — confirm exactly why each message was or wasn't promoted.</p>
         <ul id="auditRuns" class="card-list audit-runs" aria-label="Recent runs"></ul>
@@ -233,9 +426,12 @@
       </section>
 
       <section id="auditDetailCard" class="card" hidden>
-        <div class="card-header">
-          <h3 id="auditDetailTitle" class="audit-detail-kind"></h3>
-          <button id="auditDetailClose" type="button" class="icon-btn" aria-label="Close" title="Close">✕</button>
+        <div class="card-head">
+          <h3 id="auditDetailTitle" class="card-title audit-detail-kind"></h3>
+          <span class="card-actions">
+            <button id="auditDetailClose" type="button" class="icon-btn" aria-label="Close"
+                    title="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+          </span>
         </div>
         <p id="auditDetailMeta" class="muted small"></p>
         <div id="auditFunnel" class="exec-funnel" aria-label="Funnel"></div>
@@ -244,61 +440,73 @@
       </section>
     </section>
 
-    <details id="settingsPanel" class="card settings-card">
-      <summary class="settings-summary">⚙️ Settings</summary>
-      <div class="webauthn-section">
-        <h3>🔐 Access (passkey)</h3>
-        <p id="webauthnStatus" class="muted small">Checking…</p>
-        <ul id="webauthnDevices" class="webauthn-devices"></ul>
-        <button id="enrollDeviceBtn" type="button" class="big-btn" hidden>📲 Enroll this device</button>
+    <details id="settingsPanel" class="card card--collapsible settings-card">
+      <summary class="collapse-summary">
+        <span class="collapse-main">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+          <h3 class="collapse-title">Settings</h3>
+        </span>
+        <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+      </summary>
+      <div class="collapse-body">
+        <div class="webauthn-section">
+          <h3><svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg> Access (passkey)</h3>
+          <p id="webauthnStatus" class="muted small">Checking…</p>
+          <ul id="webauthnDevices" class="webauthn-devices"></ul>
+          <button id="enrollDeviceBtn" type="button" class="big-btn" hidden>Enroll this device</button>
+          <p class="muted small">
+            Open the enrollment window from the tray menu
+            (<strong>Enroll device</strong>) on the PC, then tap the button above.
+          </p>
+        </div>
+        <hr>
         <p class="muted small">
-          Open the enrollment window from the tray menu
-          (<strong>🔐 Enroll device</strong>) on the PC, then tap the button above.
+          First time on iPhone? Install the trust profile:
+          <a href="/install-ca">/install-ca</a>
         </p>
+        <p id="buildReadout" class="muted small"></p>
       </div>
-      <hr>
-      <p class="muted small">
-        First time on iPhone? Install the trust profile:
-        <a href="/install-ca">/install-ca</a>
-      </p>
-      <p id="buildReadout" class="muted small"></p>
     </details>
 
     <div id="toast" class="toast" hidden></div>
   </main>
 
-  <div id="historyOverlay" class="modal-overlay" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
-      <header class="modal-head">
-        <h2 id="historyTitle" class="modal-title"></h2>
-        <button id="historyRename" type="button" class="icon-btn" aria-label="Rename chat" title="Rename — set an alias">✏️</button>
-        <button id="historyLink" type="button" class="icon-btn" aria-label="Manage links" title="Link — merge another chat onto this person">🔗</button>
-        <button id="historyClose" type="button" class="icon-btn" aria-label="Close">✕</button>
-      </header>
+  <dialog id="historyOverlay" class="detail-dialog">
+    <div class="detail-card history-card" aria-labelledby="historyTitle">
+      <div class="detail-header">
+        <h2 id="historyTitle"></h2>
+        <button id="historyRename" type="button" class="detail-close" aria-label="Rename chat"
+                title="Rename — set an alias"><svg class="icon" aria-hidden="true"><use href="#i-pencil"></use></svg></button>
+        <button id="historyLink" type="button" class="detail-close" aria-label="Manage links"
+                title="Link — merge another chat onto this person"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg></button>
+        <button id="historyClose" type="button" class="detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
       <div id="historyLinkPanel" class="link-panel" hidden></div>
       <div id="historyBody" class="history-body"></div>
       <p id="historyEmpty" class="muted small" hidden>No messages stored for this chat.</p>
     </div>
-  </div>
+  </dialog>
 
-  <div id="linkPickerOverlay" class="modal-overlay" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="linkPickerTitle">
-      <header class="modal-head">
-        <h2 id="linkPickerTitle" class="modal-title">Link to…</h2>
-        <button id="linkPickerClose" type="button" class="icon-btn" aria-label="Close">✕</button>
-      </header>
+  <dialog id="linkPickerOverlay" class="detail-dialog">
+    <div class="detail-card history-card" aria-labelledby="linkPickerTitle">
+      <div class="detail-header">
+        <h2 id="linkPickerTitle">Link to…</h2>
+        <button id="linkPickerClose" type="button" class="detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
       <input id="linkPickerSearch" type="search" class="input-native link-search" placeholder="Search by name or alias…" autocomplete="off">
       <p id="linkPickerCount" class="muted small"></p>
-      <ul id="linkPickerList" class="card-list"></ul>
+      <ul id="linkPickerList" class="card-list history-body" aria-label="Link candidates"></ul>
       <p id="linkPickerEmpty" class="muted small" hidden>No matching chats.</p>
     </div>
-  </div>
+  </dialog>
 
   <div id="loginOverlay" class="login-overlay" hidden>
     <form id="loginForm" class="login-card" autocomplete="off">
-      <h2>🔐 Sign in</h2>
+      <h2>Sign in</h2>
       <p class="muted small">Enter the password to use WhatsApp Radar.</p>
-      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required>
+      <input id="loginPassword" type="password" class="input-native" autocomplete="current-password" placeholder="Password" required>
       <button type="submit" class="big-btn">Unlock</button>
       <div id="loginError" class="login-error" hidden></div>
     </form>

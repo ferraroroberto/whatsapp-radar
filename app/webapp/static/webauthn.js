@@ -5,6 +5,7 @@
 
 import { els, state, UNLOCK_KEY, UNLOCK_EXP_KEY } from './state.js';
 import { jsonApi, toast } from './api.js';
+import { icon } from './_vendored/icons/icons.js';
 
 // ----------------------------------------------------------- b64url helpers
 function b64urlToBuf(s) {
@@ -114,7 +115,8 @@ function renderWebauthn() {
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'icon-btn danger';
-    rm.textContent = '🗑️';
+    rm.innerHTML = icon('trash-2');
+    rm.setAttribute('aria-label', 'Remove passkey');
     rm.title = 'Remove passkey';
     rm.addEventListener('click', function () { removeDevice(d); });
     li.appendChild(rm);
@@ -153,7 +155,7 @@ async function enrollDevice() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(serializeReg(cred)),
     });
-    toast('✅ Device enrolled.', 'good');
+    toast('Device enrolled.', 'good');
     fetchWebauthnStatus();
   } catch (exc) {
     toast('Enrollment failed: ' + (exc.message || exc), 'error');

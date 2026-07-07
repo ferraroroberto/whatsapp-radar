@@ -11,6 +11,16 @@
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime } from './format.js';
+import { icon } from './_vendored/icons/icons.js';
+
+// A sprite glyph wrapped for insertion next to textContent-only user data.
+// Static markup only — never user content — so innerHTML is safe here.
+function iconMark(name) {
+  const s = document.createElement('span');
+  s.className = 'msg-icon';
+  s.innerHTML = icon(name);
+  return s;
+}
 
 // Thousands separator with a period (29999 → "29.999"), locale-independent.
 function fmtNum(n) {
@@ -124,14 +134,15 @@ function row(c) {
   const actions = document.createElement('div');
   actions.className = 'chat-actions';
 
-  // A parent shows a 🔗N badge; tapping it opens the overlay with the link panel
-  // already expanded so the family can be managed in one tap.
+  // A parent shows a link-count badge; tapping it opens the overlay with the
+  // link panel already expanded so the family can be managed in one tap.
   const kids = childrenOf(c.id);
   if (kids.length) {
     const badge = document.createElement('button');
     badge.type = 'button';
     badge.className = 'chat-link-badge';
-    badge.textContent = '🔗' + kids.length;
+    badge.innerHTML = icon('link');
+    badge.appendChild(document.createTextNode(String(kids.length)));
     badge.title = kids.length + ' linked chat' + (kids.length === 1 ? '' : 's');
     badge.setAttribute('aria-label', badge.title);
     badge.addEventListener('click', function () { openHistory(c, true); });
@@ -145,7 +156,7 @@ function row(c) {
   watch.classList.toggle('active', monitored);
   watch.setAttribute('aria-pressed', monitored ? 'true' : 'false');
   watch.title = monitored ? 'Monitoring — tap to ignore' : 'Not monitored — tap to monitor';
-  watch.textContent = '🔬';
+  watch.innerHTML = icon('eye');
   watch.addEventListener('click', function () {
     setStatus(c, monitored ? 'ignored' : 'monitored');
   });
@@ -189,12 +200,13 @@ function histMsg(m) {
   const text = document.createElement('div');
   text.className = 'hist-text';
   if (m.type === 'voice') {
-    // 🎤 marks a voice note; once transcribed, m.text *is* the transcript (#36).
-    // With retained audio (#86) the marker becomes a tap-to-play/stop control.
+    // A mic glyph marks a voice note; once transcribed, m.text *is* the
+    // transcript (#36). With retained audio (#86) the marker becomes a
+    // tap-to-play/stop control.
     if (m.has_audio) {
       text.append(voicePlayer(m.id), document.createTextNode(' ' + voiceText(m)));
     } else {
-      text.textContent = '🎤 ' + voiceText(m);
+      text.append(iconMark('mic'), document.createTextNode(' ' + voiceText(m)));
     }
   } else {
     text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
@@ -217,7 +229,7 @@ function summarizeControl(id) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'summarize-action';
-  btn.textContent = '📝 Summarize';
+  btn.textContent = 'Summarize';
   const out = document.createElement('div');
   out.className = 'msg-summary';
   out.hidden = true;
@@ -231,16 +243,16 @@ function summarizeControl(id) {
     }
     busy = true;
     btn.disabled = true;
-    btn.textContent = '📝 Summarizing…';
+    btn.textContent = 'Summarizing…';
     try {
       const body = await jsonApi('/api/messages/' + id + '/summarize', { method: 'POST' });
       cached = (body && body.summary) || '';
-      out.textContent = '📝 ' + cached;
+      out.textContent = cached;
       out.hidden = false;
-      btn.textContent = '📝 Summary';
+      btn.textContent = 'Summary';
     } catch (exc) {
       toast(String((exc && exc.message) || 'Could not summarize this message.'), 'error');
-      btn.textContent = '📝 Summarize';
+      btn.textContent = 'Summarize';
     } finally {
       busy = false;
       btn.disabled = false;
@@ -265,24 +277,28 @@ function voicePlayer(id) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'voice-play';
-  const idle = '🎤 ▶';
-  btn.textContent = idle;
+  // Static sprite markup only, so innerHTML is safe here.
+  function face(playing) {
+    btn.innerHTML = icon('mic') + icon(playing ? 'square' : 'play');
+    btn.setAttribute('aria-label', playing ? 'Stop voice note' : 'Play voice note');
+  }
+  face(false);
   let audio = null;
   btn.addEventListener('click', function () {
     if (!audio) {
       audio = new Audio(audioUrl(id));
-      audio.addEventListener('ended', function () { btn.textContent = idle; });
+      audio.addEventListener('ended', function () { face(false); });
       audio.addEventListener('error', function () {
-        btn.textContent = idle;
+        face(false);
         toast('Could not play this voice note.', 'error');
       });
     }
     if (audio.paused) {
-      audio.play().then(function () { btn.textContent = '🎤 ⏹'; }).catch(function () {});
+      audio.play().then(function () { face(true); }).catch(function () {});
     } else {
       audio.pause();
       audio.currentTime = 0;
-      btn.textContent = idle;
+      face(false);
     }
   });
   return btn;
@@ -310,10 +326,10 @@ async function openHistory(chat, openPanel) {
   els.historyTitle.textContent = chatLabel(chat);
   els.historyBody.textContent = '';
   els.historyEmpty.hidden = true;
-  els.historyOverlay.hidden = false;
+  if (!els.historyOverlay.open) els.historyOverlay.showModal();
   hist.chat = chat;
   hist.chatId = chat.id;
-  // Panel starts collapsed on a normal open; the 🔗 badge opens it expanded.
+  // Panel starts collapsed on a normal open; the link badge opens it expanded.
   panelOpen = !!openPanel;
   syncLinkPanel();
   hist.oldestTs = null;
@@ -359,8 +375,9 @@ async function loadOlder() {
   hist.loading = false;
 }
 
-function closeHistory() {
-  els.historyOverlay.hidden = true;
+// Reset the overlay's contents once the native <dialog> has closed — runs for
+// every close path (button, backdrop tap, Esc) via the 'close' event.
+function onHistoryClosed() {
   els.historyBody.textContent = '';
   els.historyLinkPanel.hidden = true;
   els.historyLinkPanel.textContent = '';
@@ -369,12 +386,16 @@ function closeHistory() {
   hist.chatId = null;
 }
 
+function closeHistory() {
+  if (els.historyOverlay.open) els.historyOverlay.close();
+}
+
 // ----------------------------------------------------------- link management
-// All link maintenance happens inside a chat's overlay. The 🔗 button toggles a
-// panel whose content depends on the chat's role:
+// All link maintenance happens inside a chat's overlay. The link button toggles
+// a panel whose content depends on the chat's role:
 //   standalone → "Link to a parent…" (opens the picker; this chat becomes a child)
 //   child      → "Linked to <parent>" + Unlink / Change parent…
-//   parent     → its children, each with an Unlink ✕
+//   parent     → its children, each with an Unlink
 // The link is keyed on the child, so every mutation targets a child id and the
 // server enforces the depth-1 rules.
 let panelOpen = false;
@@ -420,7 +441,7 @@ function renderLinkPanel(chat) {
       const nm = document.createElement('span');
       nm.className = 'link-child-name';
       nm.textContent = chatLabel(k);
-      const x = linkBtn('✕', function () { unlinkChat(k); });
+      const x = linkBtn('Unlink', function () { unlinkChat(k); });
       x.title = 'Unlink this chat';
       li.append(nm, x);
       ul.appendChild(li);
@@ -433,7 +454,7 @@ function renderLinkPanel(chat) {
     hint.textContent = 'Not linked. Merge another number for the same person onto a parent chat.';
     const actions = document.createElement('div');
     actions.className = 'link-actions';
-    actions.appendChild(linkBtn('🔗 Link to a parent…', function () { openPicker(chat); }));
+    actions.appendChild(linkBtn('Link to a parent…', function () { openPicker(chat); }));
     panel.append(hint, actions);
   }
 }
@@ -460,7 +481,7 @@ function toggleLinkPanel() {
 // itself vanished from the data (shouldn't happen) the overlay just closes.
 async function refreshAfterLink() {
   await fetchChats();
-  if (els.historyOverlay.hidden) return;
+  if (!els.historyOverlay.open) return;
   const fresh = state.chats.find(function (c) { return c.id === hist.chatId; });
   if (!fresh) { closeHistory(); return; }
   openHistory(fresh, true).catch(function () {});
@@ -523,15 +544,18 @@ function openPicker(child) {
   picker.child = child;
   els.linkPickerTitle.textContent = 'Link “' + chatLabel(child) + '” to…';
   els.linkPickerSearch.value = '';
-  els.linkPickerOverlay.hidden = false;
+  if (!els.linkPickerOverlay.open) els.linkPickerOverlay.showModal();
   renderPicker();
   els.linkPickerSearch.focus();
 }
 
-function closePicker() {
-  els.linkPickerOverlay.hidden = true;
+function onPickerClosed() {
   els.linkPickerList.textContent = '';
   picker.child = null;
+}
+
+function closePicker() {
+  if (els.linkPickerOverlay.open) els.linkPickerOverlay.close();
 }
 
 async function doLink(child, parent) {
@@ -580,7 +604,7 @@ export function wireChats() {
   els.chatsFilterMonitored.addEventListener('click', function () { setFilter('monitored'); });
   els.chatsFilterIgnored.addEventListener('click', function () { setFilter('ignored'); });
   els.chatsFilterAll.addEventListener('click', function () { setFilter('all'); });
-  // Search lives behind a 🔍 button (App Launcher style); reveal + focus on tap.
+  // Search lives behind an icon button (App Launcher style); reveal + focus on tap.
   els.chatsSearchToggle.addEventListener('click', function () {
     const show = els.chatsSearch.hidden;
     els.chatsSearch.hidden = !show;
@@ -600,15 +624,19 @@ export function wireChats() {
   els.historyRename.addEventListener('click', function () { renameChat().catch(function () {}); });
   els.historyLink.addEventListener('click', toggleLinkPanel);
   els.historyClose.addEventListener('click', closeHistory);
+  // Native <dialog>: a click on the element itself is the ::backdrop; Esc fires
+  // 'close' natively, so the reset lives on the 'close' event for every path.
   els.historyOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.historyOverlay) closeHistory();
   });
+  els.historyOverlay.addEventListener('close', onHistoryClosed);
   // Parent picker overlay (#25): search filters by name or alias; tap a result
-  // in renderPicker to link. Close on the ✕ or a backdrop tap.
+  // in renderPicker to link. Close on the close button or a backdrop tap.
   els.linkPickerClose.addEventListener('click', closePicker);
   els.linkPickerOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.linkPickerOverlay) closePicker();
   });
+  els.linkPickerOverlay.addEventListener('close', onPickerClosed);
   els.linkPickerSearch.addEventListener('input', renderPicker);
   // Newest is at the top; scrolling to the bottom pages in older messages.
   els.historyBody.addEventListener('scroll', function () {

@@ -71,6 +71,12 @@ class _VersionedStatic(StaticFiles):
     ) -> Response:
         path = Path(full_path)
         suffix = path.suffix.lower()
+        # Vendored component files are linked/imported without a ?v= stamp (the
+        # versioning regexes cover only root-level /static/<file> URLs), so an
+        # immutable year-cache would pin stale bytes across a re-vendor. The
+        # cache-hygiene rule is content-hash query OR bounded header — vendored
+        # files get the bounded day cache.
+        hashed_cache = _DAY_CACHE if "_vendored" in path.parts else _LONG_CACHE
 
         if suffix == ".js":
             try:
@@ -83,12 +89,12 @@ class _VersionedStatic(StaticFiles):
                 content=rewritten,
                 status_code=status_code,
                 media_type=media_type or "text/javascript",
-                headers={"Cache-Control": _LONG_CACHE},
+                headers={"Cache-Control": hashed_cache},
             )
 
         response = super().file_response(full_path, stat_result, scope, status_code)
         if suffix in _HASHED_SUFFIXES:
-            response.headers["Cache-Control"] = _LONG_CACHE
+            response.headers["Cache-Control"] = hashed_cache
         elif suffix in _DAY_CACHE_SUFFIXES:
             response.headers["Cache-Control"] = _DAY_CACHE
         return response

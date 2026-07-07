@@ -11,7 +11,7 @@ from playwright.sync_api import Page, expect
 @pytest.mark.smoke
 def test_shell_loads(page: Page, base_url: str) -> None:
     page.goto(base_url)
-    expect(page).to_have_title("📡 WhatsApp Radar")
+    expect(page).to_have_title("WhatsApp Radar")
     expect(page.locator("#tabDashboard")).to_be_visible()
     # Dashboard is the default pane.
     expect(page.locator("#paneDashboard")).to_be_visible()

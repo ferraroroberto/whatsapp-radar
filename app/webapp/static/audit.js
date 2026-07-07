@@ -33,10 +33,10 @@ function statusBadge(status) {
 
 // The final per-chat verdict, mapped to a short label + tone for the trace header.
 const ACTION_META = {
-  actionable: { label: '🔔 Actionable', cls: 'act' },
+  actionable: { label: 'Actionable', cls: 'act' },
   not_actionable: { label: 'Not actionable', cls: 'muted' },
-  contract_error: { label: '⚠ Contract error', cls: 'err' },
-  llm_truncated: { label: '⚠ LLM truncated', cls: 'err' },
+  contract_error: { label: 'Contract error', cls: 'err' },
+  llm_truncated: { label: 'LLM truncated', cls: 'err' },
 };
 
 function actionMeta(action) { return ACTION_META[action] || { label: action || '?', cls: 'muted' }; }
@@ -47,7 +47,7 @@ function funnelSummary(f) {
   return [
     `${f.messages_synced} synced`,
     `${f.chats_monitored} monitored`,
-    ...(f.transcriptions ? [`🎤 ${f.transcriptions}`] : []),
+    ...(f.transcriptions ? [`${f.transcriptions} voice`] : []),
     `${f.stage1_passed} Stage 1`,
     `${f.stage2_llm_calls} LLM`,
     `${f.actionable} actionable`,
@@ -107,7 +107,7 @@ function syncListItem(sync) {
 
   const tag = document.createElement('span');
   tag.className = 'audit-sync-tag';
-  tag.textContent = sync.source === 'reprocess' ? '♻️ Rebuild' : '⟳ Resync';
+  tag.textContent = sync.source === 'reprocess' ? 'Rebuild' : 'Resync';
 
   const when = document.createElement('span');
   when.className = 'audit-run-when muted small';
@@ -137,7 +137,7 @@ function funnelCells(run) {
     { label: 'Synced', value: f.messages_synced },
     { label: 'Monitored', value: f.chats_monitored },
     { label: 'Reviewed', value: f.chats_reviewed },
-    { label: '🎤 Transcribed', value: f.transcriptions },
+    { label: 'Transcribed', value: f.transcriptions },
     { label: 'Stage 1', value: f.stage1_passed },
     { label: 'LLM', value: f.stage2_llm_calls },
     { label: 'Actionable', value: f.actionable },
@@ -195,25 +195,26 @@ function messageRow(m, llmCalled, evidence) {
   sender.textContent = m.sender || 'unknown';
   head.appendChild(sender);
 
-  // 🎤 marks a voice note whose text is the transcription fed into analysis (#36).
+  // A voice badge marks a note whose text is the transcription fed into
+  // analysis (#36).
   if (m.type === 'voice') {
     const voice = document.createElement('span');
     voice.className = 'audit-msg-badge muted';
-    voice.textContent = '🎤 voice';
+    voice.textContent = 'voice';
     head.appendChild(voice);
   }
 
   const roots = Array.isArray(m.roots) ? m.roots : [];
   const s1 = document.createElement('span');
   s1.className = 'audit-msg-badge ' + (roots.length ? 'act' : 'muted');
-  s1.textContent = roots.length ? '🔑 ' + roots.join(', ') : 'no keyword';
+  s1.textContent = roots.length ? roots.join(', ') : 'no keyword';
   head.appendChild(s1);
 
   if (llmCalled) {
     const flagged = evidence.some(function (e) { return String(e) === String(m.id); });
     const s2 = document.createElement('span');
     s2.className = 'audit-msg-badge ' + (flagged ? 'act' : 'muted');
-    s2.textContent = flagged ? '🔔 LLM flagged' : 'LLM: not flagged';
+    s2.textContent = flagged ? 'LLM flagged' : 'LLM: not flagged';
     head.appendChild(s2);
   }
 
@@ -243,31 +244,37 @@ function messagesList(t) {
 }
 
 function traceBlock(t) {
+  // A vendored disclosure card (card--collapsible): title + verdict in the
+  // summary's main cluster, chevron pinned right.
   const det = document.createElement('details');
-  det.className = 'audit-trace card coding-card';
+  det.className = 'audit-trace card card--collapsible';
 
   const sum = document.createElement('summary');
-  sum.className = 'coding-summary';
-  const row = document.createElement('div');
-  row.className = 'coding-summary-row';
-  const name = document.createElement('span');
-  name.className = 'coding-summary-title';
+  sum.className = 'collapse-summary';
+  const main = document.createElement('span');
+  main.className = 'collapse-main';
+  const name = document.createElement('h3');
+  name.className = 'collapse-title';
   name.textContent = t.display_name;
   const am = actionMeta(t.final_action);
   const verdict = document.createElement('span');
   verdict.className = 'audit-verdict ' + am.cls;
   verdict.textContent = am.label;
-  row.append(name, verdict);
-  sum.appendChild(row);
+  main.append(name, verdict);
+  const chevron = document.createElement('span');
+  chevron.className = 'collapse-chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+  chevron.textContent = '›';
+  sum.append(main, chevron);
   det.appendChild(sum);
 
   const body = document.createElement('div');
-  body.className = 'audit-trace-body';
+  body.className = 'collapse-body audit-trace-body';
 
   // Stage progress line: did it pass Stage 1, was the LLM called?
   const stages = document.createElement('p');
   stages.className = 'muted small';
-  const s1 = t.stage1_passed ? 'Stage 1 ✓' : 'Stage 1 ✗ (filtered)';
+  const s1 = t.stage1_passed ? 'Stage 1 passed' : 'Stage 1 filtered';
   const s2 = t.llm_called ? 'LLM called' : 'LLM skipped';
   stages.textContent = `${s1} · ${s2}`;
   body.appendChild(stages);

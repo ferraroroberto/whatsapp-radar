@@ -1,34 +1,25 @@
-/* Four-tab switcher: Dashboard | Chats | Execution | Audit.
+/* Four-tab switcher: Dashboard | Chats | Run | Audit.
  *
- * Routing + an optional onTab callback so a tab can refresh its data when it
- * becomes visible. All four panes are live: Dashboard (#9), Chats (#10),
- * Execution (#11), Audit (#12). */
+ * Thin adapter over the vendored _vendored/nav/nav-tabs.js — that file owns
+ * tab/pane discovery, ARIA + roving tabindex, localStorage persistence, the
+ * standalone-PWA scroll reset, and the visualViewport pin. This module only
+ * keeps state.tab in sync and forwards the per-tab refresh callback. */
 
-import { els, state } from './state.js';
+import { state } from './state.js';
+import { initNavTabs } from './_vendored/nav/nav-tabs.js';
 
-const TABS = ['dashboard', 'chats', 'execution', 'audit'];
+let nav = null;
 
 export function setTab(tab) {
-  state.tab = tab;
-  els.tabDashboard.classList.toggle('active', tab === 'dashboard');
-  els.tabChats.classList.toggle('active', tab === 'chats');
-  els.tabExecution.classList.toggle('active', tab === 'execution');
-  els.tabAudit.classList.toggle('active', tab === 'audit');
-  els.paneDashboard.hidden = tab !== 'dashboard';
-  els.paneChats.hidden = tab !== 'chats';
-  els.paneExecution.hidden = tab !== 'execution';
-  els.paneAudit.hidden = tab !== 'audit';
+  if (nav) nav.setTab(tab);
 }
 
 export function wireTabs(onTab) {
-  function go(tab) {
-    setTab(tab);
-    if (onTab) onTab(tab);
-  }
-  els.tabDashboard.addEventListener('click', function () { go('dashboard'); });
-  els.tabChats.addEventListener('click', function () { go('chats'); });
-  els.tabExecution.addEventListener('click', function () { go('execution'); });
-  els.tabAudit.addEventListener('click', function () { go('audit'); });
+  nav = initNavTabs({
+    storageKey: 'wa-radar.tab',
+    onChange: function (tab) {
+      state.tab = tab;
+      if (onTab) onTab(tab);
+    },
+  });
 }
-
-export { TABS };

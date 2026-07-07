@@ -105,17 +105,19 @@
       <path d="M19 17V5a2 2 0 0 0-2-2H4" />
       <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
     </symbol>
-    <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
-      <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
-      <circle cx="12" cy="12" r="3" />
-    </symbol>
     <symbol id="i-lock" viewBox="0 0 24 24" fill="none">
       <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </symbol>
-    <symbol id="i-smartphone" viewBox="0 0 24 24" fill="none">
-      <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+    <symbol id="i-radar" viewBox="0 0 24 24" fill="none">
+      <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34" />
+      <path d="M4 6h.01" />
+      <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35" />
+      <path d="M16.24 7.76A6 6 0 1 0 8.23 16.67" />
       <path d="M12 18h.01" />
+      <path d="M17.99 11.66A6 6 0 0 1 15.77 16.67" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="m13.41 10.59 5.66-5.66" />
     </symbol>
     <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none">
       <path d="M3 6h18" />
@@ -168,11 +170,16 @@
 
   <main class="app">
     <section id="paneDashboard" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
-      <div class="page-head">
-        <h1 class="page-title">WhatsApp Radar</h1>
+      <!-- App identity card (home-automation weather-tile pattern): icon + name
+           left, theme toggle right — same height/typography as every other card. -->
+      <section class="card app-head" aria-label="App">
+        <h1 class="card-title app-head-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+          Family Radar
+        </h1>
         <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-      </div>
+      </section>
       <div class="metric-grid">
         <div class="card metric"><span class="metric-value" id="mChannels">–</span><span class="metric-label">Channels monitored</span></div>
         <div class="card metric"><span class="metric-value" id="mMessages">–</span><span class="metric-label">Messages stored</span></div>
@@ -181,13 +188,22 @@
         <div class="card metric"><span class="metric-value" id="mActionable">–</span><span class="metric-label">Alerts raised</span></div>
         <div class="card metric"><span class="metric-value" id="mNotified">–</span><span class="metric-label">Notifications sent</span></div>
       </div>
-      <div class="card lastrun-card">
-        <p class="lastrun-head"><strong>Last scan</strong> <span id="lastRunWhen" class="muted"></span></p>
-        <p id="lastRunSummary" class="muted small">Loading…</p>
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
+            Last scan
+          </h3>
+          <span id="lastRunWhen" class="card-head-meta small"></span>
+        </div>
+        <p id="lastRunSummary" class="card-meta">Loading…</p>
       </div>
       <div class="card">
         <div class="card-head">
-          <h3 class="card-title">Monitored channels</h3>
+          <h3 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
+            Monitored channels
+          </h3>
         </div>
         <table class="data-table" id="dashChannelsTable">
           <thead><tr><th>Channel</th><th class="num">Msgs</th><th class="when">Last msg</th></tr></thead>
@@ -195,6 +211,20 @@
         </table>
         <p id="dashChannelsEmpty" class="muted small" hidden>No channels monitored yet.</p>
       </div>
+
+      <!-- Passkey enrollment: appears only while the tray's enrollment window is
+           open (renderWebauthn) — the everyday UI carries no settings clutter. -->
+      <section id="enrollCard" class="card" hidden>
+        <div class="card-head">
+          <h3 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg>
+            Passkey enrollment
+          </h3>
+        </div>
+        <p id="webauthnStatus" class="card-meta"></p>
+        <ul id="webauthnDevices" class="webauthn-devices"></ul>
+        <button id="enrollDeviceBtn" type="button" class="big-btn" hidden>Enroll this device</button>
+      </section>
     </section>
 
     <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
@@ -207,15 +237,13 @@
           <span class="card-actions">
             <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name"
                     aria-label="Search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></button>
-            <button id="chatsRefresh" type="button" class="icon-btn" title="Refresh"
-                    aria-label="Refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
           </span>
         </div>
         <div class="chats-toolbar">
-          <div id="chatsFilter" class="segmented" role="radiogroup" aria-label="Chat filter">
-            <button id="chatsFilterMonitored" type="button" class="active" data-filter="monitored">Monitored</button>
-            <button id="chatsFilterIgnored" type="button" data-filter="ignored">Ignored</button>
-            <button id="chatsFilterAll" type="button" data-filter="all">All</button>
+          <div id="chatsFilter" class="range-tabs" role="radiogroup" aria-label="Chat filter">
+            <button id="chatsFilterMonitored" type="button" class="range-tab active" data-filter="monitored">Monitored</button>
+            <button id="chatsFilterIgnored" type="button" class="range-tab" data-filter="ignored">Ignored</button>
+            <button id="chatsFilterAll" type="button" class="range-tab" data-filter="all">All</button>
           </div>
         </div>
         <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search chats by name…" autocomplete="off" hidden>
@@ -246,22 +274,24 @@
           <div class="opt-group">
             <h3 class="opt-group-title">Safe settings</h3>
             <form id="configForm" autocomplete="off">
-              <label class="stacked"><span>Connector</span>
-                <select id="cfgConnector" class="select-native"></select></label>
-              <label class="stacked"><span>Classifier</span>
-                <select id="cfgClassifier" class="select-native"></select></label>
-              <label class="stacked"><span>Notifier</span>
-                <select id="cfgNotifier" class="select-native"></select></label>
-              <label class="stacked"><span>Hub base URL</span>
-                <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
-              <label class="stacked"><span>Hub model</span>
-                <input id="cfgHubModel" type="text" class="input-native"></label>
-              <label class="stacked"><span>Telegram bot token</span>
-                <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
-              <label class="stacked"><span>Telegram chat ID</span>
-                <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+              <div class="cfg-fields">
+                <label class="stacked"><span>Connector</span>
+                  <select id="cfgConnector" class="select-native"></select></label>
+                <label class="stacked"><span>Classifier</span>
+                  <select id="cfgClassifier" class="select-native"></select></label>
+                <label class="stacked"><span>Notifier</span>
+                  <select id="cfgNotifier" class="select-native"></select></label>
+                <label class="stacked"><span>Hub model</span>
+                  <input id="cfgHubModel" type="text" class="input-native"></label>
+                <label class="stacked cfg-span"><span>Hub base URL</span>
+                  <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
+                <label class="stacked cfg-span"><span>Telegram bot token</span>
+                  <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
+                <label class="stacked"><span>Telegram chat ID</span>
+                  <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+              </div>
               <p id="cfgNote" class="opt-hint"></p>
-              <button type="submit" class="big-btn">Save settings</button>
+              <button id="cfgSave" type="submit" class="big-btn" disabled>Save settings</button>
             </form>
           </div>
         </div>
@@ -269,11 +299,17 @@
     </section>
 
     <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
-      <div id="execHealth" class="exec-health" title="WhatsApp sidecar connection">
-        <span id="execHealthDot" class="exec-health-dot unknown"></span>
-        <span id="execHealthLabel" class="exec-health-label">WhatsApp</span>
+      <!-- Connection health, home-automation Net-tab "Internet" pattern:
+           icon + name left, muted stored-message count in the middle, a bold
+           Online/Offline status word pinned right. -->
+      <section id="execHealth" class="card exec-health" title="WhatsApp sidecar connection">
+        <span class="card-title exec-health-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+          <span id="execHealthLabel">WhatsApp</span>
+        </span>
         <span id="execHealthDetail" class="exec-health-detail muted small">checking…</span>
-      </div>
+        <span id="execHealthStatus" class="exec-health-status">— no data</span>
+      </section>
 
       <div id="execReconnect" class="exec-reconnect" hidden>
         <p id="execReconnectMsg" class="muted small"></p>
@@ -287,17 +323,17 @@
             <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
             Run
           </h2>
-          <div id="execMode" class="segmented exec-mode-seg" role="radiogroup" aria-label="Run mode">
-            <button id="execModeLive" type="button" class="active" data-mode="live">Live</button>
-            <button id="execModeDry" type="button" data-mode="dry_run">Dry&nbsp;run</button>
+          <div id="execMode" class="range-tabs exec-mode-seg" role="radiogroup" aria-label="Run mode">
+            <button id="execModeLive" type="button" class="range-tab active" data-mode="live">Live</button>
+            <button id="execModeDry" type="button" class="range-tab" data-mode="dry_run">Dry&nbsp;run</button>
           </div>
         </div>
         <p id="execModeHint" class="muted small">Live runs the steps for real.</p>
 
         <div id="execDryOpts" class="exec-dry-opts" hidden>
-          <div id="execWindow" class="segmented" role="radiogroup" aria-label="Dry-run window">
-            <button id="execWinNew" type="button" class="active" data-window="new">New only</button>
-            <button id="execWinDays" type="button" data-window="days">Last N days</button>
+          <div id="execWindow" class="range-tabs" role="radiogroup" aria-label="Dry-run window">
+            <button id="execWinNew" type="button" class="range-tab active" data-window="new">New only</button>
+            <button id="execWinDays" type="button" class="range-tab" data-window="days">Last N days</button>
           </div>
           <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
                  value="7" inputmode="numeric" aria-label="Days to replay" hidden>
@@ -332,13 +368,11 @@
         <p id="execBusy" class="muted small" hidden></p>
       </section>
 
-      <details id="execRunsCard" class="card card--collapsible" open>
+      <details id="execRunsCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
             <h3 class="collapse-title">Recent runs</h3>
-            <button id="execRefresh" type="button" class="icon-btn" title="Refresh"
-                    aria-label="Refresh runs"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
           </span>
           <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
         </summary>
@@ -348,7 +382,7 @@
         </div>
       </details>
 
-      <details id="execSyncsCard" class="card card--collapsible" open>
+      <details id="execSyncsCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
@@ -415,10 +449,6 @@
             <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
             Audit
           </h2>
-          <span class="card-actions">
-            <button id="auditRefresh" type="button" class="icon-btn" title="Refresh"
-                    aria-label="Refresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg></button>
-          </span>
         </div>
         <p class="muted small">Every run is listed and fully drillable — confirm exactly why each message was or wasn't promoted.</p>
         <ul id="auditRuns" class="card-list audit-runs" aria-label="Recent runs"></ul>
@@ -427,7 +457,10 @@
 
       <section id="auditDetailCard" class="card" hidden>
         <div class="card-head">
-          <h3 id="auditDetailTitle" class="card-title audit-detail-kind"></h3>
+          <h3 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+            <span id="auditDetailTitle"></span>
+          </h3>
           <span class="card-actions">
             <button id="auditDetailClose" type="button" class="icon-btn" aria-label="Close"
                     title="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
@@ -440,33 +473,11 @@
       </section>
     </section>
 
-    <details id="settingsPanel" class="card card--collapsible settings-card">
-      <summary class="collapse-summary">
-        <span class="collapse-main">
-          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
-          <h3 class="collapse-title">Settings</h3>
-        </span>
-        <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-      </summary>
-      <div class="collapse-body">
-        <div class="webauthn-section">
-          <h3><svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg> Access (passkey)</h3>
-          <p id="webauthnStatus" class="muted small">Checking…</p>
-          <ul id="webauthnDevices" class="webauthn-devices"></ul>
-          <button id="enrollDeviceBtn" type="button" class="big-btn" hidden>Enroll this device</button>
-          <p class="muted small">
-            Open the enrollment window from the tray menu
-            (<strong>Enroll device</strong>) on the PC, then tap the button above.
-          </p>
-        </div>
-        <hr>
-        <p class="muted small">
-          First time on iPhone? Install the trust profile:
-          <a href="/install-ca">/install-ca</a>
-        </p>
-        <p id="buildReadout" class="muted small"></p>
-      </div>
-    </details>
+    <!-- Build identity: which build the PWA is running. Filled by main.js;
+         visible on every tab (it sits outside the panes). -->
+    <footer class="page-foot">
+      <p id="buildReadout" class="muted small"></p>
+    </footer>
 
     <div id="toast" class="toast" hidden></div>
   </main>

@@ -55,8 +55,8 @@ def test_execution_offline_shows_reconnect(
     page.locator("#tabExecution").click()
     expect(page.locator("#paneExecution")).to_be_visible()
 
-    # The throwaway buffer (conftest) has no status.json → 'stopped' → red dot
-    # and a visible Reconnect button.
+    # The throwaway buffer (conftest) has no status.json → 'stopped' → a red
+    # "Offline" status word and a visible Reconnect button.
     expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
     expect(page.locator("#execReconnectBtn")).to_be_visible()
-    expect(page.locator("#execHealthDot")).to_have_class("exec-health-dot down")
+    expect(page.locator("#execHealthStatus")).to_have_text("Offline")

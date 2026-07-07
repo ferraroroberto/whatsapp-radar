@@ -73,6 +73,6 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
 @pytest.mark.smoke
 def test_build_readout_populates(page: Page, base_url: str) -> None:
     page.goto(base_url)
-    # main.js fetches /api/version on boot and writes it into #buildReadout.
-    page.locator("#settingsPanel").click()  # open the <details>
+    # main.js fetches /api/version on boot and writes it into the page footer,
+    # which is visible on every tab (no settings panel to open).
     expect(page.locator("#buildReadout")).to_contain_text("Build:")

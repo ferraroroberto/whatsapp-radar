@@ -92,18 +92,19 @@ export async function fetchWebauthnStatus() {
 function renderWebauthn() {
   const w = state.webauthn || {};
   if (!els.webauthnStatus) return;
-  if (!w.configured) {
-    els.webauthnStatus.textContent =
-      'Passkey gate not configured — access is Tailscale + bearer-token only.';
+  // The enrollment card only exists while the tray's enrollment window is open
+  // (the everyday UI carries no settings surface — the tray menu opens the
+  // window, then this card appears on the Dashboard).
+  const show = !!(w.configured && w.enrollment_open);
+  els.enrollCard.hidden = !show;
+  if (!show) {
     els.webauthnDevices.innerHTML = '';
     els.enrollDeviceBtn.hidden = true;
     return;
   }
   const n = (w.devices || []).length;
-  let msg = n ? n + ' device(s) enrolled.' : 'No device enrolled yet.';
-  if (w.enrollment_open) {
-    msg += ' Enrollment window open (' + w.enrollment_seconds_left + 's).';
-  }
+  const msg = (n ? n + ' device(s) enrolled.' : 'No device enrolled yet.')
+    + ' Enrollment window open (' + w.enrollment_seconds_left + 's).';
   els.webauthnStatus.textContent = msg;
   els.webauthnDevices.innerHTML = '';
   (w.devices || []).forEach(function (d) {

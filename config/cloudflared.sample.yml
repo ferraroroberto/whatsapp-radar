@@ -21,11 +21,9 @@ tunnel: 00000000-0000-0000-0000-000000000000
 # credentials-file: C:\Users\<you>\.cloudflared\<UUID>.json
 
 ingress:
-  # Public hostname → local webapp. The webapp serves HTTPS with a self-signed
-  # CA, so noTLSVerify is required (Cloudflare's edge provides the public TLS).
+  # Public hostname → local webapp. The webapp serves plain HTTP; Cloudflare's
+  # edge provides the public TLS.
   - hostname: radar.<your-domain>
-    service: https://localhost:8455
-    originRequest:
-      noTLSVerify: true
+    service: http://localhost:8455
   # Catch-all — anything that doesn't match gets a clean 404.
   - service: http_status:404

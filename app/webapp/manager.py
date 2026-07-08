@@ -63,15 +63,6 @@ def load_config(raw: dict[str, Any] | None = None) -> WebappManagerConfig:
     )
 
 
-def cert_paths(project_root: Path | None = None) -> tuple[Path, Path] | None:
-    root = project_root or PROJECT_ROOT
-    cert = root / "webapp" / "certificates" / "cert.pem"
-    key = root / "webapp" / "certificates" / "key.pem"
-    if cert.exists() and key.exists():
-        return cert, key
-    return None
-
-
 def _probe_url(scheme: str, host: str, port: int) -> str:
     return f"{scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 
@@ -81,30 +72,18 @@ class WebappManager:
         self.config = config or WebappManagerConfig()
         self._proc: subprocess.Popen[bytes] | None = None
         self._session = requests.Session()
-        self._session.verify = False
-        try:
-            import urllib3
-            from urllib3.exceptions import InsecureRequestWarning
-
-            urllib3.disable_warnings(InsecureRequestWarning)
-        except Exception:
-            pass
 
     @property
     def base_url(self) -> str:
-        scheme = "https" if cert_paths() else "http"
-        return _probe_url(scheme, self.config.host, self.config.port)
+        return _probe_url("http", self.config.host, self.config.port)
 
     def is_reachable(self) -> bool:
-        for scheme in ("https", "http"):
-            url = _probe_url(scheme, self.config.host, self.config.port) + "/healthz"
-            try:
-                r = self._session.get(url, timeout=self.config.request_timeout_seconds)
-                if r.status_code == 200:
-                    return True
-            except requests.RequestException:
-                continue
-        return False
+        url = _probe_url("http", self.config.host, self.config.port) + "/healthz"
+        try:
+            r = self._session.get(url, timeout=self.config.request_timeout_seconds)
+            return r.status_code == 200
+        except requests.RequestException:
+            return False
 
     def is_port_in_use(self) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -250,10 +229,6 @@ class WebappManager:
             "--log-level",
             "warning",
         ]
-        certs = cert_paths()
-        if certs is not None:
-            cert, key = certs
-            cmd.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
         return cmd
 
     def _wait_until_ready(self) -> None:

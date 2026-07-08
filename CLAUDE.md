@@ -24,9 +24,9 @@ whatsapp-radar/
     fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env are gitignored
-  scripts/               # gen_ssl_cert, gen_token, set_password, gen_icons, run_named_tunnel, verify-before-ship.ps1
+  scripts/               # gen_token, set_password, gen_icons, run_named_tunnel, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
-  webapp/                # runtime cert/log output (gitignored contents)
+  webapp/                # runtime log output (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
   launcher.py  wr.bat    # CLI entry points
   tray.bat  webapp.bat  webapp_tunnel_named.bat  setup.bat   # webapp entry points

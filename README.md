@@ -119,9 +119,9 @@ Transcribe-only (never translation). Failures are isolated and **retried on ever
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), Tailscale TLS, and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), portless access over the tailnet (Tailscale's own encrypted transport — no local TLS cert to install), and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.
 
-The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's canonical control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog, icons, empty-state — do not edit those files per-app; re-vendor from the scaffold). There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The `/install-ca` trust-profile link is gone from the UI (portless Tailscale/Cloudflare access supersedes the local-CA idea; the endpoint itself remains for legacy setups).
+The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's canonical control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog, icons, empty-state — do not edit those files per-app; re-vendor from the scaffold). There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves plain HTTP — Tailscale and Cloudflare terminate TLS, so there's no local-CA / trust-profile plumbing to install on the phone.
 
 ### Dashboard
 
@@ -156,14 +156,13 @@ Read-only trust surface over the persisted per-run trace: a list of every review
 
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons
-.\webapp.bat                # run the webapp standalone (HTTP, or HTTPS if a cert exists)
+.\webapp.bat                # run the webapp standalone (plain HTTP; Tailscale/Cloudflare terminate TLS)
 .\tray.bat                  # adopt-or-spawn the webapp behind a tray icon (daily use)
 .\tray.bat --restart        # stop the running tray + reclaim :8455, start fresh
 
 # Optional hardening / access:
 .\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON
 .\.venv\Scripts\python.exe scripts\set_password.py PW  # add a login password
-.\.venv\Scripts\python.exe scripts\gen_ssl_cert.py     # Tailscale TLS + iOS trust profile
 ```
 
 Restart matrix:
@@ -191,7 +190,7 @@ The same gate runs in CI on every branch push and PR to `main` ([`.github/workfl
 
 ## Home-stack wiring (App Launcher)
 
-WhatsApp Radar runs as part of the home stack through [App Launcher](../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, and the admin PWA opened from the **Apps** tab. That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI. The full procedure (job name + cadence, the two Apps rows, and the calendar-anchored cert/token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
+WhatsApp Radar runs as part of the home stack through [App Launcher](../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, and the admin PWA opened from the **Apps** tab. That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI. The full procedure (job name + cadence, the two Apps rows, and the calendar-anchored token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
 
 ## Repository Status
 

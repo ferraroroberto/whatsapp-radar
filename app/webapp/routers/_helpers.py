@@ -28,13 +28,6 @@ async def maybe_json(request: Request) -> dict[str, Any]:
     return {}
 
 
-def cert_present() -> bool:
-    return (
-        (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem").exists()
-        and (PROJECT_ROOT / "webapp" / "certificates" / "key.pem").exists()
-    )
-
-
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 

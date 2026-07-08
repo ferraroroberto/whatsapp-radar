@@ -4,7 +4,7 @@ Used by ``webapp_tunnel_named.bat`` for headless / no-tray use. The tray already
 does this same work as part of normal startup — only reach for this script when
 running without the tray.
 
-Boots uvicorn (HTTPS if ``webapp/certificates/cert.pem`` exists) then
+Boots uvicorn (plain HTTP; Tailscale/Cloudflare terminate TLS) then
 ``cloudflared tunnel --config webapp/cloudflared.yml run``. The persistent URL
 is written to ``webapp/last_tunnel_url.txt`` (with ``?token=…`` when an
 ``auth_token`` is configured).
@@ -51,8 +51,6 @@ def _find_python() -> Path:
 
 
 def _spawn_uvicorn(port: int) -> subprocess.Popen[bytes]:
-    cert = PROJECT_ROOT / "webapp" / "certificates" / "cert.pem"
-    key = PROJECT_ROOT / "webapp" / "certificates" / "key.pem"
     cmd = [
         str(_find_python()),
         "-m",
@@ -65,8 +63,6 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen[bytes]:
         "--log-level",
         "warning",
     ]
-    if cert.exists() and key.exists():
-        cmd.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
     logger.info(f"🚀 Starting uvicorn: {' '.join(cmd)}")
     kw: dict[str, object] = dict(cwd=str(PROJECT_ROOT))
     if sys.platform == "win32":

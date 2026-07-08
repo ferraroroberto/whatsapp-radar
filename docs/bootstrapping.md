@@ -126,18 +126,16 @@ If nothing is actionable, no message is sent — that is correct. See [`manual.m
 
 ## 5 — Bring up the admin PWA + phone access (Tailscale)
 
-The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**.
+The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**, serving plain HTTP — Tailscale's own encrypted transport carries it over the tailnet, so there's no local cert to mint or trust profile to install.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\gen_ssl_cert.py     # Tailscale TLS: mint local CA + leaf, install iOS trust profile
 .\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON (loopback still bypasses)
 .\.venv\Scripts\python.exe scripts\set_password.py PW  # optional: add a memorable login password
 .\tray.bat                                             # adopt-or-spawn the webapp behind a tray icon (daily use)
 ```
 
-- `gen_ssl_cert.py` mints a local CA (10-year) + a leaf cert covering `localhost`, the hostname, and the **Tailscale** name, and installs the CA into your Windows trust store. It writes an **iOS trust profile** served by the webapp — once the tray is running, open `https://<machine>.<tailnet>.ts.net:8455/install-ca` in **iPhone Safari** and tap **Install** so Safari trusts the tailnet HTTPS endpoint. The PWA then serves HTTPS on `:8455` over the tailnet.
 - `gen_token.py` turns on the bearer gate; the tray bakes the token into the copied URL (`?token=…`). Open that URL once on the phone and it stashes the token in localStorage.
-- Reach the PWA from the phone at `https://<machine>.<tailnet>.ts.net:8455` (on the tailnet).
+- Reach the PWA from the phone at `http://<machine>.<tailnet>.ts.net:8455` (on the tailnet).
 
 ### Enrol a WebAuthn passkey (Tailscale-only)
 
@@ -155,7 +153,7 @@ copy config\cloudflared.sample.yml webapp\cloudflared.yml
 # then edit webapp\cloudflared.yml: fill in `tunnel:` (the UUID) and `hostname:`
 ```
 
-Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the origin uses the self-signed cert (`noTLSVerify: true` in the config).
+Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the origin is plain HTTP.
 
 ## 7 — Schedule the digest + add the launch surfaces (App Launcher)
 
@@ -176,7 +174,7 @@ From an **Apps-tab scan** for the bats, add two rows, both named *WhatsApp Radar
 
 Tapping either from the phone spawns the matching bat. For daily use prefer this repo's own `tray.bat` (adopt-or-spawn behind a tray icon); the Apps-tab rows are for launching from the phone when the tray isn't already up.
 
-Phone access itself (Tailscale TLS, optional Cloudflare named tunnel) is Steps 5–6 above; the rotation/expiry schedule for the cert and tokens is in **Recurring maintenance** below.
+Phone access itself (Tailscale, optional Cloudflare named tunnel) is Steps 5–6 above; the rotation/expiry schedule for tokens is in **Recurring maintenance** below.
 
 ## 8 — Verify the system is live
 
@@ -192,7 +190,6 @@ Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}`
 
 | What | When | How |
 | --- | --- | --- |
-| Tailscale TLS leaf cert | Before **2027-07-06** (leaf validity 395 days) | Re-run `scripts\gen_ssl_cert.py` (reuses the long-lived CA); re-anchor the reminder to +395 days |
 | Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `scripts\set_password.py` |
 | Telegram bot token | On leak only | Re-issue via BotFather, update `config\webapp_config.json` (or `WR_TELEGRAM_*`) |
 | Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from the Execution tab) |

@@ -1,4 +1,4 @@
-"""Catch-all routes: index, healthz, version, install-ca."""
+"""Catch-all routes: index, healthz, version."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import subprocess
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 
 from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
 from src.static_versioning import asset_hash_for, rewrite_index_html
@@ -85,21 +85,3 @@ async def version(request: Request) -> dict[str, str]:
 @router.get("/healthz")
 async def healthz() -> dict[str, Any]:
     return {"ok": True, "service": "whatsapp-radar"}
-
-
-@router.get("/install-ca")
-async def install_ca() -> FileResponse:
-    profile = STATIC_DIR / "whatsapp-radar-ca.mobileconfig"
-    if not profile.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "CA profile not generated yet. Run "
-                "`scripts/gen_ssl_cert.py` from the project root."
-            ),
-        )
-    return FileResponse(
-        str(profile),
-        media_type="application/x-apple-aspen-config",
-        filename="whatsapp-radar-ca.mobileconfig",
-    )

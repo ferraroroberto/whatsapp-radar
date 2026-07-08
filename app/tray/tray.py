@@ -33,7 +33,7 @@ from pathlib import Path
 from app.tray import cloudflared_proc
 from app.tray.cloudflared_proc import TUNNEL_URL_FILE
 from app.tray.single_instance import SingleInstance
-from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
+from app.webapp.manager import WebappManager, WebappManagerConfig
 from src.config import load_config
 from src.connector import sidecar
 from src.webapp_config import append_auth_token, load_webapp_config
@@ -259,9 +259,8 @@ def run_tray() -> int:
         if not host:
             _notify("Tailscale not available", "Couldn't resolve a tailnet address.")
             return
-        scheme = "https" if cert_paths() else "http"
         url = append_auth_token(
-            f"{scheme}://{host}:{manager.config.port}", load_webapp_config().auth_token
+            f"http://{host}:{manager.config.port}", load_webapp_config().auth_token
         )
         _notify("Copied Tailscale URL" if _clipboard_copy(url) else "Tailscale URL", url)
 
@@ -291,12 +290,11 @@ def run_tray() -> int:
 
     def enroll_device(icon: object, item: object) -> None:
         def _do() -> None:
-            scheme = "https" if cert_paths() else "http"
-            url = f"{scheme}://127.0.0.1:{manager.config.port}/api/webauthn/enroll/window"
+            url = f"http://127.0.0.1:{manager.config.port}/api/webauthn/enroll/window"
             try:
                 import requests
 
-                resp = requests.post(url, json={"seconds": 300}, timeout=5, verify=False)
+                resp = requests.post(url, json={"seconds": 300}, timeout=5)
                 if resp.status_code == 200:
                     _notify(
                         "Passkey enrollment",

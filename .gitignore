@@ -24,7 +24,6 @@ config/local.*
 config/*.local.*
 
 # Webapp runtime + secrets (added by Step 3 — committed only as *.sample templates)
-webapp/certificates/
 webapp/*.log
 webapp/last_tunnel_url.txt
 # Execution-tab run records: run.json + output.log carry chat names/message text.
@@ -32,9 +31,6 @@ webapp/runs/
 config/webapp_config.json
 config/webauthn_devices.json
 config/cloudflared.yml
-# Host-specific CA artifacts gen_ssl_cert.py mirrors into the served static dir.
-app/webapp/static/*.mobileconfig
-app/webapp/static/ca.crt
 
 # WhatsApp linked-device credentials and local private data
 auth/

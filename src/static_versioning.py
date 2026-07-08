@@ -27,7 +27,7 @@ from pathlib import Path
 _HASH_LEN = 8
 
 # Files under static/ that get hashed + long-cached. Everything else (icons,
-# manifest, mobileconfig) is cached more conservatively by the static mount.
+# manifest) is cached more conservatively by the static mount.
 _HASHED_SUFFIXES = (".js", ".css")
 
 # Subdirectories under static/ to skip entirely (third-party vendor bundles are

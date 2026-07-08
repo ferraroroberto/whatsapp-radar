@@ -19,8 +19,6 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 # WebAuthn passkey gate (Face ID enrol + assert).
 webauthn>=2.0
-# Self-signed cert + iOS .mobileconfig generation (Tailscale TLS bootstrap).
-cryptography>=42.0
 # HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).
 requests>=2.31
 PyYAML>=6.0

@@ -52,14 +52,16 @@ _DAY_CACHE_SUFFIXES = {".webmanifest", ".png", ".ico"}
 class _VersionedStatic(StaticFiles):
     """Static mount that stamps Cache-Control + rewrites JS imports.
 
-    JS files get their ``import './foo.js'`` calls rewritten to
-    ``import './foo.js?v=<hash>'`` at serve time. Hashed assets get a year-long
-    immutable cache; icons and manifest get a day.
+    JS files get their relative ``import`` specifiers (including subdirectory
+    and ``../`` imports) rewritten to carry a ``?v=<hash>`` query at serve
+    time. Hashed assets (any subdirectory, including ``_vendored/``) get a
+    year-long immutable cache; icons and manifest get a day.
     """
 
     def __init__(self, *, directory: str, asset_hashes: dict[str, str]) -> None:
         super().__init__(directory=directory)
         self._asset_hashes = asset_hashes
+        self._static_dir = Path(directory)
 
     def file_response(
         self,
@@ -70,30 +72,29 @@ class _VersionedStatic(StaticFiles):
     ) -> Response:
         path = Path(full_path)
         suffix = path.suffix.lower()
-        # Vendored component files are linked/imported without a ?v= stamp (the
-        # versioning regexes cover only root-level /static/<file> URLs), so an
-        # immutable year-cache would pin stale bytes across a re-vendor. The
-        # cache-hygiene rule is content-hash query OR bounded header — vendored
-        # files get the bounded day cache.
-        hashed_cache = _DAY_CACHE if "_vendored" in path.parts else _LONG_CACHE
 
         if suffix == ".js":
             try:
                 body = path.read_text(encoding="utf-8")
             except OSError:
                 return super().file_response(full_path, stat_result, scope, status_code)
-            rewritten = rewrite_js_imports(body, self._asset_hashes)
+            try:
+                rel_parent = path.resolve().relative_to(self._static_dir.resolve()).parent
+            except ValueError:
+                rel_parent = Path(".")
+            from_dir = "" if rel_parent == Path(".") else rel_parent.as_posix()
+            rewritten = rewrite_js_imports(body, self._asset_hashes, from_dir)
             media_type, _ = mimetypes.guess_type(str(path))
             return Response(
                 content=rewritten,
                 status_code=status_code,
                 media_type=media_type or "text/javascript",
-                headers={"Cache-Control": hashed_cache},
+                headers={"Cache-Control": _LONG_CACHE},
             )
 
         response = super().file_response(full_path, stat_result, scope, status_code)
         if suffix in _HASHED_SUFFIXES:
-            response.headers["Cache-Control"] = hashed_cache
+            response.headers["Cache-Control"] = _LONG_CACHE
         elif suffix in _DAY_CACHE_SUFFIXES:
             response.headers["Cache-Control"] = _DAY_CACHE
         return response

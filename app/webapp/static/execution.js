@@ -9,6 +9,7 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
+import { fmtLocalDateTime } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
@@ -29,11 +30,6 @@ function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 // The vendored switch stores its state in aria-checked (class + aria move
 // together through setSwitch — the one write path).
 function stageOn(btn) { return btn.getAttribute('aria-checked') === 'true'; }
-
-function fmtTs(ts) {
-  if (!ts) return '';
-  return String(ts).replace('T', ' ').slice(0, 19);
-}
 
 function isRunning(status) { return status === 'running' || status === 'pending'; }
 
@@ -393,7 +389,7 @@ function runsListItem(run) {
   name.textContent = kindLabel(run.kind);
   const when = document.createElement('span');
   when.className = 'exec-run-when muted small';
-  when.textContent = fmtTs(run.started_at);
+  when.textContent = fmtLocalDateTime(run.started_at);
   li.append(badge, name, when);
   li.addEventListener('click', function () {
     const e = execState();
@@ -492,7 +488,7 @@ function renderViewer(run) {
   els.execViewerTitle.textContent = kindLabel(run.kind);
 
   const bits = [run.status || '?'];
-  if (run.started_at) bits.push('started ' + fmtTs(run.started_at));
+  if (run.started_at) bits.push('started ' + fmtLocalDateTime(run.started_at));
   if (run.result && run.result.backup_path) bits.push('backup: ' + run.result.backup_path);
   if (run.result && Array.isArray(run.result.unmapped) && run.result.unmapped.length) {
     bits.push(run.result.unmapped.length + ' unmapped');

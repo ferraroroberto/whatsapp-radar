@@ -102,7 +102,7 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     classifier = build_classifier(config.classifier, config.hub)
     _progress("▶ process starting — analyzing monitored chats since last cursor")
     outcome = review_monitored_chats(
-        conn, classifier, since_days=config.hub.recent_alert_days
+        conn, classifier, since_days=config.hub.recent_alert_days, config=config
     )
     digest = build_digest(conn, outcome.run_id)
 

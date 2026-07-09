@@ -119,9 +119,9 @@ Transcribe-only (never translation). Failures are isolated and **retried on ever
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), portless access over the tailnet (Tailscale's own encrypted transport — no local TLS cert to install), and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), a real Tailscale-issued HTTPS cert (`tailscale cert`, auto-renewed — see [HTTPS certificate (Tailscale)](#https-certificate-tailscale)), and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.
 
-The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's canonical control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog, icons, empty-state — do not edit those files per-app; re-vendor from the scaffold). There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves plain HTTP — Tailscale and Cloudflare terminate TLS, so there's no local-CA / trust-profile plumbing to install on the phone.
+The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's canonical control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog, icons, empty-state — do not edit those files per-app; re-vendor from the scaffold). There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves HTTPS directly once a Tailscale cert is provisioned — no per-device CA install, no trust profile — and falls back to plain HTTP on a fresh clone with no cert yet.
 
 ### Dashboard
 
@@ -156,7 +156,8 @@ Read-only trust surface over the persisted per-run trace: a list of every review
 
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons
-.\webapp.bat                # run the webapp standalone (plain HTTP; Tailscale/Cloudflare terminate TLS)
+.\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py  # provision HTTPS (see below)
+.\webapp.bat                # run the webapp standalone (HTTPS when a cert is present)
 .\tray.bat                  # adopt-or-spawn the webapp behind a tray icon (daily use)
 .\tray.bat --restart        # stop the running tray + reclaim :8455, start fresh
 
@@ -187,6 +188,21 @@ powershell -File scripts\verify-before-ship.ps1   # all of the above + Playwrigh
 The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on a free port and require `playwright install chromium webkit` once.
 
 The same gate runs in CI on every branch push and PR to `main` ([`.github/workflows/e2e.yml`](.github/workflows/e2e.yml)) — the local gate stays the contract; the workflow just creates the `.venv` it expects and calls it unmodified. The WebKit/iPhone e2e leg is the flaky one on the hosted runner, so CI sets `WR_E2E_TIMEOUT_SCALE=3` to give every browser wait budget 3× headroom (local runs leave it unset and keep Playwright's native budgets) and gives only the WebKit projection a bounded rerun.
+
+## HTTPS certificate (Tailscale)
+
+Fleet standard: `ferraroroberto/project-scaffolding#89`. Provision a **real Let's Encrypt cert** via `tailscale cert` — no self-signed CA, no per-device trust dance:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py
+# then: tray.bat --restart
+```
+
+One-time prereq: enable **DNS → HTTPS Certificates** in the [Tailscale admin console](https://login.tailscale.com/admin/dns). The script auto-detects the MagicDNS name and writes `webapp/certificates/cert.pem` + `key.pem`. Every device on the tailnet then trusts `https://<host>.<tailnet>.ts.net:8455` natively — no CA install, no profile, no Certificate Trust toggle.
+
+**Renewal is automatic.** The LE leaf lives ~90 days, so every uvicorn-boot path (`tray.bat` via the webapp manager, `webapp.bat`) runs `gen_tailscale_cert.py --check` first, which renews only a `.ts.net` cert expiring within 30 days and no-ops on any other cert. No calendar entry needed.
+
+> **Loopback and LAN URLs:** the Tailscale cert is issued *only* for the ts.net name, so `https://127.0.0.1:8455` and LAN-IP URLs show a hostname-mismatch warning by design — open the webapp via the ts.net URL on the PC too. With no cert at all the server runs plain HTTP on loopback — fine for a fresh clone, but iOS Safari needs HTTPS for the PWA + WebAuthn passkey ceremonies, so provision the Tailscale cert before phone use.
 
 ## Home-stack wiring (App Launcher)
 

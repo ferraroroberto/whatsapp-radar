@@ -126,16 +126,17 @@ If nothing is actionable, no message is sent — that is correct. See [`manual.m
 
 ## 5 — Bring up the admin PWA + phone access (Tailscale)
 
-The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**, serving plain HTTP — Tailscale's own encrypted transport carries it over the tailnet, so there's no local cert to mint or trust profile to install.
+The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a real Tailscale-issued HTTPS cert first — see [HTTPS certificate (Tailscale)](../README.md#https-certificate-tailscale) — so the phone gets a trusted padlock with no per-device trust profile.
 
 ```powershell
+.\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py  # provision HTTPS (one-time; auto-renews after)
 .\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON (loopback still bypasses)
 .\.venv\Scripts\python.exe scripts\set_password.py PW  # optional: add a memorable login password
 .\tray.bat                                             # adopt-or-spawn the webapp behind a tray icon (daily use)
 ```
 
 - `gen_token.py` turns on the bearer gate; the tray bakes the token into the copied URL (`?token=…`). Open that URL once on the phone and it stashes the token in localStorage.
-- Reach the PWA from the phone at `http://<machine>.<tailnet>.ts.net:8455` (on the tailnet).
+- Reach the PWA from the phone at `https://<machine>.<tailnet>.ts.net:8455` (on the tailnet).
 
 ### Enrol a WebAuthn passkey (Tailscale-only)
 
@@ -153,7 +154,7 @@ copy config\cloudflared.sample.yml webapp\cloudflared.yml
 # then edit webapp\cloudflared.yml: fill in `tunnel:` (the UUID) and `hostname:`
 ```
 
-Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the origin is plain HTTP.
+Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the sample ingress points at the origin's HTTPS port with `noTLSVerify` (the origin cert is issued for the tailnet name, not the public hostname) — see `config/cloudflared.sample.yml`.
 
 ## 7 — Schedule the digest + add the launch surfaces (App Launcher)
 

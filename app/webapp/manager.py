@@ -67,23 +67,67 @@ def _probe_url(scheme: str, host: str, port: int) -> str:
     return f"{scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 
 
+def cert_paths(project_root: Path | None = None) -> tuple[Path, Path] | None:
+    root = project_root or PROJECT_ROOT
+    cert = root / "webapp" / "certificates" / "cert.pem"
+    key = root / "webapp" / "certificates" / "key.pem"
+    if cert.exists() and key.exists():
+        return cert, key
+    return None
+
+
+def check_tailscale_cert() -> None:
+    """Auto-renew a Tailscale cert expiring within 30 days, before uvicorn
+    binds (project-scaffolding#89). No-op on a self-signed cert or when no
+    cert exists; best-effort — a cert problem must never block startup.
+    """
+    script = PROJECT_ROOT / "scripts" / "gen_tailscale_cert.py"
+    if not script.exists() or cert_paths() is None:
+        return
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), "--check"],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            cwd=str(PROJECT_ROOT),
+        )
+        out = (result.stdout or "").strip()
+        if out:
+            logger.info(f"🔐 tailscale cert check: {out}")
+    except Exception as exc:
+        logger.warning(f"⚠️  tailscale cert check failed (ignored): {exc}")
+
+
 class WebappManager:
     def __init__(self, config: WebappManagerConfig | None = None) -> None:
         self.config = config or WebappManagerConfig()
         self._proc: subprocess.Popen[bytes] | None = None
         self._session = requests.Session()
+        self._session.verify = False
+        try:
+            import urllib3
+            from urllib3.exceptions import InsecureRequestWarning
+
+            urllib3.disable_warnings(InsecureRequestWarning)
+        except Exception:
+            pass
 
     @property
     def base_url(self) -> str:
-        return _probe_url("http", self.config.host, self.config.port)
+        scheme = "https" if cert_paths() else "http"
+        return _probe_url(scheme, self.config.host, self.config.port)
 
     def is_reachable(self) -> bool:
-        url = _probe_url("http", self.config.host, self.config.port) + "/healthz"
-        try:
-            r = self._session.get(url, timeout=self.config.request_timeout_seconds)
-            return r.status_code == 200
-        except requests.RequestException:
-            return False
+        for scheme in ("https", "http"):
+            url = _probe_url(scheme, self.config.host, self.config.port) + "/healthz"
+            try:
+                r = self._session.get(url, timeout=self.config.request_timeout_seconds)
+                if r.status_code == 200:
+                    return True
+            except requests.RequestException:
+                continue
+        return False
 
     def is_port_in_use(self) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -143,6 +187,7 @@ class WebappManager:
                 logger.info(f"🔗 Adopting external webapp at {current.base_url}")
                 return current
 
+            check_tailscale_cert()
             cmd = self._build_command()
             logger.info(f"🚀 Starting webapp: {' '.join(cmd)}")
 
@@ -229,6 +274,17 @@ class WebappManager:
             "--log-level",
             "warning",
         ]
+        certs = cert_paths()
+        if certs is not None:
+            cert, key = certs
+            cmd.extend(
+                [
+                    "--ssl-keyfile",
+                    str(key),
+                    "--ssl-certfile",
+                    str(cert),
+                ]
+            )
         return cmd
 
     def _wait_until_ready(self) -> None:

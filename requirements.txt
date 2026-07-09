@@ -22,6 +22,9 @@ webauthn>=2.0
 # HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).
 requests>=2.31
 PyYAML>=6.0
+# Tailscale HTTPS cert inspection (scripts/gen_tailscale_cert.py --check):
+# reads the SAN + expiry off the existing leaf to decide whether to renew.
+cryptography>=42.0
 # Process introspection for the tray's port-owner reclaim.
 psutil>=5.9
 # PWA icon generation — dev-only: scripts/gen_icons.py calls

@@ -1,7 +1,9 @@
-/* Passkey enrollment + unlock for the admin webapp.
+/* Passkey enrollment + unlock ceremony for the admin webapp.
  *
- * The unlock token (returned by auth/finish) lives in localStorage for its TTL.
- * Loopback callers bypass the gate entirely on the server side. */
+ * The unlock token (returned by auth/finish) is cached in localStorage for its
+ * TTL but is informational only — no server route validates it (see
+ * src/webauthn_gate.py). Route access is gated by the bearer-token middleware;
+ * loopback callers bypass that gate entirely on the server side. */
 
 import { els, state, UNLOCK_KEY, UNLOCK_EXP_KEY } from './state.js';
 import { jsonApi, toast } from './api.js';
@@ -68,14 +70,10 @@ function serializeAuth(c) {
 }
 
 // ----------------------------------------------------------- unlock token store
-export function readUnlockToken() {
-  const tok = localStorage.getItem(UNLOCK_KEY);
-  const exp = parseInt(localStorage.getItem(UNLOCK_EXP_KEY) || '0', 10);
-  if (tok && exp > Date.now()) return tok;
-  return '';
-}
-
-export function writeUnlockToken(tok, ttlSeconds) {
+// Informational only: cached client-side so a future surface could show
+// "recently unlocked", but nothing reads it back today and no server route
+// validates it — see src/webauthn_gate.py's module docstring.
+function writeUnlockToken(tok, ttlSeconds) {
   if (!tok) return;
   localStorage.setItem(UNLOCK_KEY, tok);
   localStorage.setItem(UNLOCK_EXP_KEY, String(Date.now() + (ttlSeconds || 3600) * 1000));
@@ -163,8 +161,9 @@ async function enrollDevice() {
   }
 }
 
-// Run the assertion ceremony and cache the unlock token. Exposed for the
-// privileged surfaces Steps 4–7 add; loopback callers never need it.
+// Run the assertion ceremony and cache the (informational-only) unlock token.
+// Exported for a future privileged-action surface to call; nothing does yet,
+// and loopback callers never need it.
 export async function unlock() {
   if (!window.PublicKeyCredential) {
     throw new Error('this browser has no passkey support');

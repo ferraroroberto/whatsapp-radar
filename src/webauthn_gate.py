@@ -1,13 +1,17 @@
-"""WebAuthn passkey gate for the admin webapp.
+"""WebAuthn passkey ceremonies for the admin webapp.
 
-The webapp's privileged surface is gated behind a **platform passkey** (Face ID
-on the enrolled iPhone) when a relying party is configured. This module owns:
+Actual route access is gated by the bearer-token middleware
+(``app/webapp/middleware.py``) plus the Tailscale-only check on the passkey
+endpoints themselves — **not** by anything in this module. This module owns:
 
 - the enrolled-credential store (``config/webauthn_devices.json``),
 - the registration / authentication ceremonies (py_webauthn),
 - a one-time enrollment window (opened from the tray) so a new device can only
   be added deliberately,
-- short-lived **unlock tokens** minted by a successful passkey assertion.
+- short-lived **unlock tokens** minted by a successful passkey assertion and
+  handed to the frontend as an informational "recently unlocked" signal — no
+  server route or middleware validates or revokes them, so they enforce
+  nothing today.
 
 Single-user by design: one logical user, a small whitelist of devices.
 """
@@ -265,6 +269,9 @@ class WebAuthnGate:
         return token
 
     # ------------------------------------------------- unlock tokens
+    # Informational only: minted on a successful ceremony and handed to the
+    # frontend to record "recently unlocked", but nothing server-side ever
+    # validates or revokes it — no route or middleware checks these tokens.
     def _mint_token_locked(self) -> str:
         now = time.time()
         self._unlock_tokens = {
@@ -273,22 +280,6 @@ class WebAuthnGate:
         token = secrets.token_urlsafe(32)
         self._unlock_tokens[token] = now + _UNLOCK_TOKEN_TTL
         return token
-
-    def valid_unlock_token(self, token: str) -> bool:
-        if not token:
-            return False
-        with self._lock:
-            exp = self._unlock_tokens.get(token)
-            if exp is None:
-                return False
-            if exp <= time.time():
-                self._unlock_tokens.pop(token, None)
-                return False
-            return True
-
-    def revoke_unlock_tokens(self) -> None:
-        with self._lock:
-            self._unlock_tokens.clear()
 
 
 def _credential_id_of(credential: Any) -> str:

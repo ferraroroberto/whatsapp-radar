@@ -16,6 +16,8 @@ from datetime import datetime
 
 from src.analysis.classifier import Classifier
 from src.analysis.contract import ContractError, parse_analysis
+from src.analysis.transcription import hold_back_untranscribed
+from src.config import Config
 from src.db import store
 from src.models import StoredMessage
 
@@ -108,13 +110,24 @@ def advance_family_cursors(
 
 
 def review_monitored_chats(
-    conn: sqlite3.Connection, classifier: Classifier, *, since_days: int = 7
+    conn: sqlite3.Connection,
+    classifier: Classifier,
+    *,
+    since_days: int = 7,
+    config: Config | None = None,
 ) -> ReviewOutcome:
     """Review every monitored family's delta and persist results within one run.
 
     Iterates *family heads* (``store.monitored_chats`` already excludes linked
     children); each head's delta is the merge of its own and its children's
     messages since each member's cursor, classified once under the head.
+
+    Holds the delta before any voice note still awaiting transcription (#132),
+    mirroring ``scan``'s live-mode gate: without it, a note stuck ``pending``/
+    ``failed`` gets classified on its literal "[voice note]" placeholder and the
+    family cursor advances past it, so the real transcript is never analysed.
+    Gated on ``config.transcription.enabled``; ``config=None`` (as in tests with
+    no transcription feature in play) leaves the delta untouched.
     """
     run_id = store.start_run(conn)
     outcome = ReviewOutcome(run_id=run_id)
@@ -122,6 +135,8 @@ def review_monitored_chats(
     for chat in store.monitored_chats(conn):
         chat_id = int(chat["id"])
         delta = store.family_delta_since_cursor(conn, chat_id)
+        if config is not None and config.transcription.enabled:
+            delta = hold_back_untranscribed(delta)
         if not delta:
             continue
 

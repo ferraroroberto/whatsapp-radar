@@ -21,9 +21,13 @@ tunnel: 00000000-0000-0000-0000-000000000000
 # credentials-file: C:\Users\<you>\.cloudflared\<UUID>.json
 
 ingress:
-  # Public hostname → local webapp. The webapp serves plain HTTP; Cloudflare's
-  # edge provides the public TLS.
+  # Public hostname → local webapp. The origin cert is issued for the ts.net
+  # name (tailscale cert), not this hostname, so noTLSVerify is required
+  # (Cloudflare's edge provides the public TLS — your origin cert just needs
+  # to exist).
   - hostname: radar.<your-domain>
-    service: http://localhost:8455
+    service: https://localhost:8455
+    originRequest:
+      noTLSVerify: true
   # Catch-all — anything that doesn't match gets a clean 404.
   - service: http_status:404

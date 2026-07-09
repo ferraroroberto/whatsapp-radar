@@ -54,15 +54,6 @@ class WebappStatus:
     detail: str
 
 
-def load_config(raw: dict[str, Any] | None = None) -> WebappManagerConfig:
-    raw = raw or {}
-    return WebappManagerConfig(
-        enabled=bool(raw.get("enabled", True)),
-        host=str(raw.get("host", "0.0.0.0")),
-        port=int(raw.get("port", 8455)),
-    )
-
-
 def _probe_url(scheme: str, host: str, port: int) -> str:
     return f"{scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 

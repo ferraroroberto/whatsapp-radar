@@ -9,7 +9,7 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
-import { fmtLocalDateTime } from './format.js';
+import { fmtLocalDateTime, renderFunnelCells } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
@@ -457,9 +457,9 @@ function funnelCells(result) {
 
 function renderFunnel(run) {
   const box = els.execFunnel;
-  box.textContent = '';
   const cells = funnelCells(run.result);
   if (!cells) {
+    box.textContent = '';
     const p = document.createElement('p');
     p.className = 'muted small';
     p.textContent = isRunning(run.status) ? 'Running… watch the output below.'
@@ -467,18 +467,7 @@ function renderFunnel(run) {
     box.appendChild(p);
     return;
   }
-  for (const cell of cells) {
-    const div = document.createElement('div');
-    div.className = 'exec-funnel-cell';
-    const v = document.createElement('span');
-    v.className = 'exec-funnel-val';
-    v.textContent = (cell.value === undefined || cell.value === null) ? '–' : String(cell.value);
-    const l = document.createElement('span');
-    l.className = 'exec-funnel-label';
-    l.textContent = cell.label;
-    div.append(v, l);
-    box.appendChild(div);
-  }
+  renderFunnelCells(box, cells);
 }
 
 function renderViewer(run) {

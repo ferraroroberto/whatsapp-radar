@@ -10,7 +10,7 @@
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
-import { fmtLocalDateTime } from './format.js';
+import { fmtLocalDateTime, fmtNum } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 
 // A sprite glyph wrapped for insertion next to textContent-only user data.
@@ -22,10 +22,6 @@ function iconMark(name) {
   return s;
 }
 
-// Thousands separator with a period (29999 → "29.999"), locale-independent.
-function fmtNum(n) {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
 // Full LOCAL timestamp incl. year: "2026-06-06T12:47:19Z" → "2026-06-06 14:47"
 // in the operator's time zone. The chat list keeps the year (old chats from
 // 2022/2023 should be obvious); the Dashboard's monitored table drops it.

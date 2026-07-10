@@ -10,7 +10,7 @@
 
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
-import { fmtLocalDateTime } from './format.js';
+import { fmtLocalDateTime, renderFunnelCells } from './format.js';
 
 function auditState() { return state.audit; }
 
@@ -146,20 +146,7 @@ function funnelCells(run) {
 }
 
 function renderFunnel(run) {
-  const box = els.auditFunnel;
-  box.textContent = '';
-  for (const cell of funnelCells(run)) {
-    const div = document.createElement('div');
-    div.className = 'exec-funnel-cell';
-    const v = document.createElement('span');
-    v.className = 'exec-funnel-val';
-    v.textContent = (cell.value === undefined || cell.value === null) ? '–' : String(cell.value);
-    const l = document.createElement('span');
-    l.className = 'exec-funnel-label';
-    l.textContent = cell.label;
-    div.append(v, l);
-    box.appendChild(div);
-  }
+  renderFunnelCells(els.auditFunnel, funnelCells(run));
 }
 
 // A labelled <pre> block; skipped entirely when there's nothing to show so the

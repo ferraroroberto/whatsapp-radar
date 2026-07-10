@@ -19,35 +19,13 @@ from src.models import MessageRecord, StoredMessage
 
 
 def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:
-    """Insert a message idempotently. Returns True if a new row was created."""
-    import json
+    """Insert a message idempotently. Returns True if a new row was created.
 
-    cur = conn.execute(
-        """
-        INSERT OR IGNORE INTO messages
-            (chat_id, source_message_id, sender_label, message_timestamp,
-             text, message_type, raw_json, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            chat_id,
-            msg.source_message_id,
-            msg.sender_label,
-            msg.message_timestamp,
-            msg.text,
-            msg.message_type,
-            json.dumps(msg.raw, ensure_ascii=False) if msg.raw else None,
-            _now(),
-        ),
-    )
-    if cur.rowcount > 0:
-        conn.execute(
-            "UPDATE chats SET last_message_at = MAX(COALESCE(last_message_at, ''), ?) "
-            "WHERE id = ?",
-            (msg.message_timestamp, chat_id),
-        )
-    conn.commit()
-    return cur.rowcount > 0
+    Delegates to :func:`insert_messages` so there is one column list (and one
+    idempotent-insert SQL statement) to maintain between the single-message and
+    batch paths — the single-message call just pays its own commit.
+    """
+    return insert_messages(conn, chat_id, [msg]) > 0
 
 
 def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]) -> int:

@@ -56,7 +56,7 @@ def persist_tunnel_url(hostname: str, token: str) -> None:
 
 
 def stop_proc(proc: subprocess.Popen[Any], name: str) -> None:
-    """Stop one child process: CTRL_BREAK (win) -> terminate -> wait(5) -> kill."""
+    """Stop one child process: CTRL_BREAK (win) -> terminate -> wait(5) -> kill -> wait(3)."""
     try:
         logger.info(f"🛑 Stopping {name} (pid={proc.pid})")
         if sys.platform == "win32":
@@ -69,6 +69,10 @@ def stop_proc(proc: subprocess.Popen[Any], name: str) -> None:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"{name} stop failed: {exc}")
 

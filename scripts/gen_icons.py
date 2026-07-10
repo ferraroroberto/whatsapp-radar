@@ -10,16 +10,23 @@ Writes into ``app/webapp/static/``: ``icon-512.png``, ``icon-512-maskable.png``,
 ``icon-180.png``, ``icon-192.png``, ``favicon.ico``. Into ``assets/tray/``:
 ``whatsapp-radar.ico``. Into ``assets/stream-deck/``: ``whatsapp-radar-144.png``.
 
+Set ``PROJECT_SCAFFOLDING_DIR`` to point at a non-default checkout of
+``project-scaffolding``; defaults to ``E:\automation\project-scaffolding``.
+
 Usage:
     python scripts/gen_icons.py
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-SCAFFOLDING_SCRIPTS = Path(r"E:\automation\project-scaffolding\scripts")
+SCAFFOLDING_DIR = Path(
+    os.environ.get("PROJECT_SCAFFOLDING_DIR", r"E:\automation\project-scaffolding")
+)
+SCAFFOLDING_SCRIPTS = SCAFFOLDING_DIR / "scripts"
 sys.path.insert(0, str(SCAFFOLDING_SCRIPTS))
 
 from brand_gen import render_set  # noqa: E402
@@ -30,7 +37,7 @@ STATIC_DIR = PROJECT_ROOT / "app" / "webapp" / "static"
 
 def main() -> None:
     render_set(
-        master=Path(r"E:\automation\project-scaffolding\brand\radar.svg"),
+        master=SCAFFOLDING_DIR / "brand" / "radar.svg",
         out_dir=STATIC_DIR,
         tray_out_dir=PROJECT_ROOT / "assets" / "tray",
         stream_deck_out_dir=PROJECT_ROOT / "assets" / "stream-deck",

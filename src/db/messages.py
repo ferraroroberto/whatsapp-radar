@@ -13,10 +13,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+from src.db.chats import family_member_ids
+from src.db.connection import _MESSAGE_COLUMNS, _now, _to_stored
 from src.models import MessageRecord, StoredMessage
-
-from .chats import family_member_ids
-from .connection import _MESSAGE_COLUMNS, _now, _to_stored
 
 
 def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:

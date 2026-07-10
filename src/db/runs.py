@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from .connection import _now, _rowid
+from src.db.connection import _now, _rowid
 
 
 def start_run(

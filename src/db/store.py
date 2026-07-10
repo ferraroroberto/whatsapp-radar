@@ -16,7 +16,7 @@ keep working unchanged. See each submodule's docstring for what it owns.
 
 from __future__ import annotations
 
-from .chats import (
+from src.db.chats import (
     LinkError,
     chat_id_for_source,
     child_chats,
@@ -32,9 +32,9 @@ from .chats import (
     unlink_chat,
     upsert_chat,
 )
-from .connection import connect
-from .dashboard import chats_overview, count_chats_by_status, messages_per_chat
-from .messages import (
+from src.db.connection import connect
+from src.db.dashboard import chats_overview, count_chats_by_status, messages_per_chat
+from src.db.messages import (
     advance_cursor,
     baseline_cursor,
     clear_media_path,
@@ -56,8 +56,8 @@ from .messages import (
     stale_voice_notes,
     voice_audio_path,
 )
-from .reprocess_support import clear_all_data, snapshot_operator_state
-from .runs import (
+from src.db.reprocess_support import clear_all_data, snapshot_operator_state
+from src.db.runs import (
     actionable_items_for_run,
     count_actionable_items,
     count_notifications_sent,
@@ -74,7 +74,7 @@ from .runs import (
     start_run,
     traces_for_run,
 )
-from .sync_log import recent_syncs, record_sync
+from src.db.sync_log import recent_syncs, record_sync
 
 __all__ = [
     "LinkError",

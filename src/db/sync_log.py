@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from .chats import count_chats
-from .connection import _now, _rowid
-from .messages import message_count_total
+from src.db.chats import count_chats
+from src.db.connection import _now, _rowid
+from src.db.messages import message_count_total
 
 
 def record_sync(

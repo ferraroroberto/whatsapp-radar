@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from src.db.connection import _now
 from src.models import ChatRecord
-
-from .connection import _now
 
 
 def upsert_chat(conn: sqlite3.Connection, chat: ChatRecord) -> int:

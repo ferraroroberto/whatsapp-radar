@@ -275,7 +275,20 @@
             <h3 class="opt-group-title">Safe settings</h3>
             <form id="configForm" autocomplete="off">
               <div class="cfg-fields">
-                <label class="stacked"><span>Connector</span>
+                <fieldset class="cfg-source-list cfg-span" aria-label="Enabled message sources">
+                  <legend>Enabled sources</legend>
+                  <div class="cfg-source-row">
+                    <span><strong>WhatsApp</strong><small>fixture or linked device</small></span>
+                    <button type="button" id="cfgSourceWhatsapp" class="toggle on" role="switch"
+                            aria-checked="true" aria-label="WhatsApp source"><span class="knob"></span><span class="toggle-label">ON</span></button>
+                  </div>
+                  <div class="cfg-source-row">
+                    <span><strong>Gmail</strong><small>read-only whitelisted mail</small></span>
+                    <button type="button" id="cfgSourceGmail" class="toggle" role="switch"
+                            aria-checked="false" aria-label="Gmail source"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+                  </div>
+                </fieldset>
+                <label class="stacked"><span>WhatsApp connector</span>
                   <select id="cfgConnector" class="select-native"></select></label>
                 <label class="stacked"><span>Classifier</span>
                   <select id="cfgClassifier" class="select-native"></select></label>

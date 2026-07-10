@@ -39,11 +39,11 @@ from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_
 from src.analysis.review import advance_family_cursors, recent_alert_context
 from src.analysis.transcription import hold_back_untranscribed, run_transcription_phase
 from src.config import Config
-from src.connector.base import MessageConnector
-from src.connector.factory import build_connector
+from src.connector.base import ConnectorStatus, MessageConnector
+from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
-from src.db.sync import ingest_chats
+from src.db.sync import sync_sources
 from src.models import StoredMessage
 from src.notify.alert import send_alert
 from src.notify.delivery import deliver_digest
@@ -78,6 +78,7 @@ class ScanOutcome:
     actionable: int = 0
     notification_status: str = "none"
     errors: list[tuple[int, str]] = field(default_factory=list)
+    source_errors: list[tuple[str, str]] = field(default_factory=list)
     digest: Digest | None = None
 
 
@@ -167,33 +168,35 @@ def _advance(
 
 def _sync(
     conn: sqlite3.Connection,
-    connector: MessageConnector,
+    config: Config,
+    bindings: list[ConnectorBinding],
     outcome: ScanOutcome,
     progress: Progress | None = None,
-) -> None:
+) -> set[str]:
     """Pull all chats + messages from the connector into the store (live mode)."""
-    connector.connect()
-    # Shared connector→store ingest loop (the add/update diff + INSERT-OR-IGNORE
-    # semantics live once in src/db/sync.py so this path can never silently
-    # diverge from resync's sync_log bookkeeping). This path owns its own
-    # connector lifecycle (connect/stop), "scan" source tag, and progress line.
-    delta = ingest_chats(conn, connector)
-    connector.stop()
+    synced = sync_sources(
+        conn,
+        bindings,
+        operation="scan",
+        prepare=lambda source, connector: preflight(
+            config,
+            connector,
+            source=source,
+            progress=progress,
+        ),
+    )
+    delta = synced.delta
+    outcome.source_errors.extend(synced.source_errors)
     outcome.chats_synced += delta.chats_seen
     outcome.messages_synced += delta.messages_added
-    # A sync_log row so a live scan's ingest is as visible as a resync's (#31).
-    store.record_sync(
-        conn,
-        source="scan",
-        chats_added=delta.chats_added,
-        chats_updated=delta.chats_updated,
-        messages_added=delta.messages_added,
-    )
+    for source, error in synced.source_errors:
+        _emit(progress, f"⚠ {source} sync failed — {error}; its cursors are held")
     _emit(
         progress,
         f"✓ synced {outcome.chats_synced} chats ({delta.chats_added} new) / "
         f"{outcome.messages_synced} new messages",
     )
+    return synced.successful_sources
 
 
 def _abort_offline(
@@ -212,11 +215,11 @@ def _abort_offline(
     """
     outcome.notification_status = "offline"
     outcome.errors.append((0, str(exc)))
-    _emit(progress, f"✗ aborted — WhatsApp source offline: {exc}")
+    _emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
     alert_status, _ = send_alert(
         config,
-        f"⚠️ WhatsApp Radar: live scan aborted — source offline ({exc}). "
-        "No messages were checked. Reconnect the WhatsApp sidecar.",
+        f"⚠️ WhatsApp Radar: live scan aborted — all sources offline ({exc}). "
+        "No messages were checked. Restore at least one enabled source.",
     )
     _emit(progress, f"• offline alert: {alert_status}")
     store.finish_run(conn, outcome.run_id, "failed", 0)
@@ -241,6 +244,7 @@ def scan(
     mode: Mode = "live",
     days: int | None = None,
     connector: MessageConnector | None = None,
+    connectors: list[ConnectorBinding] | None = None,
     classifier: TracedClassifier | None = None,
     progress: Progress | None = None,
 ) -> ScanOutcome:
@@ -258,14 +262,24 @@ def scan(
     )
 
     if mode == "live":
-        live_connector = connector if connector is not None else build_connector(config)
+        live_bindings = connectors
+        if live_bindings is None:
+            live_bindings = (
+                [ConnectorBinding(source="whatsapp", connector=connector)]
+                if connector is not None
+                else build_connectors(config)
+            )
         try:
-            # Liveness gate (#29): never sync from a dead/stale source. Relaunches
-            # the sidecar once if it merely stopped; otherwise aborts loudly.
-            preflight(config, live_connector, progress=progress)
+            successful_sources = _sync(conn, config, live_bindings, outcome, progress)
+            if not successful_sources:
+                detail = "; ".join(
+                    f"{source}: {error}" for source, error in outcome.source_errors
+                )
+                raise ConnectorOffline(
+                    ConnectorStatus(name="all_sources", connected=False, detail=detail)
+                )
         except ConnectorOffline as exc:
             return _abort_offline(conn, config, outcome, exc, progress)
-        _sync(conn, live_connector, outcome, progress)
         # Transcribe downloaded voice notes BEFORE analysis so a voice note is never
         # classified as its "[voice note]" placeholder and the cursor never skips
         # real content (#36). No-op unless transcription is enabled; failures are
@@ -287,6 +301,21 @@ def scan(
             if mode == "live"
             else store.family_delta_replay(conn, chat_id, since_days=days)
         )
+        if mode == "live":
+            # A failed source may have older cached messages waiting. Excluding
+            # those messages from this run ensures _advance only moves cursors
+            # for sources that were confirmed live and successfully synced.
+            source_by_chat: dict[int, str | None] = {}
+            filtered_delta: list[StoredMessage] = []
+            for message in delta:
+                if message.chat_id not in source_by_chat:
+                    chat_row = store.get_chat(conn, message.chat_id)
+                    source_by_chat[message.chat_id] = (
+                        str(chat_row["source"]) if chat_row is not None else None
+                    )
+                if source_by_chat[message.chat_id] in successful_sources:
+                    filtered_delta.append(message)
+            delta = filtered_delta
         # Hold the live delta before any voice note still awaiting transcription so
         # it is never analysed as a placeholder and the cursor never skips it (#36).
         # Gated on the feature flag: disabled → voice notes are ordinary messages.
@@ -409,7 +438,11 @@ def scan(
     else:
         outcome.notification_status = "none"
 
-    run_status = "completed_with_errors" if outcome.errors else "completed"
+    run_status = (
+        "completed_with_errors"
+        if outcome.errors or outcome.source_errors
+        else "completed"
+    )
     store.finish_run(conn, run_id, run_status, outcome.chats_with_delta)
     store.record_run_funnel(
         conn,
@@ -442,7 +475,10 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
     digest = outcome.digest
     return {
         "kind": "scan",
-        "ok": outcome.notification_status not in ("failed", "offline"),
+        "ok": (
+            outcome.notification_status not in ("failed", "offline")
+            and not outcome.source_errors
+        ),
         "run_id": outcome.run_id,
         "mode": outcome.mode,
         "funnel": {
@@ -460,4 +496,8 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
         else None,
         "actionable_count": len(digest.items) if digest else 0,
         "errors": [{"chat_id": cid, "error": err} for cid, err in outcome.errors],
+        "source_errors": [
+            {"source": source, "error": error}
+            for source, error in outcome.source_errors
+        ],
     }

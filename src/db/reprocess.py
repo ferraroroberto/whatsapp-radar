@@ -27,14 +27,17 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.connector.base import MessageConnector
+from src.connector.factory import ConnectorBinding
+from src.connector.preflight import ensure_connected
 from src.db import store
-from src.db.sync import resync
+from src.db.sync import PrepareSource, resync
 
 
 @dataclass
@@ -67,7 +70,11 @@ def _backup_db(conn: sqlite3.Connection, db_path: Path) -> Path:
 
 
 def reprocess(
-    conn: sqlite3.Connection, connector: MessageConnector, db_path: Path
+    conn: sqlite3.Connection,
+    connector: MessageConnector | Sequence[ConnectorBinding],
+    db_path: Path,
+    *,
+    prepare: PrepareSource | None = None,
 ) -> ReprocessOutcome:
     """Rebuild the cache from the buffer, preserving operator state. Destructive.
 
@@ -75,6 +82,23 @@ def reprocess(
     reader, then re-applies monitored/ignored/alias state mapped through the
     connector's canonicalization. Returns counts plus the backup path.
     """
+    bindings = (
+        list(connector)
+        if not isinstance(connector, MessageConnector)
+        else [ConnectorBinding(source="whatsapp", connector=connector)]
+    )
+    prepare_source = prepare or (lambda _source, item: ensure_connected(item))
+    # A rebuild is destructive, unlike incremental fan-out. Every source must
+    # prove live before the backup/wipe begins so an unavailable Gmail account
+    # cannot silently disappear from the rebuilt cache.
+    try:
+        for binding in bindings:
+            prepare_source(binding.source, binding.connector)
+    except Exception:
+        for binding in bindings:
+            binding.connector.stop()
+        raise
+
     snapshot = store.snapshot_operator_state(conn)
     chats_before = store.count_chats(conn)
 
@@ -83,7 +107,7 @@ def reprocess(
     store.clear_all_data(conn)
     # Tag this rebuild's ingest as 'reprocess' so the Audit timeline can tell a
     # full rebuild apart from an incremental resync (both are maintenance runs).
-    resync(conn, connector, source="reprocess")
+    resync(conn, bindings, source="reprocess", prepare=prepare_source)
 
     outcome = ReprocessOutcome(
         backup_path=str(backup),
@@ -93,13 +117,22 @@ def reprocess(
     )
 
     for row in snapshot:
+        source = row["source"]
         old_source = row["source_chat_id"]
         status = row["status"]
         alias = row["alias"]
-        new_source = connector.canonical_source_id(old_source) or old_source
-        chat_id = store.chat_id_for_source(conn, new_source)
+        restore_binding = next(
+            (item for item in bindings if item.source == source),
+            None,
+        )
+        new_source = (
+            restore_binding.connector.canonical_source_id(old_source)
+            if restore_binding is not None
+            else old_source
+        ) or old_source
+        chat_id = store.chat_id_for_source(conn, new_source, source=source)
         if chat_id is None:
-            outcome.unmapped.append(old_source)
+            outcome.unmapped.append(f"{source}:{old_source}")
             continue
         if status == "monitored":
             store.set_chat_status(conn, chat_id, "monitored")
@@ -121,12 +154,32 @@ def reprocess(
         parent_source = row["parent_source_chat_id"]
         if not parent_source:
             continue
-        child_source = connector.canonical_source_id(row["source_chat_id"]) or row[
-            "source_chat_id"
-        ]
-        new_parent_source = connector.canonical_source_id(parent_source) or parent_source
-        child_id = store.chat_id_for_source(conn, child_source)
-        parent_id = store.chat_id_for_source(conn, new_parent_source)
+        child_kind = row["source"]
+        parent_kind = row["parent_source"]
+        child_binding = next(
+            (item for item in bindings if item.source == child_kind),
+            None,
+        )
+        parent_binding = next(
+            (item for item in bindings if item.source == parent_kind),
+            None,
+        )
+        child_source = (
+            child_binding.connector.canonical_source_id(row["source_chat_id"])
+            if child_binding is not None
+            else row["source_chat_id"]
+        ) or row["source_chat_id"]
+        new_parent_source = (
+            parent_binding.connector.canonical_source_id(parent_source)
+            if parent_binding is not None
+            else parent_source
+        ) or parent_source
+        child_id = store.chat_id_for_source(conn, child_source, source=child_kind)
+        parent_id = store.chat_id_for_source(
+            conn,
+            new_parent_source,
+            source=parent_kind,
+        )
         if child_id is None or parent_id is None or child_id == parent_id:
             continue
         try:

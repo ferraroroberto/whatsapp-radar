@@ -57,13 +57,15 @@ flowchart TB
   SCAN --> REVIEW
 
   subgraph connector["src/connector/ — read-only connector boundary"]
-    CFACTORY["factory.py — build_connector(config)"]
+    CFACTORY["factory.py — build_connectors(config)\nsource-tagged bindings"]
+    FANOUT["db/sync.py — per-source fan-out\nisolation + sync_log"]
     FIXTURE["fixture.py — deterministic offline fixture"]
     LINKED["linked_device.py — reads sidecar NDJSON buffer"]
     SIDECARPY["sidecar.py — Node lifecycle supervisor\n(wait/relaunch, never kill)"]
     PREFLIGHT["preflight.py — abort loud if source is down"]
   end
   SCAN --> CFACTORY
+  CFACTORY --> FANOUT
   CFACTORY --> FIXTURE
   CFACTORY --> LINKED
   SCAN --> PREFLIGHT
@@ -81,7 +83,7 @@ flowchart TB
     SYNC["sync.py — ingest_chats / resync"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
   end
-  CFACTORY --> SYNC
+  FANOUT --> SYNC
   SYNC --> STORE
   REPROCESS --> STORE
   REVIEW --> STORE

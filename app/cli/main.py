@@ -20,12 +20,11 @@ from src.analysis.classifier import build_classifier
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
 from src.analysis.review import review_monitored_chats
 from src.config import Config, load_config
-from src.connector.base import MessageConnector
-from src.connector.factory import build_connector
+from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
-from src.db.sync import ingest_chats, resync, resync_outcome_to_dict
+from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.notify import deliver_digest
 from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
@@ -42,32 +41,37 @@ def _emit_result(payload: dict[str, object]) -> None:
     print(format_result(payload), flush=True)
 
 
-def _build_connector(config: Config) -> MessageConnector:
+def _build_connectors(config: Config) -> list[ConnectorBinding]:
     try:
-        return build_connector(config)
+        return build_connectors(config)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
 
 def _cmd_status(conn: sqlite3.Connection, config: Config) -> int:
-    connector = _build_connector(config)
-    cstatus = connector.connect()
+    bindings = _build_connectors(config)
     chats = store.list_chats(conn)
     monitored = sum(1 for c in chats if c["status"] == "monitored")
     print(f"DB:         {config.db_path}")
-    print(f"Connector:  {cstatus.name} (connected={cstatus.connected}) — {cstatus.detail}")
+    for binding in bindings:
+        cstatus = binding.connector.connect()
+        binding.connector.stop()
+        print(
+            f"Source:     {binding.source} / {cstatus.name} "
+            f"(connected={cstatus.connected}) — {cstatus.detail}"
+        )
     print(f"Classifier: {config.classifier}")
     print(f"Chats:      {len(chats)} discovered, {monitored} monitored")
     return 0
 
 
 def _cmd_ingest(conn: sqlite3.Connection, config: Config) -> int:
-    connector = _build_connector(config)
-    connector.connect()
-    delta = ingest_chats(conn, connector)
-    connector.stop()
+    synced = sync_sources(conn, _build_connectors(config), operation="ingest")
+    delta = synced.delta
     print(f"Ingested {delta.chats_seen} chats, {delta.messages_added} new messages.")
-    return 0
+    for source, error in synced.source_errors:
+        print(f"  ! {source} failed: {error}", file=sys.stderr)
+    return 1 if synced.source_errors else 0
 
 
 def _cmd_chats(conn: sqlite3.Connection, recent: bool, limit: int | None) -> int:
@@ -145,36 +149,57 @@ def _cmd_scan(
 ) -> int:
     """Unified pipeline: sync -> Stage 1 -> Stage 2 -> digest -> deliver, with a trace."""
     mode: Mode = "dry_run" if dry_run else "live"
-    connector = None if dry_run else _build_connector(config)
-    outcome = scan(conn, config, mode=mode, days=days, connector=connector, progress=_progress)
+    connectors = None if dry_run else _build_connectors(config)
+    outcome = scan(
+        conn,
+        config,
+        mode=mode,
+        days=days,
+        connectors=connectors,
+        progress=_progress,
+    )
 
     for chat_id, err in outcome.errors:
         print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
     _emit_result(scan_outcome_to_dict(outcome))
-    return 1 if outcome.notification_status in ("failed", "offline") else 0
+    return (
+        1
+        if outcome.notification_status in ("failed", "offline") or outcome.source_errors
+        else 0
+    )
 
 
 def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
     """Incremental upsert from the connector buffer (the Resync action)."""
-    connector = _build_connector(config)
+    connectors = _build_connectors(config)
     _progress("▶ resync starting — pulling latest from the connector buffer")
     try:
         # Liveness gate (#29): self-heal the sidecar if it merely stopped, else
         # abort loudly instead of silently upserting nothing from a dead source.
-        preflight(config, connector, progress=_progress)
+        outcome = resync(
+            conn,
+            connectors,
+            prepare=lambda source, connector: preflight(
+                config,
+                connector,
+                source=source,
+                progress=_progress,
+            ),
+        )
     except ConnectorOffline as exc:
-        _progress(f"✗ resync aborted — WhatsApp source offline: {exc}")
+        _progress(f"✗ resync aborted — all enabled sources offline: {exc}")
         send_alert(config, f"⚠️ WhatsApp Radar: resync aborted — source offline ({exc}).")
         _emit_result({"kind": "resync", "ok": False, "error": f"connector offline: {exc}"})
         return 1
-    outcome = resync(conn, connector)
     _progress(
         f"✓ resync done — {outcome.chats_added} chats added, "
         f"{outcome.chats_updated} updated, {outcome.messages_added} new messages"
         + (" (no changes)" if outcome.is_noop else "")
     )
+    for source, error in outcome.source_errors:
+        _progress(f"⚠ {source} sync failed — {error}; its cursors were not advanced")
     _emit_result(resync_outcome_to_dict(outcome))
-    return 0
+    return 1 if outcome.source_errors else 0
 
 
 def _cmd_reprocess(conn: sqlite3.Connection, config: Config, confirm: bool) -> int:
@@ -185,9 +210,19 @@ def _cmd_reprocess(conn: sqlite3.Connection, config: Config, confirm: bool) -> i
             file=sys.stderr,
         )
         return 2
-    connector = _build_connector(config)
+    connectors = _build_connectors(config)
     _progress("▶ reprocess starting — backing up DB, then rebuilding from the buffer")
-    outcome = reprocess(conn, connector, config.db_path)
+    outcome = reprocess(
+        conn,
+        connectors,
+        config.db_path,
+        prepare=lambda source, connector: preflight(
+            config,
+            connector,
+            source=source,
+            progress=_progress,
+        ),
+    )
     _progress(f"  • backed up to {outcome.backup_path}")
     _progress(
         f"✓ reprocess done — {outcome.chats_after} chats / {outcome.messages_after} msgs; "

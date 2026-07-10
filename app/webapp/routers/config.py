@@ -25,6 +25,7 @@ from src.webapp_config import load_webapp_config, update_webapp_config
 router = APIRouter()
 
 _VALID_CONNECTORS = {"fixture", "linked_device"}
+_VALID_SOURCES = {"whatsapp", "gmail"}
 _VALID_CLASSIFIERS = {"stub", "hub", "cascade"}
 _VALID_NOTIFIERS = {"none", "telegram"}
 
@@ -32,6 +33,7 @@ _FREQUENCY_NOTE = "Scan frequency is configured in App Launcher's Jobs tab, not 
 
 
 class ConfigUpdate(BaseModel):
+    sources: list[str] | None = None
     connector: str | None = None
     classifier: str | None = None
     notifier: str | None = None
@@ -59,6 +61,7 @@ async def get_config() -> dict[str, Any]:
         "keyword_roots": _read_roots_text(),
         "settings": {
             "connector": cfg.connector,
+            "sources": list(cfg.sources),
             "classifier": cfg.classifier,
             "notifier": cfg.notifier,
             "hub": {"base_url": cfg.hub.base_url, "model": cfg.hub.model},
@@ -69,6 +72,7 @@ async def get_config() -> dict[str, Any]:
         },
         "options": {
             "connector": sorted(_VALID_CONNECTORS),
+            "sources": sorted(_VALID_SOURCES),
             "classifier": sorted(_VALID_CLASSIFIERS),
             "notifier": sorted(_VALID_NOTIFIERS),
         },
@@ -81,6 +85,18 @@ async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
     # Validate the enum-like fields before touching disk.
     if payload.connector is not None and payload.connector not in _VALID_CONNECTORS:
         raise HTTPException(status_code=400, detail=f"invalid connector {payload.connector!r}")
+    normalized_sources: list[str] | None = None
+    if payload.sources is not None:
+        normalized_sources = list(
+            dict.fromkeys(source.strip().lower() for source in payload.sources)
+        )
+        if not normalized_sources or any(
+            source not in _VALID_SOURCES for source in normalized_sources
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="sources must contain whatsapp or gmail",
+            )
     if payload.classifier is not None and payload.classifier not in _VALID_CLASSIFIERS:
         raise HTTPException(status_code=400, detail=f"invalid classifier {payload.classifier!r}")
     if payload.notifier is not None and payload.notifier not in _VALID_NOTIFIERS:
@@ -88,6 +104,8 @@ async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
 
     # Safe runtime knobs → config/local.json (gitignored per-host override).
     overrides: dict[str, Any] = {}
+    if normalized_sources is not None:
+        overrides["sources"] = normalized_sources
     if payload.connector is not None:
         overrides["connector"] = payload.connector
     if payload.classifier is not None:

@@ -162,7 +162,7 @@ def monitored_chats(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     # effect again once it is unlinked.
     return list(
         conn.execute(
-            "SELECT id, source_chat_id, display_name FROM chats "
+            "SELECT id, source, source_chat_id, display_name FROM chats "
             "WHERE status = 'monitored' AND parent_chat_id IS NULL ORDER BY id"
         ).fetchall()
     )

@@ -314,3 +314,40 @@ def test_connect_migrates_chats_alias(tmp_path: Path) -> None:
         assert store.get_chat(conn, 1)["alias"] == "Tom"
     finally:
         conn.close()
+
+
+def test_connect_migrates_sync_log_source_status(tmp_path: Path) -> None:
+    db = tmp_path / "legacy_sync.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.execute(
+        "CREATE TABLE sync_log ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, ran_at TEXT NOT NULL, "
+        "source TEXT NOT NULL, chats_added INTEGER NOT NULL DEFAULT 0, "
+        "chats_updated INTEGER NOT NULL DEFAULT 0, "
+        "messages_added INTEGER NOT NULL DEFAULT 0, "
+        "total_chats INTEGER NOT NULL DEFAULT 0, "
+        "total_messages INTEGER NOT NULL DEFAULT 0)"
+    )
+    raw.execute(
+        "INSERT INTO sync_log (ran_at, source) VALUES "
+        "('2026-01-01T00:00:00+00:00', 'scan')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        row = conn.execute(
+            "SELECT connector_source, status, detail FROM sync_log WHERE id = 1"
+        ).fetchone()
+        assert dict(row) == {
+            "connector_source": "whatsapp",
+            "status": "success",
+            "detail": "",
+        }
+        conn.close()
+        conn2 = store.connect(db)
+        assert store.recent_syncs(conn2)[0]["connector_source"] == "whatsapp"
+        conn2.close()
+    finally:
+        conn.close()

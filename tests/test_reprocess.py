@@ -11,10 +11,15 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
+from src.connector.base import ConnectorStatus
+from src.connector.factory import ConnectorBinding
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.sync import resync
+from src.models import ChatRecord, MessageRecord
 
 
 def _seed(conn: sqlite3.Connection) -> tuple[int, int]:
@@ -85,3 +90,40 @@ def test_reprocess_outcome_to_dict_shape(conn: sqlite3.Connection, tmp_path: Pat
     assert payload["kind"] == "reprocess"
     assert payload["ok"] is True
     assert "backup_path" in payload
+
+
+class _OfflineConnector:
+    def connect(self) -> ConnectorStatus:
+        return ConnectorStatus("gmail", False, "token expired")
+
+    def status(self) -> ConnectorStatus:
+        return self.connect()
+
+    def list_chats(self) -> list[ChatRecord]:
+        raise AssertionError("offline source must not be read")
+
+    def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
+        raise AssertionError("offline source must not be read")
+
+    def canonical_source_id(self, source_chat_id: str) -> str | None:
+        return source_chat_id
+
+    def stop(self) -> None:
+        return None
+
+
+def test_reprocess_preflights_all_sources_before_wipe(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed(conn)
+    before = store.count_chats(conn)
+    bindings = [
+        ConnectorBinding("whatsapp", FixtureConnector()),
+        ConnectorBinding("gmail", _OfflineConnector()),
+    ]
+
+    with pytest.raises(Exception, match="token expired"):
+        reprocess(conn, bindings, tmp_path / "test.sqlite3")
+
+    assert store.count_chats(conn) == before
+    assert not list(tmp_path.glob("*.bak-*"))

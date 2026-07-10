@@ -105,6 +105,8 @@ export const els = {
   cfgRoots: document.getElementById('cfgRoots'),
   configForm: document.getElementById('configForm'),
   cfgConnector: document.getElementById('cfgConnector'),
+  cfgSourceWhatsapp: document.getElementById('cfgSourceWhatsapp'),
+  cfgSourceGmail: document.getElementById('cfgSourceGmail'),
   cfgClassifier: document.getElementById('cfgClassifier'),
   cfgNotifier: document.getElementById('cfgNotifier'),
   cfgHubBaseUrl: document.getElementById('cfgHubBaseUrl'),

@@ -118,6 +118,10 @@ class Config:
     # Voice-note transcription (#36). Defaulted (disabled) so library/test callers
     # that build a Config without it get the offline-safe no-op behaviour.
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
+    # Enabled logical message sources. ``connector`` remains the WhatsApp reader
+    # implementation selector (fixture | linked_device) for backwards
+    # compatibility; additional sources own their own connector configuration.
+    sources: tuple[str, ...] = ("whatsapp",)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -156,6 +160,22 @@ def _as_bool(env_value: str | None, default: bool) -> bool:
     if token in {"0", "false", "no", "off"}:
         return False
     return bool(default)
+
+
+def _as_sources(value: str | list[Any] | tuple[Any, ...] | None) -> tuple[str, ...]:
+    """Normalize a JSON list or comma-separated ``WR_SOURCES`` value.
+
+    Source order is stable and duplicates are removed. An empty/invalid value
+    falls back to WhatsApp so the historical single-source configuration keeps
+    working instead of silently disabling ingestion.
+    """
+    raw = value.split(",") if isinstance(value, str) else (value or [])
+    sources: list[str] = []
+    for item in raw:
+        source = str(item).strip().lower()
+        if source and source not in sources:
+            sources.append(source)
+    return tuple(sources or ["whatsapp"])
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -203,6 +223,7 @@ def load_config(root: Path | None = None) -> Config:
 
     db_path = os.environ.get("WR_DB_PATH", merged.get("db_path", "data/whatsapp-radar.sqlite3"))
     connector = os.environ.get("WR_CONNECTOR", merged.get("connector", "fixture"))
+    sources = _as_sources(os.environ.get("WR_SOURCES") or merged.get("sources"))
     classifier = os.environ.get("WR_CLASSIFIER", merged.get("classifier", "stub"))
     notifier = os.environ.get("WR_NOTIFIER", merged.get("notifier", "none"))
     linked_device_dir = os.environ.get(
@@ -290,4 +311,5 @@ def load_config(root: Path | None = None) -> Config:
         sidecar_autostart=sidecar_autostart,
         sync_settle_seconds=sync_settle_seconds,
         sync_settle_timeout=sync_settle_timeout,
+        sources=sources,
     )

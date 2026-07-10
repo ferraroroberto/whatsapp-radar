@@ -13,6 +13,9 @@ def record_sync(
     conn: sqlite3.Connection,
     *,
     source: str,
+    connector_source: str = "whatsapp",
+    status: str = "success",
+    detail: str = "",
     chats_added: int,
     chats_updated: int,
     messages_added: int,
@@ -24,11 +27,15 @@ def record_sync(
     ``messages.ingested_at``; this is the per-run summary on top of it.
     """
     cur = conn.execute(
-        "INSERT INTO sync_log (ran_at, source, chats_added, chats_updated, "
-        "messages_added, total_chats, total_messages) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sync_log (ran_at, source, connector_source, status, detail, "
+        "chats_added, chats_updated, messages_added, total_chats, total_messages) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             _now(),
             source,
+            connector_source,
+            status,
+            detail,
             chats_added,
             chats_updated,
             messages_added,
@@ -43,7 +50,8 @@ def record_sync(
 def recent_syncs(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]:
     """The most recent sync_log rows, newest first."""
     return conn.execute(
-        "SELECT id, ran_at, source, chats_added, chats_updated, messages_added, "
+        "SELECT id, ran_at, source, connector_source, status, detail, "
+        "chats_added, chats_updated, messages_added, "
         "total_chats, total_messages FROM sync_log ORDER BY id DESC LIMIT ?",
         (max(1, limit),),
     ).fetchall()

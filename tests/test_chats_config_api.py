@@ -471,6 +471,8 @@ def test_get_config_masks_token(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["prompt"].strip()  # the system prompt renders
     assert body["keyword_roots"].strip()  # the roots file renders
     assert body["settings"]["connector"]
+    assert body["settings"]["sources"] == ["whatsapp"]
+    assert set(body["options"]["sources"]) == {"gmail", "whatsapp"}
     assert "telegram" in body["options"]["notifier"]
     # Token is never returned in clear — only configured + a last-4 hint.
     tok = body["telegram"]["token"]
@@ -503,6 +505,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
             "/api/config",
             json={
                 "connector": "linked_device",
+                "sources": ["whatsapp", "gmail"],
                 "classifier": "cascade",
                 "notifier": "telegram",
                 "hub_base_url": "http://127.0.0.1:8000",
@@ -515,6 +518,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
         assert res.status_code == 200
 
     assert saved_local["connector"] == "linked_device"
+    assert saved_local["sources"] == ["whatsapp", "gmail"]
     assert saved_local["classifier"] == "cascade"
     assert saved_local["notifier"] == "telegram"
     assert saved_local["hub"] == {"base_url": "http://127.0.0.1:8000", "model": "claude_sonnet"}
@@ -530,6 +534,8 @@ def test_post_config_rejects_bad_enum(monkeypatch: pytest.MonkeyPatch) -> None:
     app.state.webapp_config = WebappConfig(auth_token="")
     with TestClient(app, client=LOOPBACK) as client:
         assert client.post("/api/config", json={"connector": "bogus"}).status_code == 400
+        assert client.post("/api/config", json={"sources": []}).status_code == 400
+        assert client.post("/api/config", json={"sources": ["sms"]}).status_code == 400
 
 
 def test_post_config_persists_token_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:

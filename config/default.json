@@ -1,6 +1,7 @@
 {
   "db_path": "data/whatsapp-radar.sqlite3",
   "connector": "fixture",
+  "sources": ["whatsapp"],
   "classifier": "stub",
   "notifier": "none",
   "linked_device_dir": "data/linked_device",

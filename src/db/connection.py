@@ -137,3 +137,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN transcription_status TEXT")
     if "media_path" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN media_path TEXT")
+    # Multi-source sync visibility (#58): keep the historical ``source``
+    # operation tag (scan/resync/reprocess) and add which connector ran plus its
+    # outcome. Defaults make every pre-#58 row a successful WhatsApp sync.
+    sync_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sync_log)")}
+    if "connector_source" not in sync_cols:
+        conn.execute(
+            "ALTER TABLE sync_log ADD COLUMN connector_source "
+            "TEXT NOT NULL DEFAULT 'whatsapp'"
+        )
+    if "status" not in sync_cols:
+        conn.execute(
+            "ALTER TABLE sync_log ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"
+        )
+    if "detail" not in sync_cols:
+        conn.execute("ALTER TABLE sync_log ADD COLUMN detail TEXT NOT NULL DEFAULT ''")

@@ -55,6 +55,7 @@ def preflight(
     config: Config,
     connector: MessageConnector,
     *,
+    source: str = "whatsapp",
     progress: Progress | None = None,
 ) -> ConnectorStatus:
     """Ensure the source is live before a run, self-healing the sidecar if it can.
@@ -72,30 +73,34 @@ def preflight(
     """
     status = connector.connect()
     if status.connected:
-        _settle(config, progress)
+        _settle(config, source, progress)
         return status
 
-    if config.connector == "linked_device" and config.sidecar_autostart:
+    if source == "whatsapp" and config.connector == "linked_device" and config.sidecar_autostart:
         _emit(progress, f"⚠ source offline: {status.detail} — relaunching the sidecar…")
         info = ensure_running(config.linked_device_dir)
         status = connector.connect()
         if status.connected:
             _emit(progress, "✓ sidecar back online")
-            _settle(config, progress)
+            _settle(config, source, progress)
             return status
         _emit(progress, f"✗ sidecar still offline ({info.state}: {info.detail})")
 
     raise ConnectorOffline(status)
 
 
-def _settle(config: Config, progress: Progress | None) -> None:
+def _settle(config: Config, source: str, progress: Progress | None) -> None:
     """Wait for the linked-device buffer to stop growing before it is read.
 
     Only the linked-device connector has a streaming buffer; every other connector
     (the fixture) loads synchronously and needs no gate. A non-positive
     ``sync_settle_seconds`` disables it entirely.
     """
-    if config.connector != "linked_device" or config.sync_settle_seconds <= 0:
+    if (
+        source != "whatsapp"
+        or config.connector != "linked_device"
+        or config.sync_settle_seconds <= 0
+    ):
         return
     _emit(progress, "• waiting for the message buffer to settle…")
     settled = wait_for_settled(

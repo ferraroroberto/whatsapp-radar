@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.webapp import runs
 from app.webapp.routers._helpers import db_path, get_conn, maybe_json
 from src.config import load_config
-from src.connector.factory import build_connector
+from src.connector.factory import build_connectors
 from src.db import store
 
 router = APIRouter()
@@ -128,10 +128,34 @@ async def execution_health(request: Request) -> dict[str, Any]:
     """
     cfg = load_config()
     try:
-        status = build_connector(cfg).status()
-        return {"name": status.name, "connected": status.connected, "detail": status.detail}
+        statuses = []
+        for binding in build_connectors(cfg):
+            status = binding.connector.status()
+            statuses.append(
+                {
+                    "source": binding.source,
+                    "name": status.name,
+                    "connected": status.connected,
+                    "detail": status.detail,
+                }
+            )
+        connected = bool(statuses) and all(item["connected"] for item in statuses)
+        detail = "; ".join(
+            f"{item['source']}: {item['detail']}" for item in statuses
+        )
+        return {
+            "name": statuses[0]["name"] if len(statuses) == 1 else "multi-source",
+            "connected": connected,
+            "detail": detail,
+            "sources": statuses,
+        }
     except ValueError as exc:
-        return {"name": cfg.connector, "connected": False, "detail": str(exc)}
+        return {
+            "name": "multi-source",
+            "connected": False,
+            "detail": str(exc),
+            "sources": [],
+        }
 
 
 @router.get("/api/execution/syncs")

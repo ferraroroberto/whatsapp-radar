@@ -159,6 +159,9 @@ CREATE TABLE IF NOT EXISTS sync_log (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     ran_at         TEXT NOT NULL,
     source         TEXT NOT NULL,                  -- 'resync' | 'scan' | 'reprocess'
+    connector_source TEXT NOT NULL DEFAULT 'whatsapp',
+    status         TEXT NOT NULL DEFAULT 'success',
+    detail         TEXT NOT NULL DEFAULT '',
     chats_added    INTEGER NOT NULL DEFAULT 0,
     chats_updated  INTEGER NOT NULL DEFAULT 0,
     messages_added INTEGER NOT NULL DEFAULT 0,

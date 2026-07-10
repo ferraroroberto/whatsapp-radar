@@ -16,11 +16,13 @@ the delta instead of a bare "done".
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from src.connector.base import MessageConnector
-from src.connector.preflight import ensure_connected
+from src.connector.base import ConnectorStatus, MessageConnector
+from src.connector.factory import ConnectorBinding
+from src.connector.preflight import ConnectorOffline, ensure_connected
 from src.db import store
 
 
@@ -48,6 +50,7 @@ class ResyncOutcome:
     chats_added: int = 0
     chats_updated: int = 0
     messages_added: int = 0
+    source_errors: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def is_noop(self) -> bool:
@@ -57,6 +60,8 @@ class ResyncOutcome:
 def ingest_chats(
     conn: sqlite3.Connection,
     connector: MessageConnector,
+    *,
+    source: str | None = None,
 ) -> IngestDelta:
     """Upsert the connector's chats/messages into the store, reporting the delta.
 
@@ -75,6 +80,8 @@ def ingest_chats(
     """
     delta = IngestDelta()
     for chat in connector.list_chats():
+        if source is not None and chat.source != source:
+            chat = replace(chat, source=source)
         existing_id = store.chat_id_for_source(conn, chat.source_chat_id, source=chat.source)
         if existing_id is None:
             chat_id = store.upsert_chat(conn, chat)
@@ -95,11 +102,93 @@ def ingest_chats(
     return delta
 
 
+@dataclass
+class SourceSyncOutcome:
+    """One enabled source's isolated ingest result."""
+
+    source: str
+    delta: IngestDelta = field(default_factory=IngestDelta)
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+
+@dataclass
+class MultiSourceSyncOutcome:
+    """Aggregated result of one fan-out across enabled sources."""
+
+    results: list[SourceSyncOutcome] = field(default_factory=list)
+
+    @property
+    def successful_sources(self) -> set[str]:
+        return {result.source for result in self.results if result.ok}
+
+    @property
+    def source_errors(self) -> list[tuple[str, str]]:
+        return [
+            (result.source, result.error)
+            for result in self.results
+            if result.error is not None
+        ]
+
+    @property
+    def delta(self) -> IngestDelta:
+        return IngestDelta(
+            chats_seen=sum(result.delta.chats_seen for result in self.results),
+            chats_added=sum(result.delta.chats_added for result in self.results),
+            chats_updated=sum(result.delta.chats_updated for result in self.results),
+            messages_added=sum(result.delta.messages_added for result in self.results),
+        )
+
+
+PrepareSource = Callable[[str, MessageConnector], ConnectorStatus]
+
+
+def sync_sources(
+    conn: sqlite3.Connection,
+    bindings: Sequence[ConnectorBinding],
+    *,
+    operation: str,
+    prepare: PrepareSource | None = None,
+) -> MultiSourceSyncOutcome:
+    """Ingest every binding independently and record a truthful per-source row."""
+    outcome = MultiSourceSyncOutcome()
+    prepare_source = prepare or (lambda _source, connector: ensure_connected(connector))
+    for binding in bindings:
+        result = SourceSyncOutcome(source=binding.source)
+        try:
+            prepare_source(binding.source, binding.connector)
+            result.delta = ingest_chats(
+                conn,
+                binding.connector,
+                source=binding.source,
+            )
+        except ConnectorOffline as exc:
+            result.error = str(exc)
+        finally:
+            binding.connector.stop()
+        outcome.results.append(result)
+        store.record_sync(
+            conn,
+            source=operation,
+            connector_source=binding.source,
+            status="success" if result.ok else "failed",
+            detail=result.error or "",
+            chats_added=result.delta.chats_added,
+            chats_updated=result.delta.chats_updated,
+            messages_added=result.delta.messages_added,
+        )
+    return outcome
+
+
 def resync(
     conn: sqlite3.Connection,
-    connector: MessageConnector,
+    connector: MessageConnector | Sequence[ConnectorBinding],
     *,
     source: str = "resync",
+    prepare: PrepareSource | None = None,
 ) -> ResyncOutcome:
     """Upsert the connector's chats/messages into the store, reporting the delta.
 
@@ -113,29 +202,23 @@ def resync(
     ``"reprocess"`` so its ingest is distinguishable from an incremental resync
     in the Audit timeline.
     """
-    # Liveness gate (#29): never upsert from a dead/stale source. Raises
-    # ConnectorOffline if the connector isn't connected (the fixture, which loads
-    # on connect, is always live — so the offline suite is unaffected).
-    ensure_connected(connector)
-    try:
-        delta = ingest_chats(conn, connector)
-    finally:
-        connector.stop()
+    bindings = (
+        list(connector)
+        if not isinstance(connector, MessageConnector)
+        else [ConnectorBinding(source="whatsapp", connector=connector)]
+    )
+    synced = sync_sources(conn, bindings, operation=source, prepare=prepare)
+    delta = synced.delta
+    if not synced.successful_sources:
+        detail = "; ".join(f"{name}: {error}" for name, error in synced.source_errors)
+        raise ConnectorOffline(
+            ConnectorStatus(name="all_sources", connected=False, detail=detail)
+        )
     outcome = ResyncOutcome(
         chats_added=delta.chats_added,
         chats_updated=delta.chats_updated,
         messages_added=delta.messages_added,
-    )
-    # One sync_log row per resync — visible whether fired from the CLI, a
-    # scheduled Job, or the webapp (the per-message ingest time is on
-    # messages.ingested_at; this is the per-run summary). ``source`` lets a
-    # reprocess tag its rebuild ingest distinctly from an incremental resync.
-    store.record_sync(
-        conn,
-        source=source,
-        chats_added=outcome.chats_added,
-        chats_updated=outcome.chats_updated,
-        messages_added=outcome.messages_added,
+        source_errors=synced.source_errors,
     )
     return outcome
 
@@ -149,4 +232,5 @@ def resync_outcome_to_dict(outcome: ResyncOutcome) -> dict[str, Any]:
         "chats_updated": outcome.chats_updated,
         "messages_added": outcome.messages_added,
         "noop": outcome.is_noop,
+        "source_errors": outcome.source_errors,
     }

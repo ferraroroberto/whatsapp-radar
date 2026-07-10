@@ -15,7 +15,7 @@ import sqlite3
 def snapshot_operator_state(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Operator-set state worth preserving across a rebuild: status, alias, link.
 
-    Returns (source_chat_id, status, alias, parent_source_chat_id) for every chat
+    Returns (source, source_chat_id, status, alias, parent source/key) for every chat
     the operator has touched — anything not in the default 'discovered'/no-alias/
     unlinked resting state. The parent is captured by *its* ``source_chat_id`` (not
     internal id, which the rebuild reassigns) so the parent↔child link can be
@@ -24,8 +24,8 @@ def snapshot_operator_state(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """
     return list(
         conn.execute(
-            "SELECT c.source_chat_id, c.status, c.alias, "
-            "p.source_chat_id AS parent_source_chat_id "
+            "SELECT c.source, c.source_chat_id, c.status, c.alias, "
+            "p.source AS parent_source, p.source_chat_id AS parent_source_chat_id "
             "FROM chats c LEFT JOIN chats p ON p.id = c.parent_chat_id "
             "WHERE c.status != 'discovered' OR c.alias IS NOT NULL "
             "OR c.parent_chat_id IS NOT NULL"

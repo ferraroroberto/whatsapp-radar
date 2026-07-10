@@ -764,6 +764,21 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-stage-label { font-size: var(--font-label); color: var(--ink); }
 .exec-stage-desc { font-size: var(--font-caption); color: var(--muted); }
 
+.cfg-source-list { border: 0; margin: 0; padding: 0; }
+.cfg-source-list legend { font-size: var(--font-label); font-weight: 600; margin-bottom: 4px; }
+.cfg-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 52px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.cfg-source-row:last-child { border-bottom: 0; }
+.cfg-source-row > span { display: flex; flex-direction: column; gap: 1px; }
+.cfg-source-row small { color: var(--muted); font-size: var(--font-caption); }
+
 /* Funnel strip in the run viewer: small labelled value cells. */
 .exec-funnel {
   display: flex;

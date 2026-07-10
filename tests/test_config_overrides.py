@@ -58,3 +58,25 @@ def test_load_config_reads_local_overrides(
     cfg = config.load_config(root=root)
     assert cfg.classifier == "cascade"
     assert cfg.connector == "fixture"
+
+
+def test_sources_load_from_json_and_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text(
+        json.dumps({"connector": "fixture", "sources": ["whatsapp"]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WR_SOURCES", " gmail, whatsapp, gmail ")
+    cfg = config.load_config(root=root)
+    assert cfg.sources == ("gmail", "whatsapp")
+
+
+def test_empty_sources_fall_back_to_whatsapp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("WR_SOURCES", " , ")
+    assert config.load_config(root=root).sources == ("whatsapp",)

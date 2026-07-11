@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from gmail_readonly import GoogleGmailReadClient
 
 from src.config import (
     Config,
@@ -20,7 +21,6 @@ from src.config import (
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.gmail import (
     GmailConnector,
-    GoogleGmailReadClient,
     build_gmail_read_client,
 )
 from src.connector.preflight import ConnectorOffline
@@ -107,7 +107,13 @@ class _FakeClient:
         self.queries.append((query, label_ids))
         return ["newer", "older"]
 
-    def get_message(self, message_id: str) -> dict[str, Any]:
+    def get_message(
+        self,
+        message_id: str,
+        *,
+        metadata_only: bool = False,
+    ) -> dict[str, Any]:
+        assert metadata_only is False
         return self.messages[message_id]
 
     def close(self) -> None:

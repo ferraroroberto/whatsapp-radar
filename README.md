@@ -96,7 +96,7 @@ The connection is **read-only by construction** — no send/react/read-receipt s
 
 ### Gmail source
 
-Gmail is an optional second source using the official Gmail API with the read-only `gmail.readonly` OAuth scope. It reads only named senders and labels from the ignored `config/local.json`; sender/label becomes a chat, email becomes a message, attachments are never downloaded, and sender matches take precedence over labels so one email cannot create duplicate digest lines. OAuth credentials and the refresh token live under ignored `auth/gmail/`. See [`docs/gmail-bootstrap.md`](docs/gmail-bootstrap.md) for Google Cloud registration, token creation, whitelist configuration, verification, renewal, and troubleshooting.
+Gmail is an optional second source using the official Gmail API with the read-only `gmail.readonly` OAuth scope. It reads only named senders and labels from the ignored `config/local.json`; sender/label becomes a chat, email becomes a message, attachments are never downloaded, and sender matches take precedence over labels so one email cannot create duplicate digest lines. OAuth credentials and the refresh token live under ignored `auth/gmail/`. See [`docs/gmail-bootstrap.md`](docs/gmail-bootstrap.md) for Google Cloud registration, token creation, whitelist configuration, verification, renewal, and troubleshooting. The OAuth, whitelist, paginated search, metadata/count, and MIME-normalization implementation is a framework-neutral root package consumed through a thin adapter; [`docs/gmail-reuse.md`](docs/gmail-reuse.md) documents the files, dependencies, standalone command, examples, tests, and byte-for-byte adoption path for other applications.
 
 ### Voice-note transcription
 

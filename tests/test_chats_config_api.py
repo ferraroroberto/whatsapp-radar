@@ -458,6 +458,8 @@ def test_chats_requires_token_from_remote(tmp_path: Path) -> None:
 def test_get_config_masks_token(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.webapp.routers.config as config_router
 
+    # This assertion covers committed defaults, independent of ignored local sources.
+    monkeypatch.setenv("WR_SOURCES", "whatsapp")
     monkeypatch.setattr(
         config_router,
         "load_webapp_config",

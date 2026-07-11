@@ -97,6 +97,32 @@ class TelegramConfig:
 
 
 @dataclass(frozen=True)
+class GmailSender:
+    """One explicitly allowed sender represented as a stable Gmail chat."""
+
+    address: str
+    name: str
+
+
+@dataclass(frozen=True)
+class GmailLabel:
+    """One explicitly allowed Gmail label represented as a stable chat."""
+
+    name: str
+    display_name: str
+
+
+@dataclass(frozen=True)
+class GmailConfig:
+    """Read-only Gmail API credentials and whitelist."""
+
+    credentials_path: Path = Path("auth/gmail/credentials.json")
+    token_path: Path = Path("auth/gmail/token.json")
+    senders: tuple[GmailSender, ...] = ()
+    labels: tuple[GmailLabel, ...] = ()
+
+
+@dataclass(frozen=True)
 class Config:
     db_path: Path
     connector: str
@@ -122,6 +148,7 @@ class Config:
     # implementation selector (fixture | linked_device) for backwards
     # compatibility; additional sources own their own connector configuration.
     sources: tuple[str, ...] = ("whatsapp",)
+    gmail: GmailConfig = field(default_factory=GmailConfig)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -218,6 +245,7 @@ def load_config(root: Path | None = None) -> Config:
     )
     hub_raw = merged.get("hub", {})
     tr_raw = merged.get("transcription", {})
+    gmail_raw = merged.get("gmail", {})
 
     tg_raw = merged.get("telegram", {})
 
@@ -299,6 +327,45 @@ def load_config(root: Path | None = None) -> Config:
     if not resolved_buffer.is_absolute():
         resolved_buffer = root / resolved_buffer
 
+    gmail_credentials = Path(
+        os.environ.get(
+            "WR_GMAIL_CREDENTIALS_PATH",
+            gmail_raw.get("credentials_path", "auth/gmail/credentials.json"),
+        )
+    )
+    if not gmail_credentials.is_absolute():
+        gmail_credentials = root / gmail_credentials
+    gmail_token = Path(
+        os.environ.get(
+            "WR_GMAIL_TOKEN_PATH",
+            gmail_raw.get("token_path", "auth/gmail/token.json"),
+        )
+    )
+    if not gmail_token.is_absolute():
+        gmail_token = root / gmail_token
+    gmail = GmailConfig(
+        credentials_path=gmail_credentials,
+        token_path=gmail_token,
+        senders=tuple(
+            GmailSender(
+                address=str(item.get("address", "")).strip().lower(),
+                name=str(item.get("name") or item.get("address") or "").strip(),
+            )
+            for item in gmail_raw.get("senders", [])
+            if isinstance(item, dict) and str(item.get("address", "")).strip()
+        ),
+        labels=tuple(
+            GmailLabel(
+                name=str(item.get("name", "")).strip(),
+                display_name=str(
+                    item.get("display_name") or item.get("name") or ""
+                ).strip(),
+            )
+            for item in gmail_raw.get("labels", [])
+            if isinstance(item, dict) and str(item.get("name", "")).strip()
+        ),
+    )
+
     return Config(
         db_path=resolved_db,
         connector=connector,
@@ -312,4 +379,5 @@ def load_config(root: Path | None = None) -> Config:
         sync_settle_seconds=sync_settle_seconds,
         sync_settle_timeout=sync_settle_timeout,
         sources=sources,
+        gmail=gmail,
     )

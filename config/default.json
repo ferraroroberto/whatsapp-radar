@@ -5,6 +5,12 @@
   "classifier": "stub",
   "notifier": "none",
   "linked_device_dir": "data/linked_device",
+  "gmail": {
+    "credentials_path": "auth/gmail/credentials.json",
+    "token_path": "auth/gmail/token.json",
+    "senders": [],
+    "labels": []
+  },
   "hub": {
     "base_url": "http://127.0.0.1:8000",
     "model": "claude_sonnet",

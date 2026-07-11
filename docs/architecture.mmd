@@ -61,6 +61,7 @@ flowchart TB
     FANOUT["db/sync.py — per-source fan-out\nisolation + sync_log"]
     FIXTURE["fixture.py — deterministic offline fixture"]
     LINKED["linked_device.py — reads sidecar NDJSON buffer"]
+    GMAIL["gmail.py — Gmail API read-only\nwhitelisted senders + labels"]
     SIDECARPY["sidecar.py — Node lifecycle supervisor\n(wait/relaunch, never kill)"]
     PREFLIGHT["preflight.py — abort loud if source is down"]
   end
@@ -68,6 +69,7 @@ flowchart TB
   CFACTORY --> FANOUT
   CFACTORY --> FIXTURE
   CFACTORY --> LINKED
+  CFACTORY --> GMAIL
   SCAN --> PREFLIGHT
   TRAYPY -->|keep-alive supervise| SIDECARPY
   LINKED --> SIDECARPY
@@ -124,6 +126,7 @@ flowchart TB
     APPLAUNCHER["App Launcher — Jobs (scan/resync/reprocess)\n+ Apps tab (webapp URL)"]
     TAILSCALE["Tailscale — TLS for the tunnel"]
     FFMPEG["ffmpeg — voice-note transcode (OGG -> WAV/MP3)"]
+    GMAILAPI["Gmail API — gmail.readonly\nOAuth token under auth/gmail/"]
   end
   CLASSIFIER -->|hub / cascade mode| HUB
   TRANSCRIBE --> HUB
@@ -131,3 +134,4 @@ flowchart TB
   APPLAUNCHER --> CLICMDS
   SERVER --> TAILSCALE
   TRANSCRIBE --> FFMPEG
+  GMAIL --> GMAILAPI

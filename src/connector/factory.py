@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from src.config import Config
 from src.connector.base import MessageConnector
 from src.connector.fixture import FixtureConnector
+from src.connector.gmail import GmailConnector
 from src.connector.linked_device import LinkedDeviceConnector
 
 
@@ -46,6 +47,11 @@ def build_connectors(config: Config) -> list[ConnectorBinding]:
     for source in config.sources:
         if source == "whatsapp":
             bindings.append(ConnectorBinding(source="whatsapp", connector=build_connector(config)))
+            continue
+        if source == "gmail":
+            bindings.append(
+                ConnectorBinding(source="gmail", connector=GmailConnector(config.gmail))
+            )
             continue
         raise ValueError(f"source {source!r} is enabled but no connector is available")
     return bindings

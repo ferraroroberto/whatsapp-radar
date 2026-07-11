@@ -38,7 +38,7 @@ The expected shape is a small standalone local service, integrated with the exis
 
 The practical connector path for personal/group chats is likely a WhatsApp Web linked-device integration. That is technically feasible but not an official WhatsApp Business Platform use case. Any implementation must be conservative: read-only behavior in our code, no send surface, no bulk automation, no scraping beyond chats the account can already see, clear local-only storage, and explicit operator consent.
 
-To stand the whole system up from zero — new WhatsApp linked device, new Telegram bot, phone access, App Launcher wiring — follow [`docs/bootstrapping.md`](docs/bootstrapping.md).
+To stand the whole system up from zero — new WhatsApp linked device, new Telegram bot, phone access, App Launcher wiring — follow [`docs/bootstrapping.md`](docs/bootstrapping.md). To add the read-only Gmail source, follow [`docs/gmail-bootstrap.md`](docs/gmail-bootstrap.md).
 
 ## Running The Spike (No Personal Data)
 
@@ -93,6 +93,10 @@ The fixture path above needs no credentials. To run against real chats and deliv
 3. For delivery, create a Telegram bot, set `WR_NOTIFIER=telegram` plus `WR_TELEGRAM_BOT_TOKEN` / `WR_TELEGRAM_CHAT_ID`, and `wr review` delivers one consolidated digest. `wr notify` re-delivers a run if a send failed.
 
 The connection is **read-only by construction** — no send/react/read-receipt surface exists. The unofficial-library risk (Baileys), the buffer contract, the message-normalization set, and answers to the spike questions are documented in [`docs/linked-device.md`](docs/linked-device.md). Credentials/session live only under ignored `auth/`; Telegram secrets live in the gitignored `config/webapp_config.json` (or the ignored `.env` via `WR_TELEGRAM_*`).
+
+### Gmail source
+
+Gmail is an optional second source using the official Gmail API with the read-only `gmail.readonly` OAuth scope. It reads only named senders and labels from the ignored `config/local.json`; sender/label becomes a chat, email becomes a message, attachments are never downloaded, and sender matches take precedence over labels so one email cannot create duplicate digest lines. OAuth credentials and the refresh token live under ignored `auth/gmail/`. See [`docs/gmail-bootstrap.md`](docs/gmail-bootstrap.md) for Google Cloud registration, token creation, whitelist configuration, verification, renewal, and troubleshooting.
 
 ### Voice-note transcription
 

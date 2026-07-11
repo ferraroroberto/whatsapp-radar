@@ -33,6 +33,7 @@ from app.webapp import runs
 from app.webapp.routers._helpers import db_path, get_conn, maybe_json
 from src.config import load_config
 from src.connector.factory import build_connectors
+from src.connector.gmail import GmailConnector
 from src.db import store
 
 router = APIRouter()
@@ -118,27 +119,79 @@ async def start_execution_run(request: Request) -> dict[str, Any]:
 
 @router.get("/api/execution/health")
 async def execution_health(request: Request) -> dict[str, Any]:
-    """Liveness of the message source — is the WhatsApp sidecar paired & fresh?
-
-    A read-only probe: builds the configured connector and reads its status
-    (which the linked-device reader derives from the sidecar's heartbeat file).
-    Never raises — a bad config or missing sidecar surfaces as ``connected: false``
-    with the reason. (The richer Execution-tab pill uses ``/api/sidecar/status``
-    plus ``/api/execution/syncs``; this stays a minimal connector probe.)
-    """
+    """Truthful, secret-free status for every configured message source."""
     cfg = load_config()
+    conn = store.connect(db_path(request))
     try:
+        aggregates = {row["source"]: dict(row) for row in store.source_overview(conn)}
+        syncs = [dict(row) for row in store.recent_syncs(conn, 100)]
         statuses = []
         for binding in build_connectors(cfg):
-            status = binding.connector.status()
-            statuses.append(
-                {
-                    "source": binding.source,
-                    "name": status.name,
-                    "connected": status.connected,
-                    "detail": status.detail,
-                }
+            try:
+                status = binding.connector.connect()
+                account = None
+                if isinstance(binding.connector, GmailConnector) and status.connected:
+                    profile = binding.connector.profile()
+                    account = profile.masked_email_address
+            except Exception as exc:
+                status = binding.connector.status()
+                status = type(status)(
+                    status.name,
+                    False,
+                    f"status probe failed ({type(exc).__name__})",
+                )
+                account = None
+            finally:
+                binding.connector.stop()
+
+            source_syncs = [row for row in syncs if row["connector_source"] == binding.source]
+            last_attempt = source_syncs[0] if source_syncs else None
+            last_success = next(
+                (row for row in source_syncs if row["status"] == "success"), None
             )
+            stored = aggregates.get(binding.source, {})
+            item: dict[str, Any] = {
+                "source": binding.source,
+                "name": status.name,
+                "enabled": binding.source in cfg.sources,
+                "configured": (
+                    bool(cfg.gmail.senders or cfg.gmail.labels)
+                    and cfg.gmail.token_path.is_file()
+                    if binding.source == "gmail"
+                    else True
+                ),
+                "authorized": status.connected,
+                "connected": status.connected,
+                "detail": status.detail,
+                "stored_channels": int(stored.get("channels") or 0),
+                "stored_messages": int(stored.get("messages") or 0),
+                "monitored_channels": int(stored.get("monitored") or 0),
+                "latest_stored_at": stored.get("latest_message_at"),
+                "last_attempt": last_attempt,
+                "last_success": last_success,
+            }
+            if binding.source == "gmail":
+                whitelist = {
+                    "senders": [
+                        {"address": sender.address, "name": sender.name}
+                        for sender in cfg.gmail.senders
+                    ],
+                    "labels": [
+                        {"name": label.name, "display_name": label.display_name}
+                        for label in cfg.gmail.labels
+                    ],
+                }
+                item.update(
+                    {
+                        "read_only": True,
+                        "account": account,
+                        "token_present": cfg.gmail.token_path.is_file(),
+                        "whitelist": whitelist,
+                        "whitelist_valid": status.connected,
+                        "history_scope": "All messages matching the whitelist; no lookback limit.",
+                    }
+                )
+            statuses.append(item)
         connected = bool(statuses) and all(item["connected"] for item in statuses)
         detail = "; ".join(
             f"{item['source']}: {item['detail']}" for item in statuses
@@ -156,6 +209,8 @@ async def execution_health(request: Request) -> dict[str, Any]:
             "detail": str(exc),
             "sources": [],
         }
+    finally:
+        conn.close()
 
 
 @router.get("/api/execution/syncs")
@@ -172,7 +227,20 @@ async def list_syncs(
     """
     limit = max(1, min(limit, 100))
     rows = [dict(r) for r in store.recent_syncs(conn, limit)]
-    totals = {"chats": store.count_chats(conn), "messages": store.message_count_total(conn)}
+    by_source = {
+        row["source"]: {
+            "channels": int(row["channels"]),
+            "monitored": int(row["monitored"]),
+            "messages": int(row["messages"]),
+            "latest_message_at": row["latest_message_at"],
+        }
+        for row in store.source_overview(conn)
+    }
+    totals = {
+        "chats": store.count_chats(conn),
+        "messages": store.message_count_total(conn),
+        "by_source": by_source,
+    }
     return {"syncs": rows, "totals": totals}
 
 

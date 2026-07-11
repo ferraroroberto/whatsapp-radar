@@ -65,11 +65,25 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     page.locator("#historyClose").click()
     expect(page.locator("#historyOverlay")).to_be_hidden()
 
+    # Source selector isolates Gmail and the email overlay exposes subject/body/
+    # thread evidence with an unmistakable source badge.
+    page.locator("#chatsSourceGmail").click()
+    gmail_row = page.locator(".chat-row", has_text="School Updates")
+    expect(gmail_row).to_be_visible()
+    expect(gmail_row.locator(".source-badge")).to_have_text("Gmail")
+    gmail_row.locator(".chat-main").click()
+    expect(page.locator("#historySource")).to_have_text("Gmail")
+    expect(page.locator("#historyBody")).to_contain_text("Activity schedule")
+    expect(page.locator("#historyBody")).to_contain_text("e2e-thread-1")
+    page.locator("#historyClose").click()
+
     # The classifier config renders the read-only system prompt.
     page.locator("#configCard summary").click()
     expect(page.locator("#cfgPrompt")).to_contain_text(
         "triage new messages from a named communication channel"
     )
+    expect(page.locator("#cfgGmailRoots")).not_to_be_empty()
+    expect(page.locator("#cfgGmailTaxonomy")).not_to_be_empty()
 
 
 @pytest.mark.smoke

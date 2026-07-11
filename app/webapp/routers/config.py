@@ -48,6 +48,43 @@ def _read_roots_text() -> str:
     return keywords.roots_file_path().read_text(encoding="utf-8")
 
 
+def _classification_assets() -> dict[str, Any]:
+    """Every editable classification asset, labelled by source and stage."""
+    return {
+        "shared_system_prompt": {
+            "label": "Shared Stage 2 system prompt",
+            "file": "src/analysis/prompts/classification_system.md",
+            "content": load_prompt("classification_system"),
+        },
+        "whatsapp": {
+            "stage1_rules": {
+                "label": "WhatsApp Stage 1 keyword roots",
+                "file": "src/analysis/prompts/keyword_roots.txt",
+                "content": keywords.roots_file_path("whatsapp").read_text(encoding="utf-8"),
+            },
+            "stage2_note": (
+                "Uses the shared system prompt with Source: WhatsApp in the "
+                "rendered user prompt."
+            ),
+        },
+        "gmail": {
+            "stage1_rules": {
+                "label": "Gmail Stage 1 bucket and keyword rules",
+                "file": "src/analysis/prompts/gmail_keyword_roots.txt",
+                "content": keywords.roots_file_path("gmail").read_text(encoding="utf-8"),
+            },
+            "taxonomy": {
+                "label": "Gmail survey taxonomy (reference; not sent to Stage 2)",
+                "file": "src/analysis/prompts/gmail_classification_taxonomy.md",
+                "content": load_prompt("gmail_classification_taxonomy"),
+            },
+            "stage2_note": (
+                "Uses the shared system prompt with Source: Gmail in the rendered user prompt."
+            ),
+        },
+    }
+
+
 def _mask(token: str) -> dict[str, Any]:
     return {"configured": bool(token), "hint": ("…" + token[-4:]) if len(token) >= 4 else ""}
 
@@ -59,6 +96,22 @@ async def get_config() -> dict[str, Any]:
     return {
         "prompt": load_prompt("classification_system"),
         "keyword_roots": _read_roots_text(),
+        "classification_assets": _classification_assets(),
+        "gmail": {
+            "enabled": "gmail" in cfg.sources,
+            "senders": [
+                {"address": sender.address, "name": sender.name}
+                for sender in cfg.gmail.senders
+            ],
+            "labels": [
+                {"name": label.name, "display_name": label.display_name}
+                for label in cfg.gmail.labels
+            ],
+            "history_scope": (
+                "All Gmail messages matching the whitelist; no lookback limit is "
+                "applied during sync."
+            ),
+        },
         "settings": {
             "connector": cfg.connector,
             "sources": list(cfg.sources),

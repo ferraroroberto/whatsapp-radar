@@ -56,6 +56,7 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
         "completed_at": row["completed_at"],
         "notification_status": row["notification_status"],
         "error": row["error"],
+        "sources": _loads(row["source_funnel_json"]) or {},
         "funnel": {
             "chats_synced": int(row["chats_synced"]),
             "messages_synced": int(row["messages_synced"]),

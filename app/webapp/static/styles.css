@@ -458,6 +458,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   gap: 2px;
 }
 .chat-main:active { background: var(--card-off); }
+.chat-title-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* Three stacked lines, each clamped to one row with an ellipsis. */
 .chat-name {
   min-width: 0;
@@ -468,6 +469,19 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.source-badge.source-gmail { color: var(--accent); border-color: var(--accent-border-strong); }
 .chat-meta { font-size: var(--font-caption); color: var(--muted); }
 .chat-sub {
   min-width: 0;
@@ -614,6 +628,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .hist-msg { padding: 8px 0; border-bottom: 1px solid var(--line-muted); }
 .hist-msg:last-child { border-bottom: none; }
 .hist-meta { margin-bottom: 2px; font-size: var(--font-caption); color: var(--muted); }
+.hist-subject { margin-bottom: 3px; font-size: var(--font-label); font-weight: 700; }
+.hist-thread { margin-top: 4px; word-break: break-all; }
 .hist-text { white-space: pre-wrap; word-break: break-word; font-size: var(--font-label); }
 .msg-icon .icon { width: var(--icon-inline); height: var(--icon-inline); color: var(--muted); }
 /* Voice-note play/stop control (#86): a tappable inline pill. */
@@ -778,6 +794,17 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .cfg-source-row:last-child { border-bottom: 0; }
 .cfg-source-row > span { display: flex; flex-direction: column; gap: 1px; }
 .cfg-source-row small { color: var(--muted); font-size: var(--font-caption); }
+.source-config-summary {
+  margin: 8px 0 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card-off);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* Funnel strip in the run viewer: small labelled value cells. */
 .exec-funnel {
@@ -803,42 +830,47 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-output { max-height: 280px; cursor: pointer; }
 .exec-viewer-kind { font-size: var(--font-label); font-weight: 600; color: var(--ink); margin: 0 0 2px; }
 
-/* WhatsApp connection health: home-automation's Net-tab "Internet" tile —
-   icon + name left, muted message-count in the middle, bold status word right
-   (green Online / red Offline / attention while connecting or pairing). Same
-   52px row + horizontal padding as every other card head. */
-.exec-health {
+.source-status-list,
+.source-funnel-list,
+.source-summary-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.source-status-list { gap: 0; margin: 0; }
+.source-status-card { padding: 12px 0; border-bottom: 1px solid var(--line-muted); }
+.source-status-card:first-child { padding-top: 0; }
+.source-status-card:last-child { padding-bottom: 0; border-bottom: 0; }
+.source-status-head,
+.source-summary-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm);
-  padding: 0 var(--space-md);
-  /* 54px = 52px row + 2px border (border-box), same as .app-head. */
-  min-height: 54px;
 }
-.exec-health-title { flex: none; }
-.exec-health-detail {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Box-centering a caption-size box next to body-size neighbors leaves its
-     baseline ~1.4px high (ascent scales with font size — Segoe ~1.4px, iOS
-     SF ~1.7px); nudge it onto the shared baseline so the middle text reads
-     vertically aligned with the label and status word. */
-  position: relative;
-  top: 1.5px;
+.source-status-state { font-weight: 700; }
+.source-status-state.is-online { color: var(--on); }
+.source-status-state.is-offline { color: var(--deficit); }
+.source-status-state.is-warn { color: var(--attention); }
+.source-badge .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.source-status-details {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: var(--font-caption);
+  color: var(--muted);
 }
-.exec-health-status {
-  flex: none;
-  font-size: var(--font-body);
-  font-weight: 700;
-  text-align: right;
+.source-status-details li { padding: 5px 0; border-top: 1px solid var(--line-muted); }
+.source-funnel-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card-off);
 }
-.exec-health-status.is-online { color: var(--on); }
-.exec-health-status.is-offline { color: var(--deficit); }
-.exec-health-status.is-warn { color: var(--attention); }
+.source-funnel-title { margin: 0 0 6px; font-size: var(--font-label); font-weight: 700; }
+.source-funnel-values { margin: 0; color: var(--muted); font-size: var(--font-caption); }
+.source-summary-row + .source-summary-row { border-top: 1px solid var(--line-muted); padding-top: 10px; }
 
 /* Reconnect / re-pair panel: shown under the pill when the source is down (#29). */
 .exec-reconnect {

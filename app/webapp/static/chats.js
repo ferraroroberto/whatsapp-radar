@@ -1,4 +1,4 @@
-/* Chats tab (#10): pick which chats are watched, peek at recent history.
+/* Messages tab (#61): inspect and monitor WhatsApp and Gmail channels.
  *
  * Filtered into one of three buckets (Monitored | Ignored | All) + a name
  * search; "All" is capped at CHATS_RENDER_CAP rows so a ~900-chat account stays
@@ -77,6 +77,7 @@ function visibleChats() {
     // simply everything that isn't monitored.
     if (state.chatsFilter === 'monitored' && c.status !== 'monitored') return false;
     if (state.chatsFilter === 'ignored' && c.status === 'monitored') return false;
+    if (state.chatsSourceFilter !== 'all' && c.source !== state.chatsSourceFilter) return false;
     if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -94,7 +95,7 @@ function render() {
       'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.';
   } else {
     els.chatsCount.textContent = all.length
-      ? fmtNum(all.length) + ' chat' + (all.length === 1 ? '' : 's')
+      ? fmtNum(all.length) + ' channel' + (all.length === 1 ? '' : 's')
       : '';
   }
 
@@ -111,6 +112,11 @@ function row(c) {
   body.className = 'chat-main';
   body.addEventListener('click', function () { openHistory(c); });
 
+  const title = document.createElement('span');
+  title.className = 'chat-title-line';
+  const badge = document.createElement('span');
+  badge.className = 'source-badge source-' + c.source;
+  badge.textContent = c.source === 'gmail' ? 'Gmail' : 'WhatsApp';
   const name = document.createElement('span');
   name.className = 'chat-name';
   name.title = chatLabel(c);
@@ -124,7 +130,8 @@ function row(c) {
   sub.className = 'chat-sub';
   sub.textContent = c.last_message_text ? String(c.last_message_text) : '—';
 
-  body.append(name, meta, sub);
+  title.append(badge, name);
+  body.append(title, meta, sub);
 
   // Single watch toggle: lit/active when monitored, dim otherwise.
   const actions = document.createElement('div');
@@ -193,6 +200,12 @@ function histMsg(m) {
   // can tell which number it came from; absent on a single-chat view.
   const who = m.sender || '—';
   meta.textContent = (m.origin ? m.origin + ' · ' : '') + who + ' · ' + fmtTsFull(m.ts);
+  if (m.source === 'gmail') {
+    const subject = document.createElement('div');
+    subject.className = 'hist-subject';
+    subject.textContent = m.subject || '(no subject)';
+    item.append(meta, subject);
+  }
   const text = document.createElement('div');
   text.className = 'hist-text';
   if (m.type === 'voice') {
@@ -207,7 +220,14 @@ function histMsg(m) {
   } else {
     text.textContent = m.text != null ? m.text : '(' + (m.type || 'non-text') + ')';
   }
-  item.append(meta, text);
+  if (m.source !== 'gmail') item.append(meta);
+  item.append(text);
+  if (m.source === 'gmail' && m.thread_id) {
+    const thread = document.createElement('div');
+    thread.className = 'hist-thread muted small';
+    thread.textContent = 'Thread ' + m.thread_id;
+    item.append(thread);
+  }
   // A long message (long voice-note transcript or long typed message) gets an
   // on-demand Summarize control wired to the hub (#86). The server reads the same
   // messages.text, so gate on m.text length here too.
@@ -326,7 +346,10 @@ async function openHistory(chat, openPanel) {
   hist.chat = chat;
   hist.chatId = chat.id;
   // Panel starts collapsed on a normal open; the link badge opens it expanded.
-  panelOpen = !!openPanel;
+  panelOpen = chat.source === 'whatsapp' && !!openPanel;
+  els.historySource.textContent = chat.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+  els.historySource.className = 'source-badge source-' + chat.source;
+  els.historyLink.hidden = chat.source !== 'whatsapp';
   syncLinkPanel();
   hist.oldestTs = null;
   hist.oldestId = null;
@@ -457,6 +480,10 @@ function renderLinkPanel(chat) {
 
 function syncLinkPanel() {
   if (!hist.chat) return;
+  if (hist.chat.source !== 'whatsapp') {
+    els.historyLinkPanel.hidden = true;
+    return;
+  }
   if (panelOpen) {
     renderLinkPanel(hist.chat);
     els.historyLinkPanel.hidden = false;
@@ -501,6 +528,7 @@ function pickerCandidates() {
   const child = picker.child;
   return state.chats.filter(function (c) {
     if (!child || c.id === child.id) return false;     // never itself
+    if (c.source !== 'whatsapp') return false;
     if (c.parent_chat_id != null) return false;        // target must be top-level
     if (c.id === child.parent_chat_id) return false;   // already this child's parent
     if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
@@ -599,6 +627,9 @@ export function wireChats() {
   els.chatsFilterMonitored.addEventListener('click', function () { setFilter('monitored'); });
   els.chatsFilterIgnored.addEventListener('click', function () { setFilter('ignored'); });
   els.chatsFilterAll.addEventListener('click', function () { setFilter('all'); });
+  els.chatsSourceAll.addEventListener('click', function () { setSourceFilter('all'); });
+  els.chatsSourceWhatsapp.addEventListener('click', function () { setSourceFilter('whatsapp'); });
+  els.chatsSourceGmail.addEventListener('click', function () { setSourceFilter('gmail'); });
   // Search lives behind an icon button (App Launcher style); reveal + focus on tap.
   els.chatsSearchToggle.addEventListener('click', function () {
     const show = els.chatsSearch.hidden;
@@ -638,6 +669,14 @@ export function wireChats() {
     const b = els.historyBody;
     if (b.scrollTop + b.clientHeight >= b.scrollHeight - 48) loadOlder().catch(function () {});
   });
+}
+
+function setSourceFilter(source) {
+  state.chatsSourceFilter = source;
+  els.chatsSourceAll.classList.toggle('active', source === 'all');
+  els.chatsSourceWhatsapp.classList.toggle('active', source === 'whatsapp');
+  els.chatsSourceGmail.classList.toggle('active', source === 'gmail');
+  render();
 }
 
 function setFilter(filter) {

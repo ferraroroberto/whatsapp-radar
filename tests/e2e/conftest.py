@@ -152,6 +152,31 @@ def _seed_e2e_db(db_path: Path) -> None:
                 sender_label="Teacher",
             ),
         )
+        gmail = store.upsert_chat(
+            conn,
+            ChatRecord(
+                source_chat_id="e2e-mail",
+                display_name="School Updates",
+                chat_type="email",
+                source="gmail",
+            ),
+        )
+        store.set_chat_status(conn, gmail, "monitored")
+        store.insert_message(
+            conn,
+            gmail,
+            MessageRecord(
+                source_message_id="e2e-mail-1",
+                message_timestamp="2026-06-02T09:00:00+00:00",
+                text="The activity deadline is Friday.",
+                sender_label="School Office",
+                message_type="email",
+                raw={
+                    "thread_id": "e2e-thread-1",
+                    "headers": {"Subject": "Activity schedule"},
+                },
+            ),
+        )
     finally:
         conn.close()
 
@@ -174,6 +199,7 @@ def base_url() -> Iterator[str]:
     env["WR_CLASSIFIER"] = "stub"
     env["WR_CONNECTOR"] = "fixture"
     env["WR_NOTIFIER"] = "none"
+    env["WR_SOURCES"] = "whatsapp"
     # Never read the developer's real WhatsApp data: point the autobooted app at
     # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
     # project's hard privacy rule — e2e runs only against sanitized/empty state.

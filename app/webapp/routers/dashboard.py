@@ -48,6 +48,7 @@ async def dashboard(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, A
             "per_channel": [
                 {
                     "chat_id": int(row["id"]),
+                    "source": row["source"],
                     "name": row["display_name"],
                     "status": row["status"],
                     "count": int(row["message_count"]),
@@ -65,4 +66,14 @@ async def dashboard(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, A
             "actionable": store.count_actionable_items(conn),
             "notifications_sent": store.count_notifications_sent(conn),
         },
+        "sources": [
+            {
+                "source": row["source"],
+                "channels": int(row["channels"]),
+                "monitored": int(row["monitored"]),
+                "messages": int(row["messages"]),
+                "latest_message_at": row["latest_message_at"],
+            }
+            for row in store.source_overview(conn)
+        ],
     }

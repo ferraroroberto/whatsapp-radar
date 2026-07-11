@@ -10,7 +10,7 @@
 
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
-import { fmtLocalDateTime, renderFunnelCells } from './format.js';
+import { fmtLocalDateTime, renderFunnelCells, renderSourceFunnels } from './format.js';
 
 function auditState() { return state.audit; }
 
@@ -315,6 +315,7 @@ function renderDetail(data) {
   els.auditDetailMeta.textContent = bits.join(' · ');
 
   renderFunnel(run);
+  renderSourceFunnels(els.auditSourceFunnel, run.sources || {});
 
   els.auditTraces.textContent = '';
   const traces = data.traces || [];

@@ -47,3 +47,37 @@ export function renderFunnelCells(box, cells) {
     box.appendChild(div);
   }
 }
+
+export function renderSourceFunnels(box, sources) {
+  box.textContent = '';
+  for (const [source, f] of Object.entries(sources || {})) {
+    const card = document.createElement('div');
+    card.className = 'source-funnel-card';
+    const title = document.createElement('p');
+    title.className = 'source-funnel-title';
+    title.textContent = source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    const values = document.createElement('p');
+    values.className = 'source-funnel-values';
+    values.textContent = [
+      'sync ' + (f.sync_status || 'skipped'),
+      (f.messages_synced || 0) + ' synced',
+      (f.monitored_channels || 0) + ' monitored',
+      (f.messages_checked || 0) + ' checked',
+      (f.stage1_passed || 0) + ' Stage 1 pass',
+      (f.stage1_rejected || 0) + ' Stage 1 reject',
+      (f.llm_calls || 0) + ' LLM',
+      (f.actionable || 0) + ' actionable',
+      (f.cursors_advanced || 0) + ' cursor advanced',
+    ].join(' · ');
+    const explanation = document.createElement('p');
+    explanation.className = 'source-funnel-values';
+    if (f.sync_status === 'failed') explanation.textContent = 'Connector failed; cached messages were held and no cursor advanced.';
+    else if (!f.monitored_channels) explanation.textContent = 'Nothing monitored, so no messages could enter Stage 1.';
+    else if (!f.channels_with_delta) explanation.textContent = 'No new delta in monitored channels.';
+    else if (f.stage1_rejected && !f.llm_calls) explanation.textContent = 'Stage 1 deterministically rejected every delta; the LLM was not called.';
+    else if (!f.messages_synced && f.sync_status === 'success') explanation.textContent = 'Sync succeeded with no new matching messages.';
+    else explanation.textContent = 'Source completed with the counters shown above.';
+    card.append(title, values, explanation);
+    box.appendChild(card);
+  }
+}

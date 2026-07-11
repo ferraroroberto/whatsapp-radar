@@ -185,6 +185,7 @@ def test_list_chats_endpoint(tmp_path: Path) -> None:
     names = [c["name"] for c in body["chats"]]
     assert names == ["School Parents Group", "Class 4A Group"]
     first = body["chats"][0]
+    assert first["source"] == "whatsapp"
     assert {"id", "name", "type", "status", "count", "last_message_at", "last_message_text"} <= set(
         first
     )
@@ -205,6 +206,43 @@ def test_history_endpoint(tmp_path: Path) -> None:
     # 404 for an unknown chat.
     with TestClient(_app_with_db(db), client=LOOPBACK) as client:
         assert client.get("/api/chats/99999/history").status_code == 404
+
+
+def test_gmail_history_exposes_only_safe_email_fields(tmp_path: Path) -> None:
+    db = tmp_path / "gmail-history.sqlite3"
+    conn = store.connect(db)
+    channel = store.upsert_chat(
+        conn,
+        ChatRecord("sender-example", "School Updates", chat_type="email", source="gmail"),
+    )
+    store.insert_message(
+        conn,
+        channel,
+        MessageRecord(
+            source_message_id="mail-1",
+            message_timestamp="2026-07-01T10:00:00+00:00",
+            sender_label="School Office",
+            text="The activity starts at 09:00.",
+            message_type="email",
+            raw={
+                "thread_id": "thread-safe-1",
+                "headers": {"Subject": "Activity schedule", "To": "private@example.test"},
+                "oauth_token": "must-never-render",
+            },
+        ),
+    )
+    conn.close()
+
+    with TestClient(_app_with_db(db), client=LOOPBACK) as client:
+        body = client.get(f"/api/chats/{channel}/history").json()
+
+    assert body["source"] == "gmail"
+    message = body["messages"][0]
+    assert message["source"] == "gmail"
+    assert message["subject"] == "Activity schedule"
+    assert message["thread_id"] == "thread-safe-1"
+    assert "private@example.test" not in str(body)
+    assert "must-never-render" not in str(body)
 
 
 # --- voice-note audio playback endpoint (#86) -------------------------------
@@ -472,6 +510,12 @@ def test_get_config_masks_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert body["prompt"].strip()  # the system prompt renders
     assert body["keyword_roots"].strip()  # the roots file renders
+    assets = body["classification_assets"]
+    assert assets["shared_system_prompt"]["content"].strip()
+    assert assets["whatsapp"]["stage1_rules"]["content"].strip()
+    assert assets["gmail"]["stage1_rules"]["content"].strip()
+    assert assets["gmail"]["taxonomy"]["content"].strip()
+    assert assets["gmail"]["stage1_rules"]["file"].endswith("gmail_keyword_roots.txt")
     assert body["settings"]["connector"]
     assert body["settings"]["sources"] == ["whatsapp"]
     assert set(body["options"]["sources"]) == {"gmail", "whatsapp"}

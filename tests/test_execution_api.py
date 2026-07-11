@@ -9,13 +9,18 @@ covered end-to-end in ``test_execution_runs.py``.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 from starlette.testclient import TestClient
 
 from app.webapp import runs
+from app.webapp.routers import execution as execution_router
 from app.webapp.server import create_app
+from src.config import Config, GmailConfig, GmailSender, HubConfig, TelegramConfig
+from src.connector.factory import ConnectorBinding
+from src.connector.gmail import GmailConnector
 from src.webapp_config import WebappConfig
 
 LOOPBACK = ("127.0.0.1", 5555)
@@ -122,7 +127,7 @@ def test_syncs_endpoint_lists_recent_and_totals(tmp_path: Any) -> None:
     assert body["syncs"][0]["source"] == "resync"
     assert body["syncs"][0]["messages_added"] == 5
     assert body["syncs"][0]["chats_added"] == 2
-    assert set(body["totals"]) == {"chats", "messages"}
+    assert set(body["totals"]) == {"chats", "messages", "by_source"}
 
 
 def test_health_reports_connector_status(captured: dict[str, Any]) -> None:
@@ -132,3 +137,67 @@ def test_health_reports_connector_status(captured: dict[str, Any]) -> None:
     assert set(body) == {"name", "connected", "detail", "sources"}
     assert isinstance(body["connected"], bool)
     assert body["sources"][0]["source"] == "whatsapp"
+    source = body["sources"][0]
+    assert {"configured", "enabled", "authorized", "connected"} <= set(source)
+    assert "token" not in str(source).lower()
+
+
+def test_health_shows_safe_gmail_account_whitelist_and_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = tmp_path / "token.json"
+    token.write_text('{"refresh_token":"must-never-return"}', encoding="utf-8")
+    gmail = GmailConfig(
+        token_path=token,
+        senders=(GmailSender("updates@example.test", "School Updates"),),
+    )
+    cfg = Config(
+        db_path=tmp_path / "health.sqlite3",
+        connector="fixture",
+        classifier="stub",
+        hub=HubConfig("http://127.0.0.1:8000", "stub"),
+        notifier="none",
+        telegram=TelegramConfig("", ""),
+        linked_device_dir=tmp_path / "buffer",
+        sources=("gmail",),
+        gmail=gmail,
+    )
+
+    class FakeClient:
+        def get_profile(self) -> dict[str, Any]:
+            return {"emailAddress": "family@example.test", "messagesTotal": 20}
+
+        def list_labels(self) -> list[dict[str, Any]]:
+            return []
+
+        def list_message_ids(self, *, query: str, label_ids: list[str] | None = None) -> list[str]:
+            return []
+
+        def get_message(self, message_id: str, *, metadata_only: bool = False) -> dict[str, Any]:
+            return {}
+
+        def close(self) -> None:
+            return None
+
+    connector = GmailConnector(gmail, client=FakeClient())
+    monkeypatch.setattr(execution_router, "load_config", lambda: cfg)
+    monkeypatch.setattr(
+        execution_router,
+        "build_connectors",
+        lambda _cfg: [ConnectorBinding("gmail", connector)],
+    )
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = cfg.db_path
+    with TestClient(app, client=LOOPBACK) as client:
+        source = client.get("/api/execution/health").json()["sources"][0]
+
+    assert source["account"] == "f***@example.test"
+    assert source["configured"] is True
+    assert source["authorized"] is True
+    assert source["whitelist_valid"] is True
+    assert source["whitelist"]["senders"] == [
+        {"address": "updates@example.test", "name": "School Updates"}
+    ]
+    assert "must-never-return" not in str(source)
+    assert str(token) not in str(source)

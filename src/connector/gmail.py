@@ -5,6 +5,7 @@ from __future__ import annotations
 from gmail_readonly import (
     GmailLabel,
     GmailMailbox,
+    GmailProfile,
     GmailReadClient,
     GmailReadError,
     GmailSender,
@@ -67,6 +68,10 @@ class GmailConnector:
 
     def status(self) -> ConnectorStatus:
         return self._status
+
+    def profile(self) -> GmailProfile:
+        """Return the safely maskable connected-mailbox profile."""
+        return self._require_connected().profile()
 
     def list_chats(self) -> list[ChatRecord]:
         self._require_connected()

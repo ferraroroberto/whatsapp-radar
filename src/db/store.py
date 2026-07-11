@@ -33,7 +33,12 @@ from src.db.chats import (
     upsert_chat,
 )
 from src.db.connection import connect
-from src.db.dashboard import chats_overview, count_chats_by_status, messages_per_chat
+from src.db.dashboard import (
+    chats_overview,
+    count_chats_by_status,
+    messages_per_chat,
+    source_overview,
+)
 from src.db.messages import (
     advance_cursor,
     baseline_cursor,
@@ -114,6 +119,7 @@ __all__ = [
     "message_text",
     "messages_for_chat",
     "messages_per_chat",
+    "source_overview",
     "messages_since_cursor",
     "monitored_chats",
     "pending_transcriptions",

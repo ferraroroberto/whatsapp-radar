@@ -55,8 +55,24 @@ export async function fetchConfig() {
 }
 
 function render(d) {
-  els.cfgPrompt.textContent = d.prompt || '';
-  els.cfgRoots.textContent = d.keyword_roots || '';
+  const assets = d.classification_assets || {};
+  const wa = assets.whatsapp || {};
+  const gm = assets.gmail || {};
+  els.cfgPrompt.textContent = (assets.shared_system_prompt || {}).content || d.prompt || '';
+  els.cfgRoots.textContent = (wa.stage1_rules || {}).content || d.keyword_roots || '';
+  els.cfgGmailRoots.textContent = (gm.stage1_rules || {}).content || '';
+  els.cfgGmailTaxonomy.textContent = (gm.taxonomy || {}).content || '';
+  const gmail = d.gmail || {};
+  const senders = (gmail.senders || []).map(function (item) {
+    return item.name && item.name !== item.address ? item.name + ' <' + item.address + '>' : item.address;
+  });
+  const labels = (gmail.labels || []).map(function (item) {
+    return item.display_name && item.display_name !== item.name
+      ? item.display_name + ' (' + item.name + ')' : item.name;
+  });
+  const whitelist = senders.concat(labels);
+  els.cfgGmailSummary.textContent = 'Gmail whitelist: ' +
+    (whitelist.length ? whitelist.join(' · ') : 'empty') + '. ' + (gmail.history_scope || '');
 
   const s = d.settings || {};
   const opts = d.options || {};

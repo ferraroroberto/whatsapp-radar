@@ -45,11 +45,24 @@ def messages_per_chat(
     )
     return list(
         conn.execute(
-            "SELECT c.id, c.display_name, c.status, "
+            "SELECT c.id, c.source, c.display_name, c.status, "
             f"(SELECT MAX(m.message_timestamp) FROM messages m WHERE {family}) AS last_message_at, "
             f"(SELECT COUNT(*) FROM messages m WHERE {family}) AS message_count "
             f"FROM chats c {where} "
             "ORDER BY last_message_at IS NULL, last_message_at DESC, c.id"
+        ).fetchall()
+    )
+
+
+def source_overview(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Stored/monitored counts and latest message per connector source."""
+    return list(
+        conn.execute(
+            "SELECT c.source, COUNT(DISTINCT c.id) AS channels, "
+            "COUNT(DISTINCT CASE WHEN c.status = 'monitored' THEN c.id END) AS monitored, "
+            "COUNT(m.id) AS messages, MAX(m.message_timestamp) AS latest_message_at "
+            "FROM chats c LEFT JOIN messages m ON m.chat_id = c.id "
+            "GROUP BY c.source ORDER BY c.source"
         ).fetchall()
     )
 

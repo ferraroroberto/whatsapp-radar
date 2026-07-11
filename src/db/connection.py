@@ -10,6 +10,7 @@ way around.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from src.models import StoredMessage
 
 _MESSAGE_COLUMNS = (
     "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
-    "message_type, transcription_status, media_path"
+    "message_type, transcription_status, media_path, raw_json"
 )
 
 
@@ -33,6 +34,7 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
         message_type=row["message_type"],
         transcription_status=row["transcription_status"],
         media_path=row["media_path"],
+        raw=json.loads(row["raw_json"]) if row["raw_json"] else {},
     )
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -52,6 +54,7 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("transcriptions", "INTEGER NOT NULL DEFAULT 0"),
     ("actionable", "INTEGER NOT NULL DEFAULT 0"),
     ("notification_status", "TEXT"),
+    ("source_funnel_json", "TEXT"),
 )
 
 

@@ -72,7 +72,12 @@ class _FakeTraced:
         self._stop_reason = stop_reason
 
     def classify_traced(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         self.calls += 1
         return ClassificationOutcome(

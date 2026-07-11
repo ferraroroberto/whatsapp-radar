@@ -80,7 +80,7 @@ try:
     for source in sources:
         print(source.display_name, mailbox.count(source.search))
         metadata = mailbox.metadata(source.search)
-        messages = mailbox.messages(source.search)
+        messages = mailbox.messages(source.search, limit=100)
 
     unread = GmailSearch(query="is:unread", lookback_days=30)
     print(mailbox.count(unread))
@@ -88,7 +88,7 @@ finally:
     mailbox.close()
 ```
 
-`count()` retrieves message IDs only. `metadata()` requests selected headers without bodies. `messages()` retrieves and normalizes content. All modes follow Gmail pagination and deterministic `(timestamp, message_id)` ordering.
+`count()` retrieves message IDs only. `metadata()` requests selected headers without bodies. `metadata()` and `messages()` accept an optional positive `limit`; `messages()` retrieves and normalizes only that bounded subset. All modes follow Gmail pagination and deterministic `(timestamp, message_id)` ordering.
 
 ## Adopt and upgrade byte-for-byte
 

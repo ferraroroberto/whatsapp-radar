@@ -51,6 +51,7 @@ def test_audit_drilldown_shows_trace(
     #    with its own Stage-1 / LLM verdict badge, so the operator can see which
     #    messages triggered and which didn't — no black box.
     trace.locator("summary").click()
+    expect(trace).to_contain_text("WhatsApp · Stage 1")
     expect(trace).to_contain_text("Messages (")
     messages = trace.locator(".audit-msg")
     expect(messages.first).to_be_visible()

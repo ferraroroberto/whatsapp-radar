@@ -146,7 +146,9 @@ def review_monitored_chats(
         )
 
         try:
-            raw = classifier.classify(chat["display_name"], delta, prior)
+            raw = classifier.classify(
+                chat["display_name"], delta, prior, source=str(chat["source"])
+            )
             result = parse_analysis(raw)
         except ContractError as exc:
             # Do NOT advance the cursor: the same delta is retried next run.

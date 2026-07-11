@@ -35,7 +35,7 @@ from src.analysis.classifier import (
     build_stage2_classifier,
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_roots
+from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
 from src.analysis.review import advance_family_cursors, recent_alert_context
 from src.analysis.transcription import hold_back_untranscribed, run_transcription_phase
 from src.config import Config
@@ -88,7 +88,7 @@ def _render_delta(delta: list[StoredMessage]) -> str:
     )
 
 
-def _messages_record(delta: list[StoredMessage]) -> str:
+def _messages_record(delta: list[StoredMessage], source: str) -> str:
     """Per-message audit record: each message with the Stage-1 roots it matched.
 
     Captured at run time (not recomputed on read) so the trace stays faithful to
@@ -96,19 +96,20 @@ def _messages_record(delta: list[StoredMessage]) -> str:
     later. The LLM's per-message verdict is *not* stored here — it is derived on
     read from the parsed result's ``evidence_message_ids`` (issue #12).
     """
-    return json.dumps(
-        [
+    records: list[dict[str, Any]] = []
+    for message in delta:
+        rules = matched_rules(message.text, source)
+        records.append(
             {
-                "id": m.source_message_id,
-                "sender": m.sender_label,
-                "text": m.text,
-                "type": m.message_type,
-                "roots": matched_roots(m.text),
+                "id": message.source_message_id,
+                "sender": message.sender_label,
+                "text": message.text,
+                "type": message.message_type,
+                "roots": [rule.root for rule in rules],
+                "buckets": list(dict.fromkeys(rule.bucket for rule in rules)),
             }
-            for m in delta
-        ],
-        ensure_ascii=False,
-    )
+        )
+    return json.dumps(records, ensure_ascii=False)
 
 
 def _result_json(result: AnalysisResult) -> str:
@@ -120,6 +121,7 @@ def _write_trace(
     run_id: int,
     chat_id: int,
     *,
+    source: str,
     signal: KeywordSignal,
     delta: list[StoredMessage],
     outcome: ClassificationOutcome | None,
@@ -134,9 +136,10 @@ def _write_trace(
         chat_id,
         input_message_ids_json=json.dumps([m.source_message_id for m in delta]),
         input_text=_render_delta(delta),
-        messages_json=_messages_record(delta),
+        messages_json=_messages_record(delta, source),
         stage1_passed=signal.matched,
         stage1_roots_json=json.dumps(list(signal.roots)),
+        stage1_buckets_json=json.dumps(list(signal.buckets)),
         llm_called=outcome.llm_called if outcome else False,
         llm_system_prompt=outcome.system_prompt if outcome else None,
         llm_user_prompt=outcome.user_prompt if outcome else None,
@@ -325,7 +328,8 @@ def scan(
             continue
         outcome.chats_with_delta += 1
 
-        signal = has_actionable_signal(delta)
+        source = str(chat["source"])
+        signal = has_actionable_signal(delta, source)
         if not signal.matched:
             # Stage 1 gate: record a not-actionable verdict without an LLM call.
             store.insert_analysis_item(
@@ -342,7 +346,8 @@ def scan(
             )
             _write_trace(
                 conn, run_id, chat_id,
-                signal=signal, delta=delta, outcome=None, result=_NOT_ACTIONABLE,
+                source=source, signal=signal, delta=delta, outcome=None,
+                result=_NOT_ACTIONABLE,
                 final_action="not_actionable", telegram_text=None, error=None,
             )
             _advance(conn, mode, chat_id, delta, None)
@@ -357,7 +362,9 @@ def scan(
         prior = recent_alert_context(
             conn, chat_id, since_days=config.hub.recent_alert_days, exclude_run_id=run_id
         )
-        co = stage2.classify_traced(chat["display_name"], delta, prior)
+        co = stage2.classify_traced(
+            chat["display_name"], delta, prior, source=source
+        )
         if co.llm_called:
             outcome.stage2_llm_calls += 1
 
@@ -383,7 +390,7 @@ def scan(
             outcome.errors.append((chat_id, error))
             _write_trace(
                 conn, run_id, chat_id,
-                signal=signal, delta=delta, outcome=co, result=None,
+                source=source, signal=signal, delta=delta, outcome=co, result=None,
                 final_action=final_action, telegram_text=None, error=error,
             )
             continue
@@ -422,7 +429,7 @@ def scan(
 
         _write_trace(
             conn, run_id, chat_id,
-            signal=signal, delta=delta, outcome=co, result=result,
+            source=source, signal=signal, delta=delta, outcome=co, result=result,
             final_action=final_action, telegram_text=telegram_text, error=None,
         )
         _advance(conn, mode, chat_id, delta, result.summary)

@@ -139,16 +139,18 @@ def insert_analysis_trace(
     final_action: str,
     telegram_text: str | None,
     error: str | None,
+    stage1_buckets_json: str = "[]",
 ) -> int:
     """Persist the full per-chat audit trace for one run (one row per chat)."""
     cur = conn.execute(
         """
         INSERT INTO analysis_trace
             (run_id, chat_id, input_message_ids_json, input_text, messages_json,
-             stage1_passed, stage1_roots_json, llm_called, llm_system_prompt,
+             stage1_passed, stage1_roots_json, stage1_buckets_json,
+             llm_called, llm_system_prompt,
              llm_user_prompt, llm_raw_response, parsed_result_json, final_action,
              telegram_text, error, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -158,6 +160,7 @@ def insert_analysis_trace(
             messages_json,
             1 if stage1_passed else 0,
             stage1_roots_json,
+            stage1_buckets_json,
             1 if llm_called else 0,
             llm_system_prompt,
             llm_user_prompt,
@@ -177,7 +180,7 @@ def traces_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
     """Return a run's audit-trace rows joined to chat names, ordered by chat."""
     return list(
         conn.execute(
-            "SELECT t.*, c.display_name FROM analysis_trace t "
+            "SELECT t.*, c.display_name, c.source FROM analysis_trace t "
             "JOIN chats c ON c.id = t.chat_id "
             "WHERE t.run_id = ? ORDER BY t.chat_id",
             (run_id,),

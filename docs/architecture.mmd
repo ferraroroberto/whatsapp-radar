@@ -14,7 +14,7 @@ flowchart TB
   end
 
   subgraph cli["app/cli/main.py — argparse CLI"]
-    CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · tray"]
+    CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · gmail-survey · tray"]
   end
   LAUNCHER --> CLICMDS
 
@@ -47,6 +47,7 @@ flowchart TB
     CLASSIFIER["classifier.py — Stage 2 (stub | hub | cascade)"]
     CONTRACT["contract.py — parse_analysis / AnalysisResult"]
     REVIEW["review.py — cursor advance + alert memory"]
+    SURVEY["gmail_survey.py — bounded whitelist survey\n-> generic Gmail taxonomy/rules"]
   end
   CLICMDS --> SCAN
   RUNS --> SCAN
@@ -55,6 +56,7 @@ flowchart TB
   SCAN --> CLASSIFIER
   CLASSIFIER --> CONTRACT
   SCAN --> REVIEW
+  CLICMDS --> SURVEY
 
   subgraph connector["src/connector/ — read-only connector boundary"]
     CFACTORY["factory.py — build_connectors(config)\nsource-tagged bindings"]
@@ -78,6 +80,7 @@ flowchart TB
     GMAILCORE["OAuth + token refresh\nwhitelist + paginated search\nmetadata/count + MIME normalization"]
   end
   GMAIL --> GMAILCORE
+  SURVEY --> GMAILCORE
 
   subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
@@ -134,6 +137,7 @@ flowchart TB
     GMAILAPI["Gmail API — gmail.readonly\nOAuth token under auth/gmail/"]
   end
   CLASSIFIER -->|hub / cascade mode| HUB
+  SURVEY -->|one local analysis pass| HUB
   TRANSCRIBE --> HUB
   TELEGRAM --> TELEGRAMAPI
   APPLAUNCHER --> CLICMDS

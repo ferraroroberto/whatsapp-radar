@@ -91,7 +91,12 @@ class _RecordingClassifier:
         self._raw = raw_output
 
     def classify_traced(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         self.calls += 1
         self.priors.append(prior_context)

@@ -122,6 +122,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
+    if "stage1_buckets_json" not in trace_cols:
+        conn.execute("ALTER TABLE analysis_trace ADD COLUMN stage1_buckets_json TEXT")
     # `analysis_items.deadline_date` (#71): the model-resolved absolute date that
     # sits beside the free-text `deadline`, letting the digest flag today/overdue
     # deterministically. Additive, non-destructive; old rows stay NULL.

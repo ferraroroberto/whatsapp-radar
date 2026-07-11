@@ -171,6 +171,16 @@ Run a dry analysis first:
 .\wr.bat scan --dry-run
 ```
 
+Before the first real scan, optionally tune Gmail's deterministic prefilter from a bounded whitelist survey:
+
+```powershell
+.\wr.bat gmail-survey
+# Optional bounds:
+.\wr.bat gmail-survey --days 30 --max-messages 50
+```
+
+The default lookback is 60 days and the default full-content cap is 100 emails. The command first prints only aggregate whitelist count and date scope, then makes exactly one call through local-llm-hub. It rejects output containing configured/sample identifiers, addresses, domains, or URLs before atomically replacing `src/analysis/prompts/gmail_classification_taxonomy.md` and `gmail_keyword_roots.txt`. No sampled message or LLM response is logged or committed automatically. Inspect the resulting diff, keep every bucket/root generic, and revert or edit anything unsuitable before committing.
+
 Then run the real multi-source scan:
 
 ```powershell

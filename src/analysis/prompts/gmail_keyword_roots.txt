@@ -1,0 +1,33 @@
+# Gmail Stage-1 rules. Format: bucket | normalized keyword root
+# Keep categories and roots generic. Never add addresses, names, or copied mail.
+
+deadline | deadline
+deadline | due
+deadline | by tomorrow
+deadline | by friday
+payment | payment
+payment | pay
+payment | fee
+payment | invoice
+document | sign
+document | signature
+document | permission
+document | consent
+document | form
+document | document
+response | confirm
+response | rsvp
+response | register
+response | reply required
+schedule | appointment
+schedule | schedule
+schedule | rescheduled
+schedule | cancelled
+schedule | canceled
+preparation | bring
+preparation | prepare
+preparation | submit
+preparation | complete
+attention | action required
+attention | reminder
+attention | urgent

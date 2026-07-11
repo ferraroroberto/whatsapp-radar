@@ -122,10 +122,15 @@ def test_connect_migrates_analysis_trace_messages_json(tmp_path: Path) -> None:
     try:
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
         assert "messages_json" in cols
+        assert "stage1_buckets_json" in cols
         # The pre-existing row survives with a NULL per-message record (the audit
         # view falls back to the rendered input blob for it).
-        row = conn.execute("SELECT messages_json FROM analysis_trace WHERE id = 1").fetchone()
+        row = conn.execute(
+            "SELECT messages_json, stage1_buckets_json "
+            "FROM analysis_trace WHERE id = 1"
+        ).fetchone()
         assert row["messages_json"] is None
+        assert row["stage1_buckets_json"] is None
     finally:
         conn.close()
 

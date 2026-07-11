@@ -192,6 +192,13 @@ function messageRow(m, llmCalled, evidence) {
   }
 
   const roots = Array.isArray(m.roots) ? m.roots : [];
+  const buckets = Array.isArray(m.buckets) ? m.buckets : [];
+  if (buckets.length) {
+    const bucket = document.createElement('span');
+    bucket.className = 'audit-msg-badge act';
+    bucket.textContent = buckets.join(', ');
+    head.appendChild(bucket);
+  }
   const s1 = document.createElement('span');
   s1.className = 'audit-msg-badge ' + (roots.length ? 'act' : 'muted');
   s1.textContent = roots.length ? roots.join(', ') : 'no keyword';
@@ -261,17 +268,21 @@ function traceBlock(t) {
   // Stage progress line: did it pass Stage 1, was the LLM called?
   const stages = document.createElement('p');
   stages.className = 'muted small';
+  const source = t.source === 'gmail' ? 'Gmail' : 'WhatsApp';
   const s1 = t.stage1_passed ? 'Stage 1 passed' : 'Stage 1 filtered';
   const s2 = t.llm_called ? 'LLM called' : 'LLM skipped';
-  stages.textContent = `${s1} · ${s2}`;
+  stages.textContent = `${source} · ${s1} · ${s2}`;
   body.appendChild(stages);
 
   // Per-message breakdown when the trace carries it (#12); older rows fall back
   // to the rendered input blob so historical traces still render.
   const perMessage = messagesList(t);
   const roots = Array.isArray(t.stage1_roots) ? t.stage1_roots.join(', ') : t.stage1_roots;
+  const buckets = Array.isArray(t.stage1_buckets)
+    ? t.stage1_buckets.join(', ') : t.stage1_buckets;
   const fields = [
     perMessage || traceField('Input messages', t.input_text),
+    traceField('Stage-1 buckets matched', buckets),
     traceField('Stage-1 roots triggered', roots),
     traceField('LLM system prompt', t.llm_system_prompt),
     traceField('LLM user prompt', t.llm_user_prompt),

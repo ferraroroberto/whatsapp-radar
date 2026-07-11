@@ -67,7 +67,9 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
 
     # The classifier config renders the read-only system prompt.
     page.locator("#configCard summary").click()
-    expect(page.locator("#cfgPrompt")).to_contain_text("triage WhatsApp chat messages")
+    expect(page.locator("#cfgPrompt")).to_contain_text(
+        "triage new messages from a named communication channel"
+    )
 
 
 @pytest.mark.smoke

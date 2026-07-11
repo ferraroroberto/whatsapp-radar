@@ -25,6 +25,7 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 | `monitor <id>` / `ignore <id>` | Mark a chat watched (baselines its cursor to "now") / silenced |
 | `review [--dry-run]` | Classify the delta of already-ingested monitored chats; deliver unless `--dry-run` |
 | `scan [--dry-run] [--days N]` | One-shot: sync → classify → digest → deliver, with a full audit trace |
+| `gmail-survey [--days N] [--max-messages N]` | Count a bounded Gmail whitelist window and regenerate generic Gmail taxonomy/roots through the local hub |
 | `notify [--run N]` | Re-deliver a run's digest (retry a failed send without re-analyzing) |
 | `resync` | Force a fresh sync from the connector buffer |
 | `reprocess --confirm` | Full cache rebuild after a reader-logic change (backs up DB, preserves monitor/ignore/alias) |
@@ -61,10 +62,21 @@ Set `WR_CLASSIFIER` (in `.env` or via the PWA's Chats & Config settings):
 - **`hub`:** routes the whole delta through [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`.
 - **`cascade` (recommended for real use):** a cheap multilingual keyword prefilter (Spanish/English/Catalan) runs first; only deltas that show an actionable signal cost an LLM call.
 
-Two prompt assets are plain-text and loaded verbatim, so **read and tune them freely** without touching code (they're shown read-only in the PWA, edited in-file by design):
+The classifier assets are plain text, so **read and tune them freely** without touching code:
 
-- `src/analysis/prompts/classification_system.md` — the instruction sent to the model.
-- `src/analysis/prompts/keyword_roots.txt` — the cascade's actionable roots (add your own).
+- `src/analysis/prompts/classification_system.md` — the channel-neutral instruction sent to Stage 2.
+- `src/analysis/prompts/keyword_roots.txt` — WhatsApp's multilingual Stage-1 roots.
+- `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail's generic bucket definitions.
+- `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
+
+To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
+
+```powershell
+.\wr.bat gmail-survey                     # 60-day window, at most 100 full samples
+.\wr.bat gmail-survey --days 30 --max-messages 50
+```
+
+The command resolves only configured senders/labels, retrieves metadata to print aggregate count/date scope before analysis, then sends one bounded sample to local-llm-hub. Structured output containing configured/sample identifiers, addresses, domains, or URLs is rejected before either asset is replaced. Review `git diff -- src/analysis/prompts` after every survey and never commit personal additions.
 
 The hub call pins `temperature=0` so identical messages classify identically. Use a model that answers with JSON directly (the default `claude_sonnet` does). A reasoning model whose `<think>` trace overruns the output budget (`WR_HUB_MAX_TOKENS`, default 8192) truncates before the JSON — recorded as a distinct `llm_truncated` audit state, not a generic `contract_error`. The delta sent in one prompt is capped at `WR_HUB_MAX_PROMPT_CHARS` (default 24000, oldest messages dropped) so a whole-history scan can't blow the model's context window.
 

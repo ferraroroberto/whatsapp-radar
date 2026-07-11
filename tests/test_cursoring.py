@@ -95,7 +95,12 @@ def test_cursor_not_advanced_on_contract_error(ingested_conn: sqlite3.Connection
 
     class BadClassifier:
         def classify(
-            self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+            self,
+            chat_display_name: str,
+            delta: list[StoredMessage],
+            prior_context: str | None,
+            *,
+            source: str = "whatsapp",
         ) -> str:
             return "{ not valid json"
 

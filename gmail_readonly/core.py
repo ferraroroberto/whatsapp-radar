@@ -220,13 +220,17 @@ class GmailMailbox:
         """Count matching messages without retrieving metadata or content."""
         return len(self._message_ids(search))
 
-    def metadata(self, search: GmailSearch) -> list[NormalizedEmail]:
+    def metadata(
+        self, search: GmailSearch, *, limit: int | None = None
+    ) -> list[NormalizedEmail]:
         """Retrieve only selected headers and identifiers for matching messages."""
-        return self._retrieve(search, metadata_only=True)
+        return self._retrieve(search, metadata_only=True, limit=limit)
 
-    def messages(self, search: GmailSearch) -> list[NormalizedEmail]:
+    def messages(
+        self, search: GmailSearch, *, limit: int | None = None
+    ) -> list[NormalizedEmail]:
         """Retrieve and normalize matching messages, sorted oldest first."""
-        return self._retrieve(search, metadata_only=False)
+        return self._retrieve(search, metadata_only=False, limit=limit)
 
     def close(self) -> None:
         """Release the underlying HTTP transport."""
@@ -241,13 +245,24 @@ class GmailMailbox:
         except Exception as exc:
             raise GmailReadError(_safe_error_detail(exc)) from exc
 
-    def _retrieve(self, search: GmailSearch, *, metadata_only: bool) -> list[NormalizedEmail]:
+    def _retrieve(
+        self,
+        search: GmailSearch,
+        *,
+        metadata_only: bool,
+        limit: int | None,
+    ) -> list[NormalizedEmail]:
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be at least 1")
         try:
+            message_ids = self._message_ids(search)
+            if limit is not None:
+                message_ids = message_ids[:limit]
             messages = [
                 normalize_message(
                     self._client.get_message(message_id, metadata_only=metadata_only)
                 )
-                for message_id in self._message_ids(search)
+                for message_id in message_ids
             ]
         except GmailReadError:
             raise

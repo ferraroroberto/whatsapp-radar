@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS analysis_trace (
     messages_json          TEXT,            -- per-message record: [{id,sender,text,roots}] (#12)
     stage1_passed          INTEGER NOT NULL DEFAULT 0,
     stage1_roots_json      TEXT,            -- keyword roots that triggered (Stage-1 evidence)
+    stage1_buckets_json    TEXT,            -- source-specific taxonomy buckets matched
     llm_called             INTEGER NOT NULL DEFAULT 0,
     llm_system_prompt      TEXT,            -- exact system prompt sent (Stage 2)
     llm_user_prompt        TEXT,            -- exact user prompt sent (Stage 2)

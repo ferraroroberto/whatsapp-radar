@@ -63,6 +63,8 @@ class _AlwaysActionable:
         chat_display_name: str,
         delta: list[StoredMessage],
         prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         return ClassificationOutcome(
             raw_output=json.dumps(

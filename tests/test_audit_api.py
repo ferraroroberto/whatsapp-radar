@@ -26,7 +26,13 @@ def _seed(conn: sqlite3.Connection) -> int:
     """One live run over two monitored chats: one actionable (LLM called), one
     filtered at Stage 1. Returns the run id. Plus a resync sync_log marker."""
     a = store.upsert_chat(
-        conn, ChatRecord(source_chat_id="g1", display_name="Class 4A Group", chat_type="group")
+        conn,
+        ChatRecord(
+            source_chat_id="g1",
+            display_name="Class 4A Group",
+            chat_type="email",
+            source="gmail",
+        ),
     )
     b = store.upsert_chat(
         conn,
@@ -70,13 +76,14 @@ def _seed(conn: sqlite3.Connection) -> int:
         messages_json=json.dumps(
             [
                 {"id": "a0", "sender": "Parent", "text": "bring a packed lunch",
-                 "roots": ["lunch"]},
+                 "roots": ["lunch"], "buckets": ["preparation"]},
                 {"id": "a1", "sender": "Parent", "text": "tomorrow please",
-                 "roots": ["tomorrow"]},
+                 "roots": ["tomorrow"], "buckets": ["deadline"]},
             ]
         ),
         stage1_passed=True,
         stage1_roots_json=json.dumps(["lunch", "tomorrow"]),
+        stage1_buckets_json=json.dumps(["preparation", "deadline"]),
         llm_called=True,
         llm_system_prompt="You are a classifier.",
         llm_user_prompt="Messages: bring a packed lunch tomorrow",
@@ -187,8 +194,10 @@ def test_audit_run_drilldown_trace(tmp_path: Path) -> None:
 
     a = traces["Class 4A Group"]
     assert a["final_action"] == "actionable"
+    assert a["source"] == "gmail"
     assert a["stage1_passed"] is True
     assert a["stage1_roots"] == ["lunch", "tomorrow"]
+    assert a["stage1_buckets"] == ["preparation", "deadline"]
     assert a["llm_called"] is True
     assert a["llm_system_prompt"] == "You are a classifier."
     assert "packed lunch" in a["llm_user_prompt"]

@@ -61,6 +61,11 @@ _HIGH_PRIORITY_KEYWORDS = ("urgent", "today", "asap", "immediately", "now")
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
+def _source_label(source: str) -> str:
+    """Return the stable operator/model label for a supported source."""
+    return "Gmail" if source == "gmail" else "WhatsApp"
+
+
 def _format_clock(iso_or_now: str | datetime) -> str:
     """Render a timestamp as ``YYYY-MM-DD Ddd HH:MM`` for the LLM date anchor (#71).
 
@@ -143,7 +148,12 @@ class Classifier(Protocol):
     """Maps a chat's message delta to raw JSON output for the contract parser."""
 
     def classify(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> str:
         ...
 
@@ -158,7 +168,12 @@ class TracedClassifier(Protocol):
     """
 
     def classify_traced(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         ...
 
@@ -167,7 +182,12 @@ class StubClassifier:
     """Deterministic keyword classifier — no LLM, no network."""
 
     def classify_traced(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         evidence: list[str] = []
         high = False
@@ -187,7 +207,9 @@ class StubClassifier:
             "priority": ("high" if high else "medium") if action_required else None,
             "summary": (first_hit if action_required else None),
             "suggested_next_action": (
-                "Review and respond in WhatsApp" if action_required else None
+                f"Review and respond via {_source_label(source)}"
+                if action_required
+                else None
             ),
             "deadline": None,
             "confidence": 0.9 if action_required else 0.8,
@@ -196,9 +218,16 @@ class StubClassifier:
         return ClassificationOutcome(raw_output=json.dumps(result, ensure_ascii=False))
 
     def classify(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> str:
-        return self.classify_traced(chat_display_name, delta, prior_context).raw_output
+        return self.classify_traced(
+            chat_display_name, delta, prior_context, source=source
+        ).raw_output
 
 
 # The system prompt is kept in an inspectable Markdown file
@@ -219,13 +248,17 @@ class HubClassifier:
         delta: list[StoredMessage],
         prior_context: str | None,
         *,
+        source: str = "whatsapp",
         now: datetime | None = None,
     ) -> str:
         # The "now" anchor (#71): the scan time the model resolves relative dates
         # *to*. Injectable so tests are deterministic; defaults to the real clock.
         anchor = _format_clock(now if now is not None else datetime.now().astimezone())
+        source_label = _source_label(source)
+        item_label = "emails" if source == "gmail" else "messages"
         header = [
-            f"Chat: {chat_display_name}",
+            f"Source: {source_label}",
+            f"Channel: {chat_display_name}",
             f"Current time (this scan runs now): {anchor}",
         ]
         if prior_context:
@@ -233,7 +266,7 @@ class HubClassifier:
             # verbatim rather than inline-labelled so its own heading carries the
             # "don't repeat unless new/escalated" instruction to the model.
             header.append(prior_context)
-        header.append("New messages (each line is prefixed with its send time):")
+        header.append(f"New {item_label} (each line is prefixed with its send time):")
 
         # Each line carries the message's send time so the model can anchor any
         # relative date word ("tomorrow") to *when that message was sent*, not to
@@ -266,12 +299,19 @@ class HubClassifier:
         return "\n".join(header + kept)
 
     def classify_traced(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> ClassificationOutcome:
         # Lazy import so the stub/default path needs no SDK import at module load.
         from anthropic import Anthropic
 
-        user_prompt = self._build_user_prompt(chat_display_name, delta, prior_context)
+        user_prompt = self._build_user_prompt(
+            chat_display_name, delta, prior_context, source=source
+        )
         client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
         response = client.messages.create(
             model=self._hub.model,
@@ -308,9 +348,16 @@ class HubClassifier:
         )
 
     def classify(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> str:
-        return self.classify_traced(chat_display_name, delta, prior_context).raw_output
+        return self.classify_traced(
+            chat_display_name, delta, prior_context, source=source
+        ).raw_output
 
 
 class CascadeClassifier:
@@ -327,11 +374,18 @@ class CascadeClassifier:
         self._inner = inner
 
     def classify(
-        self, chat_display_name: str, delta: list[StoredMessage], prior_context: str | None
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
     ) -> str:
-        if not has_actionable_signal(delta):
+        if not has_actionable_signal(delta, source):
             return _NO_SIGNAL_RESULT
-        return self._inner.classify(chat_display_name, delta, prior_context)
+        return self._inner.classify(
+            chat_display_name, delta, prior_context, source=source
+        )
 
 
 def build_classifier(name: str, hub: HubConfig) -> Classifier:

@@ -212,6 +212,18 @@ def test_profile_mask_safe_failures_and_cleanup() -> None:
     assert "private" not in str(caught.value)
 
 
+def test_message_retrieval_limit_bounds_full_fetches() -> None:
+    client = _FakeClient()
+    mailbox = GmailMailbox(client)
+
+    messages = mailbox.messages(GmailSearch(query="in:inbox"), limit=1)
+
+    assert [message.message_id for message in messages] == ["newer"]
+    assert client.metadata_modes == [False]
+    with pytest.raises(ValueError, match="limit must be at least 1"):
+        mailbox.messages(GmailSearch(query="in:inbox"), limit=0)
+
+
 def test_query_validation_rejects_unbounded_control_characters() -> None:
     with pytest.raises(ValueError, match="single line"):
         GmailSearch(query="from:a@example.com\nsubject:private").api_query()

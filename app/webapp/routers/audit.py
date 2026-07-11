@@ -73,12 +73,14 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
     """Shape one analysis_trace row (joined to chat name) into the full decision record."""
     return {
         "chat_id": int(row["chat_id"]),
+        "source": row["source"],
         "display_name": row["display_name"],
         "input_message_ids": _loads(row["input_message_ids_json"]),
         "input_text": row["input_text"],
         "messages": _loads(row["messages_json"]),
         "stage1_passed": bool(row["stage1_passed"]),
         "stage1_roots": _loads(row["stage1_roots_json"]),
+        "stage1_buckets": _loads(row["stage1_buckets_json"]),
         "llm_called": bool(row["llm_called"]),
         "llm_system_prompt": row["llm_system_prompt"],
         "llm_user_prompt": row["llm_user_prompt"],

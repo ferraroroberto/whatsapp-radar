@@ -1,7 +1,7 @@
 """Command-line entry point.
 
 Commands: status | ingest | chats | monitor | ignore | review | scan | notify |
-resync | reprocess. The CLI wires the boundaries together but holds no business
+resync | reprocess | gmail-survey. The CLI wires the boundaries together but holds no business
 logic of its own.
 
 ``scan``, ``resync`` and ``reprocess`` are the launchable Execution-tab pieces:
@@ -16,7 +16,10 @@ import argparse
 import sqlite3
 import sys
 
+from gmail_readonly import GmailReadError
+
 from src.analysis.classifier import build_classifier
+from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
 from src.analysis.review import review_monitored_chats
 from src.config import Config, load_config
@@ -309,6 +312,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="replay stored messages with no connector, no delivery, no cursor advance",
     )
+
+    p_survey = sub.add_parser(
+        "gmail-survey",
+        help="propose Gmail taxonomy/rules from a bounded whitelisted sample",
+    )
+    p_survey.add_argument(
+        "--days", type=int, default=60, help="bounded Gmail lookback window (default: 60)"
+    )
+    p_survey.add_argument(
+        "--max-messages",
+        type=int,
+        default=100,
+        help="maximum full email bodies sent to the local hub (default: 100)",
+    )
     p_scan.add_argument(
         "--days", type=int, default=None, help="dry-run: only replay messages from the last N days"
     )
@@ -350,6 +367,19 @@ def main(argv: list[str] | None = None) -> int:
         return run_tray()
 
     config = load_config()
+    if args.command == "gmail-survey":
+        try:
+            run_gmail_survey(
+                config,
+                days=args.days,
+                max_messages=args.max_messages,
+                progress=_progress,
+            )
+        except (FileNotFoundError, GmailReadError, RuntimeError, ValueError) as exc:
+            print(f"Gmail survey failed: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
     conn = store.connect(config.db_path)
     try:
         if args.command == "status":

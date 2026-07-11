@@ -27,7 +27,14 @@ class _FakeInner:
     def __init__(self) -> None:
         self.called = False
 
-    def classify(self, name: str, delta: list[StoredMessage], prior: str | None) -> str:
+    def classify(
+        self,
+        name: str,
+        delta: list[StoredMessage],
+        prior: str | None,
+        *,
+        source: str = "whatsapp",
+    ) -> str:
         self.called = True
         return '{"action_required": true, "priority": "high", "evidence_message_ids": ["x"]}'
 

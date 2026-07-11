@@ -61,7 +61,7 @@ flowchart TB
     FANOUT["db/sync.py — per-source fan-out\nisolation + sync_log"]
     FIXTURE["fixture.py — deterministic offline fixture"]
     LINKED["linked_device.py — reads sidecar NDJSON buffer"]
-    GMAIL["gmail.py — Gmail API read-only\nwhitelisted senders + labels"]
+    GMAIL["gmail.py — thin application adapter"]
     SIDECARPY["sidecar.py — Node lifecycle supervisor\n(wait/relaunch, never kill)"]
     PREFLIGHT["preflight.py — abort loud if source is down"]
   end
@@ -73,6 +73,11 @@ flowchart TB
   SCAN --> PREFLIGHT
   TRAYPY -->|keep-alive supervise| SIDECARPY
   LINKED --> SIDECARPY
+
+  subgraph gmailcore["gmail_readonly/ — reusable framework-neutral component"]
+    GMAILCORE["OAuth + token refresh\nwhitelist + paginated search\nmetadata/count + MIME normalization"]
+  end
+  GMAIL --> GMAILCORE
 
   subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
@@ -134,4 +139,4 @@ flowchart TB
   APPLAUNCHER --> CLICMDS
   SERVER --> TAILSCALE
   TRANSCRIBE --> FFMPEG
-  GMAIL --> GMAILAPI
+  GMAILCORE --> GMAILAPI

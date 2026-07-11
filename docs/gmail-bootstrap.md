@@ -8,13 +8,14 @@ The source path is:
 
 ```text
 Google Gmail API
-  -> GmailConnector (gmail.readonly only)
+  -> reusable gmail_readonly package (gmail.readonly only)
+  -> GmailConnector application adapter
   -> source-tagged chat/message records in local SQLite
   -> existing keyword + LLM analysis
   -> one consolidated digest with WhatsApp
 ```
 
-A Gmail chat is one configured sender or Gmail label. A Gmail message is one email. Emails matching multiple whitelist entries have one owner: a sender match wins; otherwise the first matching label in configured order wins. Attachments are never downloaded. The connector exposes only label listing, message-id listing, and message retrieval; it has no send, draft, modify, archive, trash, or label-write method.
+A Gmail chat is one configured sender or Gmail label. A Gmail message is one email. Emails matching multiple whitelist entries have one owner: a sender match wins; otherwise the first matching label in configured order wins. Attachments are never downloaded. The reusable component exposes only profile lookup, label listing, message-id search, metadata/full retrieval, and cleanup; it has no send, draft, modify, archive, trash, or label-write method. See [`gmail-reuse.md`](gmail-reuse.md) to copy the same OAuth and search component into another application.
 
 OAuth files and mail data stay under ignored local paths. Never commit `auth/gmail/`, `config/local.json`, real addresses, message samples, or token output.
 
@@ -116,6 +117,14 @@ Run the interactive bootstrap from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.auth_gmail
+```
+
+That command is a thin WhatsApp Radar wrapper around the reusable explicit-path command:
+
+```powershell
+.\.venv\Scripts\python.exe -m gmail_readonly.oauth `
+  --credentials auth\gmail\credentials.json `
+  --token auth\gmail\token.json
 ```
 
 The script opens the system browser on a loopback OAuth callback. Sign in as the mailbox owner, review that the request is read-only, and approve it. Google redirects back to localhost and the script writes:

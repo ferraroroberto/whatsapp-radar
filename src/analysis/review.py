@@ -16,6 +16,12 @@ from datetime import datetime
 
 from src.analysis.classifier import Classifier
 from src.analysis.contract import ContractError, parse_analysis
+from src.analysis.keywords import has_actionable_signal
+from src.analysis.source_funnel import (
+    SourceFunnel,
+    ensure_source_funnel,
+    source_funnels_json,
+)
 from src.analysis.transcription import hold_back_untranscribed
 from src.config import Config
 from src.db import store
@@ -29,6 +35,7 @@ class ReviewOutcome:
     messages_processed: int = 0
     actionable_chats: int = 0
     errors: list[tuple[int, str]] = field(default_factory=list)
+    source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
 
 
 _RECENT_ALERT_HEADER = (
@@ -131,9 +138,18 @@ def review_monitored_chats(
     """
     run_id = store.start_run(conn)
     outcome = ReviewOutcome(run_id=run_id)
+    monitored = store.monitored_chats(conn)
+    if config is not None:
+        for source in config.sources:
+            ensure_source_funnel(outcome.source_funnels, source)
+    for chat in monitored:
+        ensure_source_funnel(
+            outcome.source_funnels, str(chat["source"])
+        ).monitored_channels += 1
 
-    for chat in store.monitored_chats(conn):
+    for chat in monitored:
         chat_id = int(chat["id"])
+        source = str(chat["source"])
         delta = store.family_delta_since_cursor(conn, chat_id)
         if config is not None and config.transcription.enabled:
             delta = hold_back_untranscribed(delta)
@@ -141,13 +157,31 @@ def review_monitored_chats(
             continue
 
         outcome.chats_with_delta += 1
+        source_funnel = ensure_source_funnel(outcome.source_funnels, source)
+        source_funnel.channels_with_delta += 1
+        source_funnel.messages_checked += len(delta)
+        signal = (
+            has_actionable_signal(delta, source)
+            if config is not None and config.classifier == "cascade"
+            else None
+        )
+        if signal is not None:
+            if signal.matched:
+                source_funnel.stage1_passed += 1
+            else:
+                source_funnel.stage1_rejected += 1
+        if config is not None and (
+            config.classifier == "hub"
+            or (config.classifier == "cascade" and signal is not None and signal.matched)
+        ):
+            source_funnel.llm_calls += 1
         prior = recent_alert_context(
             conn, chat_id, since_days=since_days, exclude_run_id=run_id
         )
 
         try:
             raw = classifier.classify(
-                chat["display_name"], delta, prior, source=str(chat["source"])
+                chat["display_name"], delta, prior, source=source
             )
             result = parse_analysis(raw)
         except ContractError as exc:
@@ -172,11 +206,25 @@ def review_monitored_chats(
         outcome.messages_processed += len(delta)
         if result.action_required:
             outcome.actionable_chats += 1
+            source_funnel.actionable += 1
 
         # Cursor advance happens only after the analysis row above is committed,
         # and per-member across the family (each member keeps its own cursor).
         advance_family_cursors(conn, chat_id, delta, result.summary)
+        source_funnel.cursors_advanced += 1
 
     status = "completed_with_errors" if outcome.errors else "completed"
     store.finish_run(conn, run_id, status, outcome.chats_with_delta)
+    store.record_run_funnel(
+        conn,
+        run_id,
+        chats_synced=0,
+        messages_synced=0,
+        chats_monitored=len(monitored),
+        stage1_passed=sum(f.stage1_passed for f in outcome.source_funnels.values()),
+        stage2_llm_calls=sum(f.llm_calls for f in outcome.source_funnels.values()),
+        actionable=outcome.actionable_chats,
+        notification_status="none",
+        source_funnel_json=source_funnels_json(outcome.source_funnels),
+    )
     return outcome

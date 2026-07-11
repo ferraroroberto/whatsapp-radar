@@ -39,12 +39,13 @@ def record_run_funnel(
     actionable: int,
     notification_status: str,
     transcriptions: int = 0,
+    source_funnel_json: str | None = None,
 ) -> None:
     """Persist a run's funnel counters and final notification status."""
     conn.execute(
         "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
         "stage1_passed = ?, stage2_llm_calls = ?, transcriptions = ?, actionable = ?, "
-        "notification_status = ? WHERE id = ?",
+        "notification_status = ?, source_funnel_json = ? WHERE id = ?",
         (
             chats_synced,
             messages_synced,
@@ -54,6 +55,7 @@ def record_run_funnel(
             transcriptions,
             actionable,
             notification_status,
+            source_funnel_json,
             run_id,
         ),
     )
@@ -238,7 +240,7 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
             "SELECT id, started_at, completed_at, status, mode, params_json, "
             "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
             "stage1_passed, stage2_llm_calls, transcriptions, actionable, "
-            "notification_status, error "
+            "notification_status, source_funnel_json, error "
             "FROM review_runs ORDER BY id DESC LIMIT ?",
             (max(1, limit),),
         ).fetchall()

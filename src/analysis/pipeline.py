@@ -37,6 +37,12 @@ from src.analysis.classifier import (
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
 from src.analysis.review import advance_family_cursors, recent_alert_context
+from src.analysis.source_funnel import (
+    SourceFunnel,
+    ensure_source_funnel,
+    source_funnels_dict,
+    source_funnels_json,
+)
 from src.analysis.transcription import hold_back_untranscribed, run_transcription_phase
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
@@ -79,6 +85,7 @@ class ScanOutcome:
     notification_status: str = "none"
     errors: list[tuple[int, str]] = field(default_factory=list)
     source_errors: list[tuple[str, str]] = field(default_factory=list)
+    source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
     digest: Digest | None = None
 
 
@@ -192,6 +199,12 @@ def _sync(
     outcome.source_errors.extend(synced.source_errors)
     outcome.chats_synced += delta.chats_seen
     outcome.messages_synced += delta.messages_added
+    for result in synced.results:
+        source_funnel = ensure_source_funnel(outcome.source_funnels, result.source)
+        source_funnel.sync_status = "success" if result.ok else "failed"
+        source_funnel.sync_error = result.error
+        source_funnel.chats_synced = result.delta.chats_seen
+        source_funnel.messages_synced = result.delta.messages_added
     for source, error in synced.source_errors:
         _emit(progress, f"⚠ {source} sync failed — {error}; its cursors are held")
     _emit(
@@ -236,6 +249,7 @@ def _abort_offline(
         stage2_llm_calls=0,
         actionable=0,
         notification_status="offline",
+        source_funnel_json=source_funnels_json(outcome.source_funnels),
     )
     return outcome
 
@@ -260,6 +274,8 @@ def scan(
     _emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
     run_id = store.start_run(conn, mode=mode, params_json=json.dumps({"days": days}))
     outcome = ScanOutcome(run_id=run_id, mode=mode)
+    for source in config.sources:
+        ensure_source_funnel(outcome.source_funnels, source)
     stage2 = classifier if classifier is not None else build_stage2_classifier(
         config.classifier, config.hub
     )
@@ -295,6 +311,10 @@ def scan(
 
     monitored = store.monitored_chats(conn)
     outcome.chats_monitored = len(monitored)
+    for chat in monitored:
+        ensure_source_funnel(
+            outcome.source_funnels, str(chat["source"])
+        ).monitored_channels += 1
     _emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
     for chat in monitored:
@@ -329,8 +349,12 @@ def scan(
         outcome.chats_with_delta += 1
 
         source = str(chat["source"])
+        source_funnel = ensure_source_funnel(outcome.source_funnels, source)
+        source_funnel.channels_with_delta += 1
+        source_funnel.messages_checked += len(delta)
         signal = has_actionable_signal(delta, source)
         if not signal.matched:
+            source_funnel.stage1_rejected += 1
             # Stage 1 gate: record a not-actionable verdict without an LLM call.
             store.insert_analysis_item(
                 conn,
@@ -351,9 +375,12 @@ def scan(
                 final_action="not_actionable", telegram_text=None, error=None,
             )
             _advance(conn, mode, chat_id, delta, None)
+            if mode == "live":
+                source_funnel.cursors_advanced += 1
             continue
 
         outcome.stage1_passed += 1
+        source_funnel.stage1_passed += 1
         _emit(
             progress,
             f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
@@ -367,6 +394,7 @@ def scan(
         )
         if co.llm_called:
             outcome.stage2_llm_calls += 1
+            source_funnel.llm_calls += 1
 
         try:
             result = parse_analysis(co.raw_output)
@@ -413,6 +441,7 @@ def scan(
         final_action = "not_actionable"
         if result.action_required:
             outcome.actionable += 1
+            source_funnel.actionable += 1
             final_action = "actionable"
             telegram_text = render_item(
                 DigestItem(
@@ -433,6 +462,8 @@ def scan(
             final_action=final_action, telegram_text=telegram_text, error=None,
         )
         _advance(conn, mode, chat_id, delta, result.summary)
+        if mode == "live":
+            source_funnel.cursors_advanced += 1
 
     digest = build_digest(conn, run_id)
     outcome.digest = digest
@@ -462,6 +493,7 @@ def scan(
         actionable=outcome.actionable,
         notification_status=outcome.notification_status,
         transcriptions=outcome.transcriptions,
+        source_funnel_json=source_funnels_json(outcome.source_funnels),
     )
     _emit(
         progress,
@@ -507,4 +539,5 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
             {"source": source, "error": error}
             for source, error in outcome.source_errors
         ],
+        "sources": source_funnels_dict(outcome.source_funnels),
     }

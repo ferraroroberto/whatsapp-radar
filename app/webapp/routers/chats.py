@@ -82,6 +82,7 @@ async def list_chats(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, 
         "chats": [
             {
                 "id": int(row["id"]),
+                "source": row["source"],
                 "source_chat_id": row["source_chat_id"],
                 "name": row["display_name"],
                 "alias": row["alias"],
@@ -126,8 +127,25 @@ async def chat_history(
     messages, has_more = store.recent_messages_family(
         conn, member_ids, limit=limit, before_ts=before_ts, before_id=before_id
     )
+    source_by_chat = {
+        mid: str(row["source"])
+        for mid in member_ids
+        if (row := store.get_chat(conn, mid)) is not None
+    }
+
+    def email_meta(message: Any) -> dict[str, Any]:
+        if source_by_chat.get(message.chat_id) != "gmail":
+            return {}
+        headers = message.raw.get("headers") or {}
+        subject = headers.get("Subject") or headers.get("subject")
+        return {
+            "subject": str(subject or "(no subject)"),
+            "thread_id": message.raw.get("thread_id"),
+        }
+
     return {
         "chat_id": chat_id,
+        "source": chat["source"],
         "name": chat["display_name"],
         "alias": chat["alias"],
         "has_more": has_more,
@@ -138,6 +156,7 @@ async def chat_history(
                 "sender": m.sender_label,
                 "text": m.text,
                 "type": m.message_type,
+                "source": source_by_chat.get(m.chat_id, str(chat["source"])),
                 # Voice-note transcription state (#36) so the UI can mark a voice
                 # note and label it when it isn't (yet) transcribed.
                 "transcription_status": m.transcription_status,
@@ -147,6 +166,7 @@ async def chat_history(
                 "has_audio": m.message_type == "voice" and m.media_path is not None,
                 # Only on a merged family view (>1 member); absent for a lone chat.
                 **({"origin": origin.get(m.chat_id)} if multi else {}),
+                **email_meta(m),
             }
             for m in messages
         ],

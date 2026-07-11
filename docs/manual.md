@@ -56,7 +56,7 @@ A live `scan` then waits for the **buffer to settle** before it reads: a freshly
 
 ## Choosing the classifier
 
-Set `WR_CLASSIFIER` (in `.env` or via the PWA's Chats & Config settings):
+Set `WR_CLASSIFIER` (in `.env` or via the PWA's Messages & Config settings):
 
 - **`stub` (default, offline):** keyword-based, deterministic, no network. Good for a first run.
 - **`hub`:** routes the whole delta through [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`.
@@ -66,8 +66,10 @@ The classifier assets are plain text, so **read and tune them freely** without t
 
 - `src/analysis/prompts/classification_system.md` — the channel-neutral instruction sent to Stage 2.
 - `src/analysis/prompts/keyword_roots.txt` — WhatsApp's multilingual Stage-1 roots.
-- `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail's generic bucket definitions.
+- `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail survey/reference bucket definitions used to generate Stage-1 rules; this file is not sent to Stage 2.
 - `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
+
+The PWA's **Messages → Classifier & settings** disclosure renders all four assets read-only with their paths, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
 
 To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
 
@@ -84,7 +86,7 @@ The hub call pins `temperature=0` so identical messages classify identically. Us
 
 - Keep the **sidecar running** — it captures live messages and history. While the **tray** is open it keeps itself alive: a keep-alive supervisor re-checks the sidecar every `WR_SIDECAR_SUPERVISE_SECONDS` (default 90) and relaunches it if the process died (never killing a live one; on a phone-side logout it toasts you to re-pair rather than crash-looping). So the buffer stays warm continuously and a scan reads an already-current source. App Launcher can also supervise it headlessly; see [`bootstrapping.md`](bootstrapping.md) Step 7.
 - The scheduled **`wr scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace.
-- For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): the Execution tab runs the pipeline live with a connection-health dot and one-tap reconnect/re-pair; the Audit tab is the read-only trust surface over every run's trace.
+- For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): **Messages** filters stored channels by source and monitoring state; **Run** shows separate truthful WhatsApp/Gmail status cards and per-source funnels; **Audit** is the read-only trust surface over every message's Stage-1/LLM path. WhatsApp keeps one-tap reconnect/re-pair. Gmail shows a masked account plus the configured whitelist but never credentials or OAuth tokens.
 - Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from the Execution tab).
 
 ## Troubleshooting
@@ -96,7 +98,7 @@ The hub call pins `temperature=0` so identical messages classify identically. Us
 | `status` shows *stale* | Sidecar process stopped/crashed | Restart `npm start`, or let a live `scan` self-heal it |
 | `ingest` finds 0 chats | History not synced yet | Wait a moment after pairing, re-run `ingest` |
 | Delivery `failed` | Bad token/chat id or no network | Fix the Telegram secrets, then `wr notify` |
-| Empty digest every run | Classifier too strict, or chats not monitored | Check `wr chats` / Chats & Config, tune the prompt |
+| Empty digest every run | Nothing ingested/monitored, no new delta, or Stage 1 rejected everything | Check Messages source/status filters, Run's per-source card/funnel, then Audit; tune source-specific rules only when the evidence shows they are too strict |
 | Scheduled scan exits non-zero | Source was dead (sidecar down) — by design | Bring the sidecar back; the run alerted rather than reporting green |
 
 ## Verification gate (for contributors)

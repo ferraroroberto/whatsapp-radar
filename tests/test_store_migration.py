@@ -89,7 +89,13 @@ def test_connect_migrates_legacy_review_runs(tmp_path: Path) -> None:
     conn = store.connect(db)
     try:
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(review_runs)")}
-        assert {"mode", "messages_synced", "actionable", "notification_status"} <= cols
+        assert {
+            "mode",
+            "messages_synced",
+            "actionable",
+            "notification_status",
+            "source_funnel_json",
+        } <= cols
 
         # The pre-existing row survives and reads with sane defaults.
         assert store.count_runs(conn) == 1

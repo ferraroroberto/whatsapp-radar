@@ -57,7 +57,7 @@ function render(d) {
     const name = document.createElement('td');
     name.className = 'name';
     name.title = ch.name;  // full name on hover/long-press; cell truncates with …
-    name.textContent = ch.name;
+    name.textContent = (ch.source === 'gmail' ? 'Gmail · ' : 'WhatsApp · ') + ch.name;
     const count = document.createElement('td');
     count.className = 'num';
     count.textContent = fmtNum(ch.count);
@@ -66,5 +66,27 @@ function render(d) {
     ts.textContent = fmtTs(ch.last_message_at);
     tr.append(name, count, ts);
     body.appendChild(tr);
+  }
+
+  els.dashSources.textContent = '';
+  const sources = d.sources || [];
+  if (!sources.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted small';
+    empty.textContent = 'No messages ingested from any source.';
+    els.dashSources.appendChild(empty);
+  }
+  for (const source of sources) {
+    const row = document.createElement('div');
+    row.className = 'source-summary-row';
+    const name = document.createElement('span');
+    name.className = 'source-badge source-' + source.source;
+    name.textContent = source.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    const detail = document.createElement('span');
+    detail.className = 'muted small';
+    detail.textContent = fmtNum(source.messages) + ' stored · ' + fmtNum(source.monitored) +
+      ' monitored · latest ' + fmtTsFull(source.latest_message_at);
+    row.append(name, detail);
+    els.dashSources.appendChild(row);
   }
 }

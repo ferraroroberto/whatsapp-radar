@@ -135,7 +135,7 @@ Read-only metrics: channels monitored, messages stored, scans run, backlog since
 
 - `GET /api/dashboard`
 
-### Chats & Config
+### Messages & Config
 
 Pick which chats are watched via a searchable Monitored/Ignored/All list ordered by last activity (single watch toggle per row, tap-to-open conversation overlay that pages older messages in). Marking a chat monitored baselines its review cursor to only new messages. From the overlay you can **rename** a chat with the pencil button (an operator alias that shows first with the connector-derived name in parentheses, e.g. `Tom (+44123…)`) and use the **link** button to merge the same person reached under two different numbers into one family. Linked children drop out of the chat list (the parent shows a link-count badge), the parent overlay shows a time-ordered merged history across the family, and monitoring/review/digest treat the family as one subject. Linking is pure local metadata — reversible, moves no message data, manual only. A long message in the overlay (a long voice-note transcript or a long typed message) shows a **Summarize** control that condenses it — and any action you need to take — on demand through the hub's `claude_haiku` (reusing App Launcher's hub-client pattern; the summary is ephemeral, never stored). The tab also surfaces the classifier: the LLM system prompt and keyword roots are shown read-only (edited in `src/analysis/prompts/` by design), while the safe settings subset (connector, classifier, notifier, hub model — persisted to `config/local.json`; Telegram token/chat-id masked and stored in `config/webapp_config.json`) is editable. Scan frequency stays in App Launcher's Jobs tab.
 
@@ -145,14 +145,18 @@ Pick which chats are watched via a searchable Monitored/Ignored/All list ordered
 - `POST /api/messages/{id}/summarize` — on-demand hub summary of a long message (long voice-note transcript or long typed message); ephemeral, routed through the hub's `claude_haiku` reusing App Launcher's loopback client pattern (#86)
 - `GET`/`POST /api/config`
 
+The Messages surface has independent monitoring-state and source selectors, source badges on every channel, and source-appropriate history: Gmail shows timestamp, sender, subject, body, and thread id, while WhatsApp retains linking, aliases, voice playback, and merged history. Classifier configuration is deliberately visible in the same tab: the shared Stage-2 system prompt, WhatsApp Stage-1 roots, Gmail Stage-1 bucket/rules, the Gmail survey taxonomy (a rule-generation reference, not an LLM prompt), effective whitelist, and actual Gmail history scope are all labelled with their source files. Audit shows the exact rendered system/user prompts actually sent, so configured intent and runtime behavior can be compared directly.
+
 ### Execution
 
-Runs the pipeline — whole or in pieces — and streams it live, mirroring App Launcher's job-run view. Pick the steps (Sync · Process · Message) and a Live/Dry-run mode, then watch: a funnel (synced → monitored-with-delta → Stage 1 → Stage 2 LLM → actionable → notification status), the would-be/sent Telegram message, and the live output log, with a recent-runs history and a WhatsApp **connection health** dot (sidecar pairing/heartbeat). When the connection is down the health pill grows a one-tap **Reconnect**, and — when the device needs re-linking — shows the **pairing QR right in the phone UI** so a household member can re-pair from their phone without a terminal. A **Recent syncs** card lists each ingest (*timestamp · chats added · messages added*) written by every sync path (webapp Sync button, a scheduled `wr resync` Job, or a live scan). A **Maintenance** card offers **Sync** (incremental upsert) and a guarded **Rebuild** (full cache rebuild — backs up the DB, preserves monitored/ignored/alias state and family links, resets run history). Runs are single-flight.
+Runs the pipeline — whole or in pieces — and streams it live, mirroring App Launcher's job-run view. Pick the steps (Sync · Process · Message) and a Live/Dry-run mode, then watch: a funnel (synced → monitored-with-delta → Stage 1 → Stage 2 LLM → actionable → notification status), the would-be/sent Telegram message, and the live output log, with recent-run history and separate WhatsApp/Gmail source-status cards. When WhatsApp is down its card retains one-tap **Reconnect** and, when re-linking is required, shows the **pairing QR right in the phone UI**. A **Recent syncs** card lists each ingest (*timestamp · source · chats/messages added*) written by every sync path. A **Maintenance** card offers **Sync** (incremental upsert) and a guarded **Rebuild** (full cache rebuild — backs up the DB, preserves monitored/ignored/alias state and family links, resets run history). Runs are single-flight.
 
 - `POST /api/execution/run`, `GET /api/execution/runs`
 - `GET /api/execution/runs/{kind}/{id}`, `POST /api/execution/runs/{kind}/{id}/kill`
 - `GET /api/execution/health`, `GET /api/execution/syncs`
 - `GET /api/sidecar/status`, `POST /api/sidecar/start`, `GET /api/sidecar/qr`
+
+Run renders separate truthful source cards. They distinguish configured, enabled, authorized/connected, whitelisted, stored, monitored, and last-checked state; Gmail displays only a masked connected account and never returns token, secret, client, OAuth-payload, or credential-path values. Scan results persist a per-source funnel covering sync success/failure, stored delta, monitoring, messages checked, Stage-1 pass/reject, LLM calls, actionable verdicts, and cursor advancement.
 
 ### Audit
 

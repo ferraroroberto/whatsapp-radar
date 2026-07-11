@@ -22,6 +22,7 @@ from src.analysis.classifier import build_classifier
 from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
 from src.analysis.review import review_monitored_chats
+from src.analysis.source_funnel import source_funnels_dict, source_funnels_json
 from src.config import Config, load_config
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
@@ -123,6 +124,23 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     else:
         notif, rc = _deliver(conn, config, outcome.run_id, digest)
 
+    store.record_run_funnel(
+        conn,
+        outcome.run_id,
+        chats_synced=0,
+        messages_synced=0,
+        chats_monitored=sum(
+            funnel.monitored_channels for funnel in outcome.source_funnels.values()
+        ),
+        stage1_passed=sum(
+            funnel.stage1_passed for funnel in outcome.source_funnels.values()
+        ),
+        stage2_llm_calls=sum(funnel.llm_calls for funnel in outcome.source_funnels.values()),
+        actionable=outcome.actionable_chats,
+        notification_status=notif,
+        source_funnel_json=source_funnels_json(outcome.source_funnels),
+    )
+
     _progress(
         f"✓ process done — {outcome.chats_with_delta} chat(s) with delta, "
         f"{outcome.messages_processed} msg(s) processed, "
@@ -139,6 +157,7 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
                 "actionable": outcome.actionable_chats,
             },
             "notification_status": notif,
+            "sources": source_funnels_dict(outcome.source_funnels),
             "telegram_text": (
                 digest.to_telegram_text() if digest.has_actionable_items else None
             ),

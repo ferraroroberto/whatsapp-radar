@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from src.analysis.classifier import StubClassifier
@@ -25,6 +26,13 @@ def test_first_review_processes_all_then_second_is_noop(ingested_conn: sqlite3.C
     first = review_monitored_chats(ingested_conn, classifier)
     assert first.chats_with_delta == 1
     assert first.messages_processed == 3
+    assert first.source_funnels["whatsapp"].messages_checked == 3
+    assert first.source_funnels["whatsapp"].cursors_advanced == 1
+    run = store.review_run(ingested_conn, first.run_id)
+    assert run is not None
+    persisted = json.loads(run["source_funnel_json"])
+    assert persisted["whatsapp"]["monitored_channels"] == 1
+    assert persisted["whatsapp"]["messages_checked"] == 3
 
     second = review_monitored_chats(ingested_conn, classifier)
     assert second.chats_with_delta == 0

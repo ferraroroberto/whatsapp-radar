@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS review_runs (
     transcriptions      INTEGER NOT NULL DEFAULT 0,      -- voice notes transcribed this run (#36)
     actionable          INTEGER NOT NULL DEFAULT 0,      -- chats with an actionable verdict
     notification_status TEXT,                            -- 'sent'|'failed'|'skipped'|'dry_run'|'none'
+    source_funnel_json  TEXT,                            -- truthful per-source counters/status
     error               TEXT
 );
 

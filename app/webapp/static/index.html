@@ -45,6 +45,10 @@
     <symbol id="i-message-circle" viewBox="0 0 24 24" fill="none">
       <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
     </symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none">
+      <rect width="20" height="16" x="2" y="4" rx="2" />
+      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+    </symbol>
     <symbol id="i-play" viewBox="0 0 24 24" fill="none">
       <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
     </symbol>
@@ -154,7 +158,7 @@
     <button id="tabChats" type="button" class="tab" data-tab="chats"
             role="tab" aria-selected="false" aria-controls="paneChats" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-message-circle"></use></svg>
-      <span class="tab-label">Chats</span>
+      <span class="tab-label">Messages</span>
     </button>
     <button id="tabExecution" type="button" class="tab" data-tab="execution"
             role="tab" aria-selected="false" aria-controls="paneExecution" tabindex="-1">
@@ -211,6 +215,10 @@
         </table>
         <p id="dashChannelsEmpty" class="muted small" hidden>No channels monitored yet.</p>
       </div>
+      <div class="card">
+        <div class="card-head"><h3 class="card-title">Sources</h3></div>
+        <div id="dashSources" class="source-summary-list"></div>
+      </div>
 
       <!-- Passkey enrollment: appears only while the tray's enrollment window is
            open (renderWebauthn) — the everyday UI carries no settings clutter. -->
@@ -232,7 +240,7 @@
         <div class="card-head">
           <h2 class="card-title">
             <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-            Chats
+            Messages
           </h2>
           <span class="card-actions">
             <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name"
@@ -240,18 +248,23 @@
           </span>
         </div>
         <div class="chats-toolbar">
-          <div id="chatsFilter" class="range-tabs" role="radiogroup" aria-label="Chat filter">
+          <div id="chatsFilter" class="range-tabs" role="radiogroup" aria-label="Message status filter">
             <button id="chatsFilterMonitored" type="button" class="range-tab active" data-filter="monitored">Monitored</button>
             <button id="chatsFilterIgnored" type="button" class="range-tab" data-filter="ignored">Ignored</button>
             <button id="chatsFilterAll" type="button" class="range-tab" data-filter="all">All</button>
           </div>
         </div>
-        <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search chats by name…" autocomplete="off" hidden>
+        <div id="chatsSourceFilter" class="range-tabs" role="radiogroup" aria-label="Message source filter">
+          <button id="chatsSourceAll" type="button" class="range-tab active" data-source="all">All sources</button>
+          <button id="chatsSourceWhatsapp" type="button" class="range-tab" data-source="whatsapp">WhatsApp</button>
+          <button id="chatsSourceGmail" type="button" class="range-tab" data-source="gmail">Gmail</button>
+        </div>
+        <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search messages by channel…" autocomplete="off" hidden>
         <p id="chatsCount" class="muted small"></p>
-        <ul id="chatsList" class="card-list" aria-label="Chats"></ul>
+        <ul id="chatsList" class="card-list" aria-label="Message channels"></ul>
         <div id="chatsEmpty" class="empty-state" hidden>
           <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-          <p class="empty-state-message">No chats to show.</p>
+          <p class="empty-state-message">No message channels match these filters.</p>
         </div>
       </section>
 
@@ -265,10 +278,16 @@
         </summary>
         <div class="collapse-body">
           <div class="opt-group">
-            <h3 class="opt-group-title">System prompt <span class="opt-tag">(read-only — edit the file)</span></h3>
+            <h3 class="opt-group-title">Shared Stage 2 system prompt <span class="opt-tag">src/analysis/prompts/classification_system.md</span></h3>
             <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
-            <h3 class="opt-group-title">Keyword roots <span class="opt-tag">(read-only — edit the file)</span></h3>
+            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Audit shows the exact system and user prompt for every LLM call.</p>
+            <h3 class="opt-group-title">WhatsApp Stage 1 roots <span class="opt-tag">src/analysis/prompts/keyword_roots.txt</span></h3>
             <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
+            <h3 class="opt-group-title">Gmail Stage 1 rules <span class="opt-tag">src/analysis/prompts/gmail_keyword_roots.txt</span></h3>
+            <pre id="cfgGmailRoots" class="codebox" aria-label="Gmail keyword rules"></pre>
+            <h3 class="opt-group-title">Gmail survey taxonomy <span class="opt-tag">reference for generating Stage-1 rules; not sent to Stage 2 · src/analysis/prompts/gmail_classification_taxonomy.md</span></h3>
+            <pre id="cfgGmailTaxonomy" class="codebox" aria-label="Gmail classification taxonomy"></pre>
+            <p id="cfgGmailSummary" class="source-config-summary"></p>
           </div>
 
           <div class="opt-group">
@@ -312,24 +331,6 @@
     </section>
 
     <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
-      <!-- Connection health, home-automation Net-tab "Internet" pattern:
-           icon + name left, muted stored-message count in the middle, a bold
-           Online/Offline status word pinned right. -->
-      <section id="execHealth" class="card exec-health" title="WhatsApp sidecar connection">
-        <span class="card-title exec-health-title">
-          <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-          <span id="execHealthLabel">WhatsApp</span>
-        </span>
-        <span id="execHealthDetail" class="exec-health-detail muted small">checking…</span>
-        <span id="execHealthStatus" class="exec-health-status">— no data</span>
-      </section>
-
-      <div id="execReconnect" class="exec-reconnect" hidden>
-        <p id="execReconnectMsg" class="muted small"></p>
-        <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-        <button id="execReconnectBtn" type="button" class="run-btn">Reconnect WhatsApp</button>
-      </div>
-
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">
@@ -424,6 +425,7 @@
             <p id="execViewerTitle" class="exec-viewer-kind"></p>
             <p id="execViewerMeta" class="muted small"></p>
             <div id="execFunnel" class="exec-funnel" aria-label="Funnel"></div>
+            <div id="execSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
             <div id="execPreview" class="exec-preview" hidden>
               <h4 class="opt-group-title">Telegram message</h4>
               <pre id="execPreviewText" class="codebox"></pre>
@@ -435,7 +437,26 @@
         </div>
       </details>
 
-      <details class="card card--collapsible">
+      <details id="execSourcesCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+            <h3 class="collapse-title">Sources health</h3>
+            <span id="execSourcesCount" class="collapse-count"></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
+          <div id="execReconnect" class="exec-reconnect" hidden>
+            <p id="execReconnectMsg" class="muted small"></p>
+            <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
+            <button id="execReconnectBtn" type="button" class="run-btn">Reconnect WhatsApp</button>
+          </div>
+        </div>
+      </details>
+
+      <details id="execMaintenanceCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
@@ -481,8 +502,9 @@
         </div>
         <p id="auditDetailMeta" class="muted small"></p>
         <div id="auditFunnel" class="exec-funnel" aria-label="Funnel"></div>
-        <div id="auditTraces" class="audit-traces" aria-label="Per-chat trace"></div>
-        <p id="auditTracesEmpty" class="muted small" hidden>No per-chat trace recorded for this run.</p>
+        <div id="auditSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
+        <div id="auditTraces" class="audit-traces" aria-label="Per-channel trace"></div>
+        <p id="auditTracesEmpty" class="muted small" hidden>No per-channel trace recorded for this run.</p>
       </section>
     </section>
 
@@ -499,7 +521,8 @@
     <div class="detail-card history-card" aria-labelledby="historyTitle">
       <div class="detail-header">
         <h2 id="historyTitle"></h2>
-        <button id="historyRename" type="button" class="detail-close" aria-label="Rename chat"
+        <span id="historySource" class="source-badge"></span>
+        <button id="historyRename" type="button" class="detail-close" aria-label="Rename channel"
                 title="Rename — set an alias"><svg class="icon" aria-hidden="true"><use href="#i-pencil"></use></svg></button>
         <button id="historyLink" type="button" class="detail-close" aria-label="Manage links"
                 title="Link — merge another chat onto this person"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg></button>
@@ -508,7 +531,7 @@
       </div>
       <div id="historyLinkPanel" class="link-panel" hidden></div>
       <div id="historyBody" class="history-body"></div>
-      <p id="historyEmpty" class="muted small" hidden>No messages stored for this chat.</p>
+      <p id="historyEmpty" class="muted small" hidden>No messages stored for this channel.</p>
     </div>
   </dialog>
 

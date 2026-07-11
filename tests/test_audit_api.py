@@ -63,6 +63,21 @@ def _seed(conn: sqlite3.Connection) -> int:
         stage2_llm_calls=1,
         actionable=1,
         notification_status="sent",
+        source_funnel_json=json.dumps(
+            {
+                "gmail": {
+                    "sync_status": "success",
+                    "messages_synced": 2,
+                    "monitored_channels": 1,
+                    "messages_checked": 2,
+                    "stage1_passed": 1,
+                    "stage1_rejected": 0,
+                    "llm_calls": 1,
+                    "actionable": 1,
+                    "cursors_advanced": 1,
+                }
+            }
+        ),
     )
     store.finish_run(conn, run_id, "completed", chats_reviewed=2)
 
@@ -172,6 +187,7 @@ def test_audit_runs_list_shape(tmp_path: Path) -> None:
     assert run["funnel"]["stage1_passed"] == 1
     assert run["funnel"]["actionable"] == 1
     assert run["notification_status"] == "sent"
+    assert run["sources"]["gmail"]["llm_calls"] == 1
 
     # The resync maintenance marker is surfaced; scan-sourced syncs would not be.
     assert len(body["syncs"]) == 1

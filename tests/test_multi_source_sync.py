@@ -177,6 +177,16 @@ def test_scan_consolidates_two_sources_into_one_delivery(
     assert outcome.actionable == 2
     assert outcome.digest is not None and len(outcome.digest.items) == 2
     assert len(calls) == 1
+    payload = scan_outcome_to_dict(outcome)
+    assert set(payload["sources"]) == {"whatsapp", "gmail"}
+    assert payload["sources"]["gmail"]["sync_status"] == "success"
+    assert payload["sources"]["gmail"]["messages_checked"] == 1
+    assert payload["sources"]["gmail"]["llm_calls"] == 1
+    assert payload["sources"]["gmail"]["cursors_advanced"] == 1
+    persisted = conn.execute(
+        "SELECT source_funnel_json FROM review_runs WHERE id = ?", (outcome.run_id,)
+    ).fetchone()
+    assert json.loads(persisted["source_funnel_json"])["gmail"]["actionable"] == 1
 
 
 def test_failed_source_is_logged_and_its_cursor_does_not_advance(
@@ -217,7 +227,10 @@ def test_failed_source_is_logged_and_its_cursor_does_not_advance(
     )
 
     assert outcome.source_errors and outcome.source_errors[0][0] == "gmail"
-    assert scan_outcome_to_dict(outcome)["ok"] is False
+    payload = scan_outcome_to_dict(outcome)
+    assert payload["ok"] is False
+    assert payload["sources"]["gmail"]["sync_status"] == "failed"
+    assert payload["sources"]["gmail"]["cursors_advanced"] == 0
     assert conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?",
         (gmail_id,),

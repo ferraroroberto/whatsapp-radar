@@ -20,6 +20,9 @@ def test_execution_dry_run_shows_funnel(
     page.goto(base_url)
     page.locator("#tabExecution").click()
     expect(page.locator("#paneExecution")).to_be_visible()
+    sources_card = page.locator("#execSourcesCard")
+    expect(sources_card).to_be_visible()
+    expect(page.locator("#execSourcesCard + #execMaintenanceCard")).to_be_visible()
 
     # Pick dry-run, then run the whole pipeline.
     page.locator("#execModeDry").click()
@@ -36,6 +39,8 @@ def test_execution_dry_run_shows_funnel(
 
     # Funnel strip rendered, and the live output captured the dry-run banner.
     expect(page.locator("#execFunnel")).to_contain_text("Notify")
+    expect(page.locator("#execSourceFunnel")).to_contain_text("WhatsApp")
+    expect(page.locator("#execSourceFunnel")).to_contain_text("Gmail")
     expect(page.locator("#execOutput")).to_contain_text("dry_run")
 
     # The run shows up in the recent-runs list too.
@@ -51,6 +56,35 @@ def test_execution_offline_shows_reconnect(
     Asserts the offline affordance *renders* — it never clicks Reconnect, so no
     Node process is ever spawned from the test.
     """
+    page.route(
+        "**/api/execution/health",
+        lambda route: route.fulfill(
+            json={
+                "name": "multi-source",
+                "connected": False,
+                "detail": "sanitized e2e status",
+                "sources": [
+                    {
+                        "source": "whatsapp", "name": "fixture", "enabled": True,
+                        "configured": True, "authorized": True, "connected": True,
+                        "detail": "fixture", "stored_channels": 2, "stored_messages": 4,
+                        "monitored_channels": 1, "latest_stored_at": None,
+                        "last_attempt": None, "last_success": None,
+                    },
+                    {
+                        "source": "gmail", "name": "gmail", "enabled": True,
+                        "configured": True, "authorized": True, "connected": True,
+                        "detail": "sanitized", "stored_channels": 1, "stored_messages": 1,
+                        "monitored_channels": 1, "latest_stored_at": None,
+                        "last_attempt": None, "last_success": None, "read_only": True,
+                        "account": "f***@example.test", "token_present": True,
+                        "whitelist": {"senders": [], "labels": []},
+                        "whitelist_valid": True, "history_scope": "Sanitized test scope.",
+                    },
+                ],
+            }
+        ),
+    )
     page.goto(base_url)
     page.locator("#tabExecution").click()
     expect(page.locator("#paneExecution")).to_be_visible()
@@ -59,4 +93,7 @@ def test_execution_offline_shows_reconnect(
     # "Offline" status word and a visible Reconnect button.
     expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
     expect(page.locator("#execReconnectBtn")).to_be_visible()
-    expect(page.locator("#execHealthStatus")).to_have_text("Offline")
+    whatsapp = page.locator(".source-status-card", has_text="WhatsApp")
+    expect(whatsapp).to_be_visible()
+    expect(whatsapp.locator(".source-status-state")).to_have_text("Not connected")
+    expect(page.locator("#execSources use[href='#i-mail']")).to_have_count(1)

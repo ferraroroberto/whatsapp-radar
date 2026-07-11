@@ -62,3 +62,6 @@ class StoredMessage:
     # once transcribed/skipped or when the download never succeeded. Distinguishes a
     # recoverable not-yet-transcribed note (audio on disk) from an unrecoverable one.
     media_path: str | None = None
+    # Connector payload retained locally. The web API exposes only an explicit,
+    # source-safe subset (for Gmail: subject + thread id), never this mapping.
+    raw: dict[str, Any] = field(default_factory=dict)

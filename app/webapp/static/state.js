@@ -23,6 +23,7 @@ export const state = {
   // Chats & Config (#10)
   chats: [],
   chatsFilter: 'monitored',  // 'monitored' | 'all'
+  chatsSourceFilter: 'all',  // 'all' | 'whatsapp' | 'gmail'
   chatsSearch: '',
   config: null,
   // Execution (#11)
@@ -38,6 +39,8 @@ export const state = {
     sidecar: null,         // last /api/sidecar/status snapshot (connection health)
     syncs: [],             // recent sync_log rows (per-sync ingest deltas)
     syncTotals: null,      // {chats, messages} current stored totals
+    sourceHealth: [],      // secret-free per-source status snapshots
+    sourceHealthAt: 0,
   },
   // Audit (#12): per-run trace drill-down (read-only).
   audit: {
@@ -69,11 +72,15 @@ export const els = {
   lastRunSummary: document.getElementById('lastRunSummary'),
   dashChannelsBody: document.getElementById('dashChannelsBody'),
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
+  dashSources: document.getElementById('dashSources'),
 
   // Chats (#10)
   chatsFilterMonitored: document.getElementById('chatsFilterMonitored'),
   chatsFilterIgnored: document.getElementById('chatsFilterIgnored'),
   chatsFilterAll: document.getElementById('chatsFilterAll'),
+  chatsSourceAll: document.getElementById('chatsSourceAll'),
+  chatsSourceWhatsapp: document.getElementById('chatsSourceWhatsapp'),
+  chatsSourceGmail: document.getElementById('chatsSourceGmail'),
   chatsSearchToggle: document.getElementById('chatsSearchToggle'),
   chatsSearch: document.getElementById('chatsSearch'),
   chatsCount: document.getElementById('chatsCount'),
@@ -83,6 +90,7 @@ export const els = {
   // History overlay (#10)
   historyOverlay: document.getElementById('historyOverlay'),
   historyTitle: document.getElementById('historyTitle'),
+  historySource: document.getElementById('historySource'),
   historyRename: document.getElementById('historyRename'),
   historyLink: document.getElementById('historyLink'),
   historyLinkPanel: document.getElementById('historyLinkPanel'),
@@ -103,6 +111,9 @@ export const els = {
   configCard: document.getElementById('configCard'),
   cfgPrompt: document.getElementById('cfgPrompt'),
   cfgRoots: document.getElementById('cfgRoots'),
+  cfgGmailRoots: document.getElementById('cfgGmailRoots'),
+  cfgGmailTaxonomy: document.getElementById('cfgGmailTaxonomy'),
+  cfgGmailSummary: document.getElementById('cfgGmailSummary'),
   configForm: document.getElementById('configForm'),
   cfgConnector: document.getElementById('cfgConnector'),
   cfgSourceWhatsapp: document.getElementById('cfgSourceWhatsapp'),
@@ -132,9 +143,9 @@ export const els = {
   execRunScan: document.getElementById('execRunScan'),
   execBusy: document.getElementById('execBusy'),
   execReprocess: document.getElementById('execReprocess'),
-  execHealthStatus: document.getElementById('execHealthStatus'),
-  execHealthLabel: document.getElementById('execHealthLabel'),
-  execHealthDetail: document.getElementById('execHealthDetail'),
+  execSourcesCard: document.getElementById('execSourcesCard'),
+  execSources: document.getElementById('execSources'),
+  execSourcesCount: document.getElementById('execSourcesCount'),
   execReconnect: document.getElementById('execReconnect'),
   execReconnectMsg: document.getElementById('execReconnectMsg'),
   execReconnectBtn: document.getElementById('execReconnectBtn'),
@@ -150,6 +161,7 @@ export const els = {
   execViewerEmpty: document.getElementById('execViewerEmpty'),
   execKill: document.getElementById('execKill'),
   execFunnel: document.getElementById('execFunnel'),
+  execSourceFunnel: document.getElementById('execSourceFunnel'),
   execPreview: document.getElementById('execPreview'),
   execPreviewText: document.getElementById('execPreviewText'),
   execOutput: document.getElementById('execOutput'),
@@ -164,6 +176,7 @@ export const els = {
   auditDetailClose: document.getElementById('auditDetailClose'),
   auditDetailMeta: document.getElementById('auditDetailMeta'),
   auditFunnel: document.getElementById('auditFunnel'),
+  auditSourceFunnel: document.getElementById('auditSourceFunnel'),
   auditTraces: document.getElementById('auditTraces'),
   auditTracesEmpty: document.getElementById('auditTracesEmpty'),
 

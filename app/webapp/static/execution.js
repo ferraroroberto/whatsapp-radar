@@ -9,7 +9,7 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, renderFunnelCells } from './format.js';
+import { fmtLocalDateTime, renderFunnelCells, renderSourceFunnels } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
@@ -147,14 +147,6 @@ async function killSelected() {
 // source is down, the card below grows a one-tap relaunch and — if a fresh QR
 // is needed — the pairing image, so the connection can be recovered from a
 // phone without a terminal (#29). Refreshed with the poll.
-const STATUS_META = {
-  running: { word: 'Online', cls: 'is-online' },
-  connecting: { word: 'Connecting', cls: 'is-warn' },
-  stale: { word: 'Offline', cls: 'is-offline' },
-  needs_qr: { word: 'Needs QR', cls: 'is-warn' },
-  stopped: { word: 'Offline', cls: 'is-offline' },
-};
-
 // Re-stamp the QR src at most every 20s (the pairing code rotates ~that often)
 // so the <img> doesn't flicker on every 1.5s poll.
 function qrSrc() {
@@ -162,12 +154,6 @@ function qrSrc() {
 }
 
 function fmtCount(n) { return (n === undefined || n === null) ? '–' : Number(n).toLocaleString(); }
-
-function fmtClock(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
 
 function fmtSyncWhen(iso) {
   if (!iso) return '';
@@ -180,19 +166,92 @@ function fmtSyncWhen(iso) {
 // When the source is live, show what's actually *stored* and the last sync delta
 // (truthful) instead of the sidecar's session counters, which reset on reconnect
 // and misread as "empty" (#31). Abbreviated ("msg") so the line never wraps.
-function healthDetail(s) {
-  const ex = execState();
-  if (s.is_live && ex.syncTotals) {
-    const last = ex.syncs && ex.syncs[0];
-    const lastBit = last ? ` · sync ${fmtClock(last.ran_at)} +${last.messages_added}` : '';
-    return `${fmtCount(ex.syncTotals.messages)} msg${lastBit}`;
-  }
-  return s.detail || s.state;
+function addStatusLine(list, label, value) {
+  const li = document.createElement('li');
+  li.textContent = label + ': ' + (value || '—');
+  list.appendChild(li);
 }
 
-function refreshHealthDetail() {
-  const s = execState().sidecar;
-  if (s) els.execHealthDetail.textContent = healthDetail(s);
+function sourceIcon(source) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', source === 'gmail' ? '#i-mail' : '#i-message-circle');
+  svg.appendChild(use);
+  return svg;
+}
+
+function renderSourceHealth() {
+  const ex = execState();
+  els.execSources.textContent = '';
+  els.execSourcesCount.textContent = ex.sourceHealth.length
+    ? ex.sourceHealth.length + ' sources'
+    : '';
+  if (!ex.sourceHealth.length) {
+    const unavailable = document.createElement('section');
+    unavailable.className = 'source-status-card muted small';
+    unavailable.textContent = 'Source status unavailable.';
+    els.execSources.appendChild(unavailable);
+    return;
+  }
+  for (const source of ex.sourceHealth) {
+    const sidecar = source.source === 'whatsapp' ? ex.sidecar : null;
+    const connected = sidecar ? !!sidecar.is_live : !!source.connected;
+    const card = document.createElement('section');
+    card.className = 'source-status-card';
+    const head = document.createElement('div');
+    head.className = 'source-status-head';
+    const badge = document.createElement('span');
+    badge.className = 'source-badge source-' + source.source;
+    badge.textContent = source.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    badge.prepend(sourceIcon(source.source));
+    const stateWord = document.createElement('span');
+    stateWord.className = 'source-status-state ' + (connected ? 'is-online' : 'is-offline');
+    stateWord.textContent = connected ? 'Connected' : 'Not connected';
+    head.append(badge, stateWord);
+    const details = document.createElement('ul');
+    details.className = 'source-status-details';
+    addStatusLine(details, 'State',
+      (source.configured ? 'configured' : 'not configured') + ' · ' +
+      (source.enabled ? 'enabled' : 'disabled') + ' · ' +
+      (source.authorized ? 'authorized' : 'not authorized'));
+    if (source.source === 'gmail') {
+      addStatusLine(details, 'Mode', 'read-only Gmail API');
+      addStatusLine(details, 'Authorization',
+        (source.token_present ? 'token present' : 'token missing') + ' · ' +
+        (source.whitelist_valid ? 'whitelist validated' : 'whitelist not validated'));
+      addStatusLine(details, 'Account', source.account || 'authorization unavailable');
+      const whitelist = source.whitelist || {};
+      const senders = (whitelist.senders || []).map(function (x) { return x.address; });
+      const labels = (whitelist.labels || []).map(function (x) { return x.name; });
+      addStatusLine(details, 'Whitelist', senders.concat(labels).join(' · ') || 'empty');
+      addStatusLine(details, 'Scope', source.history_scope);
+    } else {
+      addStatusLine(details, 'Mode', 'linked-device read-only application behavior');
+      addStatusLine(details, 'Connection', sidecar ? (sidecar.detail || sidecar.state) : source.detail);
+    }
+    const liveTotals = ((ex.syncTotals || {}).by_source || {})[source.source] || {};
+    const storedMessages = liveTotals.messages ?? source.stored_messages;
+    const storedChannels = liveTotals.channels ?? source.stored_channels;
+    const monitoredChannels = liveTotals.monitored ?? source.monitored_channels;
+    const latestStored = liveTotals.latest_message_at || source.latest_stored_at;
+    addStatusLine(details, 'Stored', fmtCount(storedMessages) + ' messages in ' + fmtCount(storedChannels) + ' channels');
+    addStatusLine(details, 'Monitored', fmtCount(monitoredChannels) + ' channels');
+    addStatusLine(details, 'Latest stored', fmtSyncWhen(latestStored));
+    const sourceSyncs = ex.syncs.filter(function (row) { return row.connector_source === source.source; });
+    const attempt = sourceSyncs[0] || source.last_attempt;
+    addStatusLine(details, 'Last checked', attempt
+      ? fmtSyncWhen(attempt.ran_at) + ' · ' + attempt.status + ' · +' + attempt.messages_added
+      : 'never');
+    const success = sourceSyncs.find(function (row) { return row.status === 'success'; }) || source.last_success;
+    addStatusLine(details, 'Last successful sync', success ? fmtSyncWhen(success.ran_at) : 'never');
+    if (!storedMessages) addStatusLine(details, 'Ingestion', 'no matching messages stored');
+    if (!monitoredChannels) addStatusLine(details, 'Analysis', 'nothing monitored; messages will not reach Stage 1');
+    if (!connected && source.detail) addStatusLine(details, 'Action needed', source.detail);
+    card.append(head, details);
+    els.execSources.appendChild(card);
+  }
 }
 
 export async function fetchHealth() {
@@ -203,10 +262,15 @@ export async function fetchHealth() {
     return;
   }
   execState().sidecar = s;
-  const m = STATUS_META[s.state] || { word: '— no data', cls: '' };
-  els.execHealthStatus.textContent = m.word;
-  els.execHealthStatus.className = ('exec-health-status ' + m.cls).trim();
-  refreshHealthDetail();
+  const ex = execState();
+  if (!ex.sourceHealthAt || Date.now() - ex.sourceHealthAt > 60000) {
+    try {
+      const health = await jsonApi('/api/execution/health');
+      ex.sourceHealth = health.sources || [];
+      ex.sourceHealthAt = Date.now();
+    } catch (_) { /* retain the last truthful snapshot */ }
+  }
+  renderSourceHealth();
   renderReconnect(s);
 }
 
@@ -223,7 +287,7 @@ export async function fetchSyncs() {
   ex.syncs = data.syncs || [];
   ex.syncTotals = data.totals || null;
   renderSyncs();
-  refreshHealthDetail();
+  renderSourceHealth();
 }
 
 function syncRow(s) {
@@ -238,7 +302,8 @@ function syncRow(s) {
   delta.textContent = `+${s.messages_added} msg${s.messages_added === 1 ? '' : 's'}${chatBit}`;
   const src = document.createElement('span');
   src.className = 'exec-sync-src muted small';
-  src.textContent = kindLabel(s.source);
+  const source = s.connector_source === 'gmail' ? 'Gmail' : 'WhatsApp';
+  src.textContent = source + ' · ' + kindLabel(s.source);
   li.append(when, delta, src);
   return li;
 }
@@ -260,6 +325,7 @@ function renderReconnect(s) {
     return;
   }
   els.execReconnect.hidden = false;
+  els.execSourcesCard.open = true;
   if (s.state === 'needs_qr') {
     els.execReconnectMsg.textContent =
       'Open WhatsApp → Linked devices → Link a device, then scan this code.';
@@ -491,6 +557,7 @@ function renderViewer(run) {
   els.execKill.hidden = !live;
 
   renderFunnel(run);
+  renderSourceFunnels(els.execSourceFunnel, (run.result && run.result.sources) || {});
 
   const tg = run.result && run.result.telegram_text;
   els.execPreview.hidden = !tg;

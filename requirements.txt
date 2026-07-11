@@ -11,6 +11,12 @@ anthropic>=0.40
 # offline detector; seeded for deterministic results.
 langdetect>=1.0.9
 
+# Read-only Gmail connector (#59): installed-app OAuth token bootstrap/refresh
+# plus the official Gmail API client. Runtime scope is gmail.readonly only.
+google-api-python-client>=2.100
+google-auth-httplib2>=0.2
+google-auth-oauthlib>=1.2
+
 # --- Admin webapp (Step 3 / issue #8) ---------------------------------------
 # FastAPI + uvicorn serve the phone-first PWA; same stack as App Launcher.
 fastapi>=0.110

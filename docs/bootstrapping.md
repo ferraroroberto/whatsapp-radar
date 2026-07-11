@@ -1,5 +1,7 @@
 # Bootstrapping — Stand WhatsApp Radar Up From Zero
 
+> This guide covers WhatsApp, Telegram, the PWA, and App Launcher. For the optional read-only Gmail source, complete [`gmail-bootstrap.md`](gmail-bootstrap.md) after this base setup.
+
 This is the complete cold-start runbook: take a fresh clone (or a brand-new machine) and bring the whole system online — a new WhatsApp linked device, a new Telegram bot, the admin PWA with phone access, and the App Launcher wiring. Follow it top to bottom and you end with a running radar delivering actionable digests to Telegram.
 
 > **Privacy first.** Everything you pair, ingest, and store stays on this machine under ignored paths (`auth/`, `data/`, `config/webapp_config.json`). Never commit credentials, session state, chat names, phone numbers, or message exports. Run `git status --ignored` before any commit. The full rules live in [`CLAUDE.md`](../CLAUDE.md).

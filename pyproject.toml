@@ -42,5 +42,8 @@ module = [
     "requests.*",
     "urllib3.*",
     "langdetect.*",
+    "google.*",
+    "google_auth_oauthlib.*",
+    "googleapiclient.*",
 ]
 ignore_missing_imports = true

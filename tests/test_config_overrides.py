@@ -80,3 +80,35 @@ def test_empty_sources_fall_back_to_whatsapp(
     (root / "config" / "default.json").write_text("{}", encoding="utf-8")
     monkeypatch.setenv("WR_SOURCES", " , ")
     assert config.load_config(root=root).sources == ("whatsapp",)
+
+
+def test_loads_named_gmail_whitelist_and_resolves_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("WR_GMAIL_CREDENTIALS_PATH", raising=False)
+    monkeypatch.delenv("WR_GMAIL_TOKEN_PATH", raising=False)
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text(
+        json.dumps(
+            {
+                "gmail": {
+                    "credentials_path": "auth/gmail/client.json",
+                    "token_path": "auth/gmail/token.json",
+                    "senders": [
+                        {"address": "SCHOOL@EXAMPLE.COM", "name": "School"}
+                    ],
+                    "labels": [
+                        {"name": "Family/Activities", "display_name": "Activities"}
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = config.load_config(root=root).gmail
+
+    assert loaded.credentials_path == root / "auth/gmail/client.json"
+    assert loaded.token_path == root / "auth/gmail/token.json"
+    assert loaded.senders[0] == config.GmailSender("school@example.com", "School")
+    assert loaded.labels[0] == config.GmailLabel("Family/Activities", "Activities")

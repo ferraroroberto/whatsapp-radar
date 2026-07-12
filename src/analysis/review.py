@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.analysis.classifier import Classifier
-from src.analysis.contract import ContractError, parse_analysis
+from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import has_actionable_signal
 from src.analysis.source_funnel import (
     SourceFunnel,
@@ -116,6 +116,46 @@ def advance_family_cursors(
         store.advance_cursor(conn, cid, last.id, last.message_timestamp, rolling)
 
 
+def hold_back_if_transcribing(
+    delta: list[StoredMessage], transcription_enabled: bool
+) -> list[StoredMessage]:
+    """Apply the untranscribed-voice-note hold-back gate (#36/#132) when enabled.
+
+    Shared by ``scan``'s live loop and ``review_monitored_chats`` so the gate
+    can only be added/changed in one place (issue #129).
+    """
+    return hold_back_untranscribed(delta) if transcription_enabled else delta
+
+
+def note_delta_funnel(
+    source_funnels: dict[str, SourceFunnel], source: str, delta_len: int
+) -> SourceFunnel:
+    """Record a chat's delta on its source funnel; shared by scan and review."""
+    source_funnel = ensure_source_funnel(source_funnels, source)
+    source_funnel.channels_with_delta += 1
+    source_funnel.messages_checked += delta_len
+    return source_funnel
+
+
+def persist_analysis_result(
+    conn: sqlite3.Connection, run_id: int, chat_id: int, result: AnalysisResult
+) -> None:
+    """Insert a parsed :class:`AnalysisResult`; shared by scan and review."""
+    store.insert_analysis_item(
+        conn,
+        run_id,
+        chat_id,
+        action_required=result.action_required,
+        priority=result.priority,
+        summary=result.summary,
+        suggested_next_action=result.suggested_next_action,
+        deadline=result.deadline,
+        deadline_date=result.deadline_date,
+        confidence=result.confidence,
+        evidence_message_ids_json=json.dumps(result.evidence_message_ids),
+    )
+
+
 def review_monitored_chats(
     conn: sqlite3.Connection,
     classifier: Classifier,
@@ -151,15 +191,14 @@ def review_monitored_chats(
         chat_id = int(chat["id"])
         source = str(chat["source"])
         delta = store.family_delta_since_cursor(conn, chat_id)
-        if config is not None and config.transcription.enabled:
-            delta = hold_back_untranscribed(delta)
+        delta = hold_back_if_transcribing(
+            delta, config is not None and config.transcription.enabled
+        )
         if not delta:
             continue
 
         outcome.chats_with_delta += 1
-        source_funnel = ensure_source_funnel(outcome.source_funnels, source)
-        source_funnel.channels_with_delta += 1
-        source_funnel.messages_checked += len(delta)
+        source_funnel = note_delta_funnel(outcome.source_funnels, source, len(delta))
         signal = (
             has_actionable_signal(delta, source)
             if config is not None and config.classifier == "cascade"
@@ -189,19 +228,7 @@ def review_monitored_chats(
             outcome.errors.append((chat_id, str(exc)))
             continue
 
-        store.insert_analysis_item(
-            conn,
-            run_id,
-            chat_id,
-            action_required=result.action_required,
-            priority=result.priority,
-            summary=result.summary,
-            suggested_next_action=result.suggested_next_action,
-            deadline=result.deadline,
-            deadline_date=result.deadline_date,
-            confidence=result.confidence,
-            evidence_message_ids_json=json.dumps(result.evidence_message_ids),
-        )
+        persist_analysis_result(conn, run_id, chat_id, result)
 
         outcome.messages_processed += len(delta)
         if result.action_required:

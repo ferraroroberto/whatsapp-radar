@@ -315,6 +315,97 @@ def test_failure_isolated_keeps_audio_and_holds_cursor(
     assert out2.actionable == 1
 
 
+# --- whole-backend outage short-circuits the batch (#99) -------------------
+
+
+def test_backend_down_short_circuits_batch_and_leaves_notes_pending(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # Three pending notes, all in different chats. A backend-down error on the
+    # first one must stop the batch immediately — the other two are never even
+    # sent to the transcriber, and none of the three flip to 'failed'.
+    cfg = _config(tmp_path)
+    buffer_dir = cfg.linked_device_dir
+    notes = []
+    for i in range(3):
+        chat_id = store.upsert_chat(
+            conn, ChatRecord(source_chat_id=f"c-outage-{i}", display_name="Class 4A")
+        )
+        store.set_chat_status(conn, chat_id, "monitored")
+        audio = _voice_note(
+            conn, chat_id, msg_id=f"n{i}", buffer_dir=buffer_dir,
+            when=datetime.now(UTC) - timedelta(seconds=3 - i),
+        )
+        notes.append((chat_id, f"n{i}", audio))
+
+    calls: list[Path] = []
+
+    def _backend_down(path: Path, _language: str | None) -> str:
+        calls.append(path)
+        raise tr.TranscriptionBackendDown("could not reach http://hub: connection refused")
+
+    outcome = run_transcription_phase(conn, cfg, transcriber=_backend_down)
+
+    assert len(calls) == 1  # only the first note was ever attempted
+    assert (outcome.done, outcome.failed, outcome.backend_down) == (0, 0, True)
+    for _chat_id, msg_id, audio in notes:
+        row = conn.execute(
+            "SELECT transcription_status, media_path FROM messages WHERE source_message_id = ?",
+            (msg_id,),
+        ).fetchone()
+        assert row["transcription_status"] == "pending"  # untouched, not flipped to failed
+        assert row["media_path"] is not None and audio.exists()
+
+
+def test_transcribe_file_raises_backend_down_on_connection_failure(tmp_path: Path) -> None:
+    wav = tmp_path / "note.wav"
+    wav.write_bytes(b"RIFF")
+
+    class _UnreachableSession:
+        def post(self, *_a: object, **_kw: object) -> object:
+            import requests
+
+            raise requests.ConnectionError("all connection attempts failed")
+
+    with pytest.raises(tr.TranscriptionBackendDown):
+        transcribe_file(wav, base_url="http://hub:8000", model="m", session=_UnreachableSession())  # type: ignore[arg-type]
+
+
+def test_transcribe_file_raises_backend_down_on_gateway_error(tmp_path: Path) -> None:
+    wav = tmp_path / "note.wav"
+    wav.write_bytes(b"RIFF")
+
+    class _GatewayErrorResp:
+        status_code = 502
+        text = '{"detail":"whisper upstream error: All connection attempts failed"}'
+
+    class _GatewaySession:
+        def post(self, *_a: object, **_kw: object) -> object:
+            return _GatewayErrorResp()
+
+    with pytest.raises(tr.TranscriptionBackendDown):
+        transcribe_file(wav, base_url="http://hub:8000", model="m", session=_GatewaySession())  # type: ignore[arg-type]
+
+
+def test_transcribe_file_still_isolates_per_file_400(tmp_path: Path) -> None:
+    # A genuine per-file error (e.g. bad audio) is NOT a backend outage — stays a
+    # plain TranscriptionError so the caller keeps isolating it per note.
+    wav = tmp_path / "note.wav"
+    wav.write_bytes(b"RIFF")
+
+    class _BadRequestResp:
+        status_code = 400
+        text = '{"detail":"could not decode audio"}'
+
+    class _BadRequestSession:
+        def post(self, *_a: object, **_kw: object) -> object:
+            return _BadRequestResp()
+
+    with pytest.raises(TranscriptionError) as exc_info:
+        transcribe_file(wav, base_url="http://hub:8000", model="m", session=_BadRequestSession())  # type: ignore[arg-type]
+    assert not isinstance(exc_info.value, tr.TranscriptionBackendDown)
+
+
 # --- review_monitored_chats gate (#132) ------------------------------------
 #
 # `wr review` (review_monitored_chats) must hold back an untranscribed voice

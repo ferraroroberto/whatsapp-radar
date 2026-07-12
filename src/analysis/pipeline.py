@@ -36,14 +36,20 @@ from src.analysis.classifier import (
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
-from src.analysis.review import advance_family_cursors, recent_alert_context
+from src.analysis.review import (
+    advance_family_cursors,
+    hold_back_if_transcribing,
+    note_delta_funnel,
+    persist_analysis_result,
+    recent_alert_context,
+)
 from src.analysis.source_funnel import (
     SourceFunnel,
     ensure_source_funnel,
     source_funnels_dict,
     source_funnels_json,
 )
-from src.analysis.transcription import hold_back_untranscribed, run_transcription_phase
+from src.analysis.transcription import run_transcription_phase
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding, build_connectors
@@ -342,16 +348,15 @@ def scan(
         # Hold the live delta before any voice note still awaiting transcription so
         # it is never analysed as a placeholder and the cursor never skips it (#36).
         # Gated on the feature flag: disabled → voice notes are ordinary messages.
-        if mode == "live" and config.transcription.enabled:
-            delta = hold_back_untranscribed(delta)
+        delta = hold_back_if_transcribing(
+            delta, mode == "live" and config.transcription.enabled
+        )
         if not delta:
             continue
         outcome.chats_with_delta += 1
 
         source = str(chat["source"])
-        source_funnel = ensure_source_funnel(outcome.source_funnels, source)
-        source_funnel.channels_with_delta += 1
-        source_funnel.messages_checked += len(delta)
+        source_funnel = note_delta_funnel(outcome.source_funnels, source, len(delta))
         signal = has_actionable_signal(delta, source)
         if not signal.matched:
             source_funnel.stage1_rejected += 1
@@ -423,19 +428,7 @@ def scan(
             )
             continue
 
-        store.insert_analysis_item(
-            conn,
-            run_id,
-            chat_id,
-            action_required=result.action_required,
-            priority=result.priority,
-            summary=result.summary,
-            suggested_next_action=result.suggested_next_action,
-            deadline=result.deadline,
-            deadline_date=result.deadline_date,
-            confidence=result.confidence,
-            evidence_message_ids_json=json.dumps(result.evidence_message_ids),
-        )
+        persist_analysis_result(conn, run_id, chat_id, result)
 
         telegram_text: str | None = None
         final_action = "not_actionable"

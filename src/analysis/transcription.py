@@ -71,6 +71,18 @@ class TranscriptionError(Exception):
     """Raised when the hub's audio endpoint is unreachable or returns an error."""
 
 
+class TranscriptionBackendDown(TranscriptionError):
+    """Raised when the whole whisper backend is unreachable, not just one file.
+
+    A transport-level failure (connection refused/timeout to the hub) or a
+    502/503/504 gateway error means every *other* pending note will fail for the
+    identical reason — as opposed to a per-file error (e.g. a genuinely corrupt
+    recording), which stays a plain :class:`TranscriptionError` and is isolated
+    as before. The batch loop in :func:`run_transcription_phase` short-circuits
+    on this subtype instead of grinding through the rest of the batch (#99).
+    """
+
+
 @dataclass
 class TranscriptionOutcome:
     """What one transcription phase did, surfaced in the run summary/funnel."""
@@ -79,6 +91,7 @@ class TranscriptionOutcome:
     failed: int = 0
     skipped_old: int = 0
     swept: int = 0  # retained audio files deleted past the retention window (#86)
+    backend_down: bool = False  # batch short-circuited on a whole-backend outage (#99)
 
 
 def _flatten(text: str) -> str:
@@ -176,7 +189,14 @@ def transcribe_file(
             url, data=data, files={"file": (filename, wav_bytes, "audio/wav")}, timeout=timeout
         )
     except requests.RequestException as exc:
-        raise TranscriptionError(f"could not reach {url}: {exc}") from exc
+        # Can't reach the hub at all — every other pending note will fail identically.
+        raise TranscriptionBackendDown(f"could not reach {url}: {exc}") from exc
+    if response.status_code in (502, 503, 504):
+        # Gateway-level failure (e.g. the hub's whisper proxy can't reach whisper-server) —
+        # a whole-backend outage, not a defect in this particular file.
+        raise TranscriptionBackendDown(
+            f"hub returned {response.status_code}: {response.text[:500]}"
+        )
     if response.status_code != 200:
         raise TranscriptionError(f"hub returned {response.status_code}: {response.text[:500]}")
     try:
@@ -318,7 +338,7 @@ def run_transcription_phase(
 
     transcribe = transcriber if transcriber is not None else _build_transcriber(cfg)
     lang_cache: dict[int, str | None] = {}
-    for row in pending:
+    for idx, row in enumerate(pending):
         msg_id = int(row["id"])
         audio = buffer_dir / row["media_path"]
         if not audio.exists():
@@ -331,6 +351,20 @@ def run_transcription_phase(
         language = _resolve_language(conn, cfg, int(row["chat_id"]), lang_cache)
         try:
             transcript = transcribe(audio, language)
+        except TranscriptionBackendDown as exc:
+            # The whole backend is down — every remaining note would fail identically.
+            # Stop now, one clear line, and leave them exactly as they are (still
+            # 'pending'/'failed') so the next scan retries them; don't churn N doomed
+            # POSTs or log N copies of the same error (#99).
+            remaining = len(pending) - idx
+            logger.warning("⚠️ transcription backend unreachable, aborting batch: %s", exc)
+            outcome.backend_down = True
+            _emit(
+                progress,
+                f"• transcription: whisper backend unreachable — skipping {remaining} "
+                f"pending note(s), will retry next scan ({exc})",
+            )
+            break
         except Exception as exc:  # noqa: BLE001 — isolate: one failure can't block the rest
             logger.warning("⚠️ voice note %s transcription failed: %s", msg_id, exc)
             store.mark_transcription(conn, msg_id, status="failed")
@@ -344,10 +378,11 @@ def run_transcription_phase(
             _delete_audio(buffer_dir, row["media_path"])
         outcome.done += 1
 
-    _emit(
-        progress,
-        f"• transcription: {outcome.done} done, {outcome.failed} failed"
-        + (f", {outcome.skipped_old} skipped (old)" if outcome.skipped_old else "")
-        + (f", {outcome.swept} audio swept" if outcome.swept else ""),
-    )
+    if not outcome.backend_down:
+        _emit(
+            progress,
+            f"• transcription: {outcome.done} done, {outcome.failed} failed"
+            + (f", {outcome.skipped_old} skipped (old)" if outcome.skipped_old else "")
+            + (f", {outcome.swept} audio swept" if outcome.swept else ""),
+        )
     return outcome

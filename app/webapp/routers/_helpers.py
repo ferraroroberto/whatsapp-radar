@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import Request
 
-from src.config import load_config
+from src.config import TtsConfig, load_config
 from src.db import store
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -88,3 +88,14 @@ def hub_base_url(request: Request) -> str:
     """
     base = getattr(request.app.state, "hub_base_url", None)
     return str(base) if base is not None else load_config().hub.base_url
+
+
+def tts_profiles(request: Request) -> TtsConfig:
+    """Return the four summary-speech voice profiles for this request (#157).
+
+    Tests inject an override via ``app.state.tts_profiles``; production falls
+    back to the loaded config's ``tts`` block. Same override pattern as
+    :func:`hub_base_url`.
+    """
+    override = getattr(request.app.state, "tts_profiles", None)
+    return override if override is not None else load_config().tts

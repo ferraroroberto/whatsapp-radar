@@ -55,6 +55,12 @@ class WebappConfig:
     # Telegram delivery secrets, migrated here from .env in Step 3.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    # Per-sender voice-gender preference for summary read-aloud (#157), keyed by
+    # the normalized sender label (src.speech_profile.normalize_sender) with a
+    # value of "female" or "male". An unmapped sender falls back to
+    # default_voice_gender. Never inferred from a name — explicit mappings only.
+    sender_voice_genders: dict[str, str] = field(default_factory=dict)
+    default_voice_gender: str = "female"
 
 
 def load_webapp_config(path: Path | None = None) -> WebappConfig:
@@ -85,6 +91,11 @@ def load_webapp_config(path: Path | None = None) -> WebappConfig:
         webauthn_origin=str(raw.get("webauthn_origin", "")),
         telegram_bot_token=str(raw.get("telegram_bot_token", "")),
         telegram_chat_id=str(raw.get("telegram_chat_id", "")),
+        sender_voice_genders={
+            str(k).strip().lower(): str(v)
+            for k, v in (raw.get("sender_voice_genders") or {}).items()
+        },
+        default_voice_gender=str(raw.get("default_voice_gender", "female")),
     )
     _validate(cfg)
     return cfg
@@ -107,6 +118,8 @@ def save_webapp_config(cfg: WebappConfig, path: Path | None = None) -> Path:
         "webauthn_origin": cfg.webauthn_origin,
         "telegram_bot_token": cfg.telegram_bot_token,
         "telegram_chat_id": cfg.telegram_chat_id,
+        "sender_voice_genders": cfg.sender_voice_genders,
+        "default_voice_gender": cfg.default_voice_gender,
     }
 
     tmp = target.with_suffix(target.suffix + ".tmp")
@@ -136,6 +149,14 @@ def append_auth_token(url: str, token: str | None) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
+_VALID_VOICE_GENDERS = {"female", "male"}
+
+
 def _validate(cfg: WebappConfig) -> None:
     if not (1 <= cfg.port <= 65535):
         raise ValueError(f"port out of range: {cfg.port}")
+    if cfg.default_voice_gender not in _VALID_VOICE_GENDERS:
+        raise ValueError(f"invalid default_voice_gender: {cfg.default_voice_gender!r}")
+    for sender, gender in cfg.sender_voice_genders.items():
+        if gender not in _VALID_VOICE_GENDERS:
+            raise ValueError(f"invalid voice gender for sender {sender!r}: {gender!r}")

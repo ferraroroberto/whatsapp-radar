@@ -193,6 +193,42 @@ def test_connect_migrates_messages_transcription_columns(tmp_path: Path) -> None
         conn.close()
 
 
+def test_connect_migrates_messages_summary(tmp_path: Path) -> None:
+    """A pre-#157 messages table gains `summary`; old rows stay NULL, migration idempotent."""
+    db = tmp_path / "legacy_summary.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_MESSAGES)
+    raw.execute(
+        "INSERT INTO chats (source_chat_id, display_name, first_seen_at, last_seen_at) "
+        "VALUES ('g1', 'Class 4A', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.execute(
+        "INSERT INTO messages (chat_id, source_message_id, message_timestamp, text, ingested_at) "
+        "VALUES (1, 'm1', '2026-01-01T00:00:00+00:00', 'hi', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        assert "summary" in cols
+        ctx = store.message_summary_context(conn, 1)
+        assert ctx is not None
+        assert ctx == ("hi", None, None)
+
+        store.set_message_summary(conn, 1, "A short summary.")
+        assert store.message_summary_context(conn, 1) == ("hi", None, "A short summary.")
+
+        # Idempotent: a second open neither errors nor loses the summary.
+        conn.close()
+        conn2 = store.connect(db)
+        assert store.message_summary_context(conn2, 1) == ("hi", None, "A short summary.")
+        conn2.close()
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_review_runs_transcriptions(tmp_path: Path) -> None:
     """A pre-#36 review_runs gains the transcriptions counter, defaulting to 0."""
     db = tmp_path / "legacy_runs_tr.sqlite3"

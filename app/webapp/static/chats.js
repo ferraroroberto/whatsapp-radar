@@ -231,25 +231,30 @@ function histMsg(m) {
   }
   // A long message (long voice-note transcript or long typed message) gets an
   // on-demand Summarize control wired to the hub (#86). The server reads the same
-  // messages.text, so gate on m.text length here too.
-  if (m.text && m.text.length >= SUMMARIZE_MIN_CHARS) item.append(summarizeControl(m.id));
+  // messages.text, so gate on m.text length here too. m.summary (#157) is any
+  // summary already persisted for this message, so a reopened overlay renders it
+  // straight from the history payload with no extra round trip.
+  if (m.text && m.text.length >= SUMMARIZE_MIN_CHARS) {
+    item.append(summarizeControl(m.id, m.summary));
+  }
   return item;
 }
 
 // An on-demand "Summarize" control for one long message. Tapping it POSTs to the
-// hub-backed summarize endpoint and renders the returned summary inline beneath
-// the message. The result is cached on first fetch so a second tap just re-shows
-// it (toggling visibility) rather than dialling the hub again.
-function summarizeControl(id) {
+// hub-backed summarize endpoint (a cheap read-through once a summary is stored,
+// #157) and renders the returned summary inline beneath the message. A summary
+// already present in the history payload (existingSummary) pre-populates the
+// panel with no fetch at all; otherwise the result is cached on first fetch so a
+// second tap just re-shows it (toggling visibility) rather than dialling the hub
+// again.
+function summarizeControl(id, existingSummary) {
   const wrap = document.createElement('div');
   wrap.className = 'msg-summary-wrap';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'summarize-action';
-  btn.textContent = 'Summarize';
   const out = document.createElement('div');
   out.className = 'msg-summary';
-  out.hidden = true;
   const summaryText = document.createElement('div');
   summaryText.className = 'msg-summary-text';
   const speak = document.createElement('button');
@@ -257,7 +262,6 @@ function summarizeControl(id) {
   speak.className = 'summary-speech-action';
   speak.textContent = 'Play summary aloud';
   speak.setAttribute('aria-pressed', 'false');
-  speak.hidden = true;
   function speaking(on) {
     speak.setAttribute('aria-pressed', on ? 'true' : 'false');
     speak.textContent = on ? 'Stop reading' : 'Play summary aloud';
@@ -267,16 +271,25 @@ function summarizeControl(id) {
       cancelSummarySpeech();
       return;
     }
-    speakSummary(cached || '', speaking).catch(function (exc) {
+    speakSummary(id, speaking).catch(function (exc) {
       toast(String((exc && exc.message) || 'Could not read this summary aloud.'), 'error');
     });
   });
   out.append(summaryText, speak);
-  let cached = null;
+  let cached = existingSummary || null;
   let busy = false;
+  out.hidden = true;
+  if (cached) {
+    summaryText.textContent = cached;
+    speak.hidden = false;
+    btn.textContent = 'Summary';
+  } else {
+    speak.hidden = true;
+    btn.textContent = 'Summarize';
+  }
   btn.addEventListener('click', async function () {
     if (busy) return;
-    if (cached !== null) {  // already fetched — just toggle the panel
+    if (cached !== null) {  // already have it — just toggle the panel
       out.hidden = !out.hidden;
       return;
     }

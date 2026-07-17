@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS messages (
     -- is swept past `transcription.audio_retention_days` (or immediately on success
     -- when retention is 0).
     media_path        TEXT,
+    -- On-demand summary text (#157), persisted the first time the operator taps
+    -- Summarize so a reopened overlay never re-pays the hub call. NULL until
+    -- requested; cleared whenever `text` is replaced (voice-note retranscription)
+    -- so a stale summary can never be shown or spoken.
+    summary           TEXT,
     raw_json          TEXT,
     ingested_at       TEXT NOT NULL,
     UNIQUE (chat_id, source_message_id)

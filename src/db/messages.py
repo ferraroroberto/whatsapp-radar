@@ -382,21 +382,33 @@ def voice_audio_path(conn: sqlite3.Connection, message_id: int) -> str | None:
     return str(media_path) if media_path is not None else None
 
 
-def message_text(conn: sqlite3.Connection, message_id: int) -> str | None:
-    """The displayed text of a message, or ``None`` if missing/empty (#86 summarize).
+def message_summary_context(
+    conn: sqlite3.Connection, message_id: int
+) -> tuple[str, str | None, str | None] | None:
+    """``(text, sender_label, stored_summary)`` for the summarize/speak endpoints
+    (#86, #157), or ``None`` if the message is missing or has no (non-blank) text
+    (e.g. an untranscribed voice note) — the caller maps that to a clean 404.
 
-    For a transcribed voice note ``text`` already holds the transcript (the
-    transcription phase overwrites it in place), so this is the same content the
-    Chats overlay shows. Returns ``None`` for a missing row or a row with no text
-    (e.g. an untranscribed voice note), which the caller maps to a clean 404/400.
+    One query for both endpoints: the summarize endpoint reads through
+    ``stored_summary`` before dialling the hub, and the speak endpoint needs
+    ``sender_label`` (voice-gender lookup) and the original ``text`` (language
+    detection) alongside whatever summary is already stored.
     """
     row = conn.execute(
-        "SELECT text FROM messages WHERE id = ?", (message_id,)
+        "SELECT text, sender_label, summary FROM messages WHERE id = ?", (message_id,)
     ).fetchone()
     if row is None:
         return None
     text = row["text"]
-    return str(text) if text is not None and str(text).strip() else None
+    if text is None or not str(text).strip():
+        return None
+    return str(text), row["sender_label"], row["summary"]
+
+
+def set_message_summary(conn: sqlite3.Connection, message_id: int, summary: str) -> None:
+    """Persist the on-demand summary for a message (#157, read-through cache)."""
+    conn.execute("UPDATE messages SET summary = ? WHERE id = ?", (summary, message_id))
+    conn.commit()
 
 
 def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> str:
@@ -430,13 +442,15 @@ def mark_transcription(
     ``status='done'`` overwrites ``messages.text`` with ``transcript`` in place (the
     original placeholder is preserved under ``raw_json.placeholder_text``) so the
     analysis pipeline — which reads only ``text`` — treats it as a normal message.
-    With ``keep_media=False`` (the default) it also clears the transient
-    ``media_path`` and the caller deletes the audio (#36). With ``keep_media=True``
-    the audio is retained for playback (#86): ``media_path`` keeps pointing at the
-    file and a later retention sweep deletes it. A retained ``done`` row never trips
-    the cursor barrier, which only holds 'pending'/'failed' notes. ``'failed'``
-    leaves ``text`` and ``media_path`` intact so the next live scan retries.
-    ``'skipped_old'`` just clears ``media_path``.
+    Also clears any persisted ``summary`` (#157): once the underlying text changes
+    a prior summary is stale and must never be shown or spoken again. With
+    ``keep_media=False`` (the default) it also clears the transient ``media_path``
+    and the caller deletes the audio (#36). With ``keep_media=True`` the audio is
+    retained for playback (#86): ``media_path`` keeps pointing at the file and a
+    later retention sweep deletes it. A retained ``done`` row never trips the
+    cursor barrier, which only holds 'pending'/'failed' notes. ``'failed'`` leaves
+    ``text`` and ``media_path`` intact so the next live scan retries. ``'skipped_old'``
+    just clears ``media_path``.
     """
     row = conn.execute(
         "SELECT text, raw_json FROM messages WHERE id = ?", (message_id,)
@@ -447,7 +461,7 @@ def mark_transcription(
         media_clause = "" if keep_media else "media_path = NULL, "
         conn.execute(
             f"UPDATE messages SET text = ?, transcription_status = 'done', "
-            f"{media_clause}raw_json = ? WHERE id = ?",
+            f"{media_clause}summary = NULL, raw_json = ? WHERE id = ?",
             (transcript, _merge_placeholder(row["raw_json"], row["text"]), message_id),
         )
     elif status == "skipped_old":

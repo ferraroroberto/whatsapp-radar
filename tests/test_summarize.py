@@ -102,7 +102,7 @@ def _seed_db(db: Path) -> dict[str, int]:
             ).fetchone()["id"]
         )
 
-    ids = {"long": _id("m1"), "short": _id("m2")}
+    ids = {"long": _id("m1"), "short": _id("m2"), "chat": chat}
     conn.close()
     return ids
 
@@ -165,3 +165,80 @@ def test_summarize_endpoint_surfaces_hub_error(tmp_path: Path) -> None:
         r = client.post(f"/api/messages/{ids['long']}/summarize")
         assert r.status_code == 503
         assert "unreachable" in r.json()["detail"]
+
+
+# --- persistence / read-through (#157) ---------------------------------
+
+def test_summarize_endpoint_persists_and_reads_through(tmp_path: Path) -> None:
+    """The first call dials the hub and stores the result; the second call
+    returns the exact stored text without dialling the hub again."""
+    db = tmp_path / "s.sqlite3"
+    ids = _seed_db(db)
+    calls = 0
+
+    def counting_summarizer(_b: str, _t: str) -> str:
+        nonlocal calls
+        calls += 1
+        return "Bring the signed form and 12 euros tomorrow."
+
+    with TestClient(_app_with_db(db, counting_summarizer), client=LOOPBACK) as client:
+        first = client.post(f"/api/messages/{ids['long']}/summarize")
+        assert first.status_code == 200
+        assert first.json()["summary"] == "Bring the signed form and 12 euros tomorrow."
+        assert calls == 1
+
+        second = client.post(f"/api/messages/{ids['long']}/summarize")
+        assert second.status_code == 200
+        assert second.json()["summary"] == "Bring the signed form and 12 euros tomorrow."
+        assert calls == 1  # not dialled again — read-through cache hit
+
+    # Persisted straight in the store too — survives a fresh connection/process.
+    conn = store.connect(db)
+    try:
+        assert store.message_summary_context(conn, ids["long"]) == (
+            _LONG, "Teacher", "Bring the signed form and 12 euros tomorrow.",
+        )
+    finally:
+        conn.close()
+
+
+def test_summary_exposed_in_chat_history(tmp_path: Path) -> None:
+    """A persisted summary shows up in /api/chats/{id}/history so a reopened
+    overlay can render it with no extra fetch; an unsummarized message reports
+    ``null`` (#157)."""
+    db = tmp_path / "s.sqlite3"
+    ids = _seed_db(db)
+
+    with TestClient(
+        _app_with_db(db, lambda _b, _t: "Bring the signed form and 12 euros tomorrow."),
+        client=LOOPBACK,
+    ) as client:
+        client.post(f"/api/messages/{ids['long']}/summarize")
+        history = client.get(f"/api/chats/{ids['chat']}/history").json()
+
+    by_id = {m["id"]: m for m in history["messages"]}
+    assert by_id[ids["long"]]["summary"] == "Bring the signed form and 12 euros tomorrow."
+    assert by_id[ids["short"]]["summary"] is None
+
+
+def test_message_summary_context_none_for_missing_and_blank_text(tmp_path: Path) -> None:
+    db = tmp_path / "s.sqlite3"
+    conn = store.connect(db)
+    try:
+        assert store.message_summary_context(conn, 99999) is None
+        chat = store.upsert_chat(
+            conn, ChatRecord(source_chat_id="c", display_name="Class 4A Group")
+        )
+        store.insert_message(
+            conn, chat,
+            MessageRecord(source_message_id="blank", message_timestamp="2026-06-10T10:00:00+00:00",
+                          text="   ", sender_label="Parent"),
+        )
+        blank_id = int(
+            conn.execute(
+                "SELECT id FROM messages WHERE source_message_id = 'blank'"
+            ).fetchone()["id"]
+        )
+        assert store.message_summary_context(conn, blank_id) is None
+    finally:
+        conn.close()

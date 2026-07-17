@@ -21,7 +21,17 @@ from src import _loopback_http
 # playback keeps the natural Orpheus voice App Launcher established.
 DEFAULT_MODEL = "orpheus-tts"
 DEFAULT_VOICE = "tara"
-VALID_VOICES = ("tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe")
+
+# Known voices per hub TTS model, so an unrecognized voice falls back to a
+# valid voice *for the requested model* rather than silently substituting a
+# different model's default (#157: Spanish requests use "kokoro-tts", whose
+# voices aren't valid Orpheus voices and vice versa).
+VOICES_BY_MODEL: dict[str, tuple[str, ...]] = {
+    DEFAULT_MODEL: ("tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"),
+    "kokoro-tts": ("ef_dora", "em_alex"),
+}
+# Backwards-compatible alias for the default model's voice set.
+VALID_VOICES = VOICES_BY_MODEL[DEFAULT_MODEL]
 
 _HEALTH_TIMEOUT = 5.0
 
@@ -55,9 +65,14 @@ def build_speech_payload(
     speed: float | None = None,
 ) -> dict[str, Any]:
     """Build a headerless streaming-PCM speech request for the hub."""
-    chosen_voice = voice if voice in VALID_VOICES else DEFAULT_VOICE
+    chosen_model = model or DEFAULT_MODEL
+    known_voices = VOICES_BY_MODEL.get(chosen_model, ())
+    if voice in known_voices:
+        chosen_voice = voice
+    else:
+        chosen_voice = known_voices[0] if known_voices else DEFAULT_VOICE
     payload: dict[str, Any] = {
-        "model": model or DEFAULT_MODEL,
+        "model": chosen_model,
         "input": text,
         "voice": chosen_voice,
         "response_format": "pcm",

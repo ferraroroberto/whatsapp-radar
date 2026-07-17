@@ -131,6 +131,32 @@ def test_transcript_overwrites_text_retains_audio_and_preserves_placeholder(
     assert json.loads(row["raw_json"])["placeholder_text"] == "[voice note]"
 
 
+def test_retranscription_clears_stored_summary(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A stale summary must never survive its underlying text being replaced (#157)."""
+    cfg = _config(tmp_path)
+    chat_id, msg_id, _audio = _monitor_with_voice(conn, cfg.linked_device_dir)
+    message_id = conn.execute(
+        "SELECT id FROM messages WHERE chat_id = ? AND source_message_id = ?",
+        (chat_id, msg_id),
+    ).fetchone()["id"]
+    store.set_message_summary(conn, message_id, "A stale summary of the placeholder.")
+    assert store.message_summary_context(conn, message_id)[2] == (
+        "A stale summary of the placeholder."
+    )
+
+    run_transcription_phase(
+        conn, cfg, transcriber=lambda _p, _lang: "Please bring the signed form tomorrow"
+    )
+
+    ctx = store.message_summary_context(conn, message_id)
+    assert ctx is not None
+    text, _sender, summary = ctx
+    assert text == "Please bring the signed form tomorrow"
+    assert summary is None
+
+
 def test_retention_zero_deletes_audio_immediately_on_success(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

@@ -32,6 +32,14 @@
     "bot_token": "",
     "chat_id": ""
   },
+  "tts": {
+    "profiles": {
+      "en_female": { "model": "orpheus-tts", "voice": "tara" },
+      "en_male": { "model": "orpheus-tts", "voice": "leo" },
+      "es_female": { "model": "kokoro-tts", "voice": "ef_dora" },
+      "es_male": { "model": "kokoro-tts", "voice": "em_alex" }
+    }
+  },
   "webapp": {
     "enabled": true,
     "host": "0.0.0.0",

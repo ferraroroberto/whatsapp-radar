@@ -91,6 +91,44 @@ class TranscriptionConfig:
 
 
 @dataclass(frozen=True)
+class VoiceProfile:
+    """A hub model + voice pair behind one logical summary-speech profile."""
+
+    model: str
+    voice: str
+
+
+@dataclass(frozen=True)
+class TtsConfig:
+    """Model/voice pairs behind the four summary read-aloud profiles (#157).
+
+    Keyed by ``"{language}_{gender}"``; :func:`src.speech_profile.resolve_profile_key`
+    picks which one applies to a given message. English keeps the existing
+    expressive ``orpheus-tts`` voices App Launcher established; Spanish uses the
+    hub's ``kokoro-tts`` model, whose bundled voice pack ships a stable
+    Spanish-capable female/male pair (``ef_dora`` / ``em_alex``) — no second TTS
+    runtime and no prerequisite local-llm-hub change needed.
+    """
+
+    en_female: VoiceProfile = field(default_factory=lambda: VoiceProfile("orpheus-tts", "tara"))
+    en_male: VoiceProfile = field(default_factory=lambda: VoiceProfile("orpheus-tts", "leo"))
+    es_female: VoiceProfile = field(
+        default_factory=lambda: VoiceProfile("kokoro-tts", "ef_dora")
+    )
+    es_male: VoiceProfile = field(default_factory=lambda: VoiceProfile("kokoro-tts", "em_alex"))
+
+    def get(self, profile_key: str) -> VoiceProfile:
+        """The :class:`VoiceProfile` for a ``"{language}_{gender}"`` key."""
+        profiles: dict[str, VoiceProfile] = {
+            "en_female": self.en_female,
+            "en_male": self.en_male,
+            "es_female": self.es_female,
+            "es_male": self.es_male,
+        }
+        return profiles[profile_key]
+
+
+@dataclass(frozen=True)
 class TelegramConfig:
     bot_token: str
     chat_id: str
@@ -144,6 +182,9 @@ class Config:
     # Voice-note transcription (#36). Defaulted (disabled) so library/test callers
     # that build a Config without it get the offline-safe no-op behaviour.
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
+    # Summary read-aloud voice profiles (#157). Defaulted so library/test callers
+    # that build a Config without it still get sane model/voice pairs.
+    tts: TtsConfig = field(default_factory=TtsConfig)
     # Enabled logical message sources. ``connector`` remains the WhatsApp reader
     # implementation selector (fixture | linked_device) for backwards
     # compatibility; additional sources own their own connector configuration.
@@ -246,6 +287,7 @@ def load_config(root: Path | None = None) -> Config:
     hub_raw = merged.get("hub", {})
     tr_raw = merged.get("transcription", {})
     gmail_raw = merged.get("gmail", {})
+    tts_raw = (merged.get("tts") or {}).get("profiles", {})
 
     tg_raw = merged.get("telegram", {})
 
@@ -306,6 +348,23 @@ def load_config(root: Path | None = None) -> Config:
             )
         ),
     )
+    def _voice_profile(key: str, default: VoiceProfile) -> VoiceProfile:
+        entry = tts_raw.get(key) if isinstance(tts_raw, dict) else None
+        if not isinstance(entry, dict):
+            return default
+        return VoiceProfile(
+            model=str(entry.get("model", default.model)),
+            voice=str(entry.get("voice", default.voice)),
+        )
+
+    _tts_defaults = TtsConfig()
+    tts = TtsConfig(
+        en_female=_voice_profile("en_female", _tts_defaults.en_female),
+        en_male=_voice_profile("en_male", _tts_defaults.en_male),
+        es_female=_voice_profile("es_female", _tts_defaults.es_female),
+        es_male=_voice_profile("es_male", _tts_defaults.es_male),
+    )
+
     # Telegram secrets live in the gitignored config/webapp_config.json (Step 3)
     # so the webapp UI owns them. Precedence: WR_TELEGRAM_* env > webapp_config >
     # local.json/default.json. Imported lazily to avoid a config import cycle.
@@ -372,6 +431,7 @@ def load_config(root: Path | None = None) -> Config:
         classifier=classifier,
         hub=hub,
         transcription=transcription,
+        tts=tts,
         notifier=notifier,
         telegram=telegram,
         linked_device_dir=resolved_buffer,

@@ -112,3 +112,46 @@ def test_loads_named_gmail_whitelist_and_resolves_paths(
     assert loaded.token_path == root / "auth/gmail/token.json"
     assert loaded.senders[0] == config.GmailSender("school@example.com", "School")
     assert loaded.labels[0] == config.GmailLabel("Family/Activities", "Activities")
+
+
+def test_tts_profiles_default_when_unconfigured(tmp_path: Path) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text("{}", encoding="utf-8")
+    tts = config.load_config(root=root).tts
+    assert tts.en_female == config.VoiceProfile("orpheus-tts", "tara")
+    assert tts.es_male == config.VoiceProfile("kokoro-tts", "em_alex")
+
+
+def test_tts_profiles_load_from_json_partial_override(tmp_path: Path) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text(
+        json.dumps(
+            {
+                "tts": {
+                    "profiles": {
+                        "es_female": {"model": "kokoro-tts", "voice": "af_bella"},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    tts = config.load_config(root=root).tts
+    # Overridden profile takes the JSON value...
+    assert tts.es_female == config.VoiceProfile("kokoro-tts", "af_bella")
+    # ...siblings not mentioned keep their defaults.
+    assert tts.en_female == config.VoiceProfile("orpheus-tts", "tara")
+    assert tts.es_male == config.VoiceProfile("kokoro-tts", "em_alex")
+
+
+def test_tts_profiles_local_json_overrides_default(tmp_path: Path) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text(
+        json.dumps({"tts": {"profiles": {"en_male": {"model": "orpheus-tts", "voice": "leo"}}}}),
+        encoding="utf-8",
+    )
+    config.save_local_overrides(
+        {"tts": {"profiles": {"en_male": {"model": "orpheus-tts", "voice": "zac"}}}}, root=root
+    )
+    tts = config.load_config(root=root).tts
+    assert tts.en_male == config.VoiceProfile("orpheus-tts", "zac")

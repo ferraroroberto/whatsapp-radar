@@ -7,6 +7,7 @@ inline — while a short message shows no control.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -82,15 +83,20 @@ def test_summarize_long_message(page: Page, base_url: str) -> None:
 @pytest.mark.smoke
 def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: str) -> None:
     page.add_init_script(_AUDIO_MOCK)
-    spoken: list[str] = []
-    page.route(
-        "**/api/messages/*/summarize",
-        lambda route: route.fulfill(
+    summarized_ids: list[str] = []
+    spoken_ids: list[str] = []
+
+    def fulfill_summarize(route: Any) -> None:
+        match = re.search(r"/api/messages/(\d+)/summarize", route.request.url)
+        if match:
+            summarized_ids.append(match.group(1))
+        route.fulfill(
             status=200,
             content_type="application/json",
             body='{"message_id": 1, "summary": "Send the signed form by Thursday."}',
-        ),
-    )
+        )
+
+    page.route("**/api/messages/*/summarize", fulfill_summarize)
     page.route(
         "**/api/tts/health",
         lambda route: route.fulfill(
@@ -99,7 +105,9 @@ def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: 
     )
 
     def capture_speech(route: Any) -> None:
-        spoken.append((route.request.post_data_json or {}).get("text", ""))
+        # The client now sends only the message id (#157) — the server resolves
+        # language/voice from that message's own stored context.
+        spoken_ids.append(str((route.request.post_data_json or {}).get("message_id", "")))
         route.fulfill(
             status=200,
             content_type="audio/L16",
@@ -116,7 +124,8 @@ def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: 
     page.wait_for_function("window.__audioLog && window.__audioLog.started >= 2")
 
     audio = page.evaluate("window.__audioLog")
-    assert spoken == ["Send the signed form by Thursday."]
+    # /tts/speak was called for the exact message /summarize resolved.
+    assert spoken_ids == summarized_ids
     assert audio["contexts"] == 1
     assert audio["resumed"] >= 1
     assert audio["buffers"] >= 2

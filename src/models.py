@@ -62,6 +62,10 @@ class StoredMessage:
     # once transcribed/skipped or when the download never succeeded. Distinguishes a
     # recoverable not-yet-transcribed note (audio on disk) from an unrecoverable one.
     media_path: str | None = None
+    # On-demand summary text (#157), persisted the first time the operator taps
+    # Summarize. ``None`` until requested, or after ``text`` is replaced (voice-note
+    # retranscription clears it so a stale summary can never be shown or spoken).
+    summary: str | None = None
     # Connector payload retained locally. The web API exposes only an explicit,
     # source-safe subset (for Gmail: subject + thread id), never this mapping.
     raw: dict[str, Any] = field(default_factory=dict)

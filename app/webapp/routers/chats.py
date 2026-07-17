@@ -22,10 +22,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from app.webapp.routers._helpers import buffer_dir, db_path, get_conn, hub_base_url
-from src import tts_client
+from app.webapp.routers._helpers import buffer_dir, db_path, get_conn, hub_base_url, tts_profiles
+from src import speech_profile, tts_client
 from src.analysis import summarize as summarize_client
 from src.db import store
+from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +80,10 @@ class LinkUpdate(BaseModel):
 
 
 class SpeechRequest(BaseModel):
-    text: str
-    voice: str | None = None
+    # The message whose stored summary should be read aloud (#157). The voice
+    # profile is resolved server-side from the message's own context — the
+    # client no longer picks text or a voice.
+    message_id: int
     speed: float | None = None
 
 
@@ -166,6 +169,9 @@ async def chat_history(
                 "text": m.text,
                 "type": m.message_type,
                 "source": source_by_chat.get(m.chat_id, str(chat["source"])),
+                # A summary already generated for this message (#157), so a
+                # reopened overlay can render it without re-dialling the hub.
+                "summary": m.summary,
                 # Voice-note transcription state (#36) so the UI can mark a voice
                 # note and label it when it isn't (yet) transcribed.
                 "transcription_status": m.transcription_status,
@@ -302,25 +308,30 @@ async def message_audio(
 
 @router.post("/api/messages/{message_id}/summarize")
 async def summarize_message(request: Request, message_id: int) -> dict[str, Any]:
-    """Summarize one long message's text on demand via the hub's Haiku (#86).
+    """Summarize one long message's text on demand via the hub's Haiku (#86, #157).
 
-    The Chats overlay shows a Summarize control on any message past
-    :data:`_SUMMARIZE_MIN_CHARS`; this condenses it to its essence plus any action
-    the reader must take. Read-only and gated by the same bearer-token middleware
-    as the rest of the API. The summary is **ephemeral** — computed per click,
-    never stored — so no schema change and nothing extra committed.
+    Read-through: the first successful summarization persists to
+    ``messages.summary``, so a re-tap, a reopened overlay, or a process restart
+    returns the exact stored text without dialling the hub again. The stored
+    summary is cleared automatically if the message's underlying text is later
+    replaced (voice-note retranscription — see ``store.mark_transcription``), so
+    a retranscribed note can never surface a stale summary.
 
     404 when the message is missing or has no text (e.g. an untranscribed voice
-    note); 400 when the text is too short to be worth a hub call; the hub's own
-    status (503 unreachable / upstream error / 502 empty) is surfaced verbatim.
+    note); 400 when the text is too short to be worth a hub call and none is
+    already stored; the hub's own status (503 unreachable / upstream error / 502
+    empty) is surfaced verbatim.
     """
     conn = store.connect(db_path(request))
     try:
-        text = store.message_text(conn, message_id)
+        ctx = store.message_summary_context(conn, message_id)
     finally:
         conn.close()
-    if text is None:
+    if ctx is None:
         raise HTTPException(status_code=404, detail="no text for this message")
+    text, _sender_label, existing_summary = ctx
+    if existing_summary is not None:
+        return {"message_id": message_id, "summary": existing_summary}
     if len(text) < _SUMMARIZE_MIN_CHARS:
         raise HTTPException(status_code=400, detail="message is too short to summarize")
 
@@ -332,6 +343,12 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
         summary = await asyncio.to_thread(summarizer, base, text)
     except summarize_client.SummarizeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+    conn = store.connect(db_path(request))
+    try:
+        store.set_message_summary(conn, message_id, summary)
+    finally:
+        conn.close()
     return {"message_id": message_id, "summary": summary}
 
 
@@ -349,19 +366,49 @@ async def tts_health(request: Request) -> dict[str, bool]:
 
 @router.post("/api/tts/speak")
 async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingResponse:
-    """Proxy one summary to the hub as a headerless PCM16 stream (#94).
+    """Proxy one message's stored summary to the hub as a headerless PCM16 stream
+    (#94, #157).
 
-    The existing bearer middleware gates this route like every other ``/api``
-    endpoint. Audio stays ephemeral: the bytes are forwarded as they arrive and
-    are never written to disk or retained by the application.
+    The voice profile is resolved server-side from the message's own context —
+    never the client: language is detected deterministically from the
+    *original* message text (not the summary), and gender comes from the
+    sender's configured voice preference (an explicit per-sender mapping in
+    the gitignored webapp config, else the configured default). The existing
+    bearer middleware gates this route like every other ``/api`` endpoint.
+    Audio stays ephemeral: the bytes are forwarded as they arrive and are
+    never written to disk or retained by the application.
+
+    404 when the message is missing or has no text; 400 when it has not been
+    summarized yet (nothing to speak); 503 when the resolved voice's backend
+    specifically is unavailable (distinguished from a general hub outage,
+    which surfaces as 502).
     """
-    text = speech.text.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="empty text")
+    conn = store.connect(db_path(request))
+    try:
+        ctx = store.message_summary_context(conn, speech.message_id)
+    finally:
+        conn.close()
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="no text for this message")
+    original_text, sender_label, summary = ctx
+    if not summary:
+        raise HTTPException(
+            status_code=400, detail="this message has not been summarized yet"
+        )
+
+    wcfg: WebappConfig = request.app.state.webapp_config
+    profile_key = speech_profile.resolve_profile_key(
+        original_text,
+        sender_label,
+        sender_voice_genders=wcfg.sender_voice_genders,
+        default_gender=wcfg.default_voice_gender,
+    )
+    profile = tts_profiles(request).get(profile_key)
 
     payload = tts_client.build_speech_payload(
-        text,
-        voice=speech.voice,
+        summary,
+        voice=profile.voice,
+        model=profile.model,
         speed=speech.speed,
     )
     upstream_url = tts_client.speech_url(hub_base_url(request))
@@ -376,10 +423,21 @@ async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingRespons
             status_code=502, detail="text-to-speech service is unavailable"
         ) from exc
     if upstream.status_code >= 400:
-        await upstream.aread()
+        body = await upstream.aread()
         await stream_cm.__aexit__(None, None, None)
         await client.aclose()
-        logger.warning("⚠️ summary TTS upstream returned HTTP %s", upstream.status_code)
+        detail = body.decode("utf-8", errors="replace")[:300] if body else ""
+        logger.warning(
+            "⚠️ summary TTS upstream returned HTTP %s for profile %s: %s",
+            upstream.status_code, profile_key, detail,
+        )
+        if upstream.status_code == 503:
+            # The resolved voice's own backend (e.g. kokoro-tts not yet loaded)
+            # is unavailable — distinct from the hub itself being unreachable.
+            raise HTTPException(
+                status_code=503,
+                detail=detail or f"the {profile_key} voice is currently unavailable",
+            )
         raise HTTPException(status_code=502, detail="text-to-speech request failed")
 
     sample_rate = upstream.headers.get("x-sample-rate", "24000")

@@ -132,9 +132,11 @@ async function pumpPcm(ctx, response, abort) {
   playback.endTimer = setTimeout(function () { finishNaturally(abort); }, remainingMs);
 }
 
-export async function speakSummary(text, onState) {
-  const clean = (text || '').trim();
-  if (!clean) return false;
+// messageId identifies the already-summarized message to read aloud; the
+// server resolves language + voice from that message's own context (#157) —
+// the client sends no text or voice choice of its own.
+export async function speakSummary(messageId, onState) {
+  if (messageId == null) return false;
   const handle = prepare(onState); // must run before this function's first await
   try {
     const health = await jsonApi('/api/tts/health');
@@ -142,7 +144,7 @@ export async function speakSummary(text, onState) {
     const response = await api('/api/tts/speak', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: clean }),
+      body: JSON.stringify({ message_id: messageId }),
       signal: handle.abort.signal,
     });
     if (!response.ok) throw new Error('Text-to-speech request failed.');

@@ -27,6 +27,8 @@ python-multipart>=0.0.9
 webauthn>=2.0
 # HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).
 requests>=2.31
+# Async streaming proxy for on-demand summary TTS (hub PCM16 → browser).
+httpx>=0.27
 PyYAML>=6.0
 # Tailscale HTTPS cert inspection (scripts/gen_tailscale_cert.py --check):
 # reads the SAN + expiry off the existing leaf to decide whether to renew.

@@ -647,20 +647,34 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
    the returned summary in a muted block beneath it. */
 .msg-summary-wrap { margin-top: 6px; }
 .summarize-action {
-  display: inline-block; padding: 2px 10px;
-  font-size: var(--font-caption); font-weight: 600; line-height: 1.6;
+  display: inline-block; min-height: 44px; padding: 0 12px;
+  font-size: var(--font-caption); font-weight: 600; line-height: 1.2;
   font-family: inherit; cursor: pointer;
   color: var(--ink); background: var(--card-off);
   border: 1px solid var(--line); border-radius: var(--radius-md);
 }
 .summarize-action:active { opacity: 0.7; }
-.summarize-action:disabled { opacity: 0.6; cursor: default; }
+.summarize-action:disabled {
+  color: var(--muted); background: var(--card-off);
+  border-color: var(--line); cursor: default;
+}
 .msg-summary {
   margin-top: 6px; padding: 8px 10px;
   white-space: pre-wrap; word-break: break-word;
   font-size: var(--font-label); color: var(--muted);
   background: var(--card-off); border-radius: var(--radius-md);
 }
+.summary-speech-action {
+  display: block; min-height: 44px; margin-top: 8px; padding: 0 12px;
+  font: 600 var(--font-caption)/1.2 var(--font); cursor: pointer;
+  color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+}
+.summary-speech-action[aria-pressed="true"] {
+  color: var(--accent); border-color: var(--accent-border-soft);
+  background: var(--accent-soft);
+}
+.summary-speech-action:active { opacity: 0.7; }
 
 /* ============================================================ passkeys */
 .webauthn-devices {

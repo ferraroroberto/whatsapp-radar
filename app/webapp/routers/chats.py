@@ -13,14 +13,17 @@ import logging
 import shutil
 import sqlite3
 import subprocess
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from app.webapp.routers._helpers import buffer_dir, db_path, get_conn, hub_base_url
+from src import tts_client
 from src.analysis import summarize as summarize_client
 from src.db import store
 
@@ -73,6 +76,12 @@ class AliasUpdate(BaseModel):
 class LinkUpdate(BaseModel):
     # The canonical (top-level) chat this chat should be folded into as a child.
     parent_id: int
+
+
+class SpeechRequest(BaseModel):
+    text: str
+    voice: str | None = None
+    speed: float | None = None
 
 
 @router.get("/api/chats")
@@ -324,3 +333,74 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
     except summarize_client.SummarizeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     return {"message_id": message_id, "summary": summary}
+
+
+@router.get("/api/tts/health")
+async def tts_health(request: Request) -> dict[str, bool]:
+    """Report whether the hub is reachable for manual summary playback (#94)."""
+    probe = getattr(request.app.state, "tts_health", None) or tts_client.health
+    try:
+        available = await asyncio.to_thread(probe, hub_base_url(request))
+    except tts_client.TtsError as exc:
+        logger.info("ℹ️ summary TTS health probe unavailable: %s", exc)
+        return {"available": False}
+    return {"available": bool(available)}
+
+
+@router.post("/api/tts/speak")
+async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingResponse:
+    """Proxy one summary to the hub as a headerless PCM16 stream (#94).
+
+    The existing bearer middleware gates this route like every other ``/api``
+    endpoint. Audio stays ephemeral: the bytes are forwarded as they arrive and
+    are never written to disk or retained by the application.
+    """
+    text = speech.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+
+    payload = tts_client.build_speech_payload(
+        text,
+        voice=speech.voice,
+        speed=speech.speed,
+    )
+    upstream_url = tts_client.speech_url(hub_base_url(request))
+    client = httpx.AsyncClient(timeout=None)
+    stream_cm = client.stream("POST", upstream_url, json=payload)
+    try:
+        upstream = await stream_cm.__aenter__()
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        logger.warning("⚠️ summary TTS upstream connection failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="text-to-speech service is unavailable"
+        ) from exc
+    if upstream.status_code >= 400:
+        await upstream.aread()
+        await stream_cm.__aexit__(None, None, None)
+        await client.aclose()
+        logger.warning("⚠️ summary TTS upstream returned HTTP %s", upstream.status_code)
+        raise HTTPException(status_code=502, detail="text-to-speech request failed")
+
+    sample_rate = upstream.headers.get("x-sample-rate", "24000")
+
+    async def forward() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in upstream.aiter_bytes():
+                if chunk:
+                    yield chunk
+        except httpx.HTTPError as exc:
+            logger.warning("⚠️ summary TTS stream ended early: %s", exc)
+        finally:
+            await stream_cm.__aexit__(None, None, None)
+            await client.aclose()
+
+    return StreamingResponse(
+        forward(),
+        media_type="audio/L16",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+            "X-Sample-Rate": str(sample_rate),
+        },
+    )

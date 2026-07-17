@@ -12,6 +12,7 @@ import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
+import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
 
 // A sprite glyph wrapped for insertion next to textContent-only user data.
 // Static markup only — never user content — so innerHTML is safe here.
@@ -249,6 +250,28 @@ function summarizeControl(id) {
   const out = document.createElement('div');
   out.className = 'msg-summary';
   out.hidden = true;
+  const summaryText = document.createElement('div');
+  summaryText.className = 'msg-summary-text';
+  const speak = document.createElement('button');
+  speak.type = 'button';
+  speak.className = 'summary-speech-action';
+  speak.textContent = 'Play summary aloud';
+  speak.setAttribute('aria-pressed', 'false');
+  speak.hidden = true;
+  function speaking(on) {
+    speak.setAttribute('aria-pressed', on ? 'true' : 'false');
+    speak.textContent = on ? 'Stop reading' : 'Play summary aloud';
+  }
+  speak.addEventListener('click', function () {
+    if (speak.getAttribute('aria-pressed') === 'true') {
+      cancelSummarySpeech();
+      return;
+    }
+    speakSummary(cached || '', speaking).catch(function (exc) {
+      toast(String((exc && exc.message) || 'Could not read this summary aloud.'), 'error');
+    });
+  });
+  out.append(summaryText, speak);
   let cached = null;
   let busy = false;
   btn.addEventListener('click', async function () {
@@ -263,7 +286,8 @@ function summarizeControl(id) {
     try {
       const body = await jsonApi('/api/messages/' + id + '/summarize', { method: 'POST' });
       cached = (body && body.summary) || '';
-      out.textContent = cached;
+      summaryText.textContent = cached;
+      speak.hidden = !cached;
       out.hidden = false;
       btn.textContent = 'Summary';
     } catch (exc) {
@@ -397,6 +421,7 @@ async function loadOlder() {
 // Reset the overlay's contents once the native <dialog> has closed — runs for
 // every close path (button, backdrop tap, Esc) via the 'close' event.
 function onHistoryClosed() {
+  cancelSummarySpeech();
   els.historyBody.textContent = '';
   els.historyLinkPanel.hidden = true;
   els.historyLinkPanel.textContent = '';

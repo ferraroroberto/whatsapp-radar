@@ -57,3 +57,6 @@ qr*.txt
 *.swp
 .DS_Store
 Thumbs.db
+
+# Private, uncommitted local context/spec files (household spec for #160, etc.)
+_local/

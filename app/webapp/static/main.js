@@ -13,6 +13,7 @@ import { fetchChats, wireChats } from './chats.js';
 import { fetchConfig, wireConfig } from './config.js';
 import { fetchExecution, wireExecution } from './execution.js';
 import { fetchAudit, wireAudit } from './audit.js';
+import { fetchFamily, wireFamily } from './family.js';
 
 // --------------------------------------------------------- build identity
 // Identical text + format to home-automation's footer readout.
@@ -101,11 +102,13 @@ wireTabs(function (tab) {
   }
   if (tab === 'execution') fetchExecution().catch(function () {});
   if (tab === 'audit') fetchAudit().catch(function () {});
+  if (tab === 'family') fetchFamily().catch(function () {});
 });
 wireWebauthn();
 wireChats();
 wireConfig();
 wireExecution();
 wireAudit();
+wireFamily();
 
 boot();

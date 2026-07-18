@@ -39,7 +39,7 @@ from src.db import store
 router = APIRouter()
 
 # Actions whose argv carries a live/dry-run mode.
-_MODAL_ACTIONS = {"scan", "process"}
+_MODAL_ACTIONS = {"scan", "process", "calendar-scan", "traffic-check"}
 _VALID_MODES = {"live", "dry_run"}
 _DAYS_MAX = 3650  # a generous ceiling; the UI offers small windows
 
@@ -93,6 +93,14 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
                 detail="reprocess rebuilds the cache and resets run history — confirm required",
             )
         return ["reprocess", "--confirm"]
+
+    if action in {"calendar-scan", "traffic-check"}:
+        # Family checks (#160): the same verb App Launcher Jobs schedule. A live
+        # run honours the enable toggle and may send an alert; dry-run never does.
+        argv = [action]
+        if mode == "dry_run":
+            argv.append("--dry-run")
+        return argv
 
     raise HTTPException(status_code=400, detail=f"unknown action {action!r}")
 

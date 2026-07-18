@@ -49,6 +49,8 @@ export const state = {
     selected: null,        // selected run id, or null
     detail: null,          // last fetched {run, traces}
   },
+  // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
+  family: null,
 };
 
 export const EXECUTION_POLL_MS = 1500;
@@ -179,6 +181,12 @@ export const els = {
   auditSourceFunnel: document.getElementById('auditSourceFunnel'),
   auditTraces: document.getElementById('auditTraces'),
   auditTracesEmpty: document.getElementById('auditTracesEmpty'),
+
+  // Family checks (#160)
+  familyControls: document.getElementById('familyControls'),
+  familyRules: document.getElementById('familyRules'),
+  familyRuns: document.getElementById('familyRuns'),
+  familyRunsEmpty: document.getElementById('familyRunsEmpty'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

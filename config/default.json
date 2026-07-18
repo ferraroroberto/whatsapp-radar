@@ -32,6 +32,31 @@
     "bot_token": "",
     "chat_id": ""
   },
+  "calendar": {
+    "credentials_path": "auth/calendar/credentials.json",
+    "token_path": "auth/calendar/token.json",
+    "accounts": []
+  },
+  "traffic": {
+    "enabled": false,
+    "api_key": "",
+    "significant_delay_min": 15,
+    "quiet_start_hour": 20,
+    "quiet_end_hour": 5,
+    "dedup_window_min": 30,
+    "origin_lookback_min": 60,
+    "lookahead_hours": 3
+  },
+  "family": {
+    "enabled": false,
+    "run_hour": 7,
+    "home_address": "",
+    "kids_home_time": "17:30",
+    "responsible_by_weekday": {},
+    "childcare_windows": [],
+    "unknown_scan_days": 7,
+    "assessment_days": 2
+  },
   "tts": {
     "profiles": {
       "en_female": { "model": "orpheus-tts", "voice": "tara" },

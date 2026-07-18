@@ -23,6 +23,8 @@ const KIND_META = {
   notify: { label: 'Message' },
   resync: { label: 'Sync' },
   reprocess: { label: 'Reprocess' },
+  'calendar-scan': { label: 'Family: daily scan' },
+  'traffic-check': { label: 'Family: traffic' },
 };
 
 function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }

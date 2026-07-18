@@ -170,6 +170,11 @@
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
       <span class="tab-label">Audit</span>
     </button>
+    <button id="tabFamily" type="button" class="tab" data-tab="family"
+            role="tab" aria-selected="false" aria-controls="paneFamily" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-radar"></use></svg>
+      <span class="tab-label">Family</span>
+    </button>
   </nav>
 
   <main class="app">
@@ -505,6 +510,29 @@
         <div id="auditSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
         <div id="auditTraces" class="audit-traces" aria-label="Per-channel trace"></div>
         <p id="auditTracesEmpty" class="muted small" hidden>No per-channel trace recorded for this run.</p>
+      </section>
+    </section>
+
+    <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+            Family checks
+          </h2>
+        </div>
+        <p class="muted small">Two deterministic scheduled checks — the daily calendar-conflict
+          scan and the traffic-jam alert. Toggle them on/off and run one on demand (dry-run).</p>
+        <div id="familyControls" class="family-controls"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2 class="card-title">Rules in force</h2></div>
+        <div id="familyRules"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2 class="card-title">Recent runs</h2></div>
+        <ul id="familyRuns" class="card-list" aria-label="Recent family-check runs"></ul>
+        <p id="familyRunsEmpty" class="muted small" hidden>No runs yet — use “Run now”.</p>
       </section>
     </section>
 

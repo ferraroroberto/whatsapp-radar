@@ -367,8 +367,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="required: acknowledge that run history resets before rebuilding",
     )
 
+    p_cal = sub.add_parser(
+        "calendar-scan", help="daily family calendar-conflict scan (#160)"
+    )
+    p_cal.add_argument(
+        "--dry-run", action="store_true", help="run fully but never send or record"
+    )
+    p_traffic = sub.add_parser(
+        "traffic-check", help="traffic-jam check for upcoming commutes (#160)"
+    )
+    p_traffic.add_argument(
+        "--dry-run", action="store_true", help="run fully but never send or record"
+    )
     sub.add_parser("tray", help="run the system-tray surface that owns the admin webapp")
     return parser
+
+
+def _cmd_calendar_scan(config: Config, dry_run: bool) -> int:
+    from datetime import datetime
+
+    from src.family.calendar_scan import run_calendar_scan
+
+    try:
+        payload = run_calendar_scan(config, now=datetime.now().astimezone(), dry_run=dry_run)
+    except (FileNotFoundError, RuntimeError) as exc:
+        _progress(f"❌ calendar-scan failed: {exc}")
+        _emit_result({"kind": "calendar-scan", "status": "error", "error": str(exc)})
+        return 1
+    _progress(
+        f"📅 calendar-scan: {payload['status']} — "
+        f"{len(payload.get('conflicts', []))} conflict(s), "
+        f"{len(payload.get('unknown_locations', []))} unknown location(s)"
+        + (" [dry-run]" if dry_run else "")
+    )
+    _emit_result(payload)
+    return 0
+
+
+def _cmd_traffic_check(config: Config, dry_run: bool) -> int:
+    from datetime import datetime
+
+    from src.family.traffic_check import run_traffic_check
+
+    try:
+        payload = run_traffic_check(config, now=datetime.now().astimezone(), dry_run=dry_run)
+    except (FileNotFoundError, RuntimeError) as exc:
+        _progress(f"❌ traffic-check failed: {exc}")
+        _emit_result({"kind": "traffic-check", "status": "error", "error": str(exc)})
+        return 1
+    _progress(
+        f"🚗 traffic-check: {payload['status']} — "
+        f"{len(payload.get('checked', []))} route(s) checked, "
+        f"{payload.get('alerts', 0)} alert(s)"
+        + (" [dry-run]" if dry_run else "")
+    )
+    _emit_result(payload)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -398,6 +452,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Gmail survey failed: {exc}", file=sys.stderr)
             return 1
         return 0
+
+    # Family checks (#160) are independent of the message store — no DB needed.
+    if args.command == "calendar-scan":
+        return _cmd_calendar_scan(config, args.dry_run)
+    if args.command == "traffic-check":
+        return _cmd_traffic_check(config, args.dry_run)
 
     conn = store.connect(config.db_path)
     try:

@@ -145,7 +145,7 @@ English keeps the existing expressive Orpheus voices App Launcher established; S
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), a real Tailscale-issued HTTPS cert (`tailscale cert`, auto-renewed — see [HTTPS certificate (Tailscale)](#https-certificate-tailscale)), and dormant Cloudflare named-tunnel scaffolding. All four tabs are live.
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), a real Tailscale-issued HTTPS cert (`tailscale cert`, auto-renewed — see [HTTPS certificate (Tailscale)](#https-certificate-tailscale)), and dormant Cloudflare named-tunnel scaffolding. All five tabs are live.
 
 The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's canonical control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog, icons, empty-state — do not edit those files per-app; re-vendor from the scaffold). There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves HTTPS directly once a Tailscale cert is provisioned — no per-device CA install, no trust profile — and falls back to plain HTTP on a fresh clone with no cert yet.
 
@@ -235,9 +235,22 @@ One-time prereq: enable **DNS → HTTPS Certificates** in the [Tailscale admin c
 
 > **Loopback and LAN URLs:** the Tailscale cert is issued *only* for the ts.net name, so `https://127.0.0.1:8455` and LAN-IP URLs show a hostname-mismatch warning by design — open the webapp via the ts.net URL on the PC too. With no cert at all the server runs plain HTTP on loopback — fine for a fresh clone, but iOS Safari needs HTTPS for the PWA + WebAuthn passkey ceremonies, so provision the Tailscale cert before phone use.
 
+## Family checks (calendar-conflict + traffic-jam alerts)
+
+Two deterministic scheduled checks (#160), ported from a retired OpenClaw agent and rebuilt as plain Python — **no LLM in either loop** (the evidence-backed lesson from that agent's postmortem: duplicate-alert spam and hallucinated traffic status from an LLM-driven loop). They live alongside the WhatsApp/Gmail pipeline, reusing this app's run store, notify, config, and UI — but not its message-analysis core.
+
+- **Traffic-jam insurance** (`wr traffic-check`): finds each household member's next commute event, resolves the origin (home, or a previous back-to-back commute's destination), checks live traffic via the Google Routes API, and alerts on Telegram only on a significant delay — deduped so the same still-ongoing delay never re-alerts, and paused during quiet hours.
+- **Daily calendar-conflict scan** (`wr calendar-scan`): scans the next few days of both household Google Calendars, flags coverage gaps against the fixed weekly responsibility pattern (who's home which afternoon, the childcare pickups), and surfaces Unknown-location events to ask about (a no-location event is Unknown, never assumed home).
+
+Both default **disabled** and are independently toggleable — from the **Family** tab or `WR_TRAFFIC_ENABLED` / `WR_FAMILY_ENABLED`. The Family tab shows the exact rules in force, the enable toggles and the significant-delay threshold (editable), plus each check's recent runs with their outcomes; full per-run detail (every route checked, every conflict) is in the Execution/Audit run output. Detection is pure Python (`src/family/`), unit-tested offline; the two Google read clients are `calendar_readonly/` (mirrors `gmail_readonly/`) and `src/traffic/`.
+
+Personal detail — home address, calendar ids, the responsibility pattern, childcare windows, the Routes API key — lives only in the gitignored `config/local.json` (schema in `config/default.json`); nothing household-identifying is committed. Provisioning (Calendar OAuth + the Routes key) is in [`docs/calendar-bootstrap.md`](docs/calendar-bootstrap.md).
+
+- `GET /api/family` (rules + recent runs), `POST /api/family` (toggles + threshold)
+
 ## Home-stack wiring (App Launcher)
 
-WhatsApp Radar runs as part of the home stack through [App Launcher](../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, and the admin PWA opened from the **Apps** tab. That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI. The full procedure (job name + cadence, the two Apps rows, and the calendar-anchored token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
+WhatsApp Radar runs as part of the home stack through [App Launcher](../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, the two family checks (`wr calendar-scan` daily, `wr traffic-check` every 30 min) as their own Jobs, and the admin PWA opened from the **Apps** tab. That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI. The full procedure (job name + cadence, the two Apps rows, and the calendar-anchored token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
 
 ## Repository Status
 

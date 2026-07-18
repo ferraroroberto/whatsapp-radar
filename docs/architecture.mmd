@@ -14,7 +14,7 @@ flowchart TB
   end
 
   subgraph cli["app/cli/main.py — argparse CLI"]
-    CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · gmail-survey · tray"]
+    CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · gmail-survey ·\ncalendar-scan · traffic-check · tray"]
   end
   LAUNCHER --> CLICMDS
 
@@ -32,7 +32,7 @@ flowchart TB
     MANAGER["manager.py — WebappManager (start/stop/restart)"]
     MIDDLEWARE["middleware.py — bearer-token gate"]
     RUNS["runs.py — spawns CLI pieces, streams output"]
-    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · misc"]
+    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · misc"]
   end
   TRAYPY --> MANAGER
   MANAGER --> SERVER
@@ -81,6 +81,33 @@ flowchart TB
   end
   GMAIL --> GMAILCORE
   SURVEY --> GMAILCORE
+
+  subgraph family["src/family/ — deterministic scheduled checks (#160, no LLM)"]
+    FRULES["rules.py — pure classification / origin / dedup / conflicts"]
+    FTRAFFIC["traffic_check.py — commute -> Routes -> alert"]
+    FCAL["calendar_scan.py — conflict + unknown-location scan"]
+    FSOURCE["calendar_source.py — events per person"]
+    FDEDUP["dedup.py — data/family/ alert log"]
+  end
+  CLICMDS --> FTRAFFIC
+  CLICMDS --> FCAL
+  FTRAFFIC --> FRULES
+  FCAL --> FRULES
+  FTRAFFIC --> FSOURCE
+  FCAL --> FSOURCE
+  FTRAFFIC --> FDEDUP
+  FTRAFFIC --> ALERT
+  FCAL --> ALERT
+  ROUTERS -->|/api/family| CONFIGPY
+  RUNS --> FTRAFFIC
+  RUNS --> FCAL
+
+  subgraph calcore["calendar_readonly/ + src/traffic/ — Google read clients (#160)"]
+    CALCLIENT["calendar_readonly — OAuth + Calendar v3 read"]
+    ROUTESCLIENT["src/traffic — Routes API v2 computeRoutes"]
+  end
+  FSOURCE --> CALCLIENT
+  FTRAFFIC --> ROUTESCLIENT
 
   subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
@@ -131,10 +158,12 @@ flowchart TB
   subgraph ext["External dependencies"]
     HUB["local-llm-hub (127.0.0.1:8000)\nclassification (claude_sonnet) + Whisper transcription"]
     TELEGRAMAPI["Telegram Bot API — digest delivery"]
-    APPLAUNCHER["App Launcher — Jobs (scan/resync/reprocess)\n+ Apps tab (webapp URL)"]
+    APPLAUNCHER["App Launcher — Jobs (scan/resync/reprocess/\ncalendar-scan/traffic-check) + Apps tab (webapp URL)"]
     TAILSCALE["Tailscale — TLS for the tunnel"]
     FFMPEG["ffmpeg — voice-note transcode (OGG -> WAV/MP3)"]
     GMAILAPI["Gmail API — gmail.readonly\nOAuth token under auth/gmail/"]
+    CALAPI["Google Calendar API — calendar.readonly\nOAuth token under auth/calendar/"]
+    ROUTESAPI["Google Routes API v2 — API key"]
   end
   CLASSIFIER -->|hub / cascade mode| HUB
   SURVEY -->|one local analysis pass| HUB
@@ -144,3 +173,5 @@ flowchart TB
   SERVER --> TAILSCALE
   TRANSCRIBE --> FFMPEG
   GMAILCORE --> GMAILAPI
+  CALCLIENT --> CALAPI
+  ROUTESCLIENT --> ROUTESAPI

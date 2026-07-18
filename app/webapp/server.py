@@ -33,7 +33,17 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from app.webapp.middleware import BearerTokenMiddleware
-from app.webapp.routers import audit, auth, chats, dashboard, execution, misc, sidecar, webauthn
+from app.webapp.routers import (
+    audit,
+    auth,
+    chats,
+    dashboard,
+    execution,
+    family,
+    misc,
+    sidecar,
+    webauthn,
+)
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
@@ -149,6 +159,7 @@ def create_app() -> FastAPI:
     app.include_router(chats.router)
     app.include_router(config_router.router)
     app.include_router(execution.router)
+    app.include_router(family.router)
     app.include_router(audit.router)
     app.include_router(sidecar.router)
 

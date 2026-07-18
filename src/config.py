@@ -161,6 +161,72 @@ class GmailConfig:
 
 
 @dataclass(frozen=True)
+class CalendarAccount:
+    """One household calendar and the person it belongs to."""
+
+    calendar_id: str  # the calendar id (an email address)
+    person: str  # canonical person key, e.g. "roberto" / "ana"
+    label: str = ""  # optional display label
+
+
+@dataclass(frozen=True)
+class CalendarConfig:
+    """Read-only Google Calendar credentials + the household calendars (#160)."""
+
+    credentials_path: Path = Path("auth/calendar/credentials.json")
+    token_path: Path = Path("auth/calendar/token.json")
+    accounts: tuple[CalendarAccount, ...] = ()
+
+
+@dataclass(frozen=True)
+class TrafficConfig:
+    """Traffic-jam check knobs (Google Routes API v2). Disabled by default (#160).
+
+    ``api_key`` is a secret and lives only in the ignored ``config/local.json``
+    (or ``WR_TRAFFIC_API_KEY`` / ``GOOGLE_MAPS_API_KEY``), never the committed
+    defaults. Quiet hours pause checks overnight; only a delay over
+    ``significant_delay_min`` alerts, deduped within ``dedup_window_min``.
+    """
+
+    enabled: bool = False
+    api_key: str = ""
+    significant_delay_min: int = 15
+    quiet_start_hour: int = 20  # local hour checks pause at (inclusive)
+    quiet_end_hour: int = 5  # local hour checks resume at
+    dedup_window_min: int = 30
+    origin_lookback_min: int = 60
+    lookahead_hours: int = 3  # how far ahead to look for the next commute
+
+
+@dataclass(frozen=True)
+class ChildcareWindow:
+    """A recurring childcare moment a parent must be present for."""
+
+    label: str
+    weekdays: tuple[int, ...]  # 0=Mon .. 6=Sun
+    time: str  # "HH:MM" deadline (pickup / departure)
+
+
+@dataclass(frozen=True)
+class FamilyConfig:
+    """Daily calendar-conflict scan knobs + the fixed household schedule (#160).
+
+    Personal household detail (home address, the who-is-home pattern, childcare
+    windows) lives only in the gitignored ``config/local.json``; the committed
+    ``default.json`` ships empty placeholders with the scan disabled.
+    """
+
+    enabled: bool = False
+    run_hour: int = 7  # local hour the daily scan fires at/after
+    home_address: str = ""
+    kids_home_time: str = "17:30"
+    responsible_by_weekday: dict[int, str] = field(default_factory=dict)  # 0..6 -> person
+    childcare_windows: tuple[ChildcareWindow, ...] = ()
+    unknown_scan_days: int = 7
+    assessment_days: int = 2
+
+
+@dataclass(frozen=True)
 class Config:
     db_path: Path
     connector: str
@@ -190,6 +256,11 @@ class Config:
     # compatibility; additional sources own their own connector configuration.
     sources: tuple[str, ...] = ("whatsapp",)
     gmail: GmailConfig = field(default_factory=GmailConfig)
+    # Family calendar-conflict + traffic-jam checks (#160). Independent of the
+    # message pipeline above; both default disabled until creds are provisioned.
+    calendar: CalendarConfig = field(default_factory=CalendarConfig)
+    traffic: TrafficConfig = field(default_factory=TrafficConfig)
+    family: FamilyConfig = field(default_factory=FamilyConfig)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -273,6 +344,96 @@ def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> P
     tmp.write_text(json.dumps(merged, indent=2), encoding="utf-8")
     os.replace(tmp, target)
     return target
+
+
+_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _weekday_index(value: Any) -> int | None:
+    """Coerce a weekday (``"mon"``/``"monday"`` or ``0``-``6``) to a 0=Mon index."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and 0 <= value <= 6:
+        return value
+    key = str(value).strip().lower()[:3]
+    return _WEEKDAYS.get(key)
+
+
+def _parse_calendar(raw: dict[str, Any], root: Path) -> CalendarConfig:
+    creds = Path(
+        os.environ.get(
+            "WR_CALENDAR_CREDENTIALS_PATH",
+            raw.get("credentials_path", "auth/calendar/credentials.json"),
+        )
+    )
+    if not creds.is_absolute():
+        creds = root / creds
+    token = Path(
+        os.environ.get(
+            "WR_CALENDAR_TOKEN_PATH", raw.get("token_path", "auth/calendar/token.json")
+        )
+    )
+    if not token.is_absolute():
+        token = root / token
+    accounts = tuple(
+        CalendarAccount(
+            calendar_id=str(item.get("calendar_id", "")).strip(),
+            person=str(item.get("person", "")).strip().lower(),
+            label=str(item.get("label") or item.get("person") or "").strip(),
+        )
+        for item in raw.get("accounts", [])
+        if isinstance(item, dict) and str(item.get("calendar_id", "")).strip()
+    )
+    return CalendarConfig(credentials_path=creds, token_path=token, accounts=accounts)
+
+
+def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:
+    api_key = (
+        os.environ.get("WR_TRAFFIC_API_KEY")
+        or os.environ.get("GOOGLE_MAPS_API_KEY")
+        or str(raw.get("api_key", ""))
+    )
+    return TrafficConfig(
+        enabled=_as_bool(os.environ.get("WR_TRAFFIC_ENABLED"), raw.get("enabled", False)),
+        api_key=api_key,
+        significant_delay_min=int(raw.get("significant_delay_min", 15)),
+        quiet_start_hour=int(raw.get("quiet_start_hour", 20)),
+        quiet_end_hour=int(raw.get("quiet_end_hour", 5)),
+        dedup_window_min=int(raw.get("dedup_window_min", 30)),
+        origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
+        lookahead_hours=int(raw.get("lookahead_hours", 3)),
+    )
+
+
+def _parse_family(raw: dict[str, Any]) -> FamilyConfig:
+    responsible: dict[int, str] = {}
+    for key, person in (raw.get("responsible_by_weekday") or {}).items():
+        idx = _weekday_index(key)
+        if idx is not None and str(person).strip():
+            responsible[idx] = str(person).strip().lower()
+    windows = tuple(
+        ChildcareWindow(
+            label=str(item.get("label", "")).strip(),
+            weekdays=tuple(
+                idx
+                for idx in (_weekday_index(d) for d in item.get("weekdays", []))
+                if idx is not None
+            ),
+            time=str(item.get("time", "")).strip(),
+        )
+        for item in raw.get("childcare_windows", [])
+        if isinstance(item, dict) and str(item.get("label", "")).strip()
+    )
+    return FamilyConfig(
+        enabled=_as_bool(os.environ.get("WR_FAMILY_ENABLED"), raw.get("enabled", False)),
+        run_hour=int(raw.get("run_hour", 7)),
+        home_address=str(raw.get("home_address", "")).strip(),
+        kids_home_time=str(raw.get("kids_home_time", "17:30")).strip(),
+        responsible_by_weekday=responsible,
+        childcare_windows=windows,
+        unknown_scan_days=int(raw.get("unknown_scan_days", 7)),
+        assessment_days=int(raw.get("assessment_days", 2)),
+    )
 
 
 def load_config(root: Path | None = None) -> Config:
@@ -425,6 +586,10 @@ def load_config(root: Path | None = None) -> Config:
         ),
     )
 
+    calendar = _parse_calendar(merged.get("calendar", {}), root)
+    traffic = _parse_traffic(merged.get("traffic", {}))
+    family = _parse_family(merged.get("family", {}))
+
     return Config(
         db_path=resolved_db,
         connector=connector,
@@ -440,4 +605,7 @@ def load_config(root: Path | None = None) -> Config:
         sync_settle_timeout=sync_settle_timeout,
         sources=sources,
         gmail=gmail,
+        calendar=calendar,
+        traffic=traffic,
+        family=family,
     )

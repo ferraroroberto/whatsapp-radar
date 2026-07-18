@@ -8,6 +8,7 @@
 import { els, state } from './state.js';
 import { jsonApi, toast } from './api.js';
 import { fmtLocalDateTime } from './format.js';
+import { switchEl } from './_vendored/switch/switch.js';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -27,16 +28,15 @@ export async function fetchFamily() {
   render(data);
 }
 
-function onOff(enabled) {
-  return enabled ? 'ON' : 'OFF';
-}
-
-function toggleButton(label, enabled, onClick) {
-  const btn = el('button', 'btn' + (enabled ? ' btn-on' : ''), label + ': ' + onOff(enabled));
-  btn.type = 'button';
-  btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-  btn.addEventListener('click', onClick);
-  return btn;
+function controlRow(labelText, enabled, onToggle, runAction) {
+  const row = el('div', 'family-control-row');
+  row.append(el('span', 'family-control-label', labelText));
+  row.append(switchEl(enabled, { label: labelText, onToggle: onToggle }));
+  const run = el('button', 'run-btn', 'Run now (dry)');
+  run.type = 'button';
+  run.addEventListener('click', function () { runNow(runAction); });
+  row.append(run);
+  return row;
 }
 
 async function patchFamily(body) {
@@ -71,30 +71,12 @@ async function runNow(action) {
 function renderControls(d) {
   const box = els.familyControls;
   box.textContent = '';
-
-  const traffic = el('div', 'family-control-row');
-  traffic.append(
-    toggleButton('Traffic check', d.traffic.enabled, function () {
-      patchFamily({ traffic_enabled: !d.traffic.enabled });
-    }),
-  );
-  const trafficRun = el('button', 'btn btn-ghost', 'Run now (dry)');
-  trafficRun.type = 'button';
-  trafficRun.addEventListener('click', function () { runNow('traffic-check'); });
-  traffic.append(trafficRun);
-  box.append(traffic);
-
-  const family = el('div', 'family-control-row');
-  family.append(
-    toggleButton('Daily scan', d.family.enabled, function () {
-      patchFamily({ family_enabled: !d.family.enabled });
-    }),
-  );
-  const familyRun = el('button', 'btn btn-ghost', 'Run now (dry)');
-  familyRun.type = 'button';
-  familyRun.addEventListener('click', function () { runNow('calendar-scan'); });
-  family.append(familyRun);
-  box.append(family);
+  box.append(controlRow('Traffic check', d.traffic.enabled, function (next) {
+    patchFamily({ traffic_enabled: next });
+  }, 'traffic-check'));
+  box.append(controlRow('Daily scan', d.family.enabled, function (next) {
+    patchFamily({ family_enabled: next });
+  }, 'calendar-scan'));
 
   if (!d.traffic.api_key_set) {
     box.append(el('p', 'muted small', '⚠️ No Routes API key configured — traffic checks will error.'));

@@ -195,6 +195,63 @@ def test_audit_runs_list_shape(tmp_path: Path) -> None:
     assert body["syncs"][0]["messages_added"] == 3
 
 
+def test_audit_groups_contiguous_offline_scans_into_coverage_gap(tmp_path: Path) -> None:
+    db = tmp_path / "coverage.sqlite3"
+    conn = store.connect(db)
+
+    def add_scan(started_at: str, *, offline: bool) -> int:
+        run_id = store.start_run(conn, mode="live", kind="scan")
+        store.record_run_funnel(
+            conn,
+            run_id,
+            chats_synced=0,
+            messages_synced=0,
+            chats_monitored=0,
+            stage1_passed=0,
+            stage2_llm_calls=0,
+            actionable=0,
+            notification_status="offline" if offline else "none",
+        )
+        store.finish_run(
+            conn,
+            run_id,
+            "failed" if offline else "completed",
+            chats_reviewed=0,
+        )
+        conn.execute(
+            "UPDATE review_runs SET started_at = ?, completed_at = ? WHERE id = ?",
+            (started_at, started_at, run_id),
+        )
+        conn.commit()
+        return run_id
+
+    add_scan("2026-06-19T18:00:00+00:00", offline=False)
+    gap_ids = [
+        add_scan("2026-06-20T18:00:00+00:00", offline=True),
+        add_scan("2026-06-21T18:00:00+00:00", offline=True),
+        add_scan("2026-06-25T18:00:00+00:00", offline=True),
+    ]
+    recovery_id = add_scan("2026-06-26T18:00:00+00:00", offline=False)
+    add_scan("2026-06-27T18:00:00+00:00", offline=True)
+    add_scan("2026-06-28T18:00:00+00:00", offline=False)
+    conn.close()
+
+    with _client(db) as client:
+        body = client.get("/api/audit/runs").json()
+
+    assert body["coverage_gaps"] == [
+        {
+            "started_at": "2026-06-20T18:00:00+00:00",
+            "ended_at": "2026-06-25T18:00:00+00:00",
+            "duration_days": 5,
+            "failed_runs": 3,
+            "run_ids": gap_ids,
+            "recovered_at": "2026-06-26T18:00:00+00:00",
+            "recovery_run_id": recovery_id,
+        }
+    ]
+
+
 def test_audit_run_drilldown_trace(tmp_path: Path) -> None:
     db = tmp_path / "audit.sqlite3"
     conn = store.connect(db)

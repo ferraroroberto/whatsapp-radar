@@ -16,6 +16,58 @@ from playwright.sync_api import Page, expect
 
 
 @pytest.mark.smoke
+def test_audit_collapses_offline_window_into_one_gap_marker(
+    page: Page, base_url: str
+) -> None:
+    def run(run_id: int, started_at: str, *, offline: bool) -> dict[str, object]:
+        return {
+            "id": run_id,
+            "kind": "scan",
+            "summary": None,
+            "mode": "live",
+            "status": "failed" if offline else "completed",
+            "params": None,
+            "started_at": started_at,
+            "completed_at": started_at,
+            "notification_status": "offline" if offline else "none",
+            "error": "connector offline" if offline else None,
+            "sources": {},
+            "funnel": {},
+        }
+
+    offline_runs = [
+        run(3, "2026-06-25T18:00:00+00:00", offline=True),
+        run(2, "2026-06-21T18:00:00+00:00", offline=True),
+        run(1, "2026-06-20T18:00:00+00:00", offline=True),
+    ]
+    payload = {
+        "runs": [run(4, "2026-06-26T18:00:00+00:00", offline=False), *offline_runs],
+        "syncs": [],
+        "coverage_gaps": [
+            {
+                "started_at": "2026-06-20T18:00:00+00:00",
+                "ended_at": "2026-06-25T18:00:00+00:00",
+                "duration_days": 5,
+                "failed_runs": 3,
+                "run_ids": [1, 2, 3],
+                "recovered_at": "2026-06-26T18:00:00+00:00",
+                "recovery_run_id": 4,
+            }
+        ],
+    }
+    page.route("**/api/audit/runs", lambda route: route.fulfill(json=payload))
+
+    page.goto(base_url)
+    page.locator("#tabAudit").click()
+
+    gap = page.locator("#auditRuns .audit-gap-li")
+    expect(gap).to_have_count(1)
+    expect(gap).to_contain_text("Coverage gap")
+    expect(gap).to_contain_text("5 days · 3 scans offline")
+    expect(page.locator("#auditRuns .audit-run-li")).to_have_count(1)
+
+
+@pytest.mark.smoke
 def test_audit_drilldown_shows_trace(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:

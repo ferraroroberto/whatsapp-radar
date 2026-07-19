@@ -148,12 +148,58 @@ function syncListItem(sync) {
   return li;
 }
 
+function coverageGapItem(gap) {
+  const li = document.createElement('li');
+  li.className = 'audit-gap-li';
+
+  const title = document.createElement('strong');
+  title.className = 'audit-gap-title';
+  title.textContent = '⚠ Coverage gap';
+
+  const range = document.createElement('span');
+  range.className = 'audit-gap-range';
+  range.textContent = `${fmtLocalDateTime(gap.started_at)} → ${fmtLocalDateTime(gap.ended_at)}`;
+
+  const detail = document.createElement('span');
+  detail.className = 'muted small';
+  const dayWord = gap.duration_days === 1 ? 'day' : 'days';
+  const scanWord = gap.failed_runs === 1 ? 'scan' : 'scans';
+  const recovery = gap.recovered_at
+    ? ` · recovered ${fmtLocalDateTime(gap.recovered_at)}`
+    : ' · recovery not yet recorded';
+  detail.textContent = `${gap.duration_days} ${dayWord} · ${gap.failed_runs} ${scanWord} offline${recovery}`;
+
+  li.append(title, range, detail);
+  return li;
+}
+
 function renderRuns() {
   const ax = auditState();
   els.auditRuns.textContent = '';
   const shown = ax.runs.filter(function (r) { return matchesKindFilter(r, ax.kindFilter); });
-  els.auditRunsEmpty.hidden = shown.length > 0;
-  for (const run of shown) els.auditRuns.appendChild(runListItem(run));
+  const showGaps = ax.kindFilter === 'all' || ax.kindFilter === 'messages';
+  const gapByRunId = new Map();
+  if (showGaps) {
+    for (const gap of ax.coverageGaps) {
+      for (const runId of gap.run_ids || []) gapByRunId.set(runId, gap);
+    }
+  }
+  const renderedGaps = new Set();
+  let rendered = 0;
+  for (const run of shown) {
+    const gap = gapByRunId.get(run.id);
+    if (gap) {
+      if (!renderedGaps.has(gap)) {
+        els.auditRuns.appendChild(coverageGapItem(gap));
+        renderedGaps.add(gap);
+        rendered += 1;
+      }
+      continue;
+    }
+    els.auditRuns.appendChild(runListItem(run));
+    rendered += 1;
+  }
+  els.auditRunsEmpty.hidden = rendered > 0;
 }
 
 // ----------------------------------------------------------- run detail
@@ -461,6 +507,7 @@ export async function fetchAudit() {
   const ax = auditState();
   ax.runs = data.runs || [];
   ax.syncs = data.syncs || [];
+  ax.coverageGaps = data.coverage_gaps || [];
   renderRuns();
 
   // If a previously-selected run is gone (e.g. after a reprocess reset), drop it.

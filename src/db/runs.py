@@ -308,6 +308,17 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
     )
 
 
+def list_live_scan_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Live scans oldest-first with only the fields needed for coverage gaps."""
+    return list(
+        conn.execute(
+            "SELECT id, started_at, status, notification_status "
+            "FROM review_runs WHERE kind = 'scan' AND mode = 'live' "
+            "ORDER BY started_at, id"
+        ).fetchall()
+    )
+
+
 def review_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
     """A single review run by id (full row), or None if it doesn't exist."""
     row: sqlite3.Row | None = conn.execute(

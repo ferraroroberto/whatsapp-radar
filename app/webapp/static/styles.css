@@ -1060,6 +1060,20 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .audit-mode-badge.dry { color: var(--attention); border-color: var(--attention); }
 .audit-mode-badge.review { color: var(--muted); }
 
+/* A multi-run connector outage replaces its individual failed rows with one
+   attention-state marker, keeping the trust gap legible without list noise. */
+.audit-gap-li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 4px 10px 10px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--attention);
+}
+.audit-gap-li:last-child { border-bottom: 0; }
+.audit-gap-title { color: var(--attention); font-size: var(--font-label); }
+.audit-gap-range { color: var(--ink); font-size: var(--font-caption); }
+
 /* Maintenance markers (resync / reprocess) interleaved into the timeline. */
 .audit-sync-li {
   display: flex;

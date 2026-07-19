@@ -89,6 +89,7 @@ export const els = {
   historyOverlay: document.getElementById('historyOverlay'),
   historyTitle: document.getElementById('historyTitle'),
   historySource: document.getElementById('historySource'),
+  historySenderChip: document.getElementById('historySenderChip'),
   historyRename: document.getElementById('historyRename'),
   historyLink: document.getElementById('historyLink'),
   historyLinkPanel: document.getElementById('historyLinkPanel'),

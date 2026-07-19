@@ -107,7 +107,16 @@ def reprocess(
     store.clear_all_data(conn)
     # Tag this rebuild's ingest as 'reprocess' so the Audit timeline can tell a
     # full rebuild apart from an incremental resync (both are maintenance runs).
-    resync(conn, bindings, source="reprocess", prepare=prepare_source)
+    # Skip Gmail retention during a rebuild: monitored status is restored only
+    # below (via the operator-state snapshot), so pruning here would wrongly treat a
+    # monitored sender as unmonitored and drop its history. Steady-state syncs prune.
+    resync(
+        conn,
+        bindings,
+        source="reprocess",
+        prepare=prepare_source,
+        gmail_retention_days=0,
+    )
 
     outcome = ReprocessOutcome(
         backup_path=str(backup),

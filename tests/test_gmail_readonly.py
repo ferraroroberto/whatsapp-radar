@@ -182,6 +182,27 @@ def test_count_metadata_and_normalized_search_modes() -> None:
     assert messages[1].headers["message-id"] == "<newer@example.com>"
 
 
+def test_discover_senders_groups_recent_metadata_by_address() -> None:
+    client = _FakeClient()
+    mailbox = GmailMailbox(client)
+
+    discovered = mailbox.discover_senders(days=30, limit=100)
+
+    # One entry per distinct From address, friendliest name kept, newest first.
+    assert [(sender.address, sender.display_name) for sender in discovered] == [
+        ("school@example.com", "School Office"),
+        ("coach@example.com", "Coach"),
+    ]
+    assert all(sender.message_count == 1 for sender in discovered)
+    # Discovery scans a bounded recent window and reads metadata only — never bodies.
+    assert client.queries[-1][0] == "newer_than:30d"
+    assert client.metadata_modes == [True, True]
+    with pytest.raises(ValueError, match="at least 1"):
+        mailbox.discover_senders(days=0, limit=100)
+    with pytest.raises(ValueError, match="at least 1"):
+        mailbox.discover_senders(days=30, limit=0)
+
+
 def test_profile_mask_safe_failures_and_cleanup() -> None:
     client = _FakeClient()
     mailbox = GmailMailbox(client)

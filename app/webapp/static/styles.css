@@ -519,6 +519,21 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .source-badge.source-gmail { color: var(--accent); border-color: var(--accent-border-strong); }
 .source-badge.source-calendar { color: var(--accent); border-color: var(--accent-border-strong); }
+/* Gmail sender chip in the history overlay (#166): identifies whose mail is shown. */
+.sender-chip {
+  align-self: flex-start;
+  max-width: 100%;
+  margin: 0 0 var(--space-xs);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .chat-meta { font-size: var(--font-caption); color: var(--muted); }
 .chat-sub {
   min-width: 0;

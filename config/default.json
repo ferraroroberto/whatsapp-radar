@@ -9,7 +9,10 @@
     "credentials_path": "auth/gmail/credentials.json",
     "token_path": "auth/gmail/token.json",
     "senders": [],
-    "labels": []
+    "labels": [],
+    "discovery_days": 30,
+    "discovery_max_messages": 400,
+    "retention_days": 30
   },
   "hub": {
     "base_url": "http://127.0.0.1:8000",

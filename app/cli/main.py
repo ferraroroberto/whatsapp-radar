@@ -207,6 +207,7 @@ def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
                 source=source,
                 progress=_progress,
             ),
+            gmail_retention_days=config.gmail.retention_days,
         )
     except ConnectorOffline as exc:
         _progress(f"✗ resync aborted — all enabled sources offline: {exc}")

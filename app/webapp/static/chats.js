@@ -56,6 +56,25 @@ function isChild(c) {
   return c.parent_chat_id != null;
 }
 
+// Source-aware vocabulary (#166): with the Gmail source filter active a row is a
+// sender (email address), not a WhatsApp "channel". The monitor/all mechanics are
+// identical — only the words change, and Gmail's demote is "stop monitoring" (back
+// to discovered), never the WhatsApp "ignore".
+function gmailFilterActive() {
+  return state.chatsSourceFilter === 'gmail';
+}
+function unitNoun(n) {
+  if (gmailFilterActive()) return n === 1 ? 'sender' : 'senders';
+  return n === 1 ? 'channel' : 'channels';
+}
+// The Gmail sender address behind a "sender:addr" chat id, else null (labels /
+// WhatsApp). Used for the history overlay's sender chip.
+function gmailSenderAddress(c) {
+  if (c.source !== 'gmail' || typeof c.source_chat_id !== 'string') return null;
+  if (!c.source_chat_id.startsWith('sender:')) return null;
+  return c.source_chat_id.slice('sender:'.length);
+}
+
 export async function fetchChats() {
   let data;
   try {
@@ -96,7 +115,7 @@ function render() {
       'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.';
   } else {
     els.chatsCount.textContent = all.length
-      ? fmtNum(all.length) + ' channel' + (all.length === 1 ? '' : 's')
+      ? fmtNum(all.length) + ' ' + unitNoun(all.length)
       : '';
   }
 
@@ -157,12 +176,18 @@ function row(c) {
   watch.type = 'button';
   watch.className = 'chat-watch';
   const monitored = c.status === 'monitored';
+  // Gmail demotes to 'discovered' (stop monitoring; retention then applies), never
+  // the WhatsApp 'ignored' — email has no "ignore" vocabulary (#166).
+  const isGmail = c.source === 'gmail';
+  const demoteTo = isGmail ? 'discovered' : 'ignored';
   watch.classList.toggle('active', monitored);
   watch.setAttribute('aria-pressed', monitored ? 'true' : 'false');
-  watch.title = monitored ? 'Monitoring — tap to ignore' : 'Not monitored — tap to monitor';
+  watch.title = monitored
+    ? (isGmail ? 'Monitoring — tap to stop' : 'Monitoring — tap to ignore')
+    : 'Not monitored — tap to monitor';
   watch.innerHTML = icon('eye');
   watch.addEventListener('click', function () {
-    setStatus(c, monitored ? 'ignored' : 'monitored');
+    setStatus(c, monitored ? demoteTo : 'monitored');
   });
   actions.appendChild(watch);
 
@@ -386,6 +411,16 @@ async function openHistory(chat, openPanel) {
   panelOpen = chat.source === 'whatsapp' && !!openPanel;
   els.historySource.textContent = chat.source === 'gmail' ? 'Gmail' : 'WhatsApp';
   els.historySource.className = 'source-badge source-' + chat.source;
+  // Filter parity (#166): viewing a monitored sender shows that sender's messages
+  // with a sender chip so the operator knows exactly whose mail they're reading.
+  const senderAddress = gmailSenderAddress(chat);
+  if (senderAddress) {
+    els.historySenderChip.textContent = 'Sender: ' + senderAddress;
+    els.historySenderChip.hidden = false;
+  } else {
+    els.historySenderChip.textContent = '';
+    els.historySenderChip.hidden = true;
+  }
   els.historyLink.hidden = chat.source !== 'whatsapp';
   syncLinkPanel();
   hist.oldestTs = null;
@@ -436,6 +471,8 @@ async function loadOlder() {
 function onHistoryClosed() {
   cancelSummarySpeech();
   els.historyBody.textContent = '';
+  els.historySenderChip.hidden = true;
+  els.historySenderChip.textContent = '';
   els.historyLinkPanel.hidden = true;
   els.historyLinkPanel.textContent = '';
   panelOpen = false;
@@ -714,6 +751,8 @@ function setSourceFilter(source) {
   els.chatsSourceAll.classList.toggle('active', source === 'all');
   els.chatsSourceWhatsapp.classList.toggle('active', source === 'whatsapp');
   els.chatsSourceGmail.classList.toggle('active', source === 'gmail');
+  // Email has no "ignore" — the not-monitored bucket reads "Not monitored" (#166).
+  els.chatsFilterIgnored.textContent = source === 'gmail' ? 'Not monitored' : 'Ignored';
   render();
 }
 

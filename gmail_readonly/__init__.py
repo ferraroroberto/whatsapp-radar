@@ -2,6 +2,7 @@
 
 from gmail_readonly.core import (
     GMAIL_READONLY_SCOPE,
+    DiscoveredSender,
     GmailLabel,
     GmailMailbox,
     GmailProfile,
@@ -21,6 +22,7 @@ from gmail_readonly.google_client import (
 
 __all__ = [
     "GMAIL_READONLY_SCOPE",
+    "DiscoveredSender",
     "GmailLabel",
     "GmailMailbox",
     "GmailProfile",

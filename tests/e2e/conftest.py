@@ -177,6 +177,33 @@ def _seed_e2e_db(db_path: Path) -> None:
                 },
             ),
         )
+        # A DISCOVERED Gmail sender (#166): keyed "sender:<addr>" and left at the
+        # default 'discovered' status so the Messages tab has a promotable sender and
+        # the history overlay's sender chip has an address to show. Sanitized only.
+        discovered = store.upsert_chat(
+            conn,
+            ChatRecord(
+                source_chat_id="sender:newsletter@example.com",
+                display_name="Class Newsletter",
+                chat_type="email",
+                source="gmail",
+            ),
+        )
+        store.insert_message(
+            conn,
+            discovered,
+            MessageRecord(
+                source_message_id="e2e-news-1",
+                message_timestamp="2026-06-03T09:00:00+00:00",
+                text="This week's class newsletter is attached.",
+                sender_label="Class Newsletter",
+                message_type="email",
+                raw={
+                    "thread_id": "e2e-thread-2",
+                    "headers": {"Subject": "Weekly update"},
+                },
+            ),
+        )
     finally:
         conn.close()
 

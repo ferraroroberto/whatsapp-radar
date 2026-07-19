@@ -45,7 +45,8 @@
     "quiet_end_hour": 5,
     "dedup_window_min": 30,
     "origin_lookback_min": 60,
-    "lookahead_hours": 3
+    "lookahead_hours": 3,
+    "cadence_min": 30
   },
   "family": {
     "enabled": false,

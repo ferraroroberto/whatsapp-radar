@@ -123,6 +123,24 @@
       <circle cx="12" cy="12" r="2" />
       <path d="m13.41 10.59 5.66-5.66" />
     </symbol>
+    <symbol id="i-car" viewBox="0 0 24 24" fill="none">
+      <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
+      <circle cx="7" cy="17" r="2" />
+      <path d="M9 17h6" />
+      <circle cx="17" cy="17" r="2" />
+    </symbol>
+    <symbol id="i-calendar-days" viewBox="0 0 24 24" fill="none">
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect width="18" height="18" x="3" y="4" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M8 14h.01" />
+      <path d="M12 14h.01" />
+      <path d="M16 14h.01" />
+      <path d="M8 18h.01" />
+      <path d="M12 18h.01" />
+      <path d="M16 18h.01" />
+    </symbol>
     <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none">
       <path d="M3 6h18" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
@@ -333,6 +351,25 @@
           </div>
         </div>
       </details>
+
+      <details id="execMaintenanceCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
+            <h3 class="collapse-title">Maintenance</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p class="muted small">
+            Rebuild the local store from the connector buffer. The <strong>Sync messages</strong>
+            step on the Run tab is incremental and safe to run often. <strong>Rebuild</strong> is a
+            full rebuild for when the reader logic changed — it backs up the DB and preserves your
+            monitored/ignored/alias choices, but <strong>run history resets</strong>.
+          </p>
+          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
+        </div>
+      </details>
     </section>
 
     <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
@@ -340,7 +377,7 @@
         <div class="card-head">
           <h2 class="card-title">
             <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
-            Run
+            Messages &amp; calendar sync
           </h2>
           <div id="execMode" class="range-tabs exec-mode-seg" role="radiogroup" aria-label="Run mode">
             <button id="execModeLive" type="button" class="range-tab active" data-mode="live">Live</button>
@@ -362,30 +399,67 @@
         <fieldset class="exec-stages" aria-label="Pipeline steps to run">
           <div class="exec-stage-row">
             <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Sync</span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Sync messages</span>
               <span class="exec-stage-desc">pull the latest into the store</span></span>
             <button type="button" id="execStageSync" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Sync step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+                    aria-checked="true" aria-label="Sync messages step"><span class="knob"></span><span class="toggle-label">ON</span></button>
           </div>
           <div class="exec-stage-row">
             <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Process</span>
-              <span class="exec-stage-desc">classify new messages</span></span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Process messages &amp; email</span>
+              <span class="exec-stage-desc">classify new items</span></span>
             <button type="button" id="execStageProcess" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Process step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+                    aria-checked="true" aria-label="Process messages and email step"><span class="knob"></span><span class="toggle-label">ON</span></button>
           </div>
           <div class="exec-stage-row">
             <svg class="icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Message</span>
-              <span class="exec-stage-desc">send the alerts</span></span>
+            <span class="exec-stage-text"><span class="exec-stage-label">Send alerts</span>
+              <span class="exec-stage-desc">deliver the digest</span></span>
             <button type="button" id="execStageMessage" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Message step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+                    aria-checked="true" aria-label="Send alerts step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+            <span class="exec-stage-text"><span class="exec-stage-label">Calendar sync</span>
+              <span class="exec-stage-desc">scan the household calendars</span></span>
+            <button type="button" id="execStageCalendar" class="toggle" role="switch"
+                    aria-checked="false" aria-label="Calendar sync step"><span class="knob"></span><span class="toggle-label">OFF</span></button>
           </div>
         </fieldset>
 
         <button id="execRunScan" type="button" class="run-btn">Run</button>
         <p id="execBusy" class="muted small" hidden></p>
       </section>
+
+      <details id="execTrafficCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
+            <h3 class="collapse-title">Traffic jam insurance</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p class="muted small">Checks your next commute and alerts only when a jam adds more
+            than the significant-delay threshold. Scheduling is an App Launcher job — this sets
+            how often it runs and lets you fire a one-off check now.</p>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
+            <span class="exec-stage-text"><span class="exec-stage-label">Enabled</span>
+              <span class="exec-stage-desc">let the scheduled job run live checks</span></span>
+            <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
+                    aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <label class="stacked"><span>Check every (minutes)</span>
+            <input id="execTrafficCadence" type="number" class="input-native" min="5" max="240"
+                   value="30" inputmode="numeric"></label>
+          <div class="exec-traffic-actions">
+            <button id="execTrafficRunLive" type="button" class="run-btn">Run now (live)</button>
+            <button id="execTrafficRunDry" type="button" class="run-btn secondary">Run now (dry)</button>
+          </div>
+          <p id="execTrafficStatus" class="muted small"></p>
+        </div>
+      </details>
 
       <details id="execRunsCard" class="card card--collapsible">
         <summary class="collapse-summary">
@@ -398,21 +472,6 @@
         <div class="collapse-body">
           <ul id="execRuns" class="card-list exec-runs" aria-label="Recent runs"></ul>
           <p id="execRunsEmpty" class="muted small" hidden>No runs yet.</p>
-        </div>
-      </details>
-
-      <details id="execSyncsCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
-            <h3 class="collapse-title">Recent syncs</h3>
-            <span id="execSyncTotals" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
-          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
         </div>
       </details>
 
@@ -442,6 +501,21 @@
         </div>
       </details>
 
+      <details id="execSyncsCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+            <h3 class="collapse-title">Recent syncs</h3>
+            <span id="execSyncTotals" class="collapse-count"></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
+          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+        </div>
+      </details>
+
       <details id="execSourcesCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -458,25 +532,6 @@
             <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
             <button id="execReconnectBtn" type="button" class="run-btn">Reconnect WhatsApp</button>
           </div>
-        </div>
-      </details>
-
-      <details id="execMaintenanceCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
-            <h3 class="collapse-title">Maintenance</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">
-            Rebuild the local store from the connector buffer. The <strong>Sync</strong> step
-            above is incremental and safe to run often. <strong>Rebuild</strong> is a full
-            rebuild for when the reader logic changed — it backs up the DB and preserves your
-            monitored/ignored/alias choices, but <strong>run history resets</strong>.
-          </p>
-          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
         </div>
       </details>
     </section>

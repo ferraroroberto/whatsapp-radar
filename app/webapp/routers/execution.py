@@ -106,6 +106,38 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
     raise HTTPException(status_code=400, detail=f"unknown action {action!r}")
 
 
+def _calendar_source(cfg: Any, recent_runs: list[sqlite3.Row]) -> dict[str, Any]:
+    """A read-only Calendar row for Sources health (#164).
+
+    Calendar is not a message connector — it feeds the family daily scan — so it
+    is described from :class:`CalendarConfig` plus the last successful
+    ``calendar-scan`` run in the unified store (#163) as its "last fetch".
+    """
+    calendar = cfg.calendar
+    token_present = calendar.token_path.is_file()
+    last_success = next(
+        (
+            row["started_at"]
+            for row in recent_runs
+            if row["kind"] == "calendar-scan" and row["status"] == "completed"
+        ),
+        None,
+    )
+    return {
+        "source": "calendar",
+        "name": "Google Calendar",
+        "enabled": cfg.family.enabled,
+        "configured": bool(calendar.accounts) and token_present,
+        "authorized": token_present,
+        "connected": token_present,
+        "detail": "read-only Google Calendar",
+        "token_present": token_present,
+        "account_count": len(calendar.accounts),
+        "accounts": [account.label or account.person for account in calendar.accounts],
+        "last_success_at": last_success,
+    }
+
+
 @router.post("/api/execution/run")
 async def start_execution_run(request: Request) -> dict[str, Any]:
     body = await maybe_json(request)
@@ -201,15 +233,18 @@ async def execution_health(request: Request) -> dict[str, Any]:
                     }
                 )
             statuses.append(item)
+        # Overall health reflects the *message* sources only; the calendar row is
+        # a read-only, non-ingesting source appended for visibility (#164).
         connected = bool(statuses) and all(item["connected"] for item in statuses)
         detail = "; ".join(
             f"{item['source']}: {item['detail']}" for item in statuses
         )
+        sources = [*statuses, _calendar_source(cfg, store.list_review_runs(conn, 200))]
         return {
             "name": statuses[0]["name"] if len(statuses) == 1 else "multi-source",
             "connected": connected,
             "detail": detail,
-            "sources": statuses,
+            "sources": sources,
         }
     except ValueError as exc:
         return {

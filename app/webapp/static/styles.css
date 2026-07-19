@@ -472,6 +472,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .source-badge {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-xs);
   flex: none;
   padding: 2px 7px;
   border: 1px solid var(--line);
@@ -482,6 +483,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   line-height: 1.2;
 }
 .source-badge.source-gmail { color: var(--accent); border-color: var(--accent-border-strong); }
+.source-badge.source-calendar { color: var(--accent); border-color: var(--accent-border-strong); }
 .chat-meta { font-size: var(--font-caption); color: var(--muted); }
 .chat-sub {
   min-width: 0;
@@ -771,6 +773,15 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--deficit);
   border-color: var(--deficit-border-soft);
 }
+/* Secondary (dry-run) action: same shape, quieter neutral fill (#164). */
+.run-btn.secondary {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+}
+/* Traffic card's paired Run-now buttons sit side by side (#164). */
+.exec-traffic-actions { display: flex; gap: var(--space-sm); margin-top: 12px; }
+.exec-traffic-actions .run-btn { flex: 1; }
 
 .exec-mode-seg .range-tab { white-space: nowrap; }
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }

@@ -9,7 +9,10 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
+import {
+  fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels,
+  sourceIcon, SOURCE_LABEL,
+} from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
@@ -163,19 +166,6 @@ function addStatusLine(list, label, value) {
   const li = document.createElement('li');
   li.textContent = label + ': ' + (value || '—');
   list.appendChild(li);
-}
-
-const SOURCE_ICON = { gmail: '#i-mail', calendar: '#i-calendar-days', whatsapp: '#i-message-circle' };
-const SOURCE_LABEL = { gmail: 'Gmail', calendar: 'Calendar', whatsapp: 'WhatsApp' };
-
-function sourceIcon(source) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.classList.add('icon');
-  svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttribute('href', SOURCE_ICON[source] || '#i-message-circle');
-  svg.appendChild(use);
-  return svg;
 }
 
 // The Calendar row (#164) is a read-only, non-ingesting source: it has no sync
@@ -492,6 +482,17 @@ async function fetchDetail(sel) {
   } catch (_) {
     /* transient — next poll retries */
   }
+}
+
+// Deep-link entry point: the Dashboard's last-activity cards select a specific
+// run here after switching to this tab (#165). run_id is the unified id the
+// runs list/detail endpoints use (a "db-<id>" for CLI/Jobs-launched runs).
+export function showRun(sel) {
+  const ex = execState();
+  ex.selected = { kind: sel.kind, run_id: sel.run_id };
+  ex.detail = null;
+  renderRuns();
+  fetchDetail(ex.selected);
 }
 
 function updateRunLabel() {

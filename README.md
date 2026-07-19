@@ -151,7 +151,7 @@ The UI follows the fleet design system (`design.md` v2): **light + dark themes**
 
 ### Dashboard
 
-Read-only metrics: channels monitored, messages stored, scans run, backlog since the last scan, alerts raised, notifications sent, plus a per-monitored-channel table. A linked family is folded into its parent as one row whose count and last-activity span the whole family.
+The home page leads with a **last-activity grid** (#165): one card per kind of work — **WhatsApp · Gmail · Traffic · Calendar** — each showing a source icon, the relative last-run time, an outcome badge (`OK` / `N alerts` / `KO` / `never ran`), and a distilled "what we found" line (e.g. *12 new · 1 actionable*, *no significant delay*, *2 conflicts · 1 missing location*). The data comes from the unified run store (#163), so CLI- and App-Launcher-launched runs appear here too; tapping a card jumps to that run's detail on the Run tab. Below the grid, a collapsible **Sources** card (WhatsApp, Gmail, and a read-only Calendar row, each with its icon) and a folded-by-default **Monitored channels** table give the provenance detail — a linked family is folded into its parent as one row whose count and last-activity span the whole family.
 
 - `GET /api/dashboard`
 

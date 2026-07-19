@@ -1,14 +1,18 @@
-/* Dashboard tab (#9): read-only at-a-glance metrics from /api/dashboard.
+/* Dashboard tab (#9, #165): the app's front door — a per-kind "last activity"
+ * grid plus the folded Sources / Monitored-channels detail.
  *
- * Six metric cards + a last-scan line + a per-monitored-channel table. Chat
- * names go in via textContent only — never innerHTML (privacy + XSS-safe). */
+ * The 2×2 grid (WhatsApp · Gmail · Traffic · Calendar) answers "when did each
+ * last run and what did it find" at a glance; tapping a card jumps to that
+ * run's detail on the Run tab (#163's unified store makes CLI/Jobs runs visible
+ * here too). Chat names go in via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
-import { fmtLocalDateTime, fmtNum } from './format.js';
+import { fmtLocalDateTime, fmtNum, fmtRelative, sourceIcon, SOURCE_LABEL } from './format.js';
+import { setTab } from './tabs.js';
+import { showRun } from './execution.js';
 
 // Per-channel "Last msg" column: compact LOCAL time, no year ("06-07 14:47").
-// The last-scan card below uses the full local timestamp via fmtTsFull.
 function fmtTs(ts) {
   return fmtLocalDateTime(ts, { withYear: false });
 }
@@ -28,25 +32,70 @@ export async function fetchDashboard() {
   render(data);
 }
 
-function render(d) {
-  els.mChannels.textContent = fmtNum(d.chats.monitored);
-  els.mMessages.textContent = fmtNum(d.messages.total);
-  els.mScans.textContent = fmtNum(d.scans.count);
-  els.mBacklog.textContent = fmtNum(d.scans.messages_since_last);
-  els.mActionable.textContent = fmtNum(d.alerts.actionable);
-  els.mNotified.textContent = fmtNum(d.alerts.notifications_sent);
-
-  // Two-line last-scan card: title + date on line 1, the report on line 2.
-  const last = d.scans.last;
-  if (last) {
-    els.lastRunWhen.textContent = fmtTsFull(last.started_at);
-    els.lastRunSummary.textContent =
-      last.mode + ' · ' + last.status + ' · ' + fmtNum(last.messages_synced) + ' msgs · ' +
-      fmtNum(last.actionable) + ' actionable · ' + (last.notification_status || 'none');
-  } else {
-    els.lastRunWhen.textContent = '';
-    els.lastRunSummary.textContent = 'No scans yet.';
+// The badge distils each card's outcome to one of: never ran · KO · running ·
+// N alerts · OK — mapped to a status-color class (design.md: status colors
+// signal state only).
+function activityBadge(card) {
+  if (!card.kind || !card.started_at) return { text: 'never ran', cls: 'muted' };
+  if (card.status === 'failed') return { text: 'KO', cls: 'ko' };
+  if (card.status === 'running' || card.status === 'pending') return { text: '···', cls: 'run' };
+  if (card.alerts > 0) {
+    return { text: card.alerts + ' alert' + (card.alerts === 1 ? '' : 's'), cls: 'act' };
   }
+  return { text: 'OK', cls: 'ok' };
+}
+
+function activityCard(card) {
+  const ran = !!(card.kind && card.started_at);
+  // A ran card is a button (deep-links to the Run tab); a never-ran card is an
+  // inert div — nothing to open.
+  const el = document.createElement(ran ? 'button' : 'div');
+  el.className = 'activity-card card' + (ran ? '' : ' is-idle');
+  if (ran) {
+    el.type = 'button';
+    el.addEventListener('click', function () {
+      setTab('execution');
+      showRun({ kind: card.kind, run_id: 'db-' + card.db_run_id });
+    });
+  }
+
+  // Line 1: icon + kind name, given the full row so a name never truncates.
+  const head = document.createElement('div');
+  head.className = 'activity-head';
+  const ico = sourceIcon(card.source);
+  ico.classList.add('activity-icon');
+  const name = document.createElement('span');
+  name.className = 'activity-name';
+  name.textContent = SOURCE_LABEL[card.source] || card.source;
+  head.append(ico, name);
+
+  // Line 2: relative last-run time on the left, the outcome badge pinned right.
+  const meta = document.createElement('div');
+  meta.className = 'activity-meta';
+  const when = document.createElement('span');
+  when.className = 'activity-when muted small';
+  when.textContent = ran ? fmtRelative(card.started_at) : 'no run yet';
+  const b = activityBadge(card);
+  const badge = document.createElement('span');
+  badge.className = 'activity-badge ' + b.cls;
+  badge.textContent = b.text;
+  meta.append(when, badge);
+
+  const summary = document.createElement('span');
+  summary.className = 'activity-summary';
+  summary.textContent = card.summary || '—';
+
+  el.append(head, meta, summary);
+  return el;
+}
+
+function renderActivity(cards) {
+  els.dashActivity.textContent = '';
+  for (const card of cards || []) els.dashActivity.appendChild(activityCard(card));
+}
+
+function render(d) {
+  renderActivity(d.last_activity);
 
   const body = els.dashChannelsBody;
   body.textContent = '';
@@ -77,16 +126,31 @@ function render(d) {
     els.dashSources.appendChild(empty);
   }
   for (const source of sources) {
-    const row = document.createElement('div');
-    row.className = 'source-summary-row';
-    const name = document.createElement('span');
-    name.className = 'source-badge source-' + source.source;
-    name.textContent = source.source === 'gmail' ? 'Gmail' : 'WhatsApp';
-    const detail = document.createElement('span');
-    detail.className = 'muted small';
-    detail.textContent = fmtNum(source.messages) + ' stored · ' + fmtNum(source.monitored) +
-      ' monitored · latest ' + fmtTsFull(source.latest_message_at);
-    row.append(name, detail);
-    els.dashSources.appendChild(row);
+    els.dashSources.appendChild(sourceRow(source.source,
+      fmtNum(source.messages) + ' stored · ' + fmtNum(source.monitored) +
+      ' monitored · latest ' + fmtTsFull(source.latest_message_at)));
   }
+  // Calendar is a read-only, non-ingesting source (#164/#165): no stored/
+  // monitored counts, so its row shows provenance + freshness of the last scan.
+  const cal = (d.last_activity || []).find(function (c) { return c.source === 'calendar'; });
+  if (cal) {
+    els.dashSources.appendChild(sourceRow('calendar', cal.kind && cal.started_at
+      ? 'read-only · last scan ' + fmtRelative(cal.started_at)
+      : 'read-only · not yet scanned'));
+  }
+}
+
+// One Sources-card row: an icon+label source badge plus a muted detail line.
+function sourceRow(sourceKey, detailText) {
+  const row = document.createElement('div');
+  row.className = 'source-summary-row';
+  const name = document.createElement('span');
+  name.className = 'source-badge source-' + sourceKey;
+  name.append(sourceIcon(sourceKey));
+  name.append(document.createTextNode(SOURCE_LABEL[sourceKey] || sourceKey));
+  const detail = document.createElement('span');
+  detail.className = 'muted small';
+  detail.textContent = detailText;
+  row.append(name, detail);
+  return row;
 }

@@ -181,3 +181,11 @@ CREATE TABLE IF NOT EXISTS sync_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sync_log_ran ON sync_log (ran_at DESC);
+
+-- Singleton cadence marker for the optional weekly unmonitored-chat Telegram
+-- nudge (#196). It is deliberately independent of review runs and chat ids so a
+-- cache reprocess does not immediately repeat a nudge.
+CREATE TABLE IF NOT EXISTS tripwire_nudge_state (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    last_sent_at TEXT NOT NULL
+);

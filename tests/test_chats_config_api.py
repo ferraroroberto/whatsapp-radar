@@ -191,6 +191,47 @@ def test_list_chats_endpoint(tmp_path: Path) -> None:
     )
 
 
+def test_tripwire_endpoint_surfaces_recent_discovered_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from src.config import TripwireConfig, load_config
+
+    db = tmp_path / "tripwire.sqlite3"
+    conn = store.connect(db)
+    chat_id = store.upsert_chat(
+        conn, ChatRecord(source_chat_id="candidate", display_name="Class reminders")
+    )
+    store.insert_message(
+        conn,
+        chat_id,
+        MessageRecord(
+            source_message_id="recent",
+            message_timestamp=datetime.now(UTC).isoformat(timespec="seconds"),
+            text="Urgent payment deadline tomorrow",
+            sender_label="Teacher",
+        ),
+    )
+    conn.close()
+    cfg = load_config()
+    monkeypatch.setattr(
+        chats,
+        "load_config",
+        lambda: replace(cfg, tripwire=TripwireConfig(window_days=7, max_messages=20)),
+    )
+
+    with TestClient(_app_with_db(db), client=LOOPBACK) as client:
+        body = client.get("/api/chats/tripwire").json()
+
+    assert body["window_days"] == 7
+    assert body["scanned_messages"] == 1
+    assert body["truncated"] is False
+    assert body["hits"][0]["id"] == chat_id
+    assert set(body["hits"][0]["roots"]) >= {"urgent", "deadline"}
+
+
 def test_history_endpoint(tmp_path: Path) -> None:
     db = tmp_path / "hist.sqlite3"
     conn = store.connect(db)

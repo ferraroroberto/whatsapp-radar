@@ -44,6 +44,7 @@ flowchart TB
     SCAN["scan(mode: live | dry_run)"]
     TRANSCRIBE["transcription.py — voice notes -> hub Whisper"]
     KEYWORDS["keywords.py — Stage 1 prefilter"]
+    TRIPWIRE["tripwire.py — bounded Stage-1-only scan\nof discovered chats; no classifier"]
     CLASSIFIER["classifier.py — Stage 2 (stub | hub | cascade)"]
     CONTRACT["contract.py — parse_analysis / AnalysisResult"]
     REVIEW["review.py — cursor advance + alert memory"]
@@ -53,6 +54,7 @@ flowchart TB
   RUNS --> SCAN
   SCAN --> TRANSCRIBE
   SCAN --> KEYWORDS
+  SCAN --> TRIPWIRE
   SCAN --> CLASSIFIER
   CLASSIFIER --> CONTRACT
   SCAN --> REVIEW
@@ -124,7 +126,7 @@ flowchart TB
   LINKED -->|read buffer| BAILEYS
 
   subgraph db["src/db/ — SQLite store"]
-    STORE["store.py — re-export facade over\nconnection/chats/messages/runs/dashboard/\nsync_log/reprocess_support/retention.py"]
+    STORE["store.py — re-export facade over\nconnection/chats/messages/runs/dashboard/\nsync_log/tripwire/reprocess_support/retention.py"]
     SYNC["sync.py — ingest_chats / resync\n+ Gmail unmonitored-sender retention prune"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
   end
@@ -150,6 +152,7 @@ flowchart TB
   DELIVERY --> NFACTORY
   NFACTORY --> TELEGRAM
   PREFLIGHT --> ALERT
+  TRIPWIRE -->|opt-in weekly nudge| ALERT
   ALERT --> NFACTORY
 
   subgraph config["src/config.py + config/"]

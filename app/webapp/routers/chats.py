@@ -25,6 +25,8 @@ from pydantic import BaseModel
 from app.webapp.routers._helpers import buffer_dir, db_path, get_conn, hub_base_url, tts_profiles
 from src import speech_profile, tts_client
 from src.analysis import summarize as summarize_client
+from src.analysis.tripwire import scan_tripwire
+from src.config import load_config
 from src.db import store
 from src.webapp_config import WebappConfig
 
@@ -110,6 +112,32 @@ async def list_chats(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, 
             }
             for row in rows
         ]
+    }
+
+
+@router.get("/api/chats/tripwire")
+async def tripwire_candidates(
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
+    """Recent Stage-1 matches from discovered chats; never invokes Stage 2."""
+    config = load_config().tripwire
+    result = scan_tripwire(conn, config)
+    return {
+        "window_days": config.window_days,
+        "scanned_messages": result.scanned_messages,
+        "truncated": result.truncated,
+        "hits": [
+            {
+                "id": hit.chat_id,
+                "source": hit.source,
+                "name": hit.display_name,
+                "last_message_at": hit.latest_message_at,
+                "matched_messages": hit.matched_messages,
+                "roots": list(hit.roots),
+                "buckets": list(hit.buckets),
+            }
+            for hit in result.hits
+        ],
     }
 
 

@@ -25,6 +25,12 @@ export const state = {
   chatsFilter: 'monitored',  // 'monitored' | 'all'
   chatsSourceFilter: 'all',  // 'all' | 'whatsapp' | 'gmail'
   chatsSearch: '',
+  tripwire: {
+    hits: [],
+    phase: 'loading',  // 'loading' | 'ready' | 'empty' | 'stale' | 'error'
+    windowDays: 7,
+    truncated: false,
+  },
   config: null,
   // Execution (#11)
   execution: {
@@ -90,6 +96,9 @@ export const els = {
   chatsCount: document.getElementById('chatsCount'),
   chatsList: document.getElementById('chatsList'),
   chatsEmpty: document.getElementById('chatsEmpty'),
+  tripwireCard: document.getElementById('tripwireCard'),
+  tripwireMeta: document.getElementById('tripwireMeta'),
+  tripwireList: document.getElementById('tripwireList'),
 
   // History overlay (#10)
   historyOverlay: document.getElementById('historyOverlay'),

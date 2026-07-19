@@ -109,6 +109,29 @@ def test_sources_load_from_json_and_env(
     assert cfg.sources == ("gmail", "whatsapp")
 
 
+def test_tripwire_defaults_quiet_and_loads_bounded_env_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_root(tmp_path)
+    (root / "config" / "default.json").write_text("{}", encoding="utf-8")
+    assert config.load_config(root=root).tripwire.telegram_nudge_enabled is False
+
+    monkeypatch.setenv("WR_TRIPWIRE_WINDOW_DAYS", "5")
+    monkeypatch.setenv("WR_TRIPWIRE_MAX_MESSAGES", "250")
+    monkeypatch.setenv("WR_TRIPWIRE_MAX_MESSAGES_PER_CHAT", "12")
+    monkeypatch.setenv("WR_TRIPWIRE_TELEGRAM_NUDGE_ENABLED", "true")
+    monkeypatch.setenv("WR_TRIPWIRE_NUDGE_CADENCE_DAYS", "9")
+
+    loaded = config.load_config(root=root).tripwire
+    assert loaded == config.TripwireConfig(
+        window_days=5,
+        max_messages=250,
+        max_messages_per_chat=12,
+        telegram_nudge_enabled=True,
+        nudge_cadence_days=9,
+    )
+
+
 def test_empty_sources_fall_back_to_whatsapp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

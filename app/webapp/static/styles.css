@@ -165,7 +165,24 @@ html, body {
 .app {
   max-width: 772px;
   margin: 0 auto;
-  padding: env(safe-area-inset-top, 0) var(--gap) calc(env(safe-area-inset-bottom, 0) + var(--space-lg));
+  padding-left: var(--gap);
+  padding-right: var(--gap);
+}
+/* Top/bottom padding is desktop/wide-only, deliberately split out of the rule
+   above (#188, mirrors app-launcher issue #355): the coarse-pointer + narrow
+   breakpoint below is where nav-tabs.css reserves .app's own top (status-bar
+   clearance) and bottom (floating tab-bar clearance) padding — a shorthand
+   `padding` here has the same specificity and comes later in the cascade
+   (styles.css loads after nav-tabs.css), so it silently clobbers both
+   reservations: the status-bar cushion shrinks to zero extra room and the
+   bottom clearance drops to 24px instead of the ~115px the floating pill
+   needs. Gating this rule to the complementary breakpoint leaves the vendored
+   component fully in charge of both edges on phones, in or out of standalone. */
+@media (pointer: fine), (min-width: 521px) {
+  .app {
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + var(--space-lg));
+  }
 }
 
 /* One tokenized focus ring, app-wide — never the browser default. */

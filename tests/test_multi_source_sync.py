@@ -238,3 +238,24 @@ def test_failed_source_is_logged_and_its_cursor_does_not_advance(
     failed = store.recent_syncs(conn)[0]
     assert failed["connector_source"] == "gmail"
     assert failed["status"] == "failed"
+
+
+def test_sync_sources_streams_progress_without_content(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    bindings = [
+        ConnectorBinding(
+            "whatsapp",
+            _fixture(tmp_path / "wa.json", "shared", "wa-1", "deadline tomorrow"),
+        ),
+    ]
+    lines: list[str] = []
+
+    sync_sources(conn, bindings, operation="ingest", progress=lines.append)
+
+    assert lines == [
+        "• whatsapp: syncing…",
+        "✓ whatsapp: 1 chat(s) · +1 new chat(s) · +1 message(s)",
+    ]
+    # Breadcrumbs must never leak message content or sender identities (#180).
+    assert not any("deadline" in line or "@" in line for line in lines)

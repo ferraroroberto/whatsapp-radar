@@ -13,6 +13,7 @@ from gmail_readonly import (
     GmailSearch,
     GmailSender,
     GmailSource,
+    NormalizedEmail,
     build_google_read_client,
 )
 
@@ -44,6 +45,10 @@ class GmailConnector:
         self._client = client
         self._mailbox: GmailMailbox | None = None
         self._sources: dict[str, GmailSource] = {}
+        # One run's discovery window, grouped by discovered source id (#180):
+        # both the discovered-sender list and each sender's messages are served
+        # from this single retrieval instead of per-sender API searches.
+        self._window: dict[str, list[NormalizedEmail]] = {}
         self._status = ConnectorStatus("gmail", False, "not connected")
 
     def connect(self) -> ConnectorStatus:
@@ -94,6 +99,12 @@ class GmailConnector:
         chat so the operator can promote it to monitored. A discovery API failure is
         non-fatal — it logs and falls back to the whitelist so a hiccup never drops
         the monitored senders' ingest.
+
+        Single-pass window (#180): the window's metadata is retrieved once and
+        kept for this run; discovered senders' message ids come from it instead
+        of one API search per sender, and full bodies are downloaded only for
+        ids the store doesn't already hold (:meth:`fetch_messages_new`) — the
+        old shape re-downloaded the entire window on every sync.
         """
         mailbox = self._require_connected()
         records = [
@@ -105,24 +116,35 @@ class GmailConnector:
             )
             for source in self._sources.values()
         ]
-        seen = set(self._sources)
         try:
-            discovered = mailbox.discover_senders(
-                days=self._config.discovery_days,
+            window = mailbox.metadata(
+                GmailSearch(lookback_days=self._config.discovery_days),
                 limit=self._config.discovery_max_messages,
             )
         except GmailReadError as exc:
             logger.warning("⚠️ Gmail sender discovery failed (%s); using whitelist only", exc)
-            discovered = ()
-        for sender in discovered:
-            source_id = f"{_SENDER_PREFIX}{sender.address}"
-            if source_id in seen:
+            window = []
+        self._window = {}
+        display_names: dict[str, str] = {}
+        latest: dict[str, str] = {}
+        for email in window:
+            address = (email.sender_address or "").strip().lower()
+            if not address:
                 continue
-            seen.add(source_id)
+            source_id = f"{_SENDER_PREFIX}{address}"
+            if source_id in self._sources:
+                continue  # whitelisted senders keep their full-history search
+            self._window.setdefault(source_id, []).append(email)
+            name = (email.sender_name or "").strip() or address
+            if display_names.get(source_id, address) == address and name != address:
+                display_names[source_id] = name
+            display_names.setdefault(source_id, name)
+            latest[source_id] = max(latest.get(source_id, ""), email.timestamp)
+        for source_id in sorted(latest, key=lambda sid: (latest[sid], sid), reverse=True):
             records.append(
                 ChatRecord(
                     source_chat_id=source_id,
-                    display_name=sender.display_name,
+                    display_name=display_names[source_id],
                     chat_type="email",
                     source="gmail",
                 )
@@ -130,41 +152,63 @@ class GmailConnector:
         return records
 
     def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
+        return self.fetch_messages_new(source_chat_id, frozenset())
+
+    def fetch_messages_new(
+        self, source_chat_id: str, known_ids: frozenset[str] | set[str]
+    ) -> list[MessageRecord]:
+        """New messages for a chat, skipping ids the caller already stores (#180).
+
+        The optional-capability twin of :meth:`fetch_messages` (the ingest loop
+        uses it when present): resolve the chat's candidate message ids cheaply —
+        whitelisted sources by search, discovered senders from this run's window
+        metadata — and download full content only for ids not in ``known_ids``.
+        Re-syncing an unchanged mailbox costs id lists, not body downloads.
+        """
         mailbox = self._require_connected()
         source = self._sources.get(source_chat_id)
-        if source is not None:
-            # Whitelisted sender/label: full-history search (unchanged).
-            search = source.search
-        elif source_chat_id.startswith(_SENDER_PREFIX):
-            # Discovered sender: bounded to the discovery window so the store stays
-            # bounded; its messages past retention are pruned unless it is monitored.
-            address = source_chat_id[len(_SENDER_PREFIX):]
-            search = GmailSearch(
-                query=f"from:{_escape_query(address)}",
-                lookback_days=self._config.discovery_days,
-            )
-        else:
-            raise ValueError("Gmail source chat is not whitelisted")
         try:
-            emails = mailbox.messages(search)
+            if source is not None:
+                # Whitelisted sender/label: full-history id search (unchanged
+                # coverage — only the download becomes incremental).
+                candidate_ids = mailbox.search_ids(source.search)
+            elif source_chat_id.startswith(_SENDER_PREFIX):
+                cached = self._window.get(source_chat_id)
+                if cached is not None:
+                    candidate_ids = [email.message_id for email in cached]
+                else:
+                    # Sender asked about outside this run's window (e.g. a
+                    # reprocess): bounded per-sender search, still incremental.
+                    address = source_chat_id[len(_SENDER_PREFIX):]
+                    candidate_ids = mailbox.search_ids(
+                        GmailSearch(
+                            query=f"from:{_escape_query(address)}",
+                            lookback_days=self._config.discovery_days,
+                        )
+                    )
+            else:
+                raise ValueError("Gmail source chat is not whitelisted")
+            new_ids = [mid for mid in candidate_ids if mid not in known_ids]
+            emails = mailbox.messages_by_ids(new_ids) if new_ids else []
         except GmailReadError as exc:
             self._status = ConnectorStatus("gmail", False, str(exc))
             raise ConnectorOffline(self._status) from exc
-        return [
-            MessageRecord(
-                source_message_id=email.message_id,
-                message_timestamp=email.timestamp,
-                text=email.text,
-                sender_label=email.sender_name or email.sender_address,
-                message_type="email",
-                raw={
-                    "thread_id": email.thread_id,
-                    "label_ids": list(email.label_ids),
-                    "headers": email.headers,
-                },
-            )
-            for email in emails
-        ]
+        return [self._record(email) for email in emails]
+
+    @staticmethod
+    def _record(email: NormalizedEmail) -> MessageRecord:
+        return MessageRecord(
+            source_message_id=email.message_id,
+            message_timestamp=email.timestamp,
+            text=email.text,
+            sender_label=email.sender_name or email.sender_address,
+            message_type="email",
+            raw={
+                "thread_id": email.thread_id,
+                "label_ids": list(email.label_ids),
+                "headers": email.headers,
+            },
+        )
 
     def canonical_source_id(self, source_chat_id: str) -> str | None:
         return source_chat_id
@@ -177,6 +221,7 @@ class GmailConnector:
         self._client = None
         self._mailbox = None
         self._sources = {}
+        self._window = {}
         self._status = ConnectorStatus("gmail", False, "stopped")
 
     def _require_connected(self) -> GmailMailbox:

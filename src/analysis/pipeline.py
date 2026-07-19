@@ -201,6 +201,7 @@ def _sync(
             progress=progress,
         ),
         gmail_retention_days=config.gmail.retention_days,
+        progress=progress,
     )
     delta = synced.delta
     outcome.source_errors.extend(synced.source_errors)

@@ -298,6 +298,29 @@ class GmailMailbox:
         """Retrieve and normalize matching messages, sorted oldest first."""
         return self._retrieve(search, metadata_only=False, limit=limit)
 
+    def search_ids(self, search: GmailSearch) -> list[str]:
+        """Matching message ids only — the cheap first half of an incremental read.
+
+        Callers that already hold some messages can diff these ids against their
+        store and download full content for the genuinely new ones via
+        :meth:`messages_by_ids` (#180), instead of re-fetching every body.
+        """
+        return self._message_ids(search)
+
+    def messages_by_ids(self, message_ids: list[str]) -> list[NormalizedEmail]:
+        """Retrieve and normalize exactly these messages, sorted oldest first."""
+        try:
+            messages = [
+                normalize_message(raw)
+                for raw in self._get_many(list(message_ids), metadata_only=False)
+            ]
+        except GmailReadError:
+            raise
+        except Exception as exc:
+            raise GmailReadError(_safe_error_detail(exc)) from exc
+        messages.sort(key=lambda message: (message.timestamp, message.message_id))
+        return messages
+
     def close(self) -> None:
         """Release the underlying HTTP transport."""
         self._client.close()
@@ -325,10 +348,8 @@ class GmailMailbox:
             if limit is not None:
                 message_ids = message_ids[:limit]
             messages = [
-                normalize_message(
-                    self._client.get_message(message_id, metadata_only=metadata_only)
-                )
-                for message_id in message_ids
+                normalize_message(raw)
+                for raw in self._get_many(message_ids, metadata_only=metadata_only)
             ]
         except GmailReadError:
             raise
@@ -336,6 +357,25 @@ class GmailMailbox:
             raise GmailReadError(_safe_error_detail(exc)) from exc
         messages.sort(key=lambda message: (message.timestamp, message.message_id))
         return messages
+
+    def _get_many(
+        self, message_ids: list[str], *, metadata_only: bool
+    ) -> list[dict[str, Any]]:
+        """Fetch raw messages, batched when the client supports it.
+
+        ``get_messages`` is an optional acceleration, not part of the minimal
+        :class:`GmailReadClient` protocol — portable implementations and test
+        fakes stay one-method simple, while the official adapter collapses a
+        window of sequential GETs into a few batch round-trips (#180).
+        """
+        bulk = getattr(self._client, "get_messages", None)
+        if callable(bulk):
+            result: list[dict[str, Any]] = bulk(message_ids, metadata_only=metadata_only)
+            return result
+        return [
+            self._client.get_message(message_id, metadata_only=metadata_only)
+            for message_id in message_ids
+        ]
 
 
 def normalize_message(raw: dict[str, Any]) -> NormalizedEmail:
@@ -374,6 +414,10 @@ def masked_email_address(address: str) -> str:
 
 
 def _safe_error_detail(exc: Exception) -> str:
+    if isinstance(exc, TimeoutError):
+        # Distinct from a generic failure: the transport-level timeout replaced
+        # what used to be an unbounded hang (#180).
+        return "Gmail API request timed out — network stalled or Google unreachable"
     status = getattr(getattr(exc, "resp", None), "status", None)
     if status == 401:
         return "OAuth token is invalid or expired"

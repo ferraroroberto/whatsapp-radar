@@ -1088,6 +1088,40 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .audit-sync-tag { font-size: var(--font-caption); font-weight: 600; color: var(--muted); flex: none; }
 .audit-sync-delta { flex: 1; min-width: 0; text-align: right; }
 
+/* Cross-run filtered review (#194): a bounded flat list, folded by default.
+   Each whole row is one >=60px drill-through target; entries use dividers,
+   never nested cards, per the fleet list-row contract. */
+.audit-filtered-list { max-height: 360px; overflow-y: auto; }
+.audit-filtered-row + .audit-filtered-row { border-top: 1px solid var(--line-muted); }
+.audit-filtered-main {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.audit-filtered-main:active { background: var(--card-off); }
+.audit-filtered-top { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+.audit-filtered-name {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--font-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.audit-filtered-when { flex: none; }
+.audit-filtered-reason { overflow-wrap: anywhere; }
+#auditFilteredMore { margin-top: var(--space-sm); }
+
 /* Run detail: header + funnel (reuses .exec-funnel) + per-chat trace blocks. */
 .audit-traces { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-trace { margin: 0; }

@@ -245,6 +245,36 @@ def traces_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
     )
 
 
+def list_filtered_traces(
+    conn: sqlite3.Connection,
+    since: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    """Recent non-actionable trace rows across runs, newest first."""
+    return list(
+        conn.execute(
+            "SELECT t.id AS trace_id, t.run_id, t.created_at, t.stage1_passed, "
+            "t.stage1_roots_json, t.llm_called, t.parsed_result_json, t.final_action, "
+            "c.display_name, c.source "
+            "FROM analysis_trace t JOIN chats c ON c.id = t.chat_id "
+            "WHERE t.final_action != 'actionable' AND t.created_at >= ? "
+            "ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?",
+            (since, max(1, limit), max(0, offset)),
+        ).fetchall()
+    )
+
+
+def count_filtered_traces(conn: sqlite3.Connection, since: str) -> int:
+    """Count recent non-actionable trace rows for bounded API pagination."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM analysis_trace "
+        "WHERE final_action != 'actionable' AND created_at >= ?",
+        (since,),
+    ).fetchone()
+    return int(row["n"])
+
+
 def actionable_items_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
     return list(
         conn.execute(

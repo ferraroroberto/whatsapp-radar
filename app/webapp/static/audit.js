@@ -202,6 +202,86 @@ function renderRuns() {
   els.auditRunsEmpty.hidden = rendered > 0;
 }
 
+// ----------------------------------------------------------- filtered-out review
+
+function filteredReason(item) {
+  if (item.final_action !== 'not_actionable') return actionMeta(item.final_action).label;
+  if (!item.stage1_passed) return 'Stage 1 filtered · no actionable keyword';
+  const verdict = item.parsed_result || {};
+  const reason = verdict.summary || 'Stage 2 marked this not actionable';
+  return verdict.priority ? `${reason} · ${verdict.priority} priority` : reason;
+}
+
+function filteredListItem(item) {
+  const li = document.createElement('li');
+  li.className = 'audit-filtered-row';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'audit-filtered-main';
+  button.setAttribute('aria-label', `Open run ${item.run_id} for ${item.display_name}`);
+
+  const top = document.createElement('span');
+  top.className = 'audit-filtered-top';
+  const name = document.createElement('strong');
+  name.className = 'audit-filtered-name';
+  name.textContent = item.display_name;
+  const source = document.createElement('span');
+  source.className = 'source-badge';
+  source.textContent = item.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+  const when = document.createElement('span');
+  when.className = 'audit-filtered-when muted small';
+  when.textContent = fmtLocalDateTime(item.created_at);
+  top.append(name, source, when);
+
+  const reason = document.createElement('span');
+  reason.className = 'audit-filtered-reason muted small';
+  reason.textContent = filteredReason(item);
+  button.append(top, reason);
+  button.addEventListener('click', function () { selectRun(item.run_id); });
+  li.appendChild(button);
+  return li;
+}
+
+function renderFiltered() {
+  const ax = auditState();
+  els.auditFiltered.textContent = '';
+  for (const item of ax.filtered) els.auditFiltered.appendChild(filteredListItem(item));
+  els.auditFilteredCount.textContent = `${ax.filteredTotal} · ${ax.filteredDays}d`;
+  els.auditFilteredEmpty.hidden = ax.filtered.length > 0;
+  els.auditFilteredMore.hidden = !ax.filteredHasMore;
+}
+
+async function fetchFiltered(append) {
+  const ax = auditState();
+  const request = ++ax.filteredRequest;
+  const previous = ax.filtered.length > 0;
+  const offset = append ? ax.filtered.length : 0;
+  els.auditFilteredCard.dataset.state = previous ? 'ready' : 'loading';
+  els.auditFilteredStatus.hidden = false;
+  els.auditFilteredStatus.textContent = append
+    ? 'Reading more filtered decisions…'
+    : 'Reading filtered decisions…';
+  try {
+    const data = await jsonApi(
+      `/api/audit/filtered?days=${ax.filteredDays}&limit=50&offset=${offset}`
+    );
+    if (request !== ax.filteredRequest) return;
+    ax.filtered = append ? ax.filtered.concat(data.items || []) : (data.items || []);
+    ax.filteredTotal = data.total || 0;
+    ax.filteredHasMore = !!data.has_more;
+    els.auditFilteredCard.dataset.state = ax.filtered.length ? 'ready' : 'empty';
+    els.auditFilteredStatus.hidden = true;
+    renderFiltered();
+  } catch (_) {
+    if (request !== ax.filteredRequest) return;
+    els.auditFilteredCard.dataset.state = previous ? 'stale' : 'error';
+    els.auditFilteredStatus.textContent = previous
+      ? 'Showing the previous list · live data unavailable'
+      : 'Filtered decisions are unavailable. Try again.';
+  }
+}
+
 // ----------------------------------------------------------- run detail
 
 function funnelCells(run) {
@@ -498,10 +578,12 @@ function closeDetail() {
 // ----------------------------------------------------------- fetch + wire
 
 export async function fetchAudit() {
+  const filteredFetch = fetchFiltered(false);
   let data;
   try {
     data = await jsonApi('/api/audit/runs');
   } catch (_) {
+    await filteredFetch;
     return;  // 401 flips the login overlay; stay quiet otherwise.
   }
   const ax = auditState();
@@ -514,6 +596,7 @@ export async function fetchAudit() {
   if (ax.selected && !ax.runs.some(function (r) { return r.id === ax.selected; })) {
     closeDetail();
   }
+  await filteredFetch;
 }
 
 export function wireAudit() {
@@ -529,4 +612,14 @@ export function wireAudit() {
     }
     renderRuns();
   });
+  els.auditFilteredDays.addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.range-tab');
+    if (!btn) return;
+    auditState().filteredDays = Number(btn.dataset.days) || 30;
+    for (const b of els.auditFilteredDays.querySelectorAll('.range-tab')) {
+      b.classList.toggle('active', b === btn);
+    }
+    fetchFiltered(false);
+  });
+  els.auditFilteredMore.addEventListener('click', function () { fetchFiltered(true); });
 }

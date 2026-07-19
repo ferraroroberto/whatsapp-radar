@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from starlette.testclient import TestClient
@@ -293,6 +294,77 @@ def test_audit_run_drilldown_trace(tmp_path: Path) -> None:
     ]
 
 
+def test_audit_filtered_list_is_recent_bounded_and_paged(tmp_path: Path) -> None:
+    db = tmp_path / "filtered.sqlite3"
+    conn = store.connect(db)
+    first_run_id = _seed(conn)
+    filtered_chat_id = int(
+        conn.execute(
+            "SELECT id FROM chats WHERE display_name = 'School Parents Group'"
+        ).fetchone()["id"]
+    )
+
+    second_run_id = store.start_run(conn, mode="live")
+    store.finish_run(conn, second_run_id, "completed", chats_reviewed=1)
+    store.insert_analysis_trace(
+        conn,
+        second_run_id,
+        filtered_chat_id,
+        input_message_ids_json=json.dumps(["b1"]),
+        input_text="See you at pickup",
+        messages_json=json.dumps(
+            [{"id": "b1", "sender": "Parent", "text": "See you at pickup", "roots": ["pickup"]}]
+        ),
+        stage1_passed=True,
+        stage1_roots_json=json.dumps(["pickup"]),
+        llm_called=True,
+        llm_system_prompt="You are a classifier.",
+        llm_user_prompt="Messages: See you at pickup",
+        llm_raw_response='{"action_required": false, "priority": "low"}',
+        parsed_result_json=json.dumps(
+            {
+                "action_required": False,
+                "priority": "low",
+                "summary": "Routine pickup acknowledgement",
+            }
+        ),
+        final_action="not_actionable",
+        telegram_text=None,
+        error=None,
+    )
+    older_at = (datetime.now(UTC) - timedelta(days=60)).isoformat(timespec="seconds")
+    conn.execute(
+        "UPDATE analysis_trace SET created_at = ? "
+        "WHERE run_id = ? AND final_action != 'actionable'",
+        (older_at, first_run_id),
+    )
+    conn.commit()
+    conn.close()
+
+    with _client(db) as client:
+        recent = client.get("/api/audit/filtered", params={"days": 30, "limit": 1}).json()
+        old_page = client.get(
+            "/api/audit/filtered", params={"days": 90, "limit": 1, "offset": 1}
+        ).json()
+
+    assert recent["days"] == 30
+    assert recent["total"] == 1
+    assert recent["has_more"] is False
+    assert len(recent["items"]) == 1
+    item = recent["items"][0]
+    assert item["run_id"] == second_run_id
+    assert item["display_name"] == "School Parents Group"
+    assert item["source"] == "whatsapp"
+    assert item["stage1_passed"] is True
+    assert item["llm_called"] is True
+    assert item["parsed_result"]["summary"] == "Routine pickup acknowledgement"
+
+    assert old_page["total"] == 2
+    assert old_page["offset"] == 1
+    assert old_page["items"][0]["run_id"] == first_run_id
+    assert old_page["items"][0]["stage1_passed"] is False
+
+
 def test_audit_run_unknown_404(tmp_path: Path) -> None:
     db = tmp_path / "audit.sqlite3"
     store.connect(db).close()
@@ -309,5 +381,10 @@ def test_audit_requires_token_from_remote(tmp_path: Path) -> None:
     app.state.db_path = db
     with TestClient(app, client=REMOTE) as client:
         assert client.get("/api/audit/runs").status_code == 401
+        assert client.get("/api/audit/filtered").status_code == 401
         ok = client.get("/api/audit/runs", headers={"Authorization": "Bearer secret"})
         assert ok.status_code == 200
+        filtered = client.get(
+            "/api/audit/filtered", headers={"Authorization": "Bearer secret"}
+        )
+        assert filtered.status_code == 200

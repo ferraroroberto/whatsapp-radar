@@ -9,16 +9,16 @@ delta, Stage-1 keyword roots, the exact LLM system+user prompts, the raw model
 response, the parsed verdict, the final action, and the Telegram text.
 
 This router is **read-only** (SELECT only, no writes, no cursor changes) so it is
-safe on the request path. It exposes two endpoints: a run list (with the funnel)
-and a per-run drill-down (the per-chat trace). It never triggers scans — that is
-the Execution tab (#11).
+safe on the request path. It exposes a run list (with the funnel), a bounded
+cross-run list of filtered decisions, and a per-run drill-down (the per-chat
+trace). It never triggers scans — that is the Execution tab (#11).
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Any
 
@@ -143,6 +143,22 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _filtered_trace_row(row: sqlite3.Row) -> dict[str, Any]:
+    """Shape one cross-run filtered item without duplicating the full trace."""
+    return {
+        "trace_id": int(row["trace_id"]),
+        "run_id": int(row["run_id"]),
+        "created_at": row["created_at"],
+        "source": row["source"],
+        "display_name": row["display_name"],
+        "stage1_passed": bool(row["stage1_passed"]),
+        "stage1_roots": _loads(row["stage1_roots_json"]),
+        "llm_called": bool(row["llm_called"]),
+        "parsed_result": _loads(row["parsed_result_json"]),
+        "final_action": row["final_action"],
+    }
+
+
 @router.get("/api/audit/runs")
 async def list_runs(
     limit: int = 50,
@@ -175,6 +191,33 @@ async def list_runs(
     ]
     coverage_gaps = _coverage_gaps(store.list_live_scan_runs(conn))
     return {"runs": runs, "syncs": syncs, "coverage_gaps": coverage_gaps}
+
+
+@router.get("/api/audit/filtered")
+async def list_filtered(
+    days: int = 30,
+    limit: int = 50,
+    offset: int = 0,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
+    """Recent cross-run decisions that did not produce an actionable item."""
+    days = max(1, min(days, 3650))
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat(timespec="seconds")
+    total = store.count_filtered_traces(conn, since)
+    items = [
+        _filtered_trace_row(row)
+        for row in store.list_filtered_traces(conn, since, limit, offset)
+    ]
+    return {
+        "days": days,
+        "limit": limit,
+        "offset": offset,
+        "total": total,
+        "has_more": offset + len(items) < total,
+        "items": items,
+    }
 
 
 @router.get("/api/audit/runs/{run_id}")

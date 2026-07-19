@@ -122,6 +122,32 @@ def location_kind(event: CalendarEvent, home_address: str) -> str:
 # --------------------------------------------------------------- origin / commutes
 
 
+def _origin_source_event(
+    event: CalendarEvent,
+    same_person_events: list[CalendarEvent],
+    *,
+    home_address: str,
+    lookback_min: int,
+) -> CalendarEvent | None:
+    """The preceding commute event this event chains off, or None (⇒ from home).
+
+    The latest same-person commute active now or ended within ``lookback_min``
+    before this event's start (office → lunch chains).
+    """
+    window_start = event.start - timedelta(minutes=lookback_min)
+    candidates = [
+        other
+        for other in same_person_events
+        if other.event_id != event.event_id
+        and other.start < event.start
+        and other.end >= window_start
+        and requires_commute(other, home_address)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda e: e.end)
+
+
 def resolve_origin(
     event: CalendarEvent,
     same_person_events: list[CalendarEvent],
@@ -135,29 +161,30 @@ def resolve_origin(
     ``lookback_min`` before this event's start; use the latest such event's
     destination as the origin (office → lunch chains). Otherwise home.
     """
-    window_start = event.start - timedelta(minutes=lookback_min)
-    candidates = [
-        other
-        for other in same_person_events
-        if other.event_id != event.event_id
-        and other.start < event.start
-        and other.end >= window_start
-        and requires_commute(other, home_address)
-    ]
-    if not candidates:
+    source = _origin_source_event(
+        event, same_person_events, home_address=home_address, lookback_min=lookback_min
+    )
+    if source is None:
         return home_address
-    latest = max(candidates, key=lambda e: e.end)
-    return physical_location(latest) or home_address
+    return physical_location(source) or home_address
 
 
 @dataclass(frozen=True)
 class CommuteLeg:
-    """One resolved commute to check for traffic."""
+    """One resolved commute to check for traffic.
+
+    ``origin_event_end`` is the end time of the preceding event when the origin
+    was chained off it (a back-to-back leg), else ``None`` (origin is home). It
+    lets the traffic check judge whether the hop is *feasible at all* — travel
+    time vs. the gap between the two events (#169, completing #168's deferred
+    back-to-back adjacency judging).
+    """
 
     person: str
     event: CalendarEvent
     origin: str
     destination: str
+    origin_event_end: datetime | None = None
 
 
 def upcoming_commutes(
@@ -180,12 +207,21 @@ def upcoming_commutes(
             dest = physical_location(event)
             if dest is None:
                 continue
-            origin = resolve_origin(
+            source = _origin_source_event(
                 event, events, home_address=home_address, lookback_min=origin_lookback_min
             )
+            origin = home_address if source is None else (physical_location(source) or home_address)
             if same_address(origin, dest):
                 continue
-            legs.append(CommuteLeg(person=person, event=event, origin=origin, destination=dest))
+            legs.append(
+                CommuteLeg(
+                    person=person,
+                    event=event,
+                    origin=origin,
+                    destination=dest,
+                    origin_event_end=source.end if source is not None else None,
+                )
+            )
     return legs
 
 
@@ -340,8 +376,9 @@ def find_overlaps(
     hard conflict regardless of childcare coverage. Deliberately conservative:
     events without a physical address (home, video, assumed home) never pair
     into an overlap, and exact back-to-back adjacency (``b.start == a.end``) is
-    not an overlap — judging whether the *travel* between two adjacent events
-    is feasible needs live routing and arrives with the presence work (#169).
+    not an overlap. Judging whether the *travel* between two adjacent events is
+    feasible needs live routing — that now lives in the traffic check, which
+    routes each chained leg and flags it when travel time exceeds the gap (#169).
     """
     conflicts: list[Conflict] = []
     for person, events in events_by_person.items():

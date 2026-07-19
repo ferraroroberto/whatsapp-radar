@@ -135,6 +135,25 @@ def test_upcoming_commutes_filters():
     )
     assert [leg.event.event_id for leg in legs] == ["a"]
     assert legs[0].origin == HOME and legs[0].destination == WORK
+    assert legs[0].origin_event_end is None  # from home ⇒ no chained departure
+
+
+def test_upcoming_commutes_records_chained_origin_end():
+    now = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)
+    office = _event("Office", location=WORK, eid="a",
+                    start=datetime(2026, 7, 20, 8, 30, tzinfo=UTC),
+                    end=datetime(2026, 7, 20, 9, 0, tzinfo=UTC))
+    lunch = _event("Lunch", location="Carrer de la Marina 16, Barcelona", eid="b",
+                   start=datetime(2026, 7, 20, 9, 10, tzinfo=UTC),
+                   end=datetime(2026, 7, 20, 10, 0, tzinfo=UTC))
+    legs = rules.upcoming_commutes(
+        {"roberto": [office, lunch]},
+        home_address=HOME, now=now, lookahead=timedelta(hours=6), origin_lookback_min=60,
+    )
+    lunch_leg = next(leg for leg in legs if leg.event.event_id == "b")
+    # Chained off the office ⇒ origin is the office and the gap anchor is its end.
+    assert lunch_leg.origin == WORK
+    assert lunch_leg.origin_event_end == office.end
 
 
 # --------------------------------------------------------------- dedup + quiet

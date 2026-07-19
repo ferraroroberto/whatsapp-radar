@@ -74,18 +74,27 @@ def compute_route(
     *,
     api_key: str,
     arrival_time: datetime | None = None,
+    origin_latlng: tuple[float, float] | None = None,
     session: requests.Session | None = None,
 ) -> RouteResult:
     """Compute the driving route ``origin`` → ``destination`` with live traffic.
 
     ``arrival_time`` (aware datetime) requests a traffic estimate for that
-    arrival; omitted, the estimate is for departing now. Raises
-    :class:`TrafficReadError` on any transport/API failure.
+    arrival; omitted, the estimate is for departing now. ``origin_latlng``
+    (a ``(lat, lng)`` pair) routes from an exact position — the live phone fix
+    (#169) — instead of the ``origin`` address string, which is then unused.
+    Raises :class:`TrafficReadError` on any transport/API failure.
     """
     if not api_key:
         raise TrafficReadError("Routes API key is not configured")
+    if origin_latlng is not None:
+        origin_waypoint: dict[str, Any] = {
+            "location": {"latLng": {"latitude": origin_latlng[0], "longitude": origin_latlng[1]}}
+        }
+    else:
+        origin_waypoint = {"address": origin}
     body: dict[str, Any] = {
-        "origin": {"address": origin},
+        "origin": origin_waypoint,
         "destination": {"address": destination},
         "travelMode": "DRIVE",
         "routingPreference": "TRAFFIC_AWARE",

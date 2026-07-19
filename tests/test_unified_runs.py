@@ -194,6 +194,7 @@ def _cadence_config(tmp_path: Path, *, cadence_min: int) -> Any:
 def test_cli_traffic_check_self_skips_within_cadence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """A **live** fire within the cadence window self-skips (#170)."""
     db = tmp_path / "cadence.sqlite3"
     monkeypatch.setenv("WR_DB_PATH", str(db))
 
@@ -217,7 +218,7 @@ def test_cli_traffic_check_self_skips_within_cadence(
 
     monkeypatch.setattr(traffic_check, "run_traffic_check", never_called)
 
-    assert cli.main(["traffic-check", "--dry-run"]) == 0
+    assert cli.main(["traffic-check"]) == 0
 
     conn = store.connect(db)
     try:
@@ -229,6 +230,59 @@ def test_cli_traffic_check_self_skips_within_cadence(
     out = capsys.readouterr().out
     assert "skipped" in out
     assert "cadence 30min not elapsed" in out
+
+
+def test_cli_traffic_check_dry_run_never_cadence_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A ``--dry-run`` fire is an explicit human test pass — never cadence-skipped (#186).
+
+    Same setup as the live self-skip test above (a live run recorded seconds
+    ago, well inside the 30min cadence window) but this time the invocation is
+    ``--dry-run``: the runner must actually be called, and a run row recorded.
+    """
+    db = tmp_path / "cadence.sqlite3"
+    monkeypatch.setenv("WR_DB_PATH", str(db))
+
+    conn = store.connect(db)
+    try:
+        run_id = store.start_run(conn, mode="live", kind="traffic-check")
+        store.finish_run_summary(
+            conn, run_id, "completed",
+            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
+        )
+    finally:
+        conn.close()
+
+    cfg = _cadence_config(tmp_path, cadence_min=30)
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+
+    payload = {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
+    calls: list[bool] = []
+
+    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+        calls.append(dry_run)
+        return dict(payload, dry_run=dry_run)
+
+    import src.family.traffic_check as traffic_check
+
+    monkeypatch.setattr(traffic_check, "run_traffic_check", fake_runner)
+
+    assert cli.main(["traffic-check", "--dry-run"]) == 0
+
+    assert calls == [True]  # the runner was actually invoked, not skipped
+
+    conn = store.connect(db)
+    try:
+        rows = store.list_review_runs(conn, 10)
+        assert len(rows) == 2
+        assert rows[0]["mode"] == "dry_run"
+        assert rows[0]["status"] == "completed"
+    finally:
+        conn.close()
+
+    out = capsys.readouterr().out
+    assert "skipped" not in out
 
 
 def test_cli_traffic_check_runs_when_cadence_elapsed(
@@ -288,6 +342,24 @@ def test_last_run_started_at_returns_most_recent_of_kind(conn: sqlite3.Connectio
     assert store.last_run_started_at(conn, "traffic-check") == latest["started_at"]
     # A different kind never confuses the lookup.
     assert store.last_run_started_at(conn, "calendar-scan") is None
+
+
+def test_last_run_started_at_ignores_dry_run_rows(conn: sqlite3.Connection) -> None:
+    """A dry run (#186) must never advance the live cadence clock.
+
+    Even though the dry run is the *newest* row by id, the lookup used to gate
+    the live cadence self-skip must keep returning the older live run's
+    timestamp — a dry run is excluded entirely.
+    """
+    live = store.start_run(conn, mode="live", kind="traffic-check")
+    store.finish_run_summary(conn, live, "completed", "{}")
+    live_row = store.review_run(conn, live)
+    assert live_row is not None
+
+    dry = store.start_run(conn, mode="dry_run", kind="traffic-check")
+    store.finish_run_summary(conn, dry, "completed", "{}")
+
+    assert store.last_run_started_at(conn, "traffic-check") == live_row["started_at"]
 
 
 # --- API: unified visibility ------------------------------------------------

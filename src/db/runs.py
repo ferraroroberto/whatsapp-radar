@@ -101,17 +101,23 @@ def latest_run_id(conn: sqlite3.Connection) -> int | None:
 
 
 def last_run_started_at(conn: sqlite3.Connection, kind: str) -> str | None:
-    """Return the ``started_at`` of the most recent run of one ``kind``, or None.
+    """Return the ``started_at`` of the most recent **live** run of one ``kind``, or None.
 
     Backs the CLI's traffic-check cadence self-skip (#170): the Windows job is
     armed at a fixed high frequency and ``wr traffic-check`` compares this
     timestamp against ``traffic.cadence_min`` on every fire, so a cadence edit
     in the UI takes effect without re-arming Task Scheduler. A skipped fire
     never calls :func:`start_run`, so it never shows up here — only real
-    checks (and their dry-runs) count as "the last run".
+    checks count as "the last run".
+
+    Excludes ``mode='dry_run'`` rows (#186) — a dry run is an explicit,
+    on-demand human test pass and must never advance or be counted towards
+    the live cadence clock, even though it is recorded in ``review_runs`` like
+    any other run (#163/#170).
     """
     row = conn.execute(
-        "SELECT started_at FROM review_runs WHERE kind = ? ORDER BY id DESC LIMIT 1",
+        "SELECT started_at FROM review_runs WHERE kind = ? AND mode != 'dry_run' "
+        "ORDER BY id DESC LIMIT 1",
         (kind,),
     ).fetchone()
     return str(row["started_at"]) if row else None

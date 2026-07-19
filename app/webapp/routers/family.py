@@ -112,7 +112,10 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         summary["alerts"] = result.get("alerts")
     else:
         summary["conflicts"] = len(result.get("conflicts") or [])
-        summary["unknown_locations"] = len(result.get("unknown_locations") or [])
+        # Renamed unknown_locations -> missing_locations in #168; old rows persist.
+        summary["missing_locations"] = len(
+            result.get("missing_locations") or result.get("unknown_locations") or []
+        )
     return summary
 
 

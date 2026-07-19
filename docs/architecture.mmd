@@ -85,7 +85,7 @@ flowchart TB
   subgraph family["src/family/ — deterministic scheduled checks (#160, no LLM)"]
     FRULES["rules.py — pure classification / origin / dedup / conflicts"]
     FTRAFFIC["traffic_check.py — commute -> Routes -> alert"]
-    FCAL["calendar_scan.py — conflict + unknown-location scan"]
+    FCAL["calendar_scan.py — conflict scan + decision trace + daily summary"]
     FSOURCE["calendar_source.py — events per person"]
     FDEDUP["dedup.py — data/family/ alert log"]
   end

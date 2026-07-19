@@ -321,7 +321,7 @@ function renderEditable(box) {
   const target = box || els.familyEditable;
   target.textContent = '';
 
-  target.append(toggleRow('Daily calendar scan', draft.enabled, function (next) {
+  target.append(toggleRow('Calendar sync', draft.enabled, function (next) {
     draft.enabled = next;
     markDirty();
   }));

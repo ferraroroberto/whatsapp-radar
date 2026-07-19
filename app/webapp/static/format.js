@@ -16,7 +16,7 @@ const KIND_META = {
   notify: { label: 'Message' },
   resync: { label: 'Sync' },
   reprocess: { label: 'Reprocess' },
-  'calendar-scan': { label: 'Family: daily scan' },
+  'calendar-scan': { label: 'Calendar sync' },
   'traffic-check': { label: 'Family: traffic' },
 };
 

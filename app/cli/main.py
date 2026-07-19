@@ -416,7 +416,7 @@ def _cmd_family_check(
         _progress(
             f"📅 calendar-scan: {payload['status']} — "
             f"{len(payload.get('conflicts', []))} conflict(s), "
-            f"{len(payload.get('unknown_locations', []))} unknown location(s)"
+            f"{len(payload.get('missing_locations', []))} missing location(s)"
             + (" [dry-run]" if dry_run else "")
         )
     else:

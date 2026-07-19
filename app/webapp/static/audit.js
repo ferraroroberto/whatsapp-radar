@@ -62,7 +62,7 @@ function runSummaryLine(run) {
       return `${(s.checked || []).length} checked · ${s.alerts || 0} alert(s)`;
     }
     return `${(s.conflicts || []).length} conflict(s) · `
-      + `${(s.unknown_locations || []).length} unknown location(s)`;
+      + `${(s.missing_locations || s.unknown_locations || []).length} missing location(s)`;
   }
   const f = run.funnel;
   if (!f) return '';
@@ -336,12 +336,30 @@ function renderFamilyDetail(run) {
     ]
     : [
       { label: 'Conflicts', value: (s.conflicts || []).length },
-      { label: 'Unknown loc.', value: (s.unknown_locations || []).length },
+      { label: 'Missing loc.', value: (s.missing_locations || s.unknown_locations || []).length },
       { label: 'Status', value: s.status },
     ];
   renderFunnelCells(els.auditFunnel, cells);
   renderSourceFunnels(els.auditSourceFunnel, {});
   els.auditTraces.textContent = '';
+  // Calendar-sync runs carry a per-event decision trace + the sent summary
+  // (#168) — render those readably above the raw payload.
+  const summaryMsg = s.summary && s.summary.text
+    ? traceField(`Summary message (${s.summary.status || 'unknown'})`, s.summary.text)
+    : null;
+  if (summaryMsg) els.auditTraces.appendChild(summaryMsg);
+  const decisions = (s.decisions || []).map((d) => {
+    const when = fmtLocalDateTime(d.start);
+    const flags = [];
+    if (d.assumed) flags.push('missing location — assumed home');
+    if (d.commute) flags.push('commute');
+    return `${d.person} · ${when} · "${d.event}" → ${d.kind}`
+      + ` (${d.source})${flags.length ? ' [' + flags.join(', ') + ']' : ''}`;
+  });
+  const decisionsBlock = decisions.length
+    ? traceField(`Event decisions (${decisions.length})`, decisions.join('\n'))
+    : null;
+  if (decisionsBlock) els.auditTraces.appendChild(decisionsBlock);
   const payload = traceField('Run payload', run.summary);
   if (payload) els.auditTraces.appendChild(payload);
   els.auditTracesEmpty.hidden = !!payload;

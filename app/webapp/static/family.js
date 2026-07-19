@@ -248,7 +248,7 @@ function windowRow(w, onRemove) {
   }
   card.append(chips);
 
-  const times = el('div', 'cfg-fields');
+  const times = el('div', 'family-window-times');
   times.append(timeField('Start', w.time, function (v) { w.time = v; }));
   times.append(timeField('End (optional)', w.end_time, function (v) { w.end_time = v; }));
   card.append(times);

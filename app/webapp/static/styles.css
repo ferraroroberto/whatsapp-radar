@@ -1136,14 +1136,26 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--ink);
 }
 .field-label:first-child { margin-top: 0; }
-.family-windows { display: flex; flex-direction: column; gap: var(--space-sm); }
-.family-window {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm);
-}
+/* Flat repeating-row list (list-row contract, design.md): each window is
+   section content in the vertical flow, not a nested canvas-subtle card —
+   separated by a top hairline on every row after the first, same language as
+   .family-control-row above (#187, fixing #175's nested-card regression). */
+.family-windows { display: flex; flex-direction: column; }
+.family-window { padding: var(--space-sm) 0; }
+.family-window + .family-window { border-top: 1px solid var(--line-muted); }
 .family-window-head { display: flex; align-items: center; gap: var(--space-xs); }
-.family-window-head .input-native { flex: 1; }
+.family-window-head .input-native { flex: 1; min-width: 0; }
+/* Start/End: always a constrained two-column grid (never the adaptive
+   .cfg-fields single-column collapse) so the pair stays compact; minmax(0, 1fr)
+   plus min-width:0 on the label wrapper stops a wide native time control from
+   forcing the track past the viewport at 390px (#187). */
+.family-window-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: var(--space-xs) 0;
+}
+.family-window-times .stacked { margin: 0; min-width: 0; }
 .weekday-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-xs) 0; }
 .weekday-chip {
   flex: 1 1 44px;

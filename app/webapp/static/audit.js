@@ -360,6 +360,22 @@ function renderFamilyDetail(run) {
     ? traceField(`Event decisions (${decisions.length})`, decisions.join('\n'))
     : null;
   if (decisionsBlock) els.auditTraces.appendChild(decisionsBlock);
+  // Live phone-position coverage judgment (#177) — derived values only, the
+  // payload never carries coordinates.
+  const live = (s.live_coverage || []).map((c) => {
+    if (!c.assessed) {
+      return `${c.person}: no live fix (${c.presence_status}) — `
+        + `calendar inference stands for ${(c.windows || []).join(', ')}`;
+    }
+    const whereabouts = c.at_home ? 'at home' : `~${c.eta_min} min from home`;
+    return `${c.person} ${whereabouts} → '${c.window}' `
+      + `${c.feasible ? 'reachable' : 'AT RISK'}`
+      + ` (margin ${c.margin_min} min, fix ${c.presence_age_min} min old)`;
+  });
+  const liveBlock = live.length
+    ? traceField(`Live coverage (${live.length})`, live.join('\n'))
+    : null;
+  if (liveBlock) els.auditTraces.appendChild(liveBlock);
   const payload = traceField('Run payload', run.summary);
   if (payload) els.auditTraces.appendChild(payload);
   els.auditTracesEmpty.hidden = !!payload;

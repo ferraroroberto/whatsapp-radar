@@ -64,6 +64,7 @@
   "presence": {
     "enabled": false,
     "base_url": "http://127.0.0.1:8447",
+    "verify_tls": true,
     "max_age_min": 5,
     "timeout_s": 6,
     "refresh_timeout_s": 12,

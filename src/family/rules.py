@@ -9,6 +9,7 @@ conflict detection all live here as plain, unit-tested code.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -281,20 +282,13 @@ def _person_away_between(
     )
 
 
-def find_conflicts(
-    events_by_person: dict[str, list[CalendarEvent]],
-    family: FamilyConfig,
-    *,
-    day: date,
-    tz: tzinfo,
-) -> list[Conflict]:
-    """Coverage gaps for the day's childcare moments against the fixed pattern.
+def day_windows(family: FamilyConfig, day: date) -> list[tuple[str, time, time]]:
+    """The day's required childcare moments/windows as ``(label, start, end)``.
 
-    For each required moment or window (explicit childcare windows, optionally a
-    start-end range, plus the daily kids-home pickup on weekdays), flag when the
-    responsible parent has an away commitment overlapping it, or when neither
-    parent is available at all. ``tz`` is the household's local zone, used to
-    anchor each wall-clock moment against the timezone-aware calendar events.
+    Explicit childcare windows filtered to the weekday (a missing/invalid end
+    degrades to the point-in-time deadline), plus the daily kids-home pickup on
+    school weekdays. Shared by the calendar coverage check and the live
+    presence-ETA assessment (#177) so both judge the same windows.
     """
     weekday = day.weekday()
     windows: list[tuple[str, time, time]] = []
@@ -312,7 +306,37 @@ def find_conflicts(
     kids_home = _parse_hhmm(family.kids_home_time)
     if kids_home is not None and weekday < 5:  # school weekdays
         windows.append(("kids home", kids_home, kids_home))
+    return windows
 
+
+def arrival_margin_min(now: datetime, eta_min: float, window_start: datetime) -> int:
+    """Minutes of slack if the person leaves *now*: negative ⇒ they arrive late.
+
+    The deterministic core of the live coverage judgment (#177):
+    ``window_start - (now + eta)``, floored to whole minutes so a 30-second
+    shortfall already reads as ``-1`` rather than rounding up to "just fine".
+    """
+    gap_min = (window_start - now).total_seconds() / 60.0
+    return math.floor(gap_min - eta_min)
+
+
+def find_conflicts(
+    events_by_person: dict[str, list[CalendarEvent]],
+    family: FamilyConfig,
+    *,
+    day: date,
+    tz: tzinfo,
+) -> list[Conflict]:
+    """Coverage gaps for the day's childcare moments against the fixed pattern.
+
+    For each required moment or window (explicit childcare windows, optionally a
+    start-end range, plus the daily kids-home pickup on weekdays), flag when the
+    responsible parent has an away commitment overlapping it, or when neither
+    parent is available at all. ``tz`` is the household's local zone, used to
+    anchor each wall-clock moment against the timezone-aware calendar events.
+    """
+    weekday = day.weekday()
+    windows = day_windows(family, day)
     responsible = family.responsible_by_weekday.get(weekday)
     conflicts: list[Conflict] = []
     for label, start, end in windows:

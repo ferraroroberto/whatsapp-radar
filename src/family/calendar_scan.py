@@ -4,8 +4,11 @@ Pipeline: fetch the next few days for both calendars → per-event decision trac
 (#168: every event gets a recorded location verdict with its reason; a missing
 location is *assumed home* and flagged, never silently dropped) → apply the
 fixed weekly responsibility pattern plus two-places-at-once detection over the
-assessment window → always send one summary on a live run: coverage issues and
-missing-location asks, or an explicit all-clear. Coverage gaps and overlaps are
+assessment window → live phone-position ETA judgment for today's imminent
+windows when presence is enabled (#177; additive signal, calendar inference
+stays authoritative for intent and for anything beyond the lookahead) → always
+send one summary on a live run: coverage issues and missing-location asks, or
+an explicit all-clear. Coverage gaps and overlaps are
 hard alerts and bypass quiet hours; a clean summary inside quiet hours is
 suppressed until the next daytime run. Returns a schema-stable result payload
 the CLI persists as the run's ``summary_json`` (#163) and prints.
@@ -20,6 +23,8 @@ from src.config import Config
 from src.family import rules
 from src.family.calendar_source import fetch_events_by_person
 from src.notify.alert import send_alert
+from src.presence import PresenceLocation, get_location
+from src.traffic import TrafficReadError, compute_route
 
 
 def _day_bounds(day_start: datetime) -> tuple[datetime, datetime]:
@@ -72,6 +77,95 @@ def build_summary_text(
     return "\n".join(lines)
 
 
+def _assess_live_coverage(
+    config: Config, *, now: datetime
+) -> tuple[list[rules.Conflict], list[dict[str, Any]]]:
+    """Judge today's imminent childcare windows by phone → home ETA (#177).
+
+    Only windows starting within the traffic lookahead are judged — a phone fix
+    *now* says nothing about tomorrow. The verdict is additive: it never
+    suppresses a calendar-based coverage gap, because position and calendar
+    answer different questions (where the parent *is* vs. what they *intend* —
+    a parent reachable-in-time right now may still have a commitment running
+    through the window). Trace entries carry only derived values (age, distance,
+    ETA, margin) — never coordinates.
+    """
+    family, traffic, presence_cfg = config.family, config.traffic, config.presence
+    if not presence_cfg.enabled:
+        return [], []
+    day = now.date()
+    responsible = family.responsible_by_weekday.get(day.weekday())
+    if not responsible:
+        return [], []
+    tz = now.tzinfo or UTC
+    horizon = now + timedelta(hours=traffic.lookahead_hours)
+    imminent = [
+        (label, datetime.combine(day, start, tzinfo=tz))
+        for label, start, _end in rules.day_windows(family, day)
+        if now < datetime.combine(day, start, tzinfo=tz) <= horizon
+    ]
+    if not imminent:
+        return [], []
+
+    location = get_location(presence_cfg, responsible, now=now)
+    if not isinstance(location, PresenceLocation):
+        return [], [{
+            "person": responsible, "location_source": "calendar_inference",
+            "presence_status": location.reason, "assessed": False,
+            "windows": [label for label, _ in imminent],
+        }]
+
+    base: dict[str, Any] = {
+        "person": responsible, "location_source": "live_presence",
+        "presence_age_min": location.age_min,
+        "presence_refreshed": location.refreshed,
+        "at_home": location.at_home,
+        "distance_from_home_km": location.distance_from_home_km,
+        "assessed": True,
+    }
+    if location.at_home:
+        return [], [
+            {**base, "window": label, "start": start.isoformat(),
+             "eta_min": 0, "margin_min": rules.arrival_margin_min(now, 0, start),
+             "feasible": True}
+            for label, start in imminent
+        ]
+
+    if not traffic.api_key:
+        return [], [{**base, "assessed": False, "presence_status": "no_routes_api_key",
+                     "windows": [label for label, _ in imminent]}]
+    try:
+        # One route serves every window: same origin (the phone) and the same
+        # destination (home, where childcare happens) — only the margins differ.
+        route = compute_route(
+            "live phone position", family.home_address,
+            api_key=traffic.api_key, origin_latlng=(location.latitude, location.longitude),
+        )
+    except TrafficReadError as exc:
+        return [], [{**base, "assessed": False, "presence_status": f"routes_error: {exc}",
+                     "windows": [label for label, _ in imminent]}]
+
+    eta_min = route.traffic_s / 60.0
+    conflicts: list[rules.Conflict] = []
+    coverage: list[dict[str, Any]] = []
+    for label, start in imminent:
+        margin = rules.arrival_margin_min(now, eta_min, start)
+        feasible = margin >= 0
+        coverage.append({**base, "window": label, "start": start.isoformat(),
+                         "eta_min": round(eta_min), "margin_min": margin,
+                         "feasible": feasible})
+        if not feasible:
+            conflicts.append(rules.Conflict(
+                kind="coverage_eta", day=day.isoformat(),
+                detail=(
+                    f"{responsible} is ~{round(eta_min)} min from home but "
+                    f"'{label}' starts at {start.strftime('%H:%M')} — "
+                    f"{-margin} min short even leaving now"
+                ),
+            ))
+    return conflicts, coverage
+
+
 def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
     """Run one calendar sync. ``dry_run`` never sends anything."""
     family = config.family
@@ -109,6 +203,11 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             rules.find_overlaps(day_events, home_address=family.home_address)
         )
 
+    # Live phone-position judgment for today's imminent windows (#177) —
+    # additive to the calendar-based gaps, never a replacement for them.
+    live_conflicts, live_coverage = _assess_live_coverage(config, now=now)
+    conflicts.extend(live_conflicts)
+
     conflict_dicts = [{"kind": c.kind, "day": c.day, "detail": c.detail} for c in conflicts]
     text = build_summary_text(
         scan_days=scan_days,
@@ -139,6 +238,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         "conflicts": conflict_dicts,
         "missing_locations": missing,
         "decisions": decisions,
+        "live_coverage": live_coverage,
         "summary": summary,
         "dry_run": dry_run,
     }

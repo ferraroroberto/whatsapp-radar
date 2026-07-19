@@ -196,6 +196,10 @@ class TrafficConfig:
     dedup_window_min: int = 30
     origin_lookback_min: int = 60
     lookahead_hours: int = 3  # how far ahead to look for the next commute
+    # How often the scheduled App Launcher job should fire a live check (#164).
+    # The webapp persists this; the actual scheduling is an App Launcher job (#170)
+    # that reads this value — nothing in-process runs on this cadence.
+    cadence_min: int = 30
 
 
 @dataclass(frozen=True)
@@ -402,6 +406,7 @@ def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:
         dedup_window_min=int(raw.get("dedup_window_min", 30)),
         origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
         lookahead_hours=int(raw.get("lookahead_hours", 3)),
+        cadence_min=int(raw.get("cadence_min", 30)),
     )
 
 

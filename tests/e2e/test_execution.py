@@ -22,7 +22,11 @@ def test_execution_dry_run_shows_funnel(
     expect(page.locator("#paneExecution")).to_be_visible()
     sources_card = page.locator("#execSourcesCard")
     expect(sources_card).to_be_visible()
-    expect(page.locator("#execSourcesCard + #execMaintenanceCard")).to_be_visible()
+    # The traffic-jam card lives on the Run tab now (#164), folded by default.
+    expect(page.locator("#execTrafficCard")).to_be_visible()
+    # Maintenance moved off the Run tab onto the Messages tab (#164).
+    expect(page.locator("#paneExecution #execMaintenanceCard")).to_have_count(0)
+    expect(page.locator("#paneChats #execMaintenanceCard")).to_have_count(1)
 
     # Pick dry-run, then run the whole pipeline.
     page.locator("#execModeDry").click()

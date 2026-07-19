@@ -289,3 +289,46 @@ def test_family_endpoint_reads_db_runs(tmp_path: Path) -> None:
     assert run["status"] == "completed"
     assert run["checked"] == 1
     assert run["alerts"] == 1
+
+
+def test_family_traffic_status_line_from_run_store(tmp_path: Path) -> None:
+    """The Run-tab traffic card's status line reads last check / last alert (#164)."""
+    db = tmp_path / "traffic.sqlite3"
+    alert_run = _seed_family_run(db, kind="traffic-check")  # alerts == 1
+    # A newer check that raised no alert: last_check advances, last_alert doesn't.
+    conn = store.connect(db)
+    try:
+        quiet = store.start_run(conn, mode="live", kind="traffic-check")
+        store.finish_run_summary(
+            conn, quiet, "completed",
+            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
+        )
+        alert_started = store.review_run(conn, alert_run)["started_at"]
+        quiet_started = store.review_run(conn, quiet)["started_at"]
+    finally:
+        conn.close()
+
+    with _client(db) as client:
+        traffic = client.get("/api/family").json()["traffic"]
+
+    assert traffic["cadence_min"] == 30  # #164 default surfaced
+    assert traffic["last_check"] == quiet_started  # newest run of any outcome
+    assert traffic["last_alert"] == alert_started  # newest run that alerted
+
+
+def test_family_post_persists_cadence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/family routes cadence_min into the traffic override block (#164)."""
+    import app.webapp.routers.family as family_router
+
+    saved: dict[str, Any] = {}
+    monkeypatch.setattr(
+        family_router, "save_local_overrides", lambda partial: saved.update(partial) or Path("x")
+    )
+    db = tmp_path / "cadence.sqlite3"
+    with _client(db) as client:
+        assert client.post("/api/family", json={"cadence_min": 45}).status_code == 200
+        assert client.post("/api/family", json={"cadence_min": 0}).status_code == 400
+
+    assert saved["traffic"] == {"cadence_min": 45}

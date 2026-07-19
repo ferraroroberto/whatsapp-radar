@@ -31,6 +31,7 @@ class FamilyUpdate(BaseModel):
     traffic_enabled: bool | None = None
     family_enabled: bool | None = None
     significant_delay_min: int | None = None
+    cadence_min: int | None = None
     run_hour: int | None = None
     quiet_start_hour: int | None = None
     quiet_end_hour: int | None = None
@@ -70,6 +71,18 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
     return summary
 
 
+def _traffic_alerts(row: sqlite3.Row) -> int:
+    """Alert count from a traffic-check run's persisted summary (#164)."""
+    try:
+        result = json.loads(row["summary_json"]) if row["summary_json"] else {}
+    except (ValueError, TypeError):
+        return 0
+    try:
+        return int(result.get("alerts") or 0)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     """The rules currently in force plus recent family-check runs."""
     config = load_config()
@@ -88,22 +101,31 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         }
         for window in family.childcare_windows
     ]
+    # One newest-first pass over the unified run store (#163) feeds both the
+    # recent-runs list and the Run-tab traffic card's status line (#164).
+    recent_runs = store.list_review_runs(conn, 200)
     family_runs = [
-        _run_summary(row)
-        for row in store.list_review_runs(conn, 100)
-        if row["kind"] in _FAMILY_KINDS
+        _run_summary(row) for row in recent_runs if row["kind"] in _FAMILY_KINDS
     ][:15]
+    traffic_rows = [row for row in recent_runs if row["kind"] == "traffic-check"]
+    last_check = traffic_rows[0]["started_at"] if traffic_rows else None
+    last_alert = next(
+        (row["started_at"] for row in traffic_rows if _traffic_alerts(row) > 0), None
+    )
 
     return {
         "traffic": {
             "enabled": traffic.enabled,
             "api_key_set": bool(traffic.api_key),
             "significant_delay_min": traffic.significant_delay_min,
+            "cadence_min": traffic.cadence_min,
             "quiet_start_hour": traffic.quiet_start_hour,
             "quiet_end_hour": traffic.quiet_end_hour,
             "dedup_window_min": traffic.dedup_window_min,
             "origin_lookback_min": traffic.origin_lookback_min,
             "lookahead_hours": traffic.lookahead_hours,
+            "last_check": last_check,
+            "last_alert": last_alert,
         },
         "family": {
             "enabled": family.enabled,
@@ -148,6 +170,10 @@ async def update_family(
         if not 0 <= payload.significant_delay_min <= 240:
             raise HTTPException(status_code=400, detail="significant_delay_min must be 0..240")
         traffic["significant_delay_min"] = payload.significant_delay_min
+    if payload.cadence_min is not None:
+        if not 1 <= payload.cadence_min <= 1440:
+            raise HTTPException(status_code=400, detail="cadence_min must be 1..1440")
+        traffic["cadence_min"] = payload.cadence_min
     if payload.quiet_start_hour is not None:
         traffic["quiet_start_hour"] = _hour(payload.quiet_start_hour)
     if payload.quiet_end_hour is not None:

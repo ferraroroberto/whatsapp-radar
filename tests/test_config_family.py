@@ -36,7 +36,7 @@ def test_family_config_parsing(tmp_path, _clean_env):
         json.dumps({
             "calendar": {"accounts": [{"calendar_id": "a@x", "person": "Roberto", "label": "R"}]},
             "traffic": {"enabled": True, "api_key": "k", "significant_delay_min": 20,
-                        "quiet_start_hour": 21, "quiet_end_hour": 6},
+                        "quiet_start_hour": 21, "quiet_end_hour": 6, "cadence_min": 45},
             "family": {
                 "enabled": True,
                 "home_address": "Home 1",
@@ -55,6 +55,7 @@ def test_family_config_parsing(tmp_path, _clean_env):
     assert cfg.traffic.api_key == "k"
     assert cfg.traffic.significant_delay_min == 20
     assert (cfg.traffic.quiet_start_hour, cfg.traffic.quiet_end_hour) == (21, 6)
+    assert cfg.traffic.cadence_min == 45
 
     assert cfg.family.enabled
     assert cfg.family.home_address == "Home 1"
@@ -74,5 +75,6 @@ def test_family_defaults_disabled(tmp_path, _clean_env):
     )
     cfg = load_config(root=tmp_path)
     assert cfg.traffic.enabled is False
+    assert cfg.traffic.cadence_min == 30  # new #164 default
     assert cfg.family.enabled is False
     assert cfg.calendar.accounts == ()

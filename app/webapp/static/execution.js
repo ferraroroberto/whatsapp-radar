@@ -31,28 +31,33 @@ function selection() {
     sync: stageOn(els.execStageSync),
     process: stageOn(els.execStageProcess),
     message: stageOn(els.execStageMessage),
+    calendar: stageOn(els.execStageCalendar),
   };
 }
 
-// Translate the ticked steps + mode into the run(s) to fire. Dry-run simulates
-// the whole pipeline on stored data (one scan --dry-run). Live composes: all
-// three steps → the integrated scan; otherwise each step's own command, in
-// order. "Message" = deliver, so Process without Message analyzes without
-// sending (a preview), and Process with Message delivers — never both.
+// Translate the ticked steps + mode into the run(s) to fire. The message stages
+// compose as before — dry-run simulates the whole pipeline on stored data (one
+// scan --dry-run); live composes all three → the integrated scan, otherwise each
+// step's own command in order ("Message" = deliver, so Process without Message
+// previews, Process with Message delivers — never both). The independent Calendar
+// switch appends a calendar-scan of the same mode after the message run(s).
 function buildChain(sel, mode) {
   const ex = execState();
-  if (mode === 'dry_run') {
-    const body = { action: 'scan', mode: 'dry_run' };
-    if (ex.window === 'days') body.days = Number(ex.days) || 7;
-    return [body];
-  }
-  if (sel.sync && sel.process && sel.message) {
-    return [{ action: 'scan', mode: 'live' }];
-  }
   const chain = [];
-  if (sel.sync) chain.push({ action: 'resync' });
-  if (sel.process) chain.push({ action: 'process', mode: sel.message ? 'live' : 'dry_run' });
-  if (sel.message && !sel.process) chain.push({ action: 'notify' });
+  if (mode === 'dry_run') {
+    if (sel.sync || sel.process || sel.message) {
+      const body = { action: 'scan', mode: 'dry_run' };
+      if (ex.window === 'days') body.days = Number(ex.days) || 7;
+      chain.push(body);
+    }
+  } else if (sel.sync && sel.process && sel.message) {
+    chain.push({ action: 'scan', mode: 'live' });
+  } else {
+    if (sel.sync) chain.push({ action: 'resync' });
+    if (sel.process) chain.push({ action: 'process', mode: sel.message ? 'live' : 'dry_run' });
+    if (sel.message && !sel.process) chain.push({ action: 'notify' });
+  }
+  if (sel.calendar) chain.push({ action: 'calendar-scan', mode });
   return chain;
 }
 
@@ -160,14 +165,47 @@ function addStatusLine(list, label, value) {
   list.appendChild(li);
 }
 
+const SOURCE_ICON = { gmail: '#i-mail', calendar: '#i-calendar-days', whatsapp: '#i-message-circle' };
+const SOURCE_LABEL = { gmail: 'Gmail', calendar: 'Calendar', whatsapp: 'WhatsApp' };
+
 function sourceIcon(source) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.classList.add('icon');
   svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttribute('href', source === 'gmail' ? '#i-mail' : '#i-message-circle');
+  use.setAttribute('href', SOURCE_ICON[source] || '#i-message-circle');
   svg.appendChild(use);
   return svg;
+}
+
+// The Calendar row (#164) is a read-only, non-ingesting source: it has no sync
+// history or stored-message counters, so it renders its own compact detail set.
+function renderCalendarHealth(source) {
+  const card = document.createElement('section');
+  card.className = 'source-status-card';
+  const head = document.createElement('div');
+  head.className = 'source-status-head';
+  const badge = document.createElement('span');
+  badge.className = 'source-badge source-calendar';
+  badge.textContent = 'Calendar';
+  badge.prepend(sourceIcon('calendar'));
+  const stateWord = document.createElement('span');
+  stateWord.className = 'source-status-state ' + (source.connected ? 'is-online' : 'is-offline');
+  stateWord.textContent = source.connected ? 'Connected' : 'Not connected';
+  head.append(badge, stateWord);
+  const details = document.createElement('ul');
+  details.className = 'source-status-details';
+  addStatusLine(details, 'State',
+    (source.configured ? 'configured' : 'not configured') + ' · ' +
+    (source.enabled ? 'daily scan enabled' : 'daily scan disabled') + ' · ' +
+    (source.authorized ? 'authorized' : 'not authorized'));
+  addStatusLine(details, 'Mode', 'read-only Google Calendar');
+  addStatusLine(details, 'Authorization', source.token_present ? 'token present' : 'token missing');
+  addStatusLine(details, 'Calendars',
+    fmtCount(source.account_count) + ((source.accounts || []).length ? ' · ' + source.accounts.join(' · ') : ''));
+  addStatusLine(details, 'Last successful fetch', source.last_success_at ? fmtSyncWhen(source.last_success_at) : 'never');
+  card.append(head, details);
+  return card;
 }
 
 function renderSourceHealth() {
@@ -184,6 +222,10 @@ function renderSourceHealth() {
     return;
   }
   for (const source of ex.sourceHealth) {
+    if (source.source === 'calendar') {
+      els.execSources.appendChild(renderCalendarHealth(source));
+      continue;
+    }
     const sidecar = source.source === 'whatsapp' ? ex.sidecar : null;
     const connected = sidecar ? !!sidecar.is_live : !!source.connected;
     const card = document.createElement('section');
@@ -192,7 +234,7 @@ function renderSourceHealth() {
     head.className = 'source-status-head';
     const badge = document.createElement('span');
     badge.className = 'source-badge source-' + source.source;
-    badge.textContent = source.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    badge.textContent = SOURCE_LABEL[source.source] || source.source;
     badge.prepend(sourceIcon(source.source));
     const stateWord = document.createElement('span');
     stateWord.className = 'source-status-state ' + (connected ? 'is-online' : 'is-offline');
@@ -306,6 +348,68 @@ function renderSyncs() {
     : '';
 }
 
+// ----------------------------------------------------- traffic jam insurance
+
+// The Run-tab traffic card (#164): the enable toggle + cadence are config
+// (persisted through the family safe-override path), and the status line reads
+// the last check / last alert from the unified run store (#163). Scheduling
+// itself is an App Launcher job — nothing runs in-process on this cadence.
+function trafficWhen(iso) { return iso ? fmtSyncWhen(iso) : 'never'; }
+
+function renderTraffic() {
+  const t = execState().traffic;
+  if (!t) return;
+  setSwitch(els.execTrafficEnabled, !!t.enabled);
+  // Don't clobber the field while the operator is typing in it.
+  if (document.activeElement !== els.execTrafficCadence) {
+    els.execTrafficCadence.value = t.cadence_min != null ? String(t.cadence_min) : '30';
+  }
+  els.execTrafficStatus.textContent =
+    'Last check: ' + trafficWhen(t.last_check) + ' · Last alert: ' + trafficWhen(t.last_alert);
+}
+
+// Config comes from /api/family; throttled since it changes rarely (a POST also
+// returns the fresh slice). `force` bypasses the throttle after a run/edit.
+export async function fetchTraffic(force) {
+  const ex = execState();
+  if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
+  let data;
+  try {
+    data = await jsonApi('/api/family');
+  } catch (_) {
+    return;  // 401 flips the login overlay; stay quiet otherwise.
+  }
+  ex.traffic = data.traffic || {};
+  ex.trafficAt = Date.now();
+  renderTraffic();
+}
+
+async function patchTraffic(body) {
+  try {
+    const data = await jsonApi('/api/family', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    execState().traffic = data.traffic || {};
+    renderTraffic();
+  } catch (exc) {
+    toast(String(exc.message || exc), 'error');
+    fetchTraffic(true);  // re-sync the controls to the server's truth
+  }
+}
+
+function runTraffic(mode) {
+  const ex = execState();
+  if (ex.active || ex.queue.length > 0 || firing) {
+    toast('A run is already in progress', 'error');
+    return;
+  }
+  ex.queue = [{ action: 'traffic-check', mode: mode }];
+  toast('Running…', '');
+  pumpQueue().then(function () { fetchExecution().catch(function () {}); });
+}
+
 function renderReconnect(s) {
   if (s.is_live) {
     els.execReconnect.hidden = true;
@@ -350,6 +454,7 @@ async function reconnectSidecar() {
 export async function fetchExecution() {
   fetchHealth().catch(function () {});
   fetchSyncs().catch(function () {});
+  fetchTraffic().catch(function () {});
   let data;
   try {
     data = await jsonApi('/api/execution/runs');
@@ -391,12 +496,17 @@ async function fetchDetail(sel) {
 
 function updateRunLabel() {
   const ex = execState();
-  if (ex.mode === 'dry_run') { els.execRunScan.textContent = 'Run dry-run'; return; }
   const sel = selection();
+  if (ex.mode === 'dry_run') {
+    els.execRunScan.textContent = sel.calendar ? 'Run dry-run + calendar' : 'Run dry-run';
+    return;
+  }
   const n = (sel.sync ? 1 : 0) + (sel.process ? 1 : 0) + (sel.message ? 1 : 0);
-  if (n === 3) els.execRunScan.textContent = 'Run full pipeline';
-  else if (n === 0) els.execRunScan.textContent = 'Run';
-  else els.execRunScan.textContent = 'Run ' + n + ' step' + (n > 1 ? 's' : '');
+  const parts = [];
+  if (n === 3) parts.push('full pipeline');
+  else if (n > 0) parts.push(n + ' step' + (n > 1 ? 's' : ''));
+  if (sel.calendar) parts.push('calendar');
+  els.execRunScan.textContent = parts.length ? 'Run ' + parts.join(' + ') : 'Run';
 }
 
 function renderControls() {
@@ -408,8 +518,15 @@ function renderControls() {
   for (const c of [els.execStageSync, els.execStageProcess, els.execStageMessage]) {
     c.disabled = stagesDisabled;
   }
+  // Calendar sync is an independent action (not part of the dry-run scan
+  // simulation), so it stays togglable in dry-run — only a live run locks it.
+  els.execStageCalendar.disabled = busy;
   els.execRunScan.disabled = busy;
   els.execReprocess.disabled = busy;
+  for (const c of [els.execTrafficRunLive, els.execTrafficRunDry,
+                   els.execTrafficEnabled, els.execTrafficCadence]) {
+    c.disabled = busy;
+  }
   els.execBusy.hidden = !busy;
   if (busy) {
     const label = ex.active ? kindLabel(ex.active.kind) : 'next step';
@@ -622,12 +739,28 @@ export function wireExecution() {
 
   // Pipeline-step switches (vendored switch component): flip on tap, then
   // recompute the run button's label. setSwitch keeps class + aria in sync.
-  for (const c of [els.execStageSync, els.execStageProcess, els.execStageMessage]) {
+  for (const c of [els.execStageSync, els.execStageProcess, els.execStageMessage,
+                   els.execStageCalendar]) {
     c.addEventListener('click', function () {
       setSwitch(c, !stageOn(c));
       updateRunLabel();
     });
   }
+
+  // Traffic jam insurance card: enable toggle + cadence persist through the
+  // family safe-override path; the two Run-now buttons fire a one-off check.
+  els.execTrafficEnabled.addEventListener('click', function () {
+    const next = !stageOn(els.execTrafficEnabled);
+    setSwitch(els.execTrafficEnabled, next);  // optimistic; patch confirms
+    patchTraffic({ traffic_enabled: next });
+  });
+  els.execTrafficCadence.addEventListener('change', function () {
+    const v = Math.max(5, Math.min(240, Number(els.execTrafficCadence.value) || 30));
+    els.execTrafficCadence.value = String(v);
+    patchTraffic({ cadence_min: v });
+  });
+  els.execTrafficRunLive.addEventListener('click', function () { runTraffic('live'); });
+  els.execTrafficRunDry.addEventListener('click', function () { runTraffic('dry_run'); });
 
   // Viewer starts empty until a run is selected.
   els.execViewer.hidden = true;

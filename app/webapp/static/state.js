@@ -41,6 +41,8 @@ export const state = {
     syncTotals: null,      // {chats, messages} current stored totals
     sourceHealth: [],      // secret-free per-source status snapshots
     sourceHealthAt: 0,
+    traffic: null,         // last /api/family traffic slice (enabled/cadence/status)
+    trafficAt: 0,
   },
   // Audit (#12): per-run trace drill-down (read-only).
   audit: {
@@ -143,9 +145,17 @@ export const els = {
   execStageSync: document.getElementById('execStageSync'),
   execStageProcess: document.getElementById('execStageProcess'),
   execStageMessage: document.getElementById('execStageMessage'),
+  execStageCalendar: document.getElementById('execStageCalendar'),
   execRunScan: document.getElementById('execRunScan'),
   execBusy: document.getElementById('execBusy'),
   execReprocess: document.getElementById('execReprocess'),
+  // Traffic jam insurance card (#164)
+  execTrafficCard: document.getElementById('execTrafficCard'),
+  execTrafficEnabled: document.getElementById('execTrafficEnabled'),
+  execTrafficCadence: document.getElementById('execTrafficCadence'),
+  execTrafficRunLive: document.getElementById('execTrafficRunLive'),
+  execTrafficRunDry: document.getElementById('execTrafficRunDry'),
+  execTrafficStatus: document.getElementById('execTrafficStatus'),
   execSourcesCard: document.getElementById('execSourcesCard'),
   execSources: document.getElementById('execSources'),
   execSourcesCount: document.getElementById('execSourcesCount'),

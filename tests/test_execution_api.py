@@ -142,6 +142,19 @@ def test_health_reports_connector_status(captured: dict[str, Any]) -> None:
     assert "token" not in str(source).lower()
 
 
+def test_health_appends_calendar_source(captured: dict[str, Any]) -> None:
+    """Sources health carries a read-only Calendar row after the message sources (#164)."""
+    body = captured["client"].get("/api/execution/health").json()
+    # Message source stays first; calendar is appended, never overall-health-bearing.
+    assert body["sources"][0]["source"] == "whatsapp"
+    calendar = [s for s in body["sources"] if s["source"] == "calendar"]
+    assert len(calendar) == 1
+    cal = calendar[0]
+    assert {"token_present", "account_count", "accounts", "last_success_at"} <= set(cal)
+    assert isinstance(cal["account_count"], int)
+    assert "refresh_token" not in str(cal).lower()
+
+
 def test_health_shows_safe_gmail_account_whitelist_and_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

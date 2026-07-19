@@ -225,6 +225,14 @@ class TrafficConfig:
     dedup_window_min: int = 30
     origin_lookback_min: int = 60
     lookahead_hours: int = 3  # how far ahead to look for the next commute
+    # Slack (minutes) baked into the "leave now" alert (#185): the alert fires
+    # when `event.start - (now + eta + leave_margin_min) <= 0`, i.e. a few
+    # minutes *before* the last possible departure so the person has a moment to
+    # move. Only a live phone fix can trigger it — a calendar-inference origin
+    # makes no claim about where the person actually is. Its timeliness is
+    # bounded by `cadence_min`: the alert lands on the first check after the
+    # departure moment, so set a low cadence when relying on leave-now.
+    leave_margin_min: int = 5
     # How often a live check should actually run (#164). The webapp persists
     # this; the App Launcher job (`family-radar-traffic-check`, #170) is armed
     # at a fixed high frequency (every few minutes) regardless, and `wr
@@ -498,6 +506,7 @@ def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:
         origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
         lookahead_hours=int(raw.get("lookahead_hours", 3)),
         cadence_min=int(raw.get("cadence_min", 30)),
+        leave_margin_min=int(raw.get("leave_margin_min", 5)),
     )
 
 

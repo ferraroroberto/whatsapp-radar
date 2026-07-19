@@ -231,6 +231,16 @@ def dedup_key(person: str, event_summary: str) -> str:
     return f"{person}::{' '.join(event_summary.lower().split())}"
 
 
+def leave_now_dedup_key(person: str, event_summary: str) -> str:
+    """Dedup key for the leave-now alert (#185) — distinct suffix on :func:`dedup_key`.
+
+    A delay alert and a leave-now alert can both be relevant for one event, so
+    they must not dedup against each other; the ``::leave-now`` suffix keeps them
+    independent in the shared JSONL log while reusing the one canonical schema.
+    """
+    return f"{dedup_key(person, event_summary)}::leave-now"
+
+
 # --------------------------------------------------------------- quiet hours
 
 
@@ -318,6 +328,21 @@ def arrival_margin_min(now: datetime, eta_min: float, window_start: datetime) ->
     """
     gap_min = (window_start - now).total_seconds() / 60.0
     return math.floor(gap_min - eta_min)
+
+
+def depart_in_min(
+    now: datetime, eta_min: float, event_start: datetime, leave_margin_min: int
+) -> int:
+    """Minutes until the person must leave for ``event_start``: ``<= 0`` ⇒ leave now.
+
+    The deterministic core of the leave-now alert (#185):
+    ``event_start - (now + eta + leave_margin_min)``, floored to whole minutes
+    (same floor-toward-late convention as :func:`arrival_margin_min`) so a
+    30-second shortfall already reads as ``-1`` — a nudge to leave, not a
+    rounded-up "just fine".
+    """
+    slack_min = (event_start - now).total_seconds() / 60.0
+    return math.floor(slack_min - eta_min - leave_margin_min)
 
 
 def find_conflicts(

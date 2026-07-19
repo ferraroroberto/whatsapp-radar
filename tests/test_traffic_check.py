@@ -220,6 +220,99 @@ def test_live_presence_origin_is_not_feasibility_judged(
     assert entry["feasible"] is None and entry["gap_min"] is None
 
 
+def test_leave_now_alerts_on_live_fix_at_departure_moment(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Office starts in 30 min; the live drive is 50 min and the margin is 5, so
+    # depart_in = 30 - (50 + 5) = -25 ⇒ leave now (they are already overdue).
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # 50 min, no delay
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["location_source"] == "live_presence"
+    assert entry["depart_in_min"] == -25 and entry["leave_margin_min"] == 5
+    assert entry["leave_now_alerted"] is True and payload["alerts"] == 1
+    assert "Leave now" in harness["sent"][0]
+    assert entry["alerted"] is False  # 0-min delay, so no separate delay alert
+
+
+def test_leave_now_silent_when_departure_not_yet_due(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Office starts in 30 min; a 10-min drive + 5-min margin leaves 15 min of
+    # slack ⇒ depart_in = 15 > 0, no leave-now alert yet.
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=600, traffic_s=600)  # 10 min
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["depart_in_min"] == 15
+    assert entry["leave_now_alerted"] is False and harness["sent"] == []
+
+
+def test_leave_now_never_on_calendar_inference_origin(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No live fix: even though the drive dwarfs the slack, a calendar-inference
+    # origin makes no claim about where the person is, so no leave-now alert.
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=1200, traffic_s=1200)  # 20 min
+    monkeypatch.setattr(
+        traffic_check, "get_location",
+        lambda *a, **kw: PresenceUnavailable("roberto", "disabled"),
+    )
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=False
+    )
+    entry = payload["checked"][0]
+    assert entry["location_source"] == "calendar_inference"
+    assert entry["depart_in_min"] is None
+    assert entry["leave_now_alerted"] is False and harness["sent"] == []
+
+
+def test_leave_now_deduped_independently_of_delay_alert(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A significant delay AND an overdue departure fire together for one event,
+    # each under its own dedup key; a prior leave-now key does not suppress the
+    # delay alert, and vice versa.
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=600, traffic_s=2400)  # 40 min, +30 delay
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+
+    recorded: list[str] = []
+    monkeypatch.setattr(traffic_check.dedup, "record_alert",
+                        lambda key, **kw: recorded.append(key))
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["alerted"] is True and entry["leave_now_alerted"] is True
+    assert payload["alerts"] == 2 and len(harness["sent"]) == 2
+    assert any("Traffic alert" in t for t in harness["sent"])
+    assert any("Leave now" in t for t in harness["sent"])
+    # Two distinct dedup keys recorded — the plain key and the ::leave-now key.
+    assert len(recorded) == 2 and recorded[1].endswith("::leave-now")
+
+
+def test_leave_now_suppressed_when_key_already_recent(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.family import rules
+
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # 50 min ⇒ overdue
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    leave_key = rules.leave_now_dedup_key("roberto", "Office")
+    monkeypatch.setattr(traffic_check.dedup, "recent_keys", lambda *a, **kw: {leave_key})
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["leave_now_alerted"] is False and harness["sent"] == []
+
+
 def test_disabled_check_is_silent(harness: dict[str, Any]) -> None:
     disabled = dataclasses.replace(_config(), traffic=TrafficConfig(enabled=False, api_key="k"))
     payload = traffic_check.run_traffic_check(disabled, now=NOW, dry_run=False)

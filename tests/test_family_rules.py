@@ -163,6 +163,16 @@ def test_dedup_key_stable():
     assert rules.dedup_key("roberto", "  Office  RUN ") == rules.dedup_key("roberto", "office run")
 
 
+def test_leave_now_dedup_key_distinct_from_delay_key():
+    """(#185) a leave-now key must not dedup against the plain delay key."""
+    delay = rules.dedup_key("roberto", "Office")
+    leave = rules.leave_now_dedup_key("roberto", "Office")
+    assert leave != delay
+    assert leave.startswith(delay)  # shares the canonical schema, distinct suffix
+    # Same normalization as dedup_key.
+    assert rules.leave_now_dedup_key("roberto", "  Office ") == leave
+
+
 def test_in_quiet_hours_wraps_midnight():
     assert rules.in_quiet_hours(datetime(2026, 7, 20, 22, 0, tzinfo=UTC), 20, 5)
     assert rules.in_quiet_hours(datetime(2026, 7, 20, 3, 0, tzinfo=UTC), 20, 5)
@@ -353,3 +363,17 @@ def test_arrival_margin_min_floors_toward_late():
     assert rules.arrival_margin_min(now, 90.0, start) == 0    # exactly on time
     assert rules.arrival_margin_min(now, 90.5, start) == -1   # 30 s short ⇒ late
     assert rules.arrival_margin_min(now, 120.0, start) == -30
+
+
+def test_depart_in_min_floors_toward_late():
+    """(#185) depart_in = start - (now + eta + margin), floored toward "leave now"."""
+    now = datetime(2026, 7, 20, 16, 0, tzinfo=UTC)
+    start = now + timedelta(minutes=60)
+    # 60 min slack, 20 min drive, 5 min margin ⇒ 35 min until departure.
+    assert rules.depart_in_min(now, 20.0, start, 5) == 35
+    # Drive + margin exactly fills the slack ⇒ leave right now.
+    assert rules.depart_in_min(now, 55.0, start, 5) == 0
+    # A 30-second shortfall reads as -1, not a rounded-up "fine".
+    assert rules.depart_in_min(now, 55.5, start, 5) == -1
+    # Already overdue.
+    assert rules.depart_in_min(now, 80.0, start, 5) == -25

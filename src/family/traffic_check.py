@@ -1,11 +1,18 @@
-"""Traffic-jam insurance check (issues #160, #169) — deterministic, one-shot.
+"""Traffic-jam insurance check (issues #160, #169, #185) — deterministic, one-shot.
 
 Pipeline: quiet-hours gate → fetch upcoming events → classify commutes →
-resolve each leg's origin → one Routes call per leg → dedup → alert only on a
-significant delay or an infeasible back-to-back hop. Returns a schema-stable
+resolve each leg's origin → one Routes call per leg → dedup → alert on a
+significant delay, an infeasible back-to-back hop, or the moment a live-tracked
+person must leave to make an event on time (#185). Returns a schema-stable
 result payload (one entry per route checked, always-present ``dedup_key``, one
 timestamp format, real API output only) that the CLI persists as the run's
 ``summary_json`` (#163) and prints.
+
+The leave-now alert (#185) closes the loop from *detection* to *action*: when a
+live phone fix puts the person far enough out that ``event.start - (now + eta +
+leave_margin_min) <= 0``, one Telegram nudge fires, deduped independently of the
+delay alert so both can coexist for one event. A calendar-inference origin never
+triggers it — no real position, no claim about where the person is.
 
 Origin resolution (#169): the responsible person's *live phone position* when
 home-automation reports a fresh fix, else the calendar-inference chain (home, or
@@ -45,6 +52,16 @@ def _infeasible_text(person: str, leg_summary: str, travel_min: int, gap_min: in
         f"⛔ Tight schedule — {person}: “{leg_summary}”. "
         f"Only {gap_min} min between events but the drive is ~{travel_min} min. "
         f"They may not make it on time."
+    )
+
+
+def _leave_now_text(
+    person: str, leg_summary: str, eta_min: int, event_start: datetime
+) -> str:
+    return (
+        f"🚗 Leave now — {person}: “{leg_summary}”. "
+        f"Drive is ~{eta_min} min with traffic; it starts at "
+        f"{event_start.strftime('%H:%M')}."
     )
 
 
@@ -136,6 +153,20 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
             feasible = (result.traffic_s / 60.0) <= gap_min
 
+        # Leave-now judgment (#185): the loop from detection to action. Only a
+        # live phone fix supports it — a calendar-inference origin makes no claim
+        # about where the person actually is, so it never triggers a leave-now.
+        # Timeliness is bounded by the check cadence (#170): the alert lands on
+        # the first fire after the departure moment, so `traffic.cadence_min`
+        # should be low when relying on leave-now.
+        depart_in: int | None = None
+        leave_now = False
+        if origin["location_source"] == _LIVE_PRESENCE:
+            depart_in = rules.depart_in_min(
+                now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
+            )
+            leave_now = depart_in <= 0
+
         entry = {
             "person": leg.person, "event": leg.event.summary,
             "origin": origin["origin_label"], "destination": leg.destination,
@@ -146,7 +177,9 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             "normal_min": result.normal_s // 60, "traffic_min": result.traffic_s // 60,
             "delay_min": result.delay_min, "status": status,
             "gap_min": gap_min, "feasible": feasible,
-            "dedup_key": key, "alerted": False, "checked_at": now.isoformat(),
+            "depart_in_min": depart_in, "leave_margin_min": traffic.leave_margin_min,
+            "dedup_key": key, "alerted": False, "leave_now_alerted": False,
+            "checked_at": now.isoformat(),
         }
         alert_needed = status == "SIGNIFICANT_DELAY" or feasible is False
         if alert_needed and key not in recent:
@@ -163,6 +196,19 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 dedup.record_alert(key, now=now)
                 recent.add(key)
             entry["alerted"] = True
+            alerts += 1
+
+        # A distinct dedup key lets a leave-now alert coexist with a delay alert
+        # for the same event without either suppressing the other.
+        leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
+        if leave_now and leave_key not in recent:
+            if not dry_run:
+                send_alert(config, _leave_now_text(
+                    leg.person, leg.event.summary, result.traffic_s // 60, leg.event.start
+                ))
+                dedup.record_alert(leave_key, now=now)
+                recent.add(leave_key)
+            entry["leave_now_alerted"] = True
             alerts += 1
         checked.append(entry)
 

@@ -342,8 +342,10 @@ function renderSyncs() {
 
 // The Run-tab traffic card (#164): the enable toggle + cadence are config
 // (persisted through the family safe-override path), and the status line reads
-// the last check / last alert from the unified run store (#163). Scheduling
-// itself is an App Launcher job — nothing runs in-process on this cadence.
+// the last check / last alert from the unified run store (#163). The App
+// Launcher job (`family-radar-traffic-check`) is armed at a fixed high
+// frequency; `wr traffic-check` self-skips in-process against this cadence
+// (#170), so editing it here takes effect with no re-arm.
 function trafficWhen(iso) { return iso ? fmtSyncWhen(iso) : 'never'; }
 
 function renderTraffic() {

@@ -160,13 +160,21 @@ Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts
 
 ## 7 — Schedule the digest + add the launch surfaces (App Launcher)
 
-WhatsApp Radar runs as part of the home stack through [App Launcher](../../app-launcher): a scheduled `wr scan` digest from the **Jobs** tab, and the admin PWA opened from the **Apps** tab. This wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed in this repo — so it must be recreated per box from App Launcher's UI. Adding the entries below is also what arms the Windows Task Scheduler entry.
+WhatsApp Radar runs as part of the home stack through [App Launcher](../../app-launcher): three scheduled Jobs — the WhatsApp/Gmail digest, the family calendar-conflict summary, and the traffic-jam check — plus the admin PWA opened from the **Apps** tab. This wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed in this repo — so it must be recreated per box from App Launcher's UI (or its `POST`/`PUT`/`DELETE /api/jobs` API — the mechanism that actually re-syncs the Windows Task Scheduler entries; hand-editing `jobs.json` on disk does not). Adding the entries below is also what arms the Windows Task Scheduler entries.
 
-### Jobs tab — scheduled digest
+### Jobs tab — scheduled digest, calendar sync, traffic check
 
-From the Jobs tab's **+**, add one job, `whatsapp-radar-scan`, firing `wr scan` (live) **daily at 18:00** (machine-local / Madrid time). App Launcher's executor points at this repo's `launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe launcher.py scan` — no PYTHONPATH juggling needed.
+All three jobs are named with a `family-radar-` prefix (#170) — two of the three are family checks, not WhatsApp, so a `whatsapp-radar-*` name would be misleading. App Launcher's executor points every job at this repo's `launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe launcher.py <command>` — no PYTHONPATH juggling needed.
 
-A live `scan` self-heals the sidecar when the device is still paired and **aborts loudly** (non-zero exit, run recorded failed, alert sent) if the source is dead, so a scheduled run can never report green while checking nothing. Change the cadence anytime in the Jobs tab; re-saving there re-syncs the schtasks entry. `wr resync` and `wr reprocess --confirm` can be registered the same way if you want them on a schedule.
+From the Jobs tab's **+**, add:
+
+| Job id | Command (`args`) | Schedule | Notes |
+| --- | --- | --- | --- |
+| `family-radar-scan` | `scan` | daily **18:00** (machine-local / Madrid time) | The WhatsApp/Gmail digest. |
+| `family-radar-calendar-sync` | `calendar-scan` | daily **18:05** | The family calendar-conflict summary (#168) always sends one Telegram summary on a live scheduled run. Deliberately its own job, not chained after the scan job — a dead WhatsApp sidecar must never suppress the family calendar summary. |
+| `family-radar-traffic-check` | `traffic-check` | every **5 minutes** | Armed well below the configured `traffic.cadence_min` (default 30, editable from the Run tab's Traffic jam insurance card); `wr traffic-check` self-skips in-process when the cadence hasn't elapsed (#170), so a cadence edit takes effect immediately with no re-arm. A skip logs one line and records no run row. |
+
+A live `scan` self-heals the sidecar when the device is still paired and **aborts loudly** (non-zero exit, run recorded failed, alert sent) if the source is dead, so a scheduled run can never report green while checking nothing. Change any cadence anytime in the Jobs tab; re-saving there re-syncs the schtasks entry (the traffic-check job's *effective* cadence is instead controlled from the Run tab, per above — its Task Scheduler entry itself should stay at the fixed 5-minute polling frequency). `wr resync` and `wr reprocess --confirm` can be registered the same way if you want them on a schedule.
 
 ### Apps tab — admin PWA
 

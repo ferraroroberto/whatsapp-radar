@@ -1,22 +1,26 @@
 """Family checks surface (issue #160): current rules + recent runs, read-only.
 
-Reuses the generic filesystem run store (``app.webapp.runs``) for history, so
-this endpoint only has to expose the resolved rules/config (non-secret) plus the
-recent ``calendar-scan`` / ``traffic-check`` runs. Editing the enable toggles and
-thresholds happens through the existing Config form; running a check happens
-through the Execution tab. This gives the operator full transparency — the exact
-rules in force and why each run did what — instead of a black box.
+Recent runs come from the unified DB run store (#163) so a scheduled App
+Launcher execution is exactly as visible as a webapp-launched one. This endpoint
+exposes the resolved rules/config (non-secret) plus the recent ``calendar-scan``
+/ ``traffic-check`` run rows. Editing the enable toggles and thresholds happens
+through the existing Config form; running a check happens through the Execution
+tab. This gives the operator full transparency — the exact rules in force and
+why each run did what — instead of a black box.
 """
 
 from __future__ import annotations
 
+import json
+import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.webapp import runs
+from app.webapp.routers._helpers import get_conn
 from src.config import load_config, save_local_overrides
+from src.db import store
 
 router = APIRouter()
 
@@ -41,17 +45,23 @@ _FAMILY_KINDS = {"calendar-scan", "traffic-check"}
 _WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def _run_summary(record: dict[str, Any]) -> dict[str, Any]:
-    result = record.get("result") or {}
+def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
+    """One family run row (#163) distilled for the recent-runs list."""
+    try:
+        result = json.loads(row["summary_json"]) if row["summary_json"] else {}
+    except (ValueError, TypeError):
+        result = {}
+    kind = row["kind"]
     summary: dict[str, Any] = {
-        "kind": record.get("kind"),
-        "run_id": record.get("run_id"),
-        "status": record.get("status"),
-        "started_at": record.get("started_at"),
-        "finished_at": record.get("finished_at"),
+        "kind": kind,
+        "run_id": f"db-{row['id']}",
+        "status": row["status"],
+        "mode": row["mode"],
+        "started_at": row["started_at"],
+        "finished_at": row["completed_at"],
         "result_status": result.get("status"),
     }
-    if record.get("kind") == "traffic-check":
+    if kind == "traffic-check":
         summary["checked"] = len(result.get("checked") or [])
         summary["alerts"] = result.get("alerts")
     else:
@@ -60,8 +70,7 @@ def _run_summary(record: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-@router.get("/api/family")
-async def get_family() -> dict[str, Any]:
+def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     """The rules currently in force plus recent family-check runs."""
     config = load_config()
     traffic, family, calendar = config.traffic, config.family, config.calendar
@@ -80,9 +89,9 @@ async def get_family() -> dict[str, Any]:
         for window in family.childcare_windows
     ]
     family_runs = [
-        _run_summary(record)
-        for record in runs.list_runs(limit=100)
-        if record.get("kind") in _FAMILY_KINDS
+        _run_summary(row)
+        for row in store.list_review_runs(conn, 100)
+        if row["kind"] in _FAMILY_KINDS
     ][:15]
 
     return {
@@ -115,8 +124,15 @@ async def get_family() -> dict[str, Any]:
     }
 
 
+@router.get("/api/family")
+async def get_family(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
+    return _family_payload(conn)
+
+
 @router.post("/api/family")
-async def update_family(payload: FamilyUpdate) -> dict[str, Any]:
+async def update_family(
+    payload: FamilyUpdate, conn: sqlite3.Connection = Depends(get_conn)
+) -> dict[str, Any]:
     """Persist the editable subset to the ignored ``config/local.json``.
 
     Only the safe toggles/thresholds are writable here; the personal schedule
@@ -148,4 +164,4 @@ async def update_family(payload: FamilyUpdate) -> dict[str, Any]:
         overrides["family"] = family
     if overrides:
         save_local_overrides(overrides)
-    return await get_family()
+    return _family_payload(conn)

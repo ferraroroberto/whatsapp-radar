@@ -44,10 +44,11 @@ export const state = {
   },
   // Audit (#12): per-run trace drill-down (read-only).
   audit: {
-    runs: [],              // recent review/scan runs (with funnel)
+    runs: [],              // recent runs of every kind (funnel or summary, #163)
     syncs: [],             // resync/reprocess maintenance markers
     selected: null,        // selected run id, or null
     detail: null,          // last fetched {run, traces}
+    kindFilter: 'all',     // 'all' | 'messages' | 'traffic-check' | 'calendar-scan'
   },
   // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
   family: null,
@@ -173,6 +174,7 @@ export const els = {
   // Audit (#12)
   auditRuns: document.getElementById('auditRuns'),
   auditRunsEmpty: document.getElementById('auditRunsEmpty'),
+  auditKindFilter: document.getElementById('auditKindFilter'),
   auditDetailCard: document.getElementById('auditDetailCard'),
   auditDetailTitle: document.getElementById('auditDetailTitle'),
   auditDetailClose: document.getElementById('auditDetailClose'),

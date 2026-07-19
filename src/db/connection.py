@@ -47,6 +47,8 @@ _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("mode", "TEXT NOT NULL DEFAULT 'review'"),
     ("params_json", "TEXT"),
+    ("kind", "TEXT NOT NULL DEFAULT 'scan'"),
+    ("summary_json", "TEXT"),
     ("chats_synced", "INTEGER NOT NULL DEFAULT 0"),
     ("messages_synced", "INTEGER NOT NULL DEFAULT 0"),
     ("chats_monitored", "INTEGER NOT NULL DEFAULT 0"),
@@ -60,7 +62,10 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    # Seconds precision, explicit +00:00 offset: unambiguous AND parseable by
+    # every browser Date() (6-digit microsecond fractions are not — the UI's
+    # fallback then rendered raw UTC digits as if local, #163).
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _rowid(cur: sqlite3.Cursor) -> int:
@@ -93,6 +98,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
         if name not in existing:
             conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
+    # One-time backfill when `kind` (#163) first lands on an older DB: rows the
+    # legacy review verb wrote (mode='review') are process runs, not scans.
+    # Idempotent — new process runs are written with kind='process' directly.
+    if "kind" not in existing:
+        conn.execute("UPDATE review_runs SET kind = 'process' WHERE mode = 'review'")
     # `chats.alias` (operator override label) and `chats.parent_chat_id` (the
     # parent↔child link) were both added after the initial schema. Each is an
     # additive, non-destructive ALTER with a constant default.

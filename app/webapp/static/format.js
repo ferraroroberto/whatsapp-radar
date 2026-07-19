@@ -8,6 +8,20 @@
 
 function _pad(n) { return String(n).padStart(2, '0'); }
 
+// Per-kind display label, shared by the Run and Audit tabs so a run is named
+// identically wherever it appears (#163).
+const KIND_META = {
+  scan: { label: 'Full pipeline' },
+  process: { label: 'Process' },
+  notify: { label: 'Message' },
+  resync: { label: 'Sync' },
+  reprocess: { label: 'Reprocess' },
+  'calendar-scan': { label: 'Family: daily scan' },
+  'traffic-check': { label: 'Family: traffic' },
+};
+
+export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
+
 // Thousands separator with a period (29999 → "29.999"), deterministic across
 // browsers/locales (avoids `toLocaleString()` drift).
 export function fmtNum(n) {

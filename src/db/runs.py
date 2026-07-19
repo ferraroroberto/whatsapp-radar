@@ -16,15 +16,38 @@ from src.db.connection import _now, _rowid
 
 
 def start_run(
-    conn: sqlite3.Connection, mode: str = "review", params_json: str | None = None
+    conn: sqlite3.Connection,
+    mode: str = "review",
+    params_json: str | None = None,
+    kind: str = "scan",
 ) -> int:
     cur = conn.execute(
-        "INSERT INTO review_runs (started_at, status, mode, params_json) "
-        "VALUES (?, 'running', ?, ?)",
-        (_now(), mode, params_json),
+        "INSERT INTO review_runs (started_at, status, mode, params_json, kind) "
+        "VALUES (?, 'running', ?, ?, ?)",
+        (_now(), mode, params_json, kind),
     )
     conn.commit()
     return _rowid(cur)
+
+
+def finish_run_summary(
+    conn: sqlite3.Connection,
+    run_id: int,
+    status: str,
+    summary_json: str | None,
+    error: str | None = None,
+) -> None:
+    """Finalize a run whose outcome is a structured payload, not a funnel.
+
+    The family checks (traffic-check / calendar-scan) record their whole result
+    here so a scheduled run is as inspectable as a webapp-launched one (#163).
+    """
+    conn.execute(
+        "UPDATE review_runs SET completed_at = ?, status = ?, summary_json = ?, error = ? "
+        "WHERE id = ?",
+        (_now(), status, summary_json, error, run_id),
+    )
+    conn.commit()
 
 
 def record_run_funnel(
@@ -62,9 +85,18 @@ def record_run_funnel(
     conn.commit()
 
 
+# The kinds that carry a message-pipeline digest/funnel. Family checks (#163)
+# share the table but must never be picked up as "the latest digest to deliver"
+# or counted as a message scan.
+_MESSAGE_KINDS = ("scan", "process")
+
+
 def latest_run_id(conn: sqlite3.Connection) -> int | None:
-    """Return the id of the most recent review run, or None if there are none."""
-    row = conn.execute("SELECT id FROM review_runs ORDER BY id DESC LIMIT 1").fetchone()
+    """Return the id of the most recent message-pipeline run, or None."""
+    row = conn.execute(
+        "SELECT id FROM review_runs WHERE kind IN (?, ?) ORDER BY id DESC LIMIT 1",
+        _MESSAGE_KINDS,
+    ).fetchone()
     return int(row["id"]) if row else None
 
 
@@ -216,14 +248,20 @@ def record_notification(
 
 
 def count_runs(conn: sqlite3.Connection) -> int:
-    """Number of review/scan runs recorded."""
-    return int(conn.execute("SELECT COUNT(*) AS n FROM review_runs").fetchone()["n"])
+    """Number of message-pipeline (scan/process) runs recorded."""
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) AS n FROM review_runs WHERE kind IN (?, ?)",
+            _MESSAGE_KINDS,
+        ).fetchone()["n"]
+    )
 
 
 def last_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    """The most recent review run row, or None if no run has happened yet."""
+    """The most recent message-pipeline run row, or None if none has happened."""
     row: sqlite3.Row | None = conn.execute(
-        "SELECT * FROM review_runs ORDER BY id DESC LIMIT 1"
+        "SELECT * FROM review_runs WHERE kind IN (?, ?) ORDER BY id DESC LIMIT 1",
+        _MESSAGE_KINDS,
     ).fetchone()
     return row
 
@@ -237,8 +275,8 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
     """
     return list(
         conn.execute(
-            "SELECT id, started_at, completed_at, status, mode, params_json, "
-            "chats_synced, messages_synced, chats_monitored, chats_reviewed, "
+            "SELECT id, kind, started_at, completed_at, status, mode, params_json, "
+            "summary_json, chats_synced, messages_synced, chats_monitored, chats_reviewed, "
             "stage1_passed, stage2_llm_calls, transcriptions, actionable, "
             "notification_status, source_funnel_json, error "
             "FROM review_runs ORDER BY id DESC LIMIT ?",

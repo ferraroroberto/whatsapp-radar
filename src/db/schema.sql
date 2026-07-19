@@ -81,16 +81,20 @@ CREATE TABLE IF NOT EXISTS chat_review_state (
     rolling_context_json           TEXT
 );
 
--- One row per scan/review run. Beyond lifecycle (status/timing) it records the
--- run mode, its parameters, and the full funnel so any run is inspectable:
--- how much was synced, how much passed each stage, and what was delivered.
+-- One row per recorded run of ANY kind (#163). The message pipeline (scan /
+-- process) fills the funnel columns; the family checks (traffic-check /
+-- calendar-scan) fill summary_json with their structured payload instead.
+-- Every run — CLI, scheduled Job, or webapp-launched — lands here, so the
+-- Audit tab and the Run tab read one truth.
 CREATE TABLE IF NOT EXISTS review_runs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind                TEXT NOT NULL DEFAULT 'scan',    -- 'scan' | 'process' | 'traffic-check' | 'calendar-scan'
     started_at          TEXT NOT NULL,
     completed_at        TEXT,
     status              TEXT NOT NULL DEFAULT 'running',
     mode                TEXT NOT NULL DEFAULT 'review',  -- 'live' | 'dry_run' | 'review'
     params_json         TEXT,                            -- run parameters (e.g. {"days": 7})
+    summary_json        TEXT,                            -- family-check structured payload (#163)
     chats_reviewed      INTEGER NOT NULL DEFAULT 0,      -- chats that had a delta
     chats_synced        INTEGER NOT NULL DEFAULT 0,      -- chats pulled from the connector (live)
     messages_synced     INTEGER NOT NULL DEFAULT 0,      -- new messages stored (live)

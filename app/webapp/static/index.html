@@ -490,6 +490,12 @@
           </h2>
         </div>
         <p class="muted small">Every run is listed and fully drillable — confirm exactly why each message was or wasn't promoted.</p>
+        <div id="auditKindFilter" class="range-tabs" role="radiogroup" aria-label="Run kind filter">
+          <button type="button" class="range-tab active" data-kind="all">All</button>
+          <button type="button" class="range-tab" data-kind="messages">Messages</button>
+          <button type="button" class="range-tab" data-kind="traffic-check">Traffic</button>
+          <button type="button" class="range-tab" data-kind="calendar-scan">Calendar</button>
+        </div>
         <ul id="auditRuns" class="card-list audit-runs" aria-label="Recent runs"></ul>
         <p id="auditRunsEmpty" class="muted small" hidden>No runs yet — run a scan from the Run tab.</p>
       </section>

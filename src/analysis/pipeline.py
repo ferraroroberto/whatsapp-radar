@@ -278,7 +278,9 @@ def scan(
     ``progress`` receives human-readable stage lines for live output.
     """
     _emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
-    run_id = store.start_run(conn, mode=mode, params_json=json.dumps({"days": days}))
+    run_id = store.start_run(
+        conn, mode=mode, params_json=json.dumps({"days": days}), kind="scan"
+    )
     outcome = ScanOutcome(run_id=run_id, mode=mode)
     for source in config.sources:
         ensure_source_funnel(outcome.source_funnels, source)

@@ -212,9 +212,13 @@ class TrafficConfig:
     dedup_window_min: int = 30
     origin_lookback_min: int = 60
     lookahead_hours: int = 3  # how far ahead to look for the next commute
-    # How often the scheduled App Launcher job should fire a live check (#164).
-    # The webapp persists this; the actual scheduling is an App Launcher job (#170)
-    # that reads this value — nothing in-process runs on this cadence.
+    # How often a live check should actually run (#164). The webapp persists
+    # this; the App Launcher job (`family-radar-traffic-check`, #170) is armed
+    # at a fixed high frequency (every few minutes) regardless, and `wr
+    # traffic-check` self-skips in-process when fewer than `cadence_min`
+    # minutes have elapsed since the last recorded traffic-check run — so
+    # editing this value here takes effect immediately, with no Task
+    # Scheduler re-arm needed.
     cadence_min: int = 30
 
 

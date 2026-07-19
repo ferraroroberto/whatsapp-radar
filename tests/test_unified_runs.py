@@ -173,6 +173,123 @@ def test_cli_traffic_check_failure_recorded(
         conn.close()
 
 
+# --- CLI: traffic-check cadence self-skip (#170) -----------------------------
+#
+# The App Launcher job is armed at a fixed high frequency; `wr traffic-check`
+# self-skips in-process when `traffic.cadence_min` hasn't elapsed since the
+# last recorded traffic-check run, so a cadence edit in the UI takes effect
+# with no Task Scheduler re-arm. A skip records no run row (would drown the
+# Audit tab in a no-op every few minutes) but does print a log line.
+
+def _cadence_config(tmp_path: Path, *, cadence_min: int) -> Any:
+    import dataclasses
+
+    from src.config import load_config
+
+    base = load_config(root=tmp_path)  # empty root -> library defaults
+    traffic = dataclasses.replace(base.traffic, cadence_min=cadence_min)
+    return dataclasses.replace(base, traffic=traffic)
+
+
+def test_cli_traffic_check_self_skips_within_cadence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "cadence.sqlite3"
+    monkeypatch.setenv("WR_DB_PATH", str(db))
+
+    conn = store.connect(db)
+    try:
+        run_id = store.start_run(conn, mode="live", kind="traffic-check")
+        store.finish_run_summary(
+            conn, run_id, "completed",
+            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
+        )
+    finally:
+        conn.close()
+
+    cfg = _cadence_config(tmp_path, cadence_min=30)
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+
+    def never_called(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+        raise AssertionError("runner must not be called on a cadence self-skip")
+
+    import src.family.traffic_check as traffic_check
+
+    monkeypatch.setattr(traffic_check, "run_traffic_check", never_called)
+
+    assert cli.main(["traffic-check", "--dry-run"]) == 0
+
+    conn = store.connect(db)
+    try:
+        # No second run row — a skip is not recorded (would drown the Audit tab).
+        assert len(store.list_review_runs(conn, 10)) == 1
+    finally:
+        conn.close()
+
+    out = capsys.readouterr().out
+    assert "skipped" in out
+    assert "cadence 30min not elapsed" in out
+
+
+def test_cli_traffic_check_runs_when_cadence_elapsed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "cadence.sqlite3"
+    monkeypatch.setenv("WR_DB_PATH", str(db))
+
+    conn = store.connect(db)
+    try:
+        run_id = store.start_run(conn, mode="live", kind="traffic-check")
+        store.finish_run_summary(
+            conn, run_id, "completed",
+            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
+        )
+        # Back-date the seeded run well past any cadence.
+        conn.execute(
+            "UPDATE review_runs SET started_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+            (run_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    cfg = _cadence_config(tmp_path, cadence_min=30)
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+
+    payload = {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
+
+    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+        return dict(payload, dry_run=dry_run)
+
+    import src.family.traffic_check as traffic_check
+
+    monkeypatch.setattr(traffic_check, "run_traffic_check", fake_runner)
+
+    assert cli.main(["traffic-check", "--dry-run"]) == 0
+
+    conn = store.connect(db)
+    try:
+        rows = store.list_review_runs(conn, 10)
+        assert len(rows) == 2
+        assert rows[0]["kind"] == "traffic-check"
+        assert rows[0]["status"] == "completed"
+    finally:
+        conn.close()
+
+
+def test_last_run_started_at_returns_most_recent_of_kind(conn: sqlite3.Connection) -> None:
+    assert store.last_run_started_at(conn, "traffic-check") is None
+    first = store.start_run(conn, mode="live", kind="traffic-check")
+    store.finish_run_summary(conn, first, "completed", "{}")
+    second = store.start_run(conn, mode="live", kind="traffic-check")
+    store.finish_run_summary(conn, second, "completed", "{}")
+    latest = store.review_run(conn, second)
+    assert latest is not None
+    assert store.last_run_started_at(conn, "traffic-check") == latest["started_at"]
+    # A different kind never confuses the lookup.
+    assert store.last_run_started_at(conn, "calendar-scan") is None
+
+
 # --- API: unified visibility ------------------------------------------------
 
 def _client(db: Path) -> TestClient:

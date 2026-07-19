@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
+from datetime import UTC, datetime
 
 from gmail_readonly import GmailReadError
 
@@ -388,6 +389,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str | None:
+    """Cadence self-skip (#170) — the reason to skip a ``traffic-check`` fire, or None.
+
+    The Windows job is armed at a fixed high frequency (every few minutes) so a
+    ``traffic.cadence_min`` edit in the Run tab takes effect immediately, with no
+    App Launcher re-arm. Most fires are then no-ops: this compares "now" against
+    the last recorded ``traffic-check`` run and skips when the configured cadence
+    hasn't elapsed. A skip is deliberately **not** recorded as a run row (it would
+    drown the Audit tab in a no-op entry every few minutes); it only prints a log
+    line, so `output.log` on the App Launcher side is the skip's audit trail.
+    """
+    last_started = store.last_run_started_at(conn, "traffic-check")
+    if last_started is None:
+        return None
+    last_dt = datetime.fromisoformat(last_started)
+    if last_dt.tzinfo is None:
+        last_dt = last_dt.replace(tzinfo=UTC)
+    elapsed_min = (datetime.now(UTC) - last_dt).total_seconds() / 60
+    cadence_min = config.traffic.cadence_min
+    if elapsed_min < cadence_min:
+        return (
+            f"cadence {cadence_min}min not elapsed "
+            f"({elapsed_min:.1f}min since last check)"
+        )
+    return None
+
+
 def _cmd_family_check(
     conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool
 ) -> int:
@@ -397,10 +425,16 @@ def _cmd_family_check(
     the Audit tab — the check itself never touches the message store.
     """
     import json
-    from datetime import datetime
 
     from src.family.calendar_scan import run_calendar_scan
     from src.family.traffic_check import run_traffic_check
+
+    if kind == "traffic-check":
+        skip_reason = _traffic_cadence_skip_reason(conn, config)
+        if skip_reason is not None:
+            _progress(f"⏭ traffic-check skipped — {skip_reason}")
+            _emit_result({"kind": kind, "status": "skipped", "reason": skip_reason})
+            return 0
 
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
     runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check

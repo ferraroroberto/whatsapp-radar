@@ -33,7 +33,7 @@
   --toggle-track: var(--line);
   --toggle-knob: #ffffff;
   --close-bg: var(--card-off);
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
   --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
   --deficit-soft: color-mix(in srgb, var(--deficit) 12%, transparent);
@@ -287,6 +287,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Quiet square icon button (search, theme toggle, close): a subtle contrast
    background instead of the card's own bg (home-automation weather-icon-btn). */
 .icon-btn {
+  position: relative;
   appearance: none;
   border: none;
   background: var(--close-bg);
@@ -301,6 +302,10 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   cursor: pointer;
   flex: none;
 }
+/* 34px is below the 44px tap floor (design.md "Touch targets"); expand the
+   hit area invisibly rather than inflating the visual button, same trick as
+   .detail-close/.detail-save-btn's ::before (34 + 2*5 = 44). */
+.icon-btn::before { content: ""; position: absolute; inset: -5px; }
 .icon-btn .icon { width: var(--icon-title); height: var(--icon-title); }
 .icon-btn:active { transform: scale(0.92); }
 .icon-btn.danger { color: var(--deficit); }

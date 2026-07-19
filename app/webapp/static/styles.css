@@ -1126,3 +1126,41 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .family-rules dt,
 .family-rules dd { margin: 0; }
+
+/* Editable schedule (#167): field-group headings, one childcare-window block
+   per row, and a weekday multi-select rendered as a chip row. */
+.field-label {
+  margin: var(--space-md) 0 4px;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  color: var(--ink);
+}
+.field-label:first-child { margin-top: 0; }
+.family-windows { display: flex; flex-direction: column; gap: var(--space-sm); }
+.family-window {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+}
+.family-window-head { display: flex; align-items: center; gap: var(--space-xs); }
+.family-window-head .input-native { flex: 1; }
+.weekday-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-xs) 0; }
+.weekday-chip {
+  flex: 1 1 44px;
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.weekday-chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border-strong);
+}
+#familyEditable .run-btn { margin-top: var(--space-md); }

@@ -220,11 +220,12 @@ class TrafficConfig:
 
 @dataclass(frozen=True)
 class ChildcareWindow:
-    """A recurring childcare moment a parent must be present for."""
+    """A recurring childcare moment (or time range) a parent must be present for."""
 
     label: str
     weekdays: tuple[int, ...]  # 0=Mon .. 6=Sun
-    time: str  # "HH:MM" deadline (pickup / departure)
+    time: str  # "HH:MM" start / deadline (pickup / departure)
+    end_time: str = ""  # "HH:MM" end; blank = a point-in-time deadline (#167)
 
 
 @dataclass(frozen=True)
@@ -441,6 +442,7 @@ def _parse_family(raw: dict[str, Any]) -> FamilyConfig:
                 if idx is not None
             ),
             time=str(item.get("time", "")).strip(),
+            end_time=str(item.get("end_time", "")).strip(),
         )
         for item in raw.get("childcare_windows", [])
         if isinstance(item, dict) and str(item.get("label", "")).strip()

@@ -65,16 +65,9 @@ export const CHATS_RENDER_CAP = 150;
 // ES modules are deferred — they execute after DOMContentLoaded, so
 // document.getElementById is safe at module top level.
 export const els = {
-  // Dashboard (#9) header + metrics
+  // Dashboard (#9, #165) header + last-activity grid
   themeToggle: document.getElementById('themeToggle'),
-  mChannels: document.getElementById('mChannels'),
-  mMessages: document.getElementById('mMessages'),
-  mScans: document.getElementById('mScans'),
-  mBacklog: document.getElementById('mBacklog'),
-  mActionable: document.getElementById('mActionable'),
-  mNotified: document.getElementById('mNotified'),
-  lastRunWhen: document.getElementById('lastRunWhen'),
-  lastRunSummary: document.getElementById('lastRunSummary'),
+  dashActivity: document.getElementById('dashActivity'),
   dashChannelsBody: document.getElementById('dashChannelsBody'),
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
   dashSources: document.getElementById('dashSources'),

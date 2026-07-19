@@ -207,41 +207,41 @@
         <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
       </section>
-      <div class="metric-grid">
-        <div class="card metric"><span class="metric-value" id="mChannels">–</span><span class="metric-label">Channels monitored</span></div>
-        <div class="card metric"><span class="metric-value" id="mMessages">–</span><span class="metric-label">Messages stored</span></div>
-        <div class="card metric"><span class="metric-value" id="mScans">–</span><span class="metric-label">Scans run</span></div>
-        <div class="card metric"><span class="metric-value" id="mBacklog">–</span><span class="metric-label">New since last scan</span></div>
-        <div class="card metric"><span class="metric-value" id="mActionable">–</span><span class="metric-label">Alerts raised</span></div>
-        <div class="card metric"><span class="metric-value" id="mNotified">–</span><span class="metric-label">Notifications sent</span></div>
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <h3 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
-            Last scan
-          </h3>
-          <span id="lastRunWhen" class="card-head-meta small"></span>
+      <!-- Last-activity grid (#165): one card per kind of work — when did each
+           last run and what did it find. Tapping a card jumps to that run's
+           detail on the Run tab. Cards are built by dashboard.js from the
+           unified run store so CLI/Jobs-launched runs show here too. -->
+      <div id="dashActivity" class="activity-grid" aria-label="Last activity by kind"></div>
+
+      <details id="dashSourcesCard" class="card card--collapsible" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+            <h3 class="collapse-title">Sources</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <div id="dashSources" class="source-summary-list"></div>
         </div>
-        <p id="lastRunSummary" class="card-meta">Loading…</p>
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <h3 class="card-title">
+      </details>
+
+      <details id="dashChannelsCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
-            Monitored channels
-          </h3>
+            <h3 class="collapse-title">Monitored channels</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <table class="data-table" id="dashChannelsTable">
+            <thead><tr><th>Channel</th><th class="num">Msgs</th><th class="when">Last msg</th></tr></thead>
+            <tbody id="dashChannelsBody"></tbody>
+          </table>
+          <p id="dashChannelsEmpty" class="muted small" hidden>No channels monitored yet.</p>
         </div>
-        <table class="data-table" id="dashChannelsTable">
-          <thead><tr><th>Channel</th><th class="num">Msgs</th><th class="when">Last msg</th></tr></thead>
-          <tbody id="dashChannelsBody"></tbody>
-        </table>
-        <p id="dashChannelsEmpty" class="muted small" hidden>No channels monitored yet.</p>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3 class="card-title">Sources</h3></div>
-        <div id="dashSources" class="source-summary-list"></div>
-      </div>
+      </details>
 
       <!-- Passkey enrollment: appears only while the tray's enrollment window is
            open (renderWebauthn) — the everyday UI carries no settings clutter. -->

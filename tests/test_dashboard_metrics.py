@@ -6,6 +6,7 @@ are known exactly; the endpoint test checks the JSON shape + the bearer gate.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -210,6 +211,87 @@ def test_dashboard_endpoint_numbers(tmp_path: Path) -> None:
     assert body["scans"]["count"] == 1
     assert body["scans"]["last"]["mode"] == "live"
     assert body["alerts"] == {"actionable": 1, "notifications_sent": 1}
+    # One last-activity card per kind, in a fixed order (#165).
+    assert [c["source"] for c in body["last_activity"]] == [
+        "whatsapp", "gmail", "traffic", "calendar"
+    ]
+
+
+# --- last-activity cards (#165) ---------------------------------------------
+
+def test_last_activity_cards_distill_each_kind(tmp_path: Path) -> None:
+    db = tmp_path / "act.sqlite3"
+    conn = store.connect(db)
+    # A message-pipeline scan carrying a per-source funnel for WhatsApp + Gmail.
+    rid = store.start_run(conn, mode="live", kind="scan")
+    store.record_run_funnel(
+        conn,
+        rid,
+        chats_synced=2,
+        messages_synced=12,
+        chats_monitored=3,
+        stage1_passed=2,
+        stage2_llm_calls=1,
+        actionable=1,
+        notification_status="sent",
+        source_funnel_json=json.dumps(
+            {
+                "whatsapp": {"messages_synced": 12, "actionable": 1},
+                "gmail": {"messages_synced": 4, "actionable": 0},
+            }
+        ),
+    )
+    store.finish_run(conn, rid, "completed", chats_reviewed=3)
+    # A traffic check that raised one delay alert.
+    tid = store.start_run(conn, mode="live", kind="traffic-check")
+    store.finish_run_summary(
+        conn, tid, "completed",
+        json.dumps({"kind": "traffic-check", "status": "ok",
+                    "checked": [{}, {}], "alerts": 1}),
+    )
+    # A calendar scan with nothing wrong.
+    cid = store.start_run(conn, mode="live", kind="calendar-scan")
+    store.finish_run_summary(
+        conn, cid, "completed",
+        json.dumps({"kind": "calendar-scan", "status": "ok",
+                    "conflicts": [], "unknown_locations": []}),
+    )
+    conn.close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        cards = {c["source"]: c for c in client.get("/api/dashboard").json()["last_activity"]}
+
+    assert cards["whatsapp"]["summary"] == "12 new · 1 actionable"
+    assert cards["whatsapp"]["alerts"] == 1
+    assert cards["whatsapp"]["kind"] == "scan"
+    assert cards["whatsapp"]["db_run_id"] == rid
+    assert cards["gmail"]["summary"] == "4 new · 0 actionable"
+    assert cards["gmail"]["alerts"] == 0
+    assert cards["traffic"]["summary"] == "1 delay alert"
+    assert cards["traffic"]["alerts"] == 1
+    assert cards["calendar"]["summary"] == "no conflicts"
+    assert cards["calendar"]["alerts"] == 0
+
+
+def test_last_activity_never_ran_on_empty_db(tmp_path: Path) -> None:
+    db = tmp_path / "act-empty.sqlite3"
+    store.connect(db).close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        cards = client.get("/api/dashboard").json()["last_activity"]
+
+    assert [c["source"] for c in cards] == ["whatsapp", "gmail", "traffic", "calendar"]
+    for card in cards:
+        assert card["kind"] is None
+        assert card["started_at"] is None
+        assert card["summary"] == ""
+        assert card["alerts"] == 0
 
 
 def test_dashboard_empty_db_all_zeros(tmp_path: Path) -> None:

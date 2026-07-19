@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -30,13 +28,18 @@ def test_tab_switching(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
-def test_dashboard_metrics_render(page: Page, base_url: str) -> None:
+def test_dashboard_activity_grid_renders(page: Page, base_url: str) -> None:
     page.goto(base_url)
-    # The Dashboard is the default pane; its metric cards are present…
-    expect(page.locator("#paneDashboard")).to_contain_text("Channels monitored")
-    # …and main.js fetches /api/dashboard, replacing the "–" placeholder with a
-    # real count (0 on an empty DB), proving the metric round-trip works.
-    expect(page.locator("#mChannels")).to_have_text(re.compile(r"^\d+$"))
+    # The Dashboard is the default pane; the last-activity grid (#165) always
+    # renders one card per kind from the unified run store, proving the
+    # /api/dashboard round-trip works (cards read "never ran" on an unseeded DB).
+    grid = page.locator("#dashActivity")
+    expect(grid.locator(".activity-card")).to_have_count(4)
+    for kind in ("WhatsApp", "Gmail", "Traffic", "Calendar"):
+        expect(grid).to_contain_text(kind)
+    # Monitored channels folded away by default so the grid is the hero (#165).
+    expect(page.locator("#dashChannelsCard")).not_to_have_attribute("open", "")
+    expect(page.locator("#dashChannelsBody")).to_be_hidden()
 
 
 @pytest.mark.smoke

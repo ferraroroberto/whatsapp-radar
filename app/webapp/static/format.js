@@ -22,6 +22,47 @@ const KIND_META = {
 
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
+// Per-source sprite icon + label, shared by the Run tab's source-health cards
+// and the Dashboard's last-activity grid + source list so a source is drawn
+// identically wherever it appears (#165). `traffic` reuses the car glyph (#164).
+export const SOURCE_ICON = {
+  gmail: '#i-mail',
+  calendar: '#i-calendar-days',
+  whatsapp: '#i-message-circle',
+  traffic: '#i-car',
+};
+export const SOURCE_LABEL = {
+  gmail: 'Gmail', calendar: 'Calendar', whatsapp: 'WhatsApp', traffic: 'Traffic',
+};
+
+export function sourceIcon(source) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', SOURCE_ICON[source] || '#i-message-circle');
+  svg.appendChild(use);
+  return svg;
+}
+
+// Coarse relative time for at-a-glance "when did this last run" cards (#165):
+// "just now" / "5m ago" / "2h ago" / "3d ago", falling back to the absolute
+// local date past a week. A non-parseable value renders as an em-dash.
+export function fmtRelative(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts).replace('T', ' ').slice(0, 16);
+  const secs = Math.round((Date.now() - d.getTime()) / 1000);
+  if (secs < 45) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.round(hours / 24);
+  if (days < 7) return days + 'd ago';
+  return fmtLocalDateTime(ts, { withYear: false });
+}
+
 // Thousands separator with a period (29999 → "29.999"), deterministic across
 // browsers/locales (avoids `toLocaleString()` drift).
 export function fmtNum(n) {

@@ -56,10 +56,10 @@ function isChild(c) {
   return c.parent_chat_id != null;
 }
 
-// Source-aware vocabulary (#166): with the Gmail source filter active a row is a
-// sender (email address), not a WhatsApp "channel". The monitor/all mechanics are
-// identical — only the words change, and Gmail's demote is "stop monitoring" (back
-// to discovered), never the WhatsApp "ignore".
+// What a row represents (#166): with the Gmail source filter active a row is a
+// sender (email address), not a WhatsApp "channel" — this is the one wording
+// difference that survives; the monitored/ignored vocabulary itself is shared
+// across sources (#182).
 function gmailFilterActive() {
   return state.chatsSourceFilter === 'gmail';
 }
@@ -176,14 +176,15 @@ function row(c) {
   watch.type = 'button';
   watch.className = 'chat-watch';
   const monitored = c.status === 'monitored';
-  // Gmail demotes to 'discovered' (stop monitoring; retention then applies), never
-  // the WhatsApp 'ignored' — email has no "ignore" vocabulary (#166).
-  const isGmail = c.source === 'gmail';
-  const demoteTo = isGmail ? 'discovered' : 'ignored';
+  // Internally Gmail still demotes to 'discovered' (so the 30-day discovery
+  // window and retention exemptions keep applying), never 'ignored' — that
+  // mechanic is unchanged. Only the UI-facing label is shared with WhatsApp
+  // now: both read "ignore" (#182).
+  const demoteTo = c.source === 'gmail' ? 'discovered' : 'ignored';
   watch.classList.toggle('active', monitored);
   watch.setAttribute('aria-pressed', monitored ? 'true' : 'false');
   watch.title = monitored
-    ? (isGmail ? 'Monitoring — tap to stop' : 'Monitoring — tap to ignore')
+    ? 'Monitoring — tap to ignore'
     : 'Not monitored — tap to monitor';
   watch.innerHTML = icon('eye');
   watch.addEventListener('click', function () {
@@ -751,8 +752,6 @@ function setSourceFilter(source) {
   els.chatsSourceAll.classList.toggle('active', source === 'all');
   els.chatsSourceWhatsapp.classList.toggle('active', source === 'whatsapp');
   els.chatsSourceGmail.classList.toggle('active', source === 'gmail');
-  // Email has no "ignore" — the not-monitored bucket reads "Not monitored" (#166).
-  els.chatsFilterIgnored.textContent = source === 'gmail' ? 'Not monitored' : 'Ignored';
   render();
 }
 

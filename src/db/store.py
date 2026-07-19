@@ -63,6 +63,7 @@ from src.db.messages import (
     voice_audio_path,
 )
 from src.db.reprocess_support import clear_all_data, snapshot_operator_state
+from src.db.retention import PruneOutcome, prune_gmail_unmonitored
 from src.db.runs import (
     actionable_items_for_run,
     count_actionable_items,
@@ -85,6 +86,7 @@ from src.db.sync_log import recent_syncs, record_sync
 
 __all__ = [
     "LinkError",
+    "PruneOutcome",
     "actionable_items_for_run",
     "advance_cursor",
     "baseline_cursor",
@@ -126,6 +128,7 @@ __all__ = [
     "messages_since_cursor",
     "monitored_chats",
     "pending_transcriptions",
+    "prune_gmail_unmonitored",
     "recent_actionable_items",
     "recent_messages",
     "recent_messages_family",

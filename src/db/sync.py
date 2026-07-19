@@ -15,6 +15,7 @@ the delta instead of a bare "done".
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
@@ -24,6 +25,8 @@ from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding
 from src.connector.preflight import ConnectorOffline, ensure_connected
 from src.db import store
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -152,8 +155,18 @@ def sync_sources(
     *,
     operation: str,
     prepare: PrepareSource | None = None,
+    gmail_retention_days: int = 30,
 ) -> MultiSourceSyncOutcome:
-    """Ingest every binding independently and record a truthful per-source row."""
+    """Ingest every binding independently and record a truthful per-source row.
+
+    After a successful Gmail ingest, unmonitored senders' messages past
+    ``gmail_retention_days`` are pruned (#166) so a discovered mailbox never floods
+    the store; monitored senders and all WhatsApp data are untouched. The pruned
+    counts are logged and folded into that source's sync-log detail.
+    ``gmail_retention_days=0`` skips the prune entirely — used by the destructive
+    reprocess rebuild, which re-applies monitored status only *after* re-ingest, so
+    pruning mid-rebuild would wrongly drop a monitored sender's history.
+    """
     outcome = MultiSourceSyncOutcome()
     prepare_source = prepare or (lambda _source, connector: ensure_connected(connector))
     for binding in bindings:
@@ -169,13 +182,30 @@ def sync_sources(
             result.error = str(exc)
         finally:
             binding.connector.stop()
+        detail = result.error or ""
+        if binding.source == "gmail" and result.ok and gmail_retention_days > 0:
+            pruned = store.prune_gmail_unmonitored(
+                conn, retention_days=gmail_retention_days
+            )
+            if not pruned.is_noop:
+                logger.info(
+                    "ℹ️ Gmail retention: pruned %d message(s) and %d empty sender(s) "
+                    "older than %s (monitored senders exempt)",
+                    pruned.messages_pruned,
+                    pruned.senders_removed,
+                    pruned.cutoff,
+                )
+                detail = (
+                    f"retention pruned {pruned.messages_pruned} msg / "
+                    f"{pruned.senders_removed} sender(s)"
+                )
         outcome.results.append(result)
         store.record_sync(
             conn,
             source=operation,
             connector_source=binding.source,
             status="success" if result.ok else "failed",
-            detail=result.error or "",
+            detail=detail,
             chats_added=result.delta.chats_added,
             chats_updated=result.delta.chats_updated,
             messages_added=result.delta.messages_added,
@@ -189,6 +219,7 @@ def resync(
     *,
     source: str = "resync",
     prepare: PrepareSource | None = None,
+    gmail_retention_days: int = 30,
 ) -> ResyncOutcome:
     """Upsert the connector's chats/messages into the store, reporting the delta.
 
@@ -207,7 +238,13 @@ def resync(
         if not isinstance(connector, MessageConnector)
         else [ConnectorBinding(source="whatsapp", connector=connector)]
     )
-    synced = sync_sources(conn, bindings, operation=source, prepare=prepare)
+    synced = sync_sources(
+        conn,
+        bindings,
+        operation=source,
+        prepare=prepare,
+        gmail_retention_days=gmail_retention_days,
+    )
     delta = synced.delta
     if not synced.successful_sources:
         detail = "; ".join(f"{name}: {error}" for name, error in synced.source_errors)

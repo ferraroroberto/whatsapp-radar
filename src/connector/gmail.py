@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from gmail_readonly import (
     GmailLabel,
     GmailMailbox,
     GmailProfile,
     GmailReadClient,
     GmailReadError,
+    GmailSearch,
     GmailSender,
     GmailSource,
     build_google_read_client,
@@ -17,6 +20,10 @@ from src.config import GmailConfig
 from src.connector.base import ConnectorStatus
 from src.connector.preflight import ConnectorOffline
 from src.models import ChatRecord, MessageRecord
+
+logger = logging.getLogger(__name__)
+
+_SENDER_PREFIX = "sender:"
 
 
 def build_gmail_read_client(config: GmailConfig) -> GmailReadClient:
@@ -44,21 +51,27 @@ class GmailConnector:
             if self._client is None:
                 self._client = build_gmail_read_client(self._config)
             self._mailbox = GmailMailbox(self._client)
-            sources = self._mailbox.resolve_sources(
-                senders=tuple(
-                    GmailSender(sender.address, sender.name)
-                    for sender in self._config.senders
-                ),
-                labels=tuple(
-                    GmailLabel(label.name, label.display_name)
-                    for label in self._config.labels
-                ),
+            senders = tuple(
+                GmailSender(sender.address, sender.name)
+                for sender in self._config.senders
             )
-            self._sources = {source.source_id: source for source in sources}
+            labels = tuple(
+                GmailLabel(label.name, label.display_name)
+                for label in self._config.labels
+            )
+            # An empty whitelist is now valid (#166): senders are discovered from the
+            # last N days instead of being pre-listed. Only resolve/validate the
+            # whitelist when one is configured (a missing label still fails closed).
+            if senders or labels:
+                sources = self._mailbox.resolve_sources(senders=senders, labels=labels)
+                self._sources = {source.source_id: source for source in sources}
+            else:
+                self._sources = {}
             self._status = ConnectorStatus(
                 "gmail",
                 True,
-                f"{len(sources)} whitelisted sender/label chat(s)",
+                f"{len(self._sources)} whitelisted chat(s) + "
+                f"{self._config.discovery_days}d sender discovery",
             )
         except (GmailReadError, ValueError) as exc:
             self._status = ConnectorStatus("gmail", False, str(exc))
@@ -74,8 +87,16 @@ class GmailConnector:
         return self._require_connected().profile()
 
     def list_chats(self) -> list[ChatRecord]:
-        self._require_connected()
-        return [
+        """Whitelisted chats plus senders discovered in the last N days (#166).
+
+        Whitelist sources (senders + labels) keep their full-history behaviour; each
+        distinct sender seen in the last ``discovery_days`` is added as an ``email``
+        chat so the operator can promote it to monitored. A discovery API failure is
+        non-fatal — it logs and falls back to the whitelist so a hiccup never drops
+        the monitored senders' ingest.
+        """
+        mailbox = self._require_connected()
+        records = [
             ChatRecord(
                 source_chat_id=source.source_id,
                 display_name=source.display_name,
@@ -84,14 +105,48 @@ class GmailConnector:
             )
             for source in self._sources.values()
         ]
+        seen = set(self._sources)
+        try:
+            discovered = mailbox.discover_senders(
+                days=self._config.discovery_days,
+                limit=self._config.discovery_max_messages,
+            )
+        except GmailReadError as exc:
+            logger.warning("⚠️ Gmail sender discovery failed (%s); using whitelist only", exc)
+            discovered = ()
+        for sender in discovered:
+            source_id = f"{_SENDER_PREFIX}{sender.address}"
+            if source_id in seen:
+                continue
+            seen.add(source_id)
+            records.append(
+                ChatRecord(
+                    source_chat_id=source_id,
+                    display_name=sender.display_name,
+                    chat_type="email",
+                    source="gmail",
+                )
+            )
+        return records
 
     def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
         mailbox = self._require_connected()
         source = self._sources.get(source_chat_id)
-        if source is None:
+        if source is not None:
+            # Whitelisted sender/label: full-history search (unchanged).
+            search = source.search
+        elif source_chat_id.startswith(_SENDER_PREFIX):
+            # Discovered sender: bounded to the discovery window so the store stays
+            # bounded; its messages past retention are pruned unless it is monitored.
+            address = source_chat_id[len(_SENDER_PREFIX):]
+            search = GmailSearch(
+                query=f"from:{_escape_query(address)}",
+                lookback_days=self._config.discovery_days,
+            )
+        else:
             raise ValueError("Gmail source chat is not whitelisted")
         try:
-            emails = mailbox.messages(source.search)
+            emails = mailbox.messages(search)
         except GmailReadError as exc:
             self._status = ConnectorStatus("gmail", False, str(exc))
             raise ConnectorOffline(self._status) from exc
@@ -128,6 +183,11 @@ class GmailConnector:
         if not self._status.connected or self._mailbox is None:
             raise ConnectorOffline(self._status)
         return self._mailbox
+
+
+def _escape_query(value: str) -> str:
+    """Escape a discovered address for safe inclusion in a Gmail ``from:`` query."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _safe_error_detail(exc: Exception) -> str:

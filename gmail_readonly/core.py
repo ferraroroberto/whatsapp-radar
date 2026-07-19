@@ -69,6 +69,21 @@ class GmailSource:
 
 
 @dataclass(frozen=True)
+class DiscoveredSender:
+    """A distinct sender seen while scanning a recent time window (#166).
+
+    Produced by :meth:`GmailMailbox.discover_senders` from message metadata only —
+    never full bodies. ``address`` is lowercased for stable identity; ``display_name``
+    is the friendliest ``From`` name seen (falling back to the address).
+    """
+
+    address: str
+    display_name: str
+    last_timestamp: str
+    message_count: int
+
+
+@dataclass(frozen=True)
 class GmailProfile:
     """Safe mailbox identity and aggregate counts returned by Gmail."""
 
@@ -215,6 +230,57 @@ class GmailMailbox:
                 )
             )
         return tuple(sources)
+
+    def discover_senders(
+        self, *, days: int, limit: int
+    ) -> tuple[DiscoveredSender, ...]:
+        """Distinct senders active in the last ``days``, from metadata only (#166).
+
+        Scans at most ``limit`` recent messages (the mailbox is huge — this hard cap
+        bounds the metadata reads), groups them by lowercased ``From`` address, and
+        returns one :class:`DiscoveredSender` per address with its friendliest name,
+        latest send time, and how many of the scanned messages it accounts for.
+        Sorted most-recent first. Never downloads message bodies or attachments.
+        """
+        if days < 1:
+            raise ValueError("days must be at least 1")
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        metadata = self.metadata(GmailSearch(lookback_days=days), limit=limit)
+        by_address: dict[str, DiscoveredSender] = {}
+        for email in metadata:
+            address = (email.sender_address or "").strip().lower()
+            if not address:
+                continue
+            name = (email.sender_name or "").strip() or address
+            existing = by_address.get(address)
+            if existing is None:
+                by_address[address] = DiscoveredSender(
+                    address=address,
+                    display_name=name,
+                    last_timestamp=email.timestamp,
+                    message_count=1,
+                )
+            else:
+                # Keep the latest timestamp and a non-address display name if we find one.
+                display_name = (
+                    name if existing.display_name == address and name != address
+                    else existing.display_name
+                )
+                last_timestamp = max(existing.last_timestamp, email.timestamp)
+                by_address[address] = DiscoveredSender(
+                    address=address,
+                    display_name=display_name,
+                    last_timestamp=last_timestamp,
+                    message_count=existing.message_count + 1,
+                )
+        return tuple(
+            sorted(
+                by_address.values(),
+                key=lambda sender: (sender.last_timestamp, sender.address),
+                reverse=True,
+            )
+        )
 
     def count(self, search: GmailSearch) -> int:
         """Count matching messages without retrieving metadata or content."""

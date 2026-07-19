@@ -105,6 +105,10 @@ class _FakeClient:
         label_ids: list[str] | None = None,
     ) -> list[str]:
         self.queries.append((query, label_ids))
+        # Sender discovery (#166) scans a recent window with a ``newer_than`` query;
+        # these fixtures exercise the whitelist path, so discovery finds nothing here.
+        if "newer_than" in query:
+            return []
         return ["newer", "older"]
 
     def get_message(
@@ -168,7 +172,7 @@ def test_label_queries_enforce_sender_then_label_precedence(tmp_path: Path) -> N
     )
 
 
-def test_missing_label_and_empty_whitelist_fail_closed(tmp_path: Path) -> None:
+def test_missing_label_fails_closed_but_empty_whitelist_discovers(tmp_path: Path) -> None:
     missing = GmailConnector(
         GmailConfig(
             senders=(),
@@ -179,9 +183,95 @@ def test_missing_label_and_empty_whitelist_fail_closed(tmp_path: Path) -> None:
     assert missing.connect().connected is False
     assert "not found" in missing.status().detail
 
+    # An empty whitelist is now valid (#166): senders are discovered from the last
+    # N days rather than pre-listed, so the connector connects in discovery mode.
     empty = GmailConnector(GmailConfig(), client=_FakeClient())
-    assert empty.connect().connected is False
-    assert "whitelist is empty" in empty.status().detail
+    status = empty.connect()
+    assert status.connected is True
+    assert "discovery" in status.detail
+    assert empty.list_chats() == []
+
+
+class _DiscoveryClient(_FakeClient):
+    """A client whose recent window surfaces senders (metadata reads allowed)."""
+
+    def list_message_ids(
+        self,
+        *,
+        query: str,
+        label_ids: list[str] | None = None,
+    ) -> list[str]:
+        self.queries.append((query, label_ids))
+        return ["newer", "older"]
+
+    def get_message(
+        self,
+        message_id: str,
+        *,
+        metadata_only: bool = False,
+    ) -> dict[str, Any]:
+        return self.messages[message_id]
+
+
+def test_list_chats_includes_discovered_senders_deduped(tmp_path: Path) -> None:
+    connector = GmailConnector(
+        GmailConfig(senders=(GmailSender("school@example.com", "School notices"),)),
+        client=_DiscoveryClient(),
+    )
+    connector.connect()
+
+    chats = connector.list_chats()
+    ids = [chat.source_chat_id for chat in chats]
+
+    # The whitelisted sender keeps its configured name and appears once; the
+    # non-whitelisted sender seen in the window (coach) is added as discovered.
+    assert ids.count("sender:school@example.com") == 1
+    assert "sender:coach@example.com" in ids
+    school = next(c for c in chats if c.source_chat_id == "sender:school@example.com")
+    assert school.display_name == "School notices"
+    assert {chat.chat_type for chat in chats} == {"email"}
+
+
+def test_discovered_sender_fetch_is_windowed(tmp_path: Path) -> None:
+    client = _DiscoveryClient()
+    connector = GmailConnector(GmailConfig(discovery_days=30), client=client)
+    connector.connect()
+
+    connector.fetch_messages("sender:coach@example.com")
+
+    # A discovered (non-whitelisted) sender is fetched only within the window, so a
+    # huge mailbox history never floods the store.
+    assert ("from:coach@example.com newer_than:30d", None) in client.queries
+
+
+def test_discovery_failure_falls_back_to_whitelist(tmp_path: Path) -> None:
+    class _Response:
+        status = 429
+
+    class _DiscoveryFailsClient(_FakeClient):
+        def list_message_ids(
+            self,
+            *,
+            query: str,
+            label_ids: list[str] | None = None,
+        ) -> list[str]:
+            self.queries.append((query, label_ids))
+            if "newer_than" in query:
+                error = RuntimeError("private discovery detail")
+                error.resp = _Response()  # type: ignore[attr-defined]
+                raise error
+            return ["newer", "older"]
+
+    connector = GmailConnector(
+        GmailConfig(senders=(GmailSender("school@example.com", "School"),)),
+        client=_DiscoveryFailsClient(),
+    )
+    connector.connect()
+
+    # A discovery hiccup must not drop the whitelisted (monitored) sender's ingest.
+    chats = connector.list_chats()
+    assert [chat.source_chat_id for chat in chats] == ["sender:school@example.com"]
+    assert connector.status().connected is True
 
 
 def test_missing_token_degrades_without_starting_oauth(tmp_path: Path) -> None:

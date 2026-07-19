@@ -152,12 +152,28 @@ class GmailLabel:
 
 @dataclass(frozen=True)
 class GmailConfig:
-    """Read-only Gmail API credentials and whitelist."""
+    """Read-only Gmail API credentials, whitelist, and sender-discovery bounds (#166).
+
+    ``senders``/``labels`` are the explicit whitelist (full-history ingest, as
+    before). Sender-level monitoring (#166) additionally *discovers* senders active
+    in the last ``discovery_days`` and ingests only that bounded window for them, so
+    the mailbox never floods the store. ``retention_days`` prunes messages from
+    **unmonitored** Gmail senders past that window — monitored senders are exempt and
+    WhatsApp data is never touched.
+    """
 
     credentials_path: Path = Path("auth/gmail/credentials.json")
     token_path: Path = Path("auth/gmail/token.json")
     senders: tuple[GmailSender, ...] = ()
     labels: tuple[GmailLabel, ...] = ()
+    # Sender discovery: how many days back to look for active senders and the hard
+    # cap on messages scanned per discovery pass (the mailbox is huge — this bounds
+    # the metadata reads). A discovered, unmonitored sender's messages are ingested
+    # only within this window and pruned past ``retention_days``.
+    discovery_days: int = 30
+    discovery_max_messages: int = 400
+    # Retention window for unmonitored Gmail senders. Monitored senders are exempt.
+    retention_days: int = 30
 
 
 @dataclass(frozen=True)
@@ -571,6 +587,18 @@ def load_config(root: Path | None = None) -> Config:
     gmail = GmailConfig(
         credentials_path=gmail_credentials,
         token_path=gmail_token,
+        discovery_days=int(
+            os.environ.get("WR_GMAIL_DISCOVERY_DAYS", gmail_raw.get("discovery_days", 30))
+        ),
+        discovery_max_messages=int(
+            os.environ.get(
+                "WR_GMAIL_DISCOVERY_MAX_MESSAGES",
+                gmail_raw.get("discovery_max_messages", 400),
+            )
+        ),
+        retention_days=int(
+            os.environ.get("WR_GMAIL_RETENTION_DAYS", gmail_raw.get("retention_days", 30))
+        ),
         senders=tuple(
             GmailSender(
                 address=str(item.get("address", "")).strip().lower(),

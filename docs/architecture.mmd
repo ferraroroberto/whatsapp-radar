@@ -77,7 +77,7 @@ flowchart TB
   LINKED --> SIDECARPY
 
   subgraph gmailcore["gmail_readonly/ — reusable framework-neutral component"]
-    GMAILCORE["OAuth + token refresh\nwhitelist + paginated search\nmetadata/count + MIME normalization"]
+    GMAILCORE["OAuth + token refresh\nwhitelist + paginated search\nsender discovery (last N days)\nmetadata/count + MIME normalization"]
   end
   GMAIL --> GMAILCORE
   SURVEY --> GMAILCORE
@@ -118,8 +118,8 @@ flowchart TB
   LINKED -->|read buffer| BAILEYS
 
   subgraph db["src/db/ — SQLite store"]
-    STORE["store.py — re-export facade over\nconnection/chats/messages/runs/\ndashboard/sync_log/reprocess_support.py"]
-    SYNC["sync.py — ingest_chats / resync"]
+    STORE["store.py — re-export facade over\nconnection/chats/messages/runs/dashboard/\nsync_log/reprocess_support/retention.py"]
+    SYNC["sync.py — ingest_chats / resync\n+ Gmail unmonitored-sender retention prune"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
   end
   FANOUT --> SYNC

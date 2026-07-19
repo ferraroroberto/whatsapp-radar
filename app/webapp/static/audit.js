@@ -10,9 +10,21 @@
 
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
-import { fmtLocalDateTime, renderFunnelCells, renderSourceFunnels } from './format.js';
+import { fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
 
 function auditState() { return state.audit; }
+
+const FAMILY_KINDS = ['traffic-check', 'calendar-scan'];
+
+function isFamilyKind(kind) { return FAMILY_KINDS.indexOf(kind) !== -1; }
+
+// Kind filter (#163): 'messages' groups the message-pipeline kinds; the family
+// checks filter individually.
+function matchesKindFilter(run, filter) {
+  if (!filter || filter === 'all') return true;
+  if (filter === 'messages') return !isFamilyKind(run.kind);
+  return run.kind === filter;
+}
 
 // Live = a real run that synced + (maybe) delivered; dry_run = replay on stored
 // data; review = the legacy process-only verb. Badge keys map to CSS colors.
@@ -41,8 +53,18 @@ const ACTION_META = {
 
 function actionMeta(action) { return ACTION_META[action] || { label: action || '?', cls: 'muted' }; }
 
-// One compact line summarizing the funnel for the run list.
-function funnelSummary(f) {
+// One compact line summarizing the run for the list: the funnel for message
+// runs, the structured payload counts for family checks (#163).
+function runSummaryLine(run) {
+  if (isFamilyKind(run.kind)) {
+    const s = run.summary || {};
+    if (run.kind === 'traffic-check') {
+      return `${(s.checked || []).length} checked · ${s.alerts || 0} alert(s)`;
+    }
+    return `${(s.conflicts || []).length} conflict(s) · `
+      + `${(s.unknown_locations || []).length} unknown location(s)`;
+  }
+  const f = run.funnel;
   if (!f) return '';
   return [
     `${f.messages_synced} synced`,
@@ -79,6 +101,10 @@ function runListItem(run) {
   status.className = 'exec-run-badge ' + sb.cls;
   status.textContent = sb.text;
 
+  const name = document.createElement('span');
+  name.className = 'exec-run-name small';
+  name.textContent = kindLabel(run.kind);
+
   const mm = modeMeta(run.mode);
   const mode = document.createElement('span');
   mode.className = 'audit-mode-badge ' + mm.cls;
@@ -89,11 +115,11 @@ function runListItem(run) {
   const params = paramsSummary(run.params);
   when.textContent = fmtLocalDateTime(run.started_at) + (params ? ' · ' + params : '');
 
-  top.append(status, mode, when);
+  top.append(status, name, mode, when);
 
   const summary = document.createElement('p');
   summary.className = 'audit-run-funnel muted small';
-  summary.textContent = funnelSummary(run.funnel);
+  summary.textContent = runSummaryLine(run);
 
   li.append(top, summary);
   li.addEventListener('click', function () { selectRun(run.id); });
@@ -125,8 +151,9 @@ function syncListItem(sync) {
 function renderRuns() {
   const ax = auditState();
   els.auditRuns.textContent = '';
-  els.auditRunsEmpty.hidden = ax.runs.length > 0;
-  for (const run of ax.runs) els.auditRuns.appendChild(runListItem(run));
+  const shown = ax.runs.filter(function (r) { return matchesKindFilter(r, ax.kindFilter); });
+  els.auditRunsEmpty.hidden = shown.length > 0;
+  for (const run of shown) els.auditRuns.appendChild(runListItem(run));
 }
 
 // ----------------------------------------------------------- run detail
@@ -297,15 +324,40 @@ function traceBlock(t) {
   return det;
 }
 
+// Family-check drill-down (#163): the run's structured payload IS the trace —
+// show the headline counts as funnel cells and the full payload verbatim.
+function renderFamilyDetail(run) {
+  const s = run.summary || {};
+  const cells = run.kind === 'traffic-check'
+    ? [
+      { label: 'Checked', value: (s.checked || []).length },
+      { label: 'Alerts', value: s.alerts },
+      { label: 'Status', value: s.status },
+    ]
+    : [
+      { label: 'Conflicts', value: (s.conflicts || []).length },
+      { label: 'Unknown loc.', value: (s.unknown_locations || []).length },
+      { label: 'Status', value: s.status },
+    ];
+  renderFunnelCells(els.auditFunnel, cells);
+  renderSourceFunnels(els.auditSourceFunnel, {});
+  els.auditTraces.textContent = '';
+  const payload = traceField('Run payload', run.summary);
+  if (payload) els.auditTraces.appendChild(payload);
+  els.auditTracesEmpty.hidden = !!payload;
+  if (!payload) els.auditTracesEmpty.textContent = 'No payload recorded for this run.';
+}
+
 function renderDetail(data) {
   const run = data.run;
   els.auditDetailCard.hidden = false;
   const mm = modeMeta(run.mode);
+  const kindBit = isFamilyKind(run.kind) ? kindLabel(run.kind) + ' — ' : '';
   // "Live run #40" / "Dry run #3" — don't double the word when the mode label
   // already ends in "run".
-  els.auditDetailTitle.textContent = mm.label.toLowerCase().endsWith('run')
+  els.auditDetailTitle.textContent = kindBit + (mm.label.toLowerCase().endsWith('run')
     ? `${mm.label} #${run.id}`
-    : `${mm.label} run #${run.id}`;
+    : `${mm.label} run #${run.id}`);
 
   const bits = [run.status];
   if (run.started_at) bits.push('started ' + fmtLocalDateTime(run.started_at));
@@ -313,6 +365,12 @@ function renderDetail(data) {
   if (params) bits.push(params);
   if (run.error) bits.push('error: ' + run.error);
   els.auditDetailMeta.textContent = bits.join(' · ');
+
+  if (isFamilyKind(run.kind)) {
+    renderFamilyDetail(run);
+    els.auditDetailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
 
   renderFunnel(run);
   renderSourceFunnels(els.auditSourceFunnel, run.sources || {});
@@ -380,4 +438,14 @@ export async function fetchAudit() {
 export function wireAudit() {
   els.auditDetailClose.addEventListener('click', closeDetail);
   els.auditDetailCard.hidden = true;
+  // Kind filter chips (#163): client-side filter over the fetched run list.
+  els.auditKindFilter.addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.range-tab');
+    if (!btn) return;
+    auditState().kindFilter = btn.dataset.kind || 'all';
+    for (const b of els.auditKindFilter.querySelectorAll('.range-tab')) {
+      b.classList.toggle('active', b === btn);
+    }
+    renderRuns();
+  });
 }

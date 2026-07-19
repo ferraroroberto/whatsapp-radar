@@ -24,6 +24,7 @@ a second request returns 409.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any
 
@@ -252,17 +253,124 @@ async def list_syncs(
     return {"syncs": rows, "totals": totals}
 
 
+def _loads(value: Any) -> Any:
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _fs_mode(record: dict[str, Any]) -> str:
+    argv = record.get("argv") or []
+    return "dry_run" if "--dry-run" in argv else "live"
+
+
+def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
+    """Shape a DB run row as a run record for the unified runs list/viewer (#163).
+
+    Covers runs launched outside the webapp (CLI, App Launcher Jobs) which have
+    no filesystem record: family checks carry their summary payload as the
+    result; scan/process rows rebuild the funnel from the DB columns.
+    """
+    rid = int(row["id"])
+    kind = row["kind"]
+    if kind in ("calendar-scan", "traffic-check"):
+        result = _loads(row["summary_json"])
+    else:
+        result = {
+            "kind": kind,
+            "run_id": rid,
+            "funnel": {
+                "messages_synced": int(row["messages_synced"]),
+                "chats_monitored": int(row["chats_monitored"]),
+                "chats_with_delta": int(row["chats_reviewed"]),
+                "transcriptions": int(row["transcriptions"]),
+                "stage1_passed": int(row["stage1_passed"]),
+                "stage2_llm_calls": int(row["stage2_llm_calls"]),
+                "actionable": int(row["actionable"]),
+            },
+            "notification_status": row["notification_status"],
+            "sources": _loads(row["source_funnel_json"]) or {},
+        }
+    return {
+        "kind": kind,
+        "run_id": f"db-{rid}",
+        "db_run_id": rid,
+        "origin": "db",
+        "status": row["status"],
+        "mode": row["mode"],
+        "started_at": row["started_at"],
+        "finished_at": row["completed_at"],
+        "error": row["error"],
+        "result": result,
+        "output_tail": "(launched outside the webapp — no captured output; "
+        "the run record above is the full outcome)",
+    }
+
+
 @router.get("/api/execution/runs")
-async def list_execution_runs(request: Request, limit: int = 50) -> dict[str, Any]:
+async def list_execution_runs(
+    request: Request,
+    limit: int = 50,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
+    """Unified recent runs: one entry per execution across both stores (#163).
+
+    Filesystem records (webapp-launched, carry live output) are merged with DB
+    run rows (every launch) by the DB run id; DB-only rows — scheduled scans and
+    family checks — synthesize a record so nothing that ran is invisible here.
+    """
     limit = max(1, min(limit, 200))
-    return {"active": runs.active_run(), "runs": runs.list_runs(limit)}
+    merged: list[dict[str, Any]] = []
+    by_db_id: dict[int, dict[str, Any]] = {}
+    for record in runs.list_runs(limit):
+        record.setdefault("mode", _fs_mode(record))
+        db_id = record.get("db_run_id")
+        if not isinstance(db_id, int):
+            result = record.get("result")
+            db_id = result.get("run_id") if isinstance(result, dict) else None
+        if isinstance(db_id, int):
+            record["db_run_id"] = db_id
+            by_db_id[db_id] = record
+        merged.append(record)
+    for row in store.list_review_runs(conn, limit):
+        rid = int(row["id"])
+        matched = by_db_id.get(rid)
+        if matched is not None:
+            # The DB row is authoritative for timing (one clock, UTC) and — for
+            # scan runs — the live/dry mode; process rows keep the argv-derived
+            # mode ('review' in the DB conflates the two).
+            matched["started_at"] = row["started_at"]
+            if row["mode"] in ("live", "dry_run"):
+                matched["mode"] = row["mode"]
+            continue
+        merged.append(_db_run_record(row))
+    merged.sort(key=lambda r: str(r.get("started_at") or ""), reverse=True)
+    return {"active": runs.active_run(), "runs": merged[:limit]}
 
 
 @router.get("/api/execution/runs/{kind}/{run_id}")
-async def get_execution_run(request: Request, kind: str, run_id: str) -> dict[str, Any]:
+async def get_execution_run(
+    request: Request,
+    kind: str,
+    run_id: str,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
+    if run_id.startswith("db-"):
+        try:
+            rid = int(run_id[3:])
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="run not found") from exc
+        row = store.review_run(conn, rid)
+        if row is None or row["kind"] != kind:
+            raise HTTPException(status_code=404, detail="run not found")
+        return {"run": _db_run_record(row)}
     record = runs.get_run(kind, run_id)
     if record is None:
         raise HTTPException(status_code=404, detail="run not found")
+    record.setdefault("mode", _fs_mode(record))
     return {"run": record}
 
 

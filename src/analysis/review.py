@@ -176,7 +176,7 @@ def review_monitored_chats(
     Gated on ``config.transcription.enabled``; ``config=None`` (as in tests with
     no transcription feature in play) leaves the delta untouched.
     """
-    run_id = store.start_run(conn)
+    run_id = store.start_run(conn, kind="process")
     outcome = ReviewOutcome(run_id=run_id)
     monitored = store.monitored_chats(conn)
     if config is not None:

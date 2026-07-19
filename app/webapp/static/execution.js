@@ -9,25 +9,12 @@
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, renderFunnelCells, renderSourceFunnels } from './format.js';
+import { fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
 let firing = false;
-
-// Per-kind display label for the runs list and viewer title.
-const KIND_META = {
-  scan: { label: 'Full pipeline' },
-  process: { label: 'Process' },
-  notify: { label: 'Message' },
-  resync: { label: 'Sync' },
-  reprocess: { label: 'Reprocess' },
-  'calendar-scan': { label: 'Family: daily scan' },
-  'traffic-check': { label: 'Family: traffic' },
-};
-
-function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
 // The vendored switch stores its state in aria-checked (class + aria move
 // together through setSwitch — the one write path).
@@ -157,12 +144,11 @@ function qrSrc() {
 
 function fmtCount(n) { return (n === undefined || n === null) ? '–' : Number(n).toLocaleString(); }
 
+// Compact local timestamp for sync/health lines — the one shared formatter so
+// no surface can drift to a different clock or format again (#163).
 function fmtSyncWhen(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  return isNaN(d)
-    ? String(iso)
-    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return fmtLocalDateTime(iso, { withYear: false });
 }
 
 // When the source is live, show what's actually *stored* and the last sync delta
@@ -458,7 +444,16 @@ function runsListItem(run) {
   const when = document.createElement('span');
   when.className = 'exec-run-when muted small';
   when.textContent = fmtLocalDateTime(run.started_at);
-  li.append(badge, name, when);
+  li.append(badge, name);
+  // A dry run must be visibly distinct in the list — four unlabeled "Full
+  // pipeline" dry entries read as four real runs (#163).
+  if (run.mode === 'dry_run') {
+    const dry = document.createElement('span');
+    dry.className = 'audit-mode-badge dry';
+    dry.textContent = 'Dry run';
+    li.append(dry);
+  }
+  li.append(when);
   li.addEventListener('click', function () {
     const e = execState();
     e.selected = { kind: run.kind, run_id: run.run_id };
@@ -519,6 +514,20 @@ function funnelCells(result) {
   }
   if (result.kind === 'notify') {
     return [{ label: 'Notify', value: result.notification_status }];
+  }
+  if (result.kind === 'calendar-scan') {
+    return [
+      { label: 'Conflicts', value: (result.conflicts || []).length },
+      { label: 'Unknown loc.', value: (result.unknown_locations || []).length },
+      { label: 'Status', value: result.status },
+    ];
+  }
+  if (result.kind === 'traffic-check') {
+    return [
+      { label: 'Checked', value: (result.checked || []).length },
+      { label: 'Alerts', value: result.alerts },
+      { label: 'Status', value: result.status },
+    ];
   }
   return null;
 }

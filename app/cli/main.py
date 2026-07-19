@@ -371,58 +371,70 @@ def build_parser() -> argparse.ArgumentParser:
         "calendar-scan", help="daily family calendar-conflict scan (#160)"
     )
     p_cal.add_argument(
-        "--dry-run", action="store_true", help="run fully but never send or record"
+        "--dry-run",
+        action="store_true",
+        help="run fully but never send an alert (the run row itself is recorded)",
     )
     p_traffic = sub.add_parser(
         "traffic-check", help="traffic-jam check for upcoming commutes (#160)"
     )
     p_traffic.add_argument(
-        "--dry-run", action="store_true", help="run fully but never send or record"
+        "--dry-run",
+        action="store_true",
+        help="run fully but never send an alert (the run row itself is recorded)",
     )
     sub.add_parser("tray", help="run the system-tray surface that owns the admin webapp")
     return parser
 
 
-def _cmd_calendar_scan(config: Config, dry_run: bool) -> int:
+def _cmd_family_check(
+    conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool
+) -> int:
+    """Run one family check, recording it as a run row like any other kind (#163).
+
+    The run record is what makes a scheduled (App Launcher) execution visible in
+    the Audit tab — the check itself never touches the message store.
+    """
+    import json
     from datetime import datetime
 
     from src.family.calendar_scan import run_calendar_scan
-
-    try:
-        payload = run_calendar_scan(config, now=datetime.now().astimezone(), dry_run=dry_run)
-    except (FileNotFoundError, RuntimeError) as exc:
-        _progress(f"❌ calendar-scan failed: {exc}")
-        _emit_result({"kind": "calendar-scan", "status": "error", "error": str(exc)})
-        return 1
-    _progress(
-        f"📅 calendar-scan: {payload['status']} — "
-        f"{len(payload.get('conflicts', []))} conflict(s), "
-        f"{len(payload.get('unknown_locations', []))} unknown location(s)"
-        + (" [dry-run]" if dry_run else "")
-    )
-    _emit_result(payload)
-    return 0
-
-
-def _cmd_traffic_check(config: Config, dry_run: bool) -> int:
-    from datetime import datetime
-
     from src.family.traffic_check import run_traffic_check
 
+    run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
+    runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check
     try:
-        payload = run_traffic_check(config, now=datetime.now().astimezone(), dry_run=dry_run)
+        payload = runner(config, now=datetime.now().astimezone(), dry_run=dry_run)
     except (FileNotFoundError, RuntimeError) as exc:
-        _progress(f"❌ traffic-check failed: {exc}")
-        _emit_result({"kind": "traffic-check", "status": "error", "error": str(exc)})
+        _progress(f"❌ {kind} failed: {exc}")
+        store.finish_run_summary(conn, run_id, "failed", None, error=str(exc))
+        _emit_result({"kind": kind, "status": "error", "error": str(exc), "run_id": run_id})
         return 1
-    _progress(
-        f"🚗 traffic-check: {payload['status']} — "
-        f"{len(payload.get('checked', []))} route(s) checked, "
-        f"{payload.get('alerts', 0)} alert(s)"
-        + (" [dry-run]" if dry_run else "")
+    payload["run_id"] = run_id
+    if kind == "calendar-scan":
+        _progress(
+            f"📅 calendar-scan: {payload['status']} — "
+            f"{len(payload.get('conflicts', []))} conflict(s), "
+            f"{len(payload.get('unknown_locations', []))} unknown location(s)"
+            + (" [dry-run]" if dry_run else "")
+        )
+    else:
+        _progress(
+            f"🚗 traffic-check: {payload['status']} — "
+            f"{len(payload.get('checked', []))} route(s) checked, "
+            f"{payload.get('alerts', 0)} alert(s)"
+            + (" [dry-run]" if dry_run else "")
+        )
+    status = "failed" if payload.get("status") == "error" else "completed"
+    store.finish_run_summary(
+        conn,
+        run_id,
+        status,
+        json.dumps(payload, ensure_ascii=False),
+        error=payload.get("error"),
     )
     _emit_result(payload)
-    return 0
+    return 1 if status == "failed" else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,14 +465,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
-    # Family checks (#160) are independent of the message store — no DB needed.
-    if args.command == "calendar-scan":
-        return _cmd_calendar_scan(config, args.dry_run)
-    if args.command == "traffic-check":
-        return _cmd_traffic_check(config, args.dry_run)
-
     conn = store.connect(config.db_path)
     try:
+        # Family checks (#160) never touch the message store, but since #163 they
+        # record a run row so scheduled executions are visible in the Audit tab.
+        if args.command in ("calendar-scan", "traffic-check"):
+            return _cmd_family_check(conn, config, args.command, args.dry_run)
         if args.command == "status":
             return _cmd_status(conn, config)
         if args.command == "ingest":

@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
@@ -52,7 +52,9 @@ class RunBusyError(Exception):
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    # UTC with an explicit offset — the same discipline as the DB store, so the
+    # same run can never show two different times across surfaces (#163).
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _python() -> str:
@@ -257,6 +259,10 @@ def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO
     }
     if result is not None:
         fields["result"] = result
+        # The CLI's DB run id, when the verb records one — the merge key that
+        # lets the runs list show one entry per execution across stores (#163).
+        if isinstance(result.get("run_id"), int):
+            fields["db_run_id"] = result["run_id"]
     write_run_json(run_dir, **fields)
     with _LOCK:
         if _ACTIVE is not None and _ACTIVE["run_id"] == run_id:

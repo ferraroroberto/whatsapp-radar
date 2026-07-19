@@ -46,9 +46,16 @@ def _loads(value: Any) -> Any:
 
 
 def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
-    """Shape a review_runs row for the run list: identity + parsed params + funnel."""
+    """Shape a run row for the run list: identity + parsed params + funnel.
+
+    Since #163 the table holds every run kind; family checks (traffic-check /
+    calendar-scan) carry their structured payload in ``summary`` instead of a
+    meaningful funnel.
+    """
     return {
         "id": int(row["id"]),
+        "kind": row["kind"],
+        "summary": _loads(row["summary_json"]),
         "mode": row["mode"],
         "status": row["status"],
         "params": _loads(row["params_json"]),
@@ -96,16 +103,22 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
 @router.get("/api/audit/runs")
 async def list_runs(
     limit: int = 50,
+    kind: str | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Recent review/scan runs (with funnel) plus maintenance sync markers.
+    """Recent runs of every kind (with funnel/summary) plus maintenance markers.
 
-    ``runs`` are the inspectable review/scan runs, newest first; ``syncs`` are the
-    resync/reprocess data-maintenance events so they're visible in the same audit
-    timeline (read-only, no schema beyond the existing sync_log).
+    ``runs`` are the inspectable runs, newest first — message scans, process
+    runs, and the family checks alike (#163); ``kind`` filters to one kind.
+    ``syncs`` are the resync/reprocess data-maintenance events so they're
+    visible in the same audit timeline (read-only, no schema beyond sync_log).
     """
     limit = max(1, min(limit, 200))
-    runs = [_run_list_row(r) for r in store.list_review_runs(conn, limit)]
+    runs = [
+        r
+        for r in (_run_list_row(row) for row in store.list_review_runs(conn, limit))
+        if kind is None or r["kind"] == kind
+    ]
     syncs = [
         {
             "ran_at": s["ran_at"],

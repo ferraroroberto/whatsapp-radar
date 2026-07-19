@@ -233,6 +233,17 @@ def base_url() -> Iterator[str]:
     db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
     db_path = Path(db_dir) / "e2e.sqlite3"
     env["WR_DB_PATH"] = str(db_path)
+    # Family rules normally live in the developer's ignored local config. Give
+    # the e2e webapp an explicit sanitized config layer so both reads and any
+    # accidental Family-tab saves stay inside this disposable directory.
+    local_config_path = Path(db_dir) / "e2e-local.json"
+    local_config_path.write_text(
+        '{"family": {"enabled": false, "home_address": "", '
+        '"kids_home_time": "17:30", "responsible_by_weekday": {}, '
+        '"childcare_windows": []}}',
+        encoding="utf-8",
+    )
+    env["WR_LOCAL_CONFIG_PATH"] = str(local_config_path)
     # Never read the developer's real WhatsApp buffer: point the sidecar status /
     # QR routes at an empty throwaway dir (renders as a 'stopped' connection).
     env["WR_LINKED_DEVICE_DIR"] = str(Path(db_dir) / "linked_device")

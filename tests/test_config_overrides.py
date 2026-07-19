@@ -60,6 +60,42 @@ def test_load_config_reads_local_overrides(
     assert cfg.connector == "fixture"
 
 
+def test_e2e_local_config_override_never_opens_or_writes_host_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_root(tmp_path)
+    host_local = root / "config" / "local.json"
+    host_local.write_text(
+        json.dumps({"family": {"home_address": "real home"}}), encoding="utf-8"
+    )
+    fixture_local = tmp_path / "e2e-local.json"
+    fixture_local.write_text(
+        json.dumps({"family": {"home_address": "sanitized fixture"}}), encoding="utf-8"
+    )
+    monkeypatch.setenv("WR_LOCAL_CONFIG_PATH", str(fixture_local))
+
+    opened: list[Path] = []
+    original_load_json = config._load_json
+
+    def recording_load_json(path: Path) -> dict:
+        opened.append(path)
+        return original_load_json(path)
+
+    monkeypatch.setattr(config, "_load_json", recording_load_json)
+    loaded = config.load_config(root=root)
+    written = config.save_local_overrides({"family": {"enabled": True}}, root=root)
+
+    assert loaded.family.home_address == "sanitized fixture"
+    assert host_local not in opened
+    assert json.loads(host_local.read_text(encoding="utf-8")) == {
+        "family": {"home_address": "real home"}
+    }
+    assert written == fixture_local
+    assert json.loads(fixture_local.read_text(encoding="utf-8")) == {
+        "family": {"enabled": True, "home_address": "sanitized fixture"}
+    }
+
+
 def test_sources_load_from_json_and_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

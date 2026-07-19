@@ -9,13 +9,11 @@ is pinned WebKit-only, matching test_iphone_revalidate.py's precedent).
 contract: full-bleed rows on a top hairline after the first, never a nested
 canvas-subtle card) and gives Start/End a constrained two-column grid.
 
-Privacy: this test only ever adds new BLANK windows via the "+ Add childcare
-window" button (a pure client-side draft mutation, see family.js) and never
-clicks Save — so it never reads or persists real family data, even though
-the autobooted app's family config comes from the gitignored, unsanitized
-``config/local.json`` (no env-var isolation exists for that file, unlike the
-message DB). Assertions are structural only (classes, computed styles,
-bounding boxes) — never window content.
+Privacy: the autobooted app receives a disposable sanitized local-config
+fixture, including its Family rules. This test only adds blank windows via the
+pure client-side draft mutation (see family.js), and its assertions remain
+structural only (classes, computed styles, bounding boxes) — never rule
+content.
 """
 
 from __future__ import annotations
@@ -130,6 +128,4 @@ def test_childcare_windows_flat_and_fit_390px(
             f"add-window button ({add_box}) overlaps the floating nav pill ({nav_box})"
         )
     finally:
-        # Never Save: config/local.json isn't test-isolated for family data,
-        # so persisting would write junk windows into real local config.
         context.close()

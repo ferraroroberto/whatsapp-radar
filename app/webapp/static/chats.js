@@ -179,7 +179,9 @@ function renderTripwire() {
     const promote = document.createElement('button');
     promote.type = 'button';
     promote.className = 'tripwire-promote';
-    promote.textContent = 'Monitor';
+    promote.title = 'Not monitored — tap to monitor';
+    promote.setAttribute('aria-label', promote.title);
+    promote.innerHTML = icon('eye');
     promote.addEventListener('click', function () {
       const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
       if (chat) setStatus(chat, 'monitored');

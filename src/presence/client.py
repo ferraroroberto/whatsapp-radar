@@ -173,12 +173,11 @@ def _evaluate(
     # Among all of the person's entities, use the freshest one that actually
     # carries a fix — coordinate-less rows (role/"shortcut" entries, offline
     # accessories) must never shadow a live device (#177).
-    usable: list[tuple[datetime, dict[str, Any]]] = []
-    for entity in matched:
-        if entity.get("latitude") is None or entity.get("longitude") is None:
-            continue
-        raw = entity.get("last_seen")
-        if not raw:
+    usable: list[tuple[datetime, float, float, dict[str, Any]]] = []
+    for candidate in matched:
+        cand_lat, cand_lon = candidate.get("latitude"), candidate.get("longitude")
+        raw = candidate.get("last_seen")
+        if cand_lat is None or cand_lon is None or not raw:
             continue
         try:
             seen = datetime.fromisoformat(str(raw))
@@ -186,11 +185,10 @@ def _evaluate(
             continue
         if seen.tzinfo is None:
             seen = seen.replace(tzinfo=UTC)
-        usable.append((seen, entity))
+        usable.append((seen, float(cand_lat), float(cand_lon), candidate))
     if not usable:
         return PresenceUnavailable(person, "no_fix")
-    last_seen, entity = max(usable, key=lambda pair: pair[0])
-    lat, lon = entity.get("latitude"), entity.get("longitude")
+    last_seen, lat, lon, entity = max(usable, key=lambda pair: pair[0])
 
     # Freshness is derived here, never read from entity["stale"] (home-automation#483).
     age_min = (now - last_seen).total_seconds() / 60.0

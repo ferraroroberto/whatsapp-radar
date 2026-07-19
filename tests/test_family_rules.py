@@ -315,3 +315,41 @@ def test_event_decisions_trace_every_event():
     assert by_event["Mystery"]["source"] == "assumed_home"
     assert by_event["Holiday"]["kind"] == "all_day"
     assert by_event["Holiday"]["source"] == "not_assessed"
+
+
+def test_day_windows_table():
+    """(#177) shared window assembly: weekday filter, range fallback, kids-home."""
+    from datetime import date, time
+
+    family = FamilyConfig(
+        enabled=True,
+        home_address="Carrer Example 30",
+        kids_home_time="17:30",
+        responsible_by_weekday={0: "roberto"},
+        childcare_windows=(
+            ChildcareWindow(label="school run", weekdays=(0,), time="08:30"),
+            ChildcareWindow(label="afternoon", weekdays=(0,), time="15:00", end_time="18:00"),
+            ChildcareWindow(label="inverted", weekdays=(0,), time="16:00", end_time="09:00"),
+            ChildcareWindow(label="not monday", weekdays=(2,), time="10:00"),
+        ),
+    )
+    monday = date(2026, 7, 20)
+    windows = rules.day_windows(family, monday)
+    assert ("school run", time(8, 30), time(8, 30)) in windows
+    assert ("afternoon", time(15, 0), time(18, 0)) in windows
+    assert ("inverted", time(16, 0), time(16, 0)) in windows  # bad end → point
+    assert all(label != "not monday" for label, *_ in windows)
+    assert ("kids home", time(17, 30), time(17, 30)) in windows
+    # Saturday: no kids-home moment.
+    saturday = date(2026, 7, 25)
+    assert all(label != "kids home" for label, *_ in rules.day_windows(family, saturday))
+
+
+def test_arrival_margin_min_floors_toward_late():
+    """(#177) a 30-second shortfall already reads as late — never rounded fine."""
+    now = datetime(2026, 7, 20, 16, 0, tzinfo=UTC)
+    start = now + timedelta(minutes=90)
+    assert rules.arrival_margin_min(now, 20.0, start) == 70
+    assert rules.arrival_margin_min(now, 90.0, start) == 0    # exactly on time
+    assert rules.arrival_margin_min(now, 90.5, start) == -1   # 30 s short ⇒ late
+    assert rules.arrival_margin_min(now, 120.0, start) == -30

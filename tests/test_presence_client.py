@@ -49,15 +49,18 @@ class _Session:
         self._post_exc = post_exc
         self.get_calls: list[str] = []
         self.post_calls: list[str] = []
+        self.verify_seen: list[bool] = []
 
-    def get(self, url: str, timeout: float | None = None) -> _Resp:
+    def get(self, url: str, timeout: float | None = None, verify: bool = True) -> _Resp:
         self.get_calls.append(url)
+        self.verify_seen.append(verify)
         if self._get_exc is not None:
             raise self._get_exc
         return _Resp(self._gets.pop(0))
 
-    def post(self, url: str, timeout: float | None = None) -> _Resp:
+    def post(self, url: str, timeout: float | None = None, verify: bool = True) -> _Resp:
         self.post_calls.append(url)
+        self.verify_seen.append(verify)
         if self._post_exc is not None:
             raise self._post_exc
         return _Resp({"available": True})
@@ -176,3 +179,37 @@ def test_repr_redacts_coordinates() -> None:
     text = repr(result)
     assert "redacted" in text
     assert str(LAT) not in text and str(LON) not in text
+
+
+def test_verify_tls_defaults_on_and_threads_through() -> None:
+    """Every HTTP call carries the config's TLS-verification choice (#177)."""
+    session = _Session([_snapshot(_entity(age_min=2))])
+    result = get_location(_cfg(), "roberto", now=NOW, session=session)
+    assert isinstance(result, PresenceLocation)
+    assert session.verify_seen == [True]
+
+
+def test_verify_tls_off_reaches_every_call() -> None:
+    """verify_tls=False (loopback Tailscale-cert case) covers refresh + re-read too."""
+    session = _Session(
+        [_snapshot(_entity(age_min=30)), _snapshot(_entity(age_min=1))]
+    )
+    result = get_location(_cfg(verify_tls=False), "roberto", now=NOW, session=session)
+    assert isinstance(result, PresenceLocation) and result.refreshed is True
+    # GET, POST /refresh, GET — all three carried verify=False.
+    assert session.verify_seen == [False, False, False]
+
+
+def test_coordinate_less_role_entity_never_shadows_device_fix() -> None:
+    """(#177) live regression: the dad/mom role rows carry at_home but no
+    coordinates and are listed first — the freshest real device fix must win."""
+    role_row = _entity(name="Roberto shortcut", role="dad", lat=None, lon=None, age_min=0.5)
+    older_device = _entity(name="Roberto", age_min=4.0)
+    newest_device = _entity(name="Roberto", age_min=1.0, distance_m=500.0)
+    session = _Session([_snapshot(role_row, older_device, newest_device)])
+    cfg = _cfg(person_aliases={"roberto": ("dad",)})
+    result = get_location(cfg, "roberto", now=NOW, session=session)
+    assert isinstance(result, PresenceLocation)
+    assert result.age_min == pytest.approx(1.0, abs=0.05)  # freshest device won
+    assert result.distance_from_home_km == 0.5
+    assert session.post_calls == []  # a usable fresh fix ⇒ no forced locate

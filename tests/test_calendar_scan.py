@@ -179,3 +179,107 @@ def test_summary_text_is_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
     assert text_one.splitlines()[1] == "📍 No location set — please add one:"
     assert "ana: Tue 21 Jul 15:30 — Hairdresser" in text_one
     assert text_one == text_two
+
+
+# --------------------------------------------------------------- live coverage (#177)
+
+LIVE_NOW = datetime(2026, 7, 20, 16, 0, tzinfo=UTC)  # Monday; kids-home 17:30 imminent
+PLACEHOLDER_LATLNG = (41.55512, 2.34567)  # generic decimals, never a real location
+
+
+def _live_config() -> Config:
+    from src.config import PresenceConfig
+
+    return dataclasses.replace(
+        _config(),
+        presence=PresenceConfig(enabled=True),
+        traffic=TrafficConfig(api_key="test-key"),
+    )
+
+
+def _fix(at_home: bool = False) -> object:
+    from src.presence import PresenceLocation
+
+    return PresenceLocation(
+        person="roberto", latitude=PLACEHOLDER_LATLNG[0], longitude=PLACEHOLDER_LATLNG[1],
+        at_home=at_home, distance_from_home_km=42.0, age_min=2.0, refreshed=False,
+    )
+
+
+def _route(minutes: int) -> object:
+    from src.traffic import RouteResult
+
+    return RouteResult(normal_s=minutes * 60, traffic_s=minutes * 60)
+
+
+def test_live_infeasible_window_raises_coverage_eta(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phone 120 min out, window in 90 → coverage_eta conflict, hard-alerted."""
+    monkeypatch.setattr(calendar_scan, "get_location", lambda *a, **kw: _fix())
+    monkeypatch.setattr(calendar_scan, "compute_route", lambda *a, **kw: _route(120))
+    payload = calendar_scan.run_calendar_scan(_live_config(), now=LIVE_NOW, dry_run=False)
+    kinds = [c["kind"] for c in payload["conflicts"]]
+    assert "coverage_eta" in kinds
+    assert any("min short" in c["detail"] for c in payload["conflicts"])
+    assert sent, "an infeasible window is a hard alert and must send"
+    entry = next(e for e in payload["live_coverage"] if e.get("window") == "kids home")
+    assert entry["location_source"] == "live_presence"
+    assert entry["feasible"] is False and entry["margin_min"] == -30
+    # Privacy: derived values only — never coordinates, in any key or value.
+    import json
+
+    text = json.dumps(payload)
+    assert "latitude" not in text and "longitude" not in text
+    assert str(PLACEHOLDER_LATLNG[0]) not in text and str(PLACEHOLDER_LATLNG[1]) not in text
+
+
+def test_live_feasible_window_adds_trace_without_conflict(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(calendar_scan, "get_location", lambda *a, **kw: _fix())
+    monkeypatch.setattr(calendar_scan, "compute_route", lambda *a, **kw: _route(20))
+    payload = calendar_scan.run_calendar_scan(_live_config(), now=LIVE_NOW, dry_run=False)
+    assert payload["conflicts"] == []
+    entry = next(e for e in payload["live_coverage"] if e.get("window") == "kids home")
+    assert entry["feasible"] is True and entry["margin_min"] == 70
+    assert entry["eta_min"] == 20
+
+
+def test_live_at_home_skips_routing(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(*a: object, **kw: object) -> object:
+        raise AssertionError("compute_route must not be called when already home")
+
+    monkeypatch.setattr(calendar_scan, "get_location", lambda *a, **kw: _fix(at_home=True))
+    monkeypatch.setattr(calendar_scan, "compute_route", _boom)
+    payload = calendar_scan.run_calendar_scan(_live_config(), now=LIVE_NOW, dry_run=False)
+    entry = next(e for e in payload["live_coverage"] if e.get("window") == "kids home")
+    assert entry["feasible"] is True and entry["at_home"] is True and entry["eta_min"] == 0
+
+
+def test_live_presence_unavailable_falls_back_silently(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.presence import PresenceUnavailable
+
+    monkeypatch.setattr(
+        calendar_scan,
+        "get_location",
+        lambda *a, **kw: PresenceUnavailable("roberto", "transport_error"),
+    )
+    payload = calendar_scan.run_calendar_scan(_live_config(), now=LIVE_NOW, dry_run=False)
+    assert payload["conflicts"] == []
+    assert payload["live_coverage"] == [
+        {
+            "person": "roberto", "location_source": "calendar_inference",
+            "presence_status": "transport_error", "assessed": False,
+            "windows": ["kids home"],
+        }
+    ]
+
+
+def test_live_coverage_absent_when_presence_disabled(sent: list[str]) -> None:
+    payload = calendar_scan.run_calendar_scan(_config(), now=LIVE_NOW, dry_run=False)
+    assert payload["live_coverage"] == []

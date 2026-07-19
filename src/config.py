@@ -243,6 +243,13 @@ class PresenceConfig:
 
     enabled: bool = False
     base_url: str = "http://127.0.0.1:8447"
+    # TLS certificate verification for an https base_url. Keep True except for
+    # the loopback deployment: home-automation serves :8447 with its Tailscale
+    # certificate, whose ts.net hostname can never match ``127.0.0.1`` — and the
+    # hostname-verified path (https://<host>.ts.net:8447) forfeits the loopback
+    # auth bypass (401 without a bearer token). False is safe only because the
+    # loopback hop never leaves the machine (#177).
+    verify_tls: bool = True
     # A fix older than this many minutes is stale and triggers a forced refresh.
     max_age_min: int = 5
     # Per-request read timeout for the cached-snapshot GET.
@@ -479,6 +486,7 @@ def _parse_presence(raw: dict[str, Any]) -> PresenceConfig:
         base_url=os.environ.get(
             "WR_PRESENCE_BASE_URL", str(raw.get("base_url", "http://127.0.0.1:8447"))
         ),
+        verify_tls=_as_bool(os.environ.get("WR_PRESENCE_VERIFY_TLS"), raw.get("verify_tls", True)),
         max_age_min=int(raw.get("max_age_min", 5)),
         timeout_s=float(raw.get("timeout_s", 6.0)),
         refresh_timeout_s=float(raw.get("refresh_timeout_s", 12.0)),

@@ -22,11 +22,15 @@ from __future__ import annotations
 
 import logging
 import unicodedata
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 from src.config import PresenceConfig
 
@@ -89,19 +93,26 @@ def _fold(text: str) -> str:
     return "".join(ch for ch in lowered if not unicodedata.combining(ch))
 
 
-def _match_entity(
+def _match_entities(
     entities: list[dict[str, Any]], person: str, aliases: tuple[str, ...]
-) -> dict[str, Any] | None:
-    """Find the entity for ``person`` by role / display name / raw name.
+) -> list[dict[str, Any]]:
+    """Every entity for ``person`` by role / display name / raw name.
 
     The whatsapp-radar person key (e.g. ``"roberto"``) already folds to the
     entity's ``display_name`` (``"Roberto"``); ``aliases`` add role-based hits
-    (``"dad"``) or any other spelling the presence source uses.
+    (``"dad"``) or any other spelling the presence source uses. All matches are
+    returned because one person appears as several entities in the live payload
+    (per-device rows across two accounts plus derived role/"shortcut" people
+    entries that carry ``at_home`` but no coordinates) — the caller picks the
+    best usable fix rather than trusting whichever happens to be listed first
+    (#177: first-match shadowed the real device fix behind a coordinate-less
+    role entry on the very first live run).
     """
     wanted = {_fold(person), *(_fold(a) for a in aliases)}
     wanted.discard("")
     if not wanted:
-        return None
+        return []
+    matched: list[dict[str, Any]] = []
     for entity in entities:
         candidates = {
             _fold(str(entity.get(field) or ""))
@@ -109,21 +120,38 @@ def _match_entity(
         }
         candidates.discard("")
         if wanted & candidates:
-            return entity
-    return None
+            matched.append(entity)
+    return matched
 
 
-def _get(url: str, timeout: float, session: requests.Session | None) -> dict[str, Any]:
+@contextmanager
+def _tls_warning_guard(verify: bool) -> Iterator[None]:
+    """Silence urllib3's per-request insecure warning only when ``verify_tls``
+    was deliberately turned off (the loopback Tailscale-cert case, #177) —
+    a verified deployment keeps every warning."""
+    if verify:
+        yield
+        return
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", InsecureRequestWarning)
+        yield
+
+
+def _get(
+    url: str, timeout: float, session: requests.Session | None, *, verify: bool
+) -> dict[str, Any]:
     http = session or requests
-    response = http.get(url, timeout=timeout)
+    with _tls_warning_guard(verify):
+        response = http.get(url, timeout=timeout, verify=verify)
     response.raise_for_status()
     data: dict[str, Any] = response.json()
     return data
 
 
-def _post(url: str, timeout: float, session: requests.Session | None) -> None:
+def _post(url: str, timeout: float, session: requests.Session | None, *, verify: bool) -> None:
     http = session or requests
-    response = http.post(url, timeout=timeout)
+    with _tls_warning_guard(verify):
+        response = http.post(url, timeout=timeout, verify=verify)
     response.raise_for_status()
 
 
@@ -138,20 +166,31 @@ def _evaluate(
     """Resolve + freshness-check one snapshot. Pure over the fetched payload."""
     entities = data.get("entities") or []
     aliases = config.person_aliases.get(person) or config.person_aliases.get(_fold(person)) or ()
-    entity = _match_entity(entities, person, aliases)
-    if entity is None:
+    matched = _match_entities(entities, person, aliases)
+    if not matched:
         return PresenceUnavailable(person, "not_found")
 
-    lat, lon = entity.get("latitude"), entity.get("longitude")
-    last_seen_raw = entity.get("last_seen")
-    if lat is None or lon is None or not last_seen_raw:
+    # Among all of the person's entities, use the freshest one that actually
+    # carries a fix — coordinate-less rows (role/"shortcut" entries, offline
+    # accessories) must never shadow a live device (#177).
+    usable: list[tuple[datetime, dict[str, Any]]] = []
+    for entity in matched:
+        if entity.get("latitude") is None or entity.get("longitude") is None:
+            continue
+        raw = entity.get("last_seen")
+        if not raw:
+            continue
+        try:
+            seen = datetime.fromisoformat(str(raw))
+        except ValueError:
+            continue
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=UTC)
+        usable.append((seen, entity))
+    if not usable:
         return PresenceUnavailable(person, "no_fix")
-    try:
-        last_seen = datetime.fromisoformat(str(last_seen_raw))
-    except ValueError:
-        return PresenceUnavailable(person, "no_fix", "unparseable last_seen")
-    if last_seen.tzinfo is None:
-        last_seen = last_seen.replace(tzinfo=UTC)
+    last_seen, entity = max(usable, key=lambda pair: pair[0])
+    lat, lon = entity.get("latitude"), entity.get("longitude")
 
     # Freshness is derived here, never read from entity["stale"] (home-automation#483).
     age_min = (now - last_seen).total_seconds() / 60.0
@@ -193,8 +232,9 @@ def get_location(
         return PresenceUnavailable(person, "disabled")
 
     base = config.base_url.rstrip("/")
+    verify = config.verify_tls
     try:
-        data = _get(f"{base}/api/presence", config.timeout_s, session)
+        data = _get(f"{base}/api/presence", config.timeout_s, session, verify=verify)
     except (requests.RequestException, ValueError) as exc:
         logger.info("ℹ️ presence read failed for %s: %s", person, type(exc).__name__)
         return PresenceUnavailable(person, "transport_error", type(exc).__name__)
@@ -206,8 +246,8 @@ def get_location(
         return result
 
     try:
-        _post(f"{base}/api/presence/refresh", config.refresh_timeout_s, session)
-        data = _get(f"{base}/api/presence", config.timeout_s, session)
+        _post(f"{base}/api/presence/refresh", config.refresh_timeout_s, session, verify=verify)
+        data = _get(f"{base}/api/presence", config.timeout_s, session, verify=verify)
     except (requests.RequestException, ValueError) as exc:
         logger.info("ℹ️ presence refresh failed for %s: %s", person, type(exc).__name__)
         return PresenceUnavailable(person, "transport_error", type(exc).__name__)

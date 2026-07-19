@@ -180,6 +180,44 @@ def test_find_conflicts_quiet_when_responsible_home():
     assert conflicts == []
 
 
+def _family_ranged() -> FamilyConfig:
+    """A genuine start-end childcare window (#167), not a point deadline."""
+    return FamilyConfig(
+        enabled=True,
+        home_address=HOME,
+        kids_home_time="17:30",
+        responsible_by_weekday={5: "roberto"},  # Saturday
+        childcare_windows=(
+            ChildcareWindow(label="camp", weekdays=(5,), time="09:00", end_time="12:00"),
+        ),
+    )
+
+
+def test_find_conflicts_range_window_flags_away_overlapping_end():
+    # Saturday; the away commitment only overlaps the tail of the 09:00-12:00
+    # window, never the 09:00 start instant — proves the check is range-aware,
+    # not just a single-moment containment test.
+    day = datetime(2026, 7, 25).date()
+    away = _event("Errand", location=WORK, calendar_id="roberto@x",
+                  start=datetime(2026, 7, 25, 11, 30, tzinfo=UTC),
+                  end=datetime(2026, 7, 25, 13, 0, tzinfo=UTC))
+    conflicts = rules.find_conflicts(
+        {"roberto": [away]}, _family_ranged(), day=day, tz=UTC
+    )
+    assert any(c.kind == "coverage_gap" and "camp" in c.detail for c in conflicts)
+
+
+def test_find_conflicts_range_window_ignores_commitment_after_window():
+    day = datetime(2026, 7, 25).date()
+    away = _event("Errand", location=WORK, calendar_id="roberto@x",
+                  start=datetime(2026, 7, 25, 12, 30, tzinfo=UTC),
+                  end=datetime(2026, 7, 25, 14, 0, tzinfo=UTC))
+    conflicts = rules.find_conflicts(
+        {"roberto": [away]}, _family_ranged(), day=day, tz=UTC
+    )
+    assert conflicts == []
+
+
 def test_find_unknown_locations():
     unknown = _event("Mystery appointment")  # no location, no video
     known = _event("Office", location=WORK)

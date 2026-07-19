@@ -575,26 +575,22 @@
     </section>
 
     <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
-            Family checks
-          </h2>
+      <details id="familyRulesCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+            <h3 class="collapse-title">Rules in force</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p class="muted small">The exact household schedule the daily calendar-conflict scan
+            and the traffic-jam check run against. Edit any rule below — it saves straight to
+            your local config and the next run picks it up, no restart needed.</p>
+          <div id="familyReadOnly"></div>
+          <div id="familyEditable"></div>
         </div>
-        <p class="muted small">Two deterministic scheduled checks — the daily calendar-conflict
-          scan and the traffic-jam alert. Toggle them on/off and run one on demand (dry-run).</p>
-        <div id="familyControls" class="family-controls"></div>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2 class="card-title">Rules in force</h2></div>
-        <div id="familyRules"></div>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2 class="card-title">Recent runs</h2></div>
-        <ul id="familyRuns" class="card-list" aria-label="Recent family-check runs"></ul>
-        <p id="familyRunsEmpty" class="muted small" hidden>No runs yet — use “Run now”.</p>
-      </section>
+      </details>
     </section>
 
     <!-- Build identity: which build the PWA is running. Filled by main.js;

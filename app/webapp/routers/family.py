@@ -1,12 +1,15 @@
-"""Family checks surface (issue #160): current rules + recent runs, read-only.
+"""Family rules surface (issues #160, #167): the resolved schedule, editable.
 
 Recent runs come from the unified DB run store (#163) so a scheduled App
-Launcher execution is exactly as visible as a webapp-launched one. This endpoint
-exposes the resolved rules/config (non-secret) plus the recent ``calendar-scan``
-/ ``traffic-check`` run rows. Editing the enable toggles and thresholds happens
-through the existing Config form; running a check happens through the Execution
-tab. This gives the operator full transparency — the exact rules in force and
-why each run did what — instead of a black box.
+Launcher execution is exactly as visible as a webapp-launched one; the Run tab
+(#164) is where a check is actually fired and where recent runs now live. This
+endpoint exposes the resolved rules/config (non-secret) and lets the webapp
+edit the household schedule in place — on-duty weekday pattern, kids-home time,
+childcare windows, quiet hours, significant delay, the daily-scan enable toggle
+— straight into the gitignored ``config/local.json``. Calendar accounts stay
+read-only (provisioned by the calendar-bootstrap flow, not the UI). This gives
+the operator full transparency and control over the exact rules in force
+instead of a black box or a file edit.
 """
 
 from __future__ import annotations
@@ -25,8 +28,26 @@ from src.db import store
 router = APIRouter()
 
 
+class ChildcareWindowIn(BaseModel):
+    """A childcare window as edited from the Family tab (#167).
+
+    ``end_time`` is optional — blank keeps the original point-in-time deadline
+    semantics (e.g. a pickup); set it to describe a genuine coverage range.
+    """
+
+    label: str
+    days: list[str]
+    time: str
+    end_time: str = ""
+
+
 class FamilyUpdate(BaseModel):
-    """The UI-editable subset of the family-check settings (safe, non-secret)."""
+    """The UI-editable subset of the family-check settings (safe, non-secret).
+
+    Extended in #167 to cover the household schedule itself — it is schedule
+    data, not a secret, and belongs in ``config/local.json`` like the rest of
+    this safe-override subset.
+    """
 
     traffic_enabled: bool | None = None
     family_enabled: bool | None = None
@@ -35,6 +56,9 @@ class FamilyUpdate(BaseModel):
     run_hour: int | None = None
     quiet_start_hour: int | None = None
     quiet_end_hour: int | None = None
+    kids_home_time: str | None = None
+    responsible_by_weekday: dict[str, str] | None = None
+    childcare_windows: list[ChildcareWindowIn] | None = None
 
 
 def _hour(value: int) -> int:
@@ -44,6 +68,27 @@ def _hour(value: int) -> int:
 
 _FAMILY_KINDS = {"calendar-scan", "traffic-check"}
 _WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_WEEKDAY_LOOKUP = {name.lower(): name.lower() for name in _WEEKDAY_NAMES}
+
+
+def _hhmm(value: str, *, what: str) -> tuple[int, int]:
+    """Parse ``"HH:MM"``, raising a clear 400 on anything else (#167)."""
+    text = (value or "").strip()
+    parts = text.split(":")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        hh, mm = int(parts[0]), int(parts[1])
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+    raise HTTPException(status_code=400, detail=f"{what} must be a valid HH:MM time, got '{value}'")
+
+
+def _weekday_key(value: str) -> str:
+    key = value.strip().lower()
+    if key not in _WEEKDAY_LOOKUP:
+        raise HTTPException(
+            status_code=400, detail=f"'{value}' is not a weekday (Mon..Sun)"
+        )
+    return key
 
 
 def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
@@ -98,6 +143,7 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "label": window.label,
             "days": [_WEEKDAY_NAMES[d] for d in window.weekdays if 0 <= d < 7],
             "time": window.time,
+            "end_time": window.end_time,
         }
         for window in family.childcare_windows
     ]
@@ -157,10 +203,13 @@ async def update_family(
 ) -> dict[str, Any]:
     """Persist the editable subset to the ignored ``config/local.json``.
 
-    Only the safe toggles/thresholds are writable here; the personal schedule
-    (addresses, responsibility pattern, childcare windows) is file-edited, shown
-    read-only in the UI — mirroring how the message pipeline's keyword roots and
-    prompts are read-only in the app.
+    Toggles/thresholds plus the household schedule (on-duty weekday pattern,
+    kids-home time, childcare windows, quiet hours) are all writable here
+    (#167) — home address and calendar accounts stay file-edited, shown
+    read-only in the UI. Validation: every time value must parse as HH:MM, a
+    submitted on-duty pattern must name exactly the 7 weekdays (a day can map
+    to "" for "nobody scheduled"), and a childcare window's optional end must
+    come after its start (non-inverted).
     """
     traffic: dict[str, Any] = {}
     family: dict[str, Any] = {}
@@ -182,6 +231,48 @@ async def update_family(
         family["enabled"] = payload.family_enabled
     if payload.run_hour is not None:
         family["run_hour"] = _hour(payload.run_hour)
+    if payload.kids_home_time is not None:
+        _hhmm(payload.kids_home_time, what="kids_home_time")
+        family["kids_home_time"] = payload.kids_home_time.strip()
+    if payload.responsible_by_weekday is not None:
+        submitted = {k.strip().lower(): v for k, v in payload.responsible_by_weekday.items()}
+        if set(submitted) != set(_WEEKDAY_LOOKUP):
+            missing = sorted(set(_WEEKDAY_LOOKUP) - set(submitted))
+            extra = sorted(set(submitted) - set(_WEEKDAY_LOOKUP))
+            detail = "responsible_by_weekday must name exactly Mon..Sun"
+            if missing:
+                detail += f" (missing: {', '.join(missing)})"
+            if extra:
+                detail += f" (unknown: {', '.join(extra)})"
+            raise HTTPException(status_code=400, detail=detail)
+        family["responsible_by_weekday"] = {
+            day: (person or "").strip() for day, person in submitted.items()
+        }
+    if payload.childcare_windows is not None:
+        windows_out: list[dict[str, Any]] = []
+        for window in payload.childcare_windows:
+            label = window.label.strip()
+            if not label:
+                raise HTTPException(status_code=400, detail="a childcare window needs a label")
+            days = [_weekday_key(d) for d in window.days]
+            if not days:
+                raise HTTPException(
+                    status_code=400, detail=f"childcare window '{label}' needs at least one weekday"
+                )
+            start_h, start_m = _hhmm(window.time, what=f"childcare window '{label}' time")
+            end_time = (window.end_time or "").strip()
+            if end_time:
+                end_h, end_m = _hhmm(end_time, what=f"childcare window '{label}' end_time")
+                if (end_h, end_m) <= (start_h, start_m):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"childcare window '{label}' end must be after start (non-inverted)",
+                    )
+            windows_out.append({
+                "label": label, "weekdays": days,
+                "time": window.time.strip(), "end_time": end_time,
+            })
+        family["childcare_windows"] = windows_out
 
     overrides: dict[str, Any] = {}
     if traffic:

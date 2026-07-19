@@ -202,12 +202,20 @@ def _parse_hhmm(value: str) -> time | None:
         return None
 
 
-def _person_away_at(events: list[CalendarEvent], moment: datetime, home_address: str) -> bool:
-    """True if the person has an 'away' timed event spanning ``moment``."""
+def _person_away_between(
+    events: list[CalendarEvent], start: datetime, end: datetime, home_address: str
+) -> bool:
+    """True if the person has an 'away' timed event overlapping ``[start, end]``.
+
+    A point-in-time deadline (no configured end) is the degenerate case
+    ``start == end`` — identical to the original single-moment containment
+    check this generalizes (#167).
+    """
     return any(
         not event.all_day
         and location_kind(event, home_address) == "away"
-        and event.start <= moment <= event.end
+        and event.start <= end
+        and event.end >= start
         for event in events
     )
 
@@ -221,31 +229,38 @@ def find_conflicts(
 ) -> list[Conflict]:
     """Coverage gaps for the day's childcare moments against the fixed pattern.
 
-    For each required moment (explicit childcare windows plus the daily kids-home
-    pickup on weekdays), flag when the responsible parent has an away commitment
-    spanning it, or when neither parent is available at all. ``tz`` is the
-    household's local zone, used to anchor each wall-clock moment against the
-    timezone-aware calendar events.
+    For each required moment or window (explicit childcare windows, optionally a
+    start-end range, plus the daily kids-home pickup on weekdays), flag when the
+    responsible parent has an away commitment overlapping it, or when neither
+    parent is available at all. ``tz`` is the household's local zone, used to
+    anchor each wall-clock moment against the timezone-aware calendar events.
     """
     weekday = day.weekday()
-    moments: list[tuple[str, time]] = []
+    windows: list[tuple[str, time, time]] = []
     for window in family.childcare_windows:
         if weekday in window.weekdays:
-            parsed = _parse_hhmm(window.time)
-            if parsed is not None:
-                moments.append((window.label, parsed))
+            start = _parse_hhmm(window.time)
+            if start is None:
+                continue
+            end = _parse_hhmm(window.end_time) if window.end_time else start
+            # Config validation (webapp) rejects an inverted end before it is
+            # persisted; a malformed legacy config just falls back to the point.
+            if end is None or end < start:
+                end = start
+            windows.append((window.label, start, end))
     kids_home = _parse_hhmm(family.kids_home_time)
     if kids_home is not None and weekday < 5:  # school weekdays
-        moments.append(("kids home", kids_home))
+        windows.append(("kids home", kids_home, kids_home))
 
     responsible = family.responsible_by_weekday.get(weekday)
     conflicts: list[Conflict] = []
-    for label, moment in moments:
-        moment_dt = datetime.combine(day, moment, tzinfo=tz)
+    for label, start, end in windows:
+        start_dt = datetime.combine(day, start, tzinfo=tz)
+        end_dt = datetime.combine(day, end, tzinfo=tz)
         away = {
             person
             for person, events in events_by_person.items()
-            if _person_away_at(events, moment_dt, family.home_address)
+            if _person_away_between(events, start_dt, end_dt, family.home_address)
         }
         available = [person for person in events_by_person if person not in away]
         if responsible and responsible in away:
@@ -255,7 +270,7 @@ def find_conflicts(
                     day=day.isoformat(),
                     detail=(
                         f"{responsible} is on duty for '{label}' at "
-                        f"{moment.strftime('%H:%M')} but has an away commitment"
+                        f"{start.strftime('%H:%M')} but has an away commitment"
                     ),
                 )
             )
@@ -264,7 +279,7 @@ def find_conflicts(
                 Conflict(
                     kind="coverage_gap",
                     day=day.isoformat(),
-                    detail=f"No parent is available for '{label}' at {moment.strftime('%H:%M')}",
+                    detail=f"No parent is available for '{label}' at {start.strftime('%H:%M')}",
                 )
             )
     return conflicts

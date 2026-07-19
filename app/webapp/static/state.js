@@ -188,11 +188,9 @@ export const els = {
   auditTraces: document.getElementById('auditTraces'),
   auditTracesEmpty: document.getElementById('auditTracesEmpty'),
 
-  // Family checks (#160)
-  familyControls: document.getElementById('familyControls'),
-  familyRules: document.getElementById('familyRules'),
-  familyRuns: document.getElementById('familyRuns'),
-  familyRunsEmpty: document.getElementById('familyRunsEmpty'),
+  // Family rules (#160, #167) — run controls + recent runs moved to the Run tab.
+  familyReadOnly: document.getElementById('familyReadOnly'),
+  familyEditable: document.getElementById('familyEditable'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

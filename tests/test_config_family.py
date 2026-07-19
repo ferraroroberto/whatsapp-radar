@@ -42,7 +42,13 @@ def test_family_config_parsing(tmp_path, _clean_env):
                 "home_address": "Home 1",
                 "responsible_by_weekday": {"mon": "roberto", "fri": "ana"},
                 "childcare_windows": [
-                    {"label": "swim", "weekdays": ["mon", "wed"], "time": "16:45"}
+                    {"label": "swim", "weekdays": ["mon", "wed"], "time": "16:45"},
+                    {
+                        "label": "after-school club",
+                        "weekdays": ["tue"],
+                        "time": "15:30",
+                        "end_time": "17:00",
+                    },
                 ],
             },
         }),
@@ -62,6 +68,8 @@ def test_family_config_parsing(tmp_path, _clean_env):
     # weekday names are normalized to 0=Mon indices
     assert cfg.family.responsible_by_weekday == {0: "roberto", 4: "ana"}
     assert cfg.family.childcare_windows[0].weekdays == (0, 2)
+    assert cfg.family.childcare_windows[0].end_time == ""  # point-in-time deadline, back-compat
+    assert cfg.family.childcare_windows[1].end_time == "17:00"  # a genuine range (#167)
 
     assert cfg.calendar.accounts[0].calendar_id == "a@x"
     assert cfg.calendar.accounts[0].person == "roberto"  # lowercased

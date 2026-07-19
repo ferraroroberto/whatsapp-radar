@@ -16,7 +16,7 @@ import pytest
 
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
 from src.analysis.pipeline import scan, scan_outcome_to_dict
-from src.config import Config, HubConfig, TelegramConfig
+from src.config import Config, HubConfig, TelegramConfig, TripwireConfig
 from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
 from src.db import store
@@ -406,6 +406,87 @@ def test_stage1_noise_skips_the_llm(
     assert ingested_conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
     ).fetchone() is not None
+
+
+def test_discovered_tripwire_hits_never_reach_stage2(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _monitor(ingested_conn, "chat-building")  # monitored, but only small talk
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    store.insert_message(
+        ingested_conn,
+        chat_id_by_source(ingested_conn, "chat-class-4a"),
+        MessageRecord("tripwire-recent", now, "Urgent payment deadline", "Teacher"),
+    )
+    fake = _FakeTraced(_ACTIONABLE_JSON)
+
+    outcome = scan(
+        ingested_conn,
+        _config(tmp_path),
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=fake,
+    )
+
+    assert outcome.tripwire_hits >= 1
+    assert fake.calls == 0
+    assert outcome.stage2_llm_calls == 0
+    assert scan_outcome_to_dict(outcome)["tripwire"]["hits"] >= 1
+
+
+def test_tripwire_weekly_nudge_is_opt_in_and_cadenced(
+    ingested_conn: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    alerts: list[str] = []
+
+    def fake_alert(_config: Config, text: str) -> tuple[str, None]:
+        alerts.append(text)
+        return "sent", None
+
+    monkeypatch.setattr("src.analysis.pipeline.send_alert", fake_alert)
+    base = _config(tmp_path)
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    store.insert_message(
+        ingested_conn,
+        chat_id_by_source(ingested_conn, "chat-class-4a"),
+        MessageRecord("tripwire-nudge", now, "Urgent payment deadline", "Teacher"),
+    )
+
+    scan(
+        ingested_conn,
+        base,
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=StubClassifier(),
+    )
+    assert alerts == []
+
+    enabled = replace(
+        base,
+        tripwire=TripwireConfig(telegram_nudge_enabled=True, nudge_cadence_days=7),
+    )
+    scan(
+        ingested_conn,
+        enabled,
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=StubClassifier(),
+    )
+    scan(
+        ingested_conn,
+        enabled,
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=StubClassifier(),
+    )
+
+    assert len(alerts) == 1
+    assert "unmonitored" in alerts[0].lower()
+    assert "Class 4A Group" in alerts[0]
 
 
 def test_contract_error_traces_and_does_not_advance_cursor(

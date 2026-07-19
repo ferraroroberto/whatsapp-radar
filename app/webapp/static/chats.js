@@ -76,13 +76,23 @@ function gmailSenderAddress(c) {
 }
 
 export async function fetchChats() {
-  let data;
-  try {
-    data = await jsonApi('/api/chats');
-  } catch (exc) {
-    return; // 401 flips the login overlay in api.js; stay quiet otherwise.
+  state.tripwire.phase = 'loading';
+  const results = await Promise.allSettled([
+    jsonApi('/api/chats'),
+    jsonApi('/api/chats/tripwire'),
+  ]);
+  if (results[0].status === 'fulfilled') {
+    state.chats = results[0].value.chats || [];
   }
-  state.chats = data.chats || [];
+  if (results[1].status === 'fulfilled') {
+    const data = results[1].value;
+    state.tripwire.hits = data.hits || [];
+    state.tripwire.windowDays = data.window_days || 7;
+    state.tripwire.truncated = !!data.truncated;
+    state.tripwire.phase = state.tripwire.hits.length ? 'ready' : 'empty';
+  } else {
+    state.tripwire.phase = state.tripwire.hits.length ? 'stale' : 'error';
+  }
   render();
 }
 
@@ -104,6 +114,7 @@ function visibleChats() {
 }
 
 function render() {
+  renderTripwire();
   const all = visibleChats();
   const shown = all.slice(0, CHATS_RENDER_CAP);
 
@@ -120,6 +131,62 @@ function render() {
   }
 
   for (const c of shown) els.chatsList.appendChild(row(c));
+}
+
+function renderTripwire() {
+  const tw = state.tripwire;
+  const hits = tw.hits.filter(function (hit) {
+    const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
+    return !chat || chat.status === 'discovered';
+  });
+  tw.hits = hits;
+  els.tripwireList.textContent = '';
+
+  if (!hits.length && tw.phase !== 'error') {
+    els.tripwireCard.hidden = true;
+    return;
+  }
+  els.tripwireCard.hidden = false;
+  if (tw.phase === 'error') {
+    els.tripwireMeta.textContent = 'Could not check recent unmonitored chats.';
+    return;
+  }
+  const bounded = tw.truncated ? ' · bounded scan' : '';
+  const stale = tw.phase === 'stale' ? ' · showing the last successful check' : '';
+  els.tripwireMeta.textContent =
+    'Stage 1 only · last ' + tw.windowDays + ' days' + bounded + stale;
+
+  for (const hit of hits) {
+    const li = document.createElement('li');
+    li.className = 'tripwire-row';
+    const copy = document.createElement('div');
+    copy.className = 'tripwire-copy';
+    const title = document.createElement('div');
+    title.className = 'chat-title-line';
+    const badge = document.createElement('span');
+    badge.className = 'source-badge source-' + hit.source;
+    badge.textContent = hit.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    const name = document.createElement('span');
+    name.className = 'chat-name';
+    name.textContent = hit.name;
+    title.append(badge, name);
+    const reason = document.createElement('div');
+    reason.className = 'tripwire-reason';
+    const signals = hit.source === 'gmail' && hit.buckets.length ? hit.buckets : hit.roots;
+    reason.textContent = 'Matched: ' + signals.join(', ');
+    copy.append(title, reason);
+
+    const promote = document.createElement('button');
+    promote.type = 'button';
+    promote.className = 'tripwire-promote';
+    promote.textContent = 'Monitor';
+    promote.addEventListener('click', function () {
+      const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
+      if (chat) setStatus(chat, 'monitored');
+    });
+    li.append(copy, promote);
+    els.tripwireList.appendChild(li);
+  }
 }
 
 function row(c) {
@@ -204,6 +271,12 @@ async function setStatus(chat, status) {
       body: JSON.stringify({ status }),
     });
     chat.status = res.status;
+    if (status === 'monitored') {
+      state.tripwire.hits = state.tripwire.hits.filter(function (hit) {
+        return hit.id !== chat.id;
+      });
+      if (!state.tripwire.hits.length) state.tripwire.phase = 'empty';
+    }
     toast(status === 'monitored'
       ? (res.baselined ? 'Now monitoring — baselined to new messages.' : 'Now monitoring.')
       : 'No longer monitoring.', 'good');

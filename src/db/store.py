@@ -88,6 +88,11 @@ from src.db.runs import (
     traces_for_run,
 )
 from src.db.sync_log import recent_syncs, record_sync
+from src.db.tripwire import (
+    last_tripwire_nudge_at,
+    mark_tripwire_nudge_sent,
+    recent_discovered_messages,
+)
 
 __all__ = [
     "LinkError",
@@ -122,6 +127,7 @@ __all__ = [
     "insert_messages",
     "last_run",
     "last_run_started_at",
+    "last_tripwire_nudge_at",
     "latest_run_id",
     "link_chats",
     "list_chats",
@@ -129,6 +135,7 @@ __all__ = [
     "list_live_scan_runs",
     "list_review_runs",
     "mark_transcription",
+    "mark_tripwire_nudge_sent",
     "message_count_total",
     "message_source_ids",
     "message_summary_context",
@@ -140,6 +147,7 @@ __all__ = [
     "pending_transcriptions",
     "prune_gmail_unmonitored",
     "recent_actionable_items",
+    "recent_discovered_messages",
     "recent_messages",
     "recent_messages_family",
     "recent_syncs",

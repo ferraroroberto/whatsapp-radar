@@ -35,6 +35,13 @@
     "bot_token": "",
     "chat_id": ""
   },
+  "tripwire": {
+    "window_days": 7,
+    "max_messages": 500,
+    "max_messages_per_chat": 20,
+    "telegram_nudge_enabled": false,
+    "nudge_cadence_days": 7
+  },
   "calendar": {
     "credentials_path": "auth/calendar/credentials.json",
     "token_path": "auth/calendar/token.json",

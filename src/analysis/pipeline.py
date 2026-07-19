@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from src.analysis._common import Progress, _emit
@@ -50,6 +51,7 @@ from src.analysis.source_funnel import (
     source_funnels_json,
 )
 from src.analysis.transcription import run_transcription_phase
+from src.analysis.tripwire import TripwireScan, scan_tripwire
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding, build_connectors
@@ -88,6 +90,10 @@ class ScanOutcome:
     stage1_passed: int = 0
     stage2_llm_calls: int = 0
     actionable: int = 0
+    tripwire_scanned: int = 0
+    tripwire_hits: int = 0
+    tripwire_truncated: bool = False
+    tripwire_nudge_status: str = "disabled"
     notification_status: str = "none"
     errors: list[tuple[int, str]] = field(default_factory=list)
     source_errors: list[tuple[str, str]] = field(default_factory=list)
@@ -262,6 +268,61 @@ def _abort_offline(
     return outcome
 
 
+def _run_tripwire(
+    conn: sqlite3.Connection,
+    config: Config,
+    outcome: ScanOutcome,
+    progress: Progress | None,
+) -> TripwireScan:
+    """Run the additive Stage-1-only discovery pass and optional weekly nudge."""
+    result = scan_tripwire(conn, config.tripwire)
+    outcome.tripwire_scanned = result.scanned_messages
+    outcome.tripwire_hits = len(result.hits)
+    outcome.tripwire_truncated = result.truncated
+    _emit(
+        progress,
+        f"• tripwire: scanned {result.scanned_messages} recent unmonitored message(s), "
+        f"found {len(result.hits)} chat(s)" + (" (bounded)" if result.truncated else ""),
+    )
+    if not config.tripwire.telegram_nudge_enabled:
+        return result
+    if not result.hits:
+        outcome.tripwire_nudge_status = "no_hits"
+        return result
+
+    now = datetime.now(UTC)
+    last_raw = store.last_tripwire_nudge_at(conn)
+    if last_raw:
+        try:
+            last = datetime.fromisoformat(last_raw)
+        except ValueError:
+            last = None
+            _emit(progress, "⚠ tripwire nudge state was invalid; treating it as unsent")
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)
+        if last is not None and now - last < timedelta(
+            days=config.tripwire.nudge_cadence_days
+        ):
+            outcome.tripwire_nudge_status = "cadenced"
+            return result
+
+    names = [hit.display_name for hit in result.hits[:8]]
+    suffix = f" (+{len(result.hits) - len(names)} more)" if len(result.hits) > len(names) else ""
+    status, detail = send_alert(
+        config,
+        f"WhatsApp Radar: {len(result.hits)} unmonitored chat(s) matched actionable "
+        f"keywords recently: {', '.join(names)}{suffix}. Open Messages → "
+        "Chats worth monitoring to review and promote them.",
+    )
+    outcome.tripwire_nudge_status = status
+    if status == "sent":
+        store.mark_tripwire_nudge_sent(conn, now.isoformat(timespec="seconds"))
+        _emit(progress, "• tripwire weekly nudge: sent")
+    else:
+        _emit(progress, f"⚠ tripwire weekly nudge: {status}" + (f" — {detail}" if detail else ""))
+    return result
+
+
 def scan(
     conn: sqlite3.Connection,
     config: Config,
@@ -316,6 +377,7 @@ def scan(
         # this — it replays stored messages with no network and no side effects.
         tr = run_transcription_phase(conn, config, progress=progress)
         outcome.transcriptions = tr.done
+        _run_tripwire(conn, config, outcome, progress)
     else:
         _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
@@ -528,6 +590,12 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
             "actionable": outcome.actionable,
         },
         "notification_status": outcome.notification_status,
+        "tripwire": {
+            "scanned_messages": outcome.tripwire_scanned,
+            "hits": outcome.tripwire_hits,
+            "truncated": outcome.tripwire_truncated,
+            "nudge_status": outcome.tripwire_nudge_status,
+        },
         "telegram_text": digest.to_telegram_text() if digest and digest.has_actionable_items
         else None,
         "actionable_count": len(digest.items) if digest else 0,

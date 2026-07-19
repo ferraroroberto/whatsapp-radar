@@ -135,6 +135,19 @@ class TelegramConfig:
 
 
 @dataclass(frozen=True)
+class TripwireConfig:
+    """Bounds and optional notification cadence for unmonitored-chat signals (#196)."""
+
+    window_days: int = 7
+    max_messages: int = 500
+    max_messages_per_chat: int = 20
+    # In-app suggestions are always available. Telegram stays silent unless this
+    # independent opt-in is set; normal notifier credentials/config still apply.
+    telegram_nudge_enabled: bool = False
+    nudge_cadence_days: int = 7
+
+
+@dataclass(frozen=True)
 class GmailSender:
     """One explicitly allowed sender represented as a stable Gmail chat."""
 
@@ -297,6 +310,7 @@ class Config:
     notifier: str
     telegram: TelegramConfig
     linked_device_dir: Path
+    tripwire: TripwireConfig = field(default_factory=TripwireConfig)
     # When the live source is the linked-device sidecar, a preflight may relaunch
     # it automatically if it has stopped (issue #29). Off skips the self-heal and
     # simply aborts the run loudly when the source is offline.
@@ -554,6 +568,7 @@ def load_config(root: Path | None = None) -> Config:
     hub_raw = merged.get("hub", {})
     tr_raw = merged.get("transcription", {})
     gmail_raw = merged.get("gmail", {})
+    tripwire_raw = merged.get("tripwire", {})
     tts_raw = (merged.get("tts") or {}).get("profiles", {})
 
     tg_raw = merged.get("telegram", {})
@@ -644,6 +659,46 @@ def load_config(root: Path | None = None) -> Config:
         bot_token=os.environ.get("WR_TELEGRAM_BOT_TOKEN", tg_bot_default),
         chat_id=os.environ.get("WR_TELEGRAM_CHAT_ID", tg_chat_default),
     )
+    tripwire = TripwireConfig(
+        window_days=max(
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_WINDOW_DAYS", tripwire_raw.get("window_days", 7)
+                )
+            ),
+        ),
+        max_messages=max(
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_MAX_MESSAGES", tripwire_raw.get("max_messages", 500)
+                )
+            ),
+        ),
+        max_messages_per_chat=max(
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_MAX_MESSAGES_PER_CHAT",
+                    tripwire_raw.get("max_messages_per_chat", 20),
+                )
+            ),
+        ),
+        telegram_nudge_enabled=_as_bool(
+            os.environ.get("WR_TRIPWIRE_TELEGRAM_NUDGE_ENABLED"),
+            tripwire_raw.get("telegram_nudge_enabled", False),
+        ),
+        nudge_cadence_days=max(
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_NUDGE_CADENCE_DAYS",
+                    tripwire_raw.get("nudge_cadence_days", 7),
+                )
+            ),
+        ),
+    )
 
     resolved_db = Path(db_path)
     if not resolved_db.is_absolute():
@@ -719,6 +774,7 @@ def load_config(root: Path | None = None) -> Config:
         notifier=notifier,
         telegram=telegram,
         linked_device_dir=resolved_buffer,
+        tripwire=tripwire,
         sidecar_autostart=sidecar_autostart,
         sync_settle_seconds=sync_settle_seconds,
         sync_settle_timeout=sync_settle_timeout,

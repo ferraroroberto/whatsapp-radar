@@ -399,3 +399,160 @@ def test_public_core_exposes_no_write_operations() -> None:
     }
     assert forbidden.isdisjoint(set(dir(GmailMailbox)))
     assert forbidden.isdisjoint(set(dir(GoogleGmailReadClient)))
+
+
+def test_mailbox_prefers_batched_get_messages_when_available() -> None:
+    class _BulkClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.bulk_calls: list[tuple[list[str], bool]] = []
+
+        def get_messages(
+            self, message_ids: list[str], *, metadata_only: bool = False
+        ) -> list[dict[str, Any]]:
+            self.bulk_calls.append((list(message_ids), metadata_only))
+            return [self.messages[message_id] for message_id in message_ids]
+
+    client = _BulkClient()
+    mailbox = GmailMailbox(client)
+
+    messages = mailbox.messages(GmailSearch(query="from:school@example.com"))
+
+    assert client.bulk_calls == [(["newer", "older"], False)]
+    assert client.metadata_modes == []  # per-message get_message never used
+    assert [message.message_id for message in messages] == ["older", "newer"]
+
+
+def test_timeout_surfaces_distinct_error_instead_of_generic_detail() -> None:
+    class _TimeoutClient(_FakeClient):
+        def get_message(
+            self, message_id: str, *, metadata_only: bool = False
+        ) -> dict[str, Any]:
+            raise TimeoutError("socket timed out")
+
+    mailbox = GmailMailbox(_TimeoutClient())
+
+    with pytest.raises(GmailReadError, match="timed out"):
+        mailbox.messages(GmailSearch(query="from:school@example.com"))
+
+
+def test_google_client_batches_gets_in_chunks_of_fifty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
+
+    class _FakeRequest:
+        def __init__(self, response: dict[str, Any]) -> None:
+            self._response = response
+
+        def execute(self) -> dict[str, Any]:
+            return self._response
+
+    class _FakeBatch:
+        def __init__(self, callback: Any) -> None:
+            self._callback = callback
+            self.size = 0
+
+        def add(self, request: _FakeRequest, request_id: str) -> None:
+            self.size += 1
+            self._pending = getattr(self, "_pending", [])
+            self._pending.append((request_id, request))
+
+        def execute(self) -> None:
+            for request_id, request in self._pending:
+                self._callback(request_id, request.execute(), None)
+
+    class _BatchService:
+        def __init__(self) -> None:
+            self.batches: list[_FakeBatch] = []
+
+        def users(self) -> _BatchService:
+            return self
+
+        def messages(self) -> _BatchService:
+            return self
+
+        def get(self, **kwargs: Any) -> _FakeRequest:
+            return _FakeRequest({"id": kwargs["id"]})
+
+        def new_batch_http_request(self, callback: Any) -> _FakeBatch:
+            batch = _FakeBatch(callback)
+            self.batches.append(batch)
+            return batch
+
+    service = _BatchService()
+    client = GoogleGmailReadClient(service)
+    message_ids = [f"m{i}" for i in range(120)]
+
+    results = client.get_messages(message_ids)
+
+    assert [batch.size for batch in service.batches] == [50, 50, 20]
+    assert [raw["id"] for raw in results] == message_ids
+    # One pace pause between consecutive batches, none before the first.
+    assert sleeps == [1.0, 1.0]
+
+
+def test_google_client_retries_rate_limited_batch_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
+
+    class _Response:
+        status = 429
+
+    class _FakeRequest:
+        def __init__(self, message_id: str) -> None:
+            self.message_id = message_id
+
+    class _RateLimitedService:
+        def __init__(self) -> None:
+            self.attempts: dict[str, int] = {}
+
+        def users(self) -> _RateLimitedService:
+            return self
+
+        def messages(self) -> _RateLimitedService:
+            return self
+
+        def get(self, **kwargs: Any) -> _FakeRequest:
+            return _FakeRequest(kwargs["id"])
+
+        def new_batch_http_request(self, callback: Any) -> Any:
+            service = self
+
+            class _Batch:
+                def __init__(self) -> None:
+                    self.pending: list[tuple[str, _FakeRequest]] = []
+
+                def add(self, request: _FakeRequest, request_id: str) -> None:
+                    self.pending.append((request_id, request))
+
+                def execute(self) -> None:
+                    for request_id, _request in self.pending:
+                        attempt = service.attempts.get(request_id, 0) + 1
+                        service.attempts[request_id] = attempt
+                        if request_id == "flaky" and attempt == 1:
+                            error = RuntimeError("rate limited")
+                            error.resp = _Response()  # type: ignore[attr-defined]
+                            callback(request_id, None, error)
+                        else:
+                            callback(request_id, {"id": request_id}, None)
+
+            return _Batch()
+
+    service = _RateLimitedService()
+    client = GoogleGmailReadClient(service)
+
+    results = client.get_messages(["steady", "flaky"])
+
+    # The 429'd item is retried alone after a backoff pause; nothing is lost
+    # and nothing non-flaky is re-fetched.
+    assert [raw["id"] for raw in results] == ["steady", "flaky"]
+    assert service.attempts == {"steady": 1, "flaky": 2}
+    assert sleeps == [1]

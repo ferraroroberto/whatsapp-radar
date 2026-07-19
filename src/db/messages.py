@@ -18,6 +18,19 @@ from src.db.connection import _MESSAGE_COLUMNS, _now, _to_stored
 from src.models import MessageRecord, StoredMessage
 
 
+def message_source_ids(conn: sqlite3.Connection, chat_id: int) -> set[str]:
+    """Source message ids already stored for a chat.
+
+    The known-ids oracle for incremental ingest (#180): a connector that can
+    diff against these downloads full content only for genuinely new messages.
+    """
+    rows = conn.execute(
+        "SELECT source_message_id FROM messages WHERE chat_id = ?",
+        (chat_id,),
+    ).fetchall()
+    return {row["source_message_id"] for row in rows}
+
+
 def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:
     """Insert a message idempotently. Returns True if a new row was created.
 

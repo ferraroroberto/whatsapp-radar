@@ -71,7 +71,9 @@ def _cmd_status(conn: sqlite3.Connection, config: Config) -> int:
 
 
 def _cmd_ingest(conn: sqlite3.Connection, config: Config) -> int:
-    synced = sync_sources(conn, _build_connectors(config), operation="ingest")
+    synced = sync_sources(
+        conn, _build_connectors(config), operation="ingest", progress=_progress
+    )
     delta = synced.delta
     print(f"Ingested {delta.chats_seen} chats, {delta.messages_added} new messages.")
     for source, error in synced.source_errors:
@@ -209,6 +211,7 @@ def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
                 progress=_progress,
             ),
             gmail_retention_days=config.gmail.retention_days,
+            progress=_progress,
         )
     except ConnectorOffline as exc:
         _progress(f"✗ resync aborted — all enabled sources offline: {exc}")

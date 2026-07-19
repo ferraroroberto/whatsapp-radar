@@ -391,3 +391,58 @@ def test_gmail_sync_is_idempotent(
         (chat_id,),
     ).fetchone()["n"]
     assert count == 2
+
+
+def test_discovered_ingest_is_single_pass(tmp_path: Path) -> None:
+    client = _DiscoveryClient()
+    connector = GmailConnector(GmailConfig(discovery_days=30), client=client)
+    connector.connect()
+
+    chats = connector.list_chats()
+    for chat in chats:
+        connector.fetch_messages(chat.source_chat_id)
+
+    # One windowed retrieval serves discovery AND every discovered sender's
+    # messages — no per-sender API searches (#180: the old shape cost one
+    # search per discovered sender on every sync).
+    assert len(chats) == 2
+    assert len(client.queries) == 1
+    assert "newer_than:30d" in client.queries[0][0]
+
+
+def test_second_sync_downloads_no_bodies(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    class _CountingClient(_DiscoveryClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.full_gets = 0
+
+        def get_message(
+            self,
+            message_id: str,
+            *,
+            metadata_only: bool = False,
+        ) -> dict[str, Any]:
+            if not metadata_only:
+                self.full_gets += 1
+            return self.messages[message_id]
+
+    first_client = _CountingClient()
+    sync_sources(
+        conn,
+        [ConnectorBinding("gmail", GmailConnector(GmailConfig(), client=first_client))],
+        operation="ingest",
+    )
+    second_client = _CountingClient()
+    outcome = sync_sources(
+        conn,
+        [ConnectorBinding("gmail", GmailConnector(GmailConfig(), client=second_client))],
+        operation="ingest",
+    )
+
+    # First run downloads the window's bodies; a re-sync over an unchanged
+    # mailbox diffs ids against the store and downloads nothing (#180).
+    assert first_client.full_gets == 2
+    assert second_client.full_gets == 0
+    assert outcome.delta.messages_added == 0

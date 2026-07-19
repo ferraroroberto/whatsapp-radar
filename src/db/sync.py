@@ -99,9 +99,17 @@ def ingest_chats(
                 store.upsert_chat(conn, chat)
                 delta.chats_updated += 1
         delta.chats_seen += 1
-        delta.messages_added += store.insert_messages(
-            conn, chat_id, connector.fetch_messages(chat.source_chat_id)
-        )
+        # Incremental capability (#180): a connector exposing fetch_messages_new
+        # is given the ids already stored so it can skip re-downloading them.
+        # The store's INSERT OR IGNORE keeps either path idempotent.
+        fetch_new = getattr(connector, "fetch_messages_new", None)
+        if callable(fetch_new):
+            records = fetch_new(
+                chat.source_chat_id, store.message_source_ids(conn, chat_id)
+            )
+        else:
+            records = connector.fetch_messages(chat.source_chat_id)
+        delta.messages_added += store.insert_messages(conn, chat_id, records)
     return delta
 
 
@@ -147,6 +155,7 @@ class MultiSourceSyncOutcome:
 
 
 PrepareSource = Callable[[str, MessageConnector], ConnectorStatus]
+Progress = Callable[[str], None]
 
 
 def sync_sources(
@@ -156,6 +165,7 @@ def sync_sources(
     operation: str,
     prepare: PrepareSource | None = None,
     gmail_retention_days: int = 30,
+    progress: Progress | None = None,
 ) -> MultiSourceSyncOutcome:
     """Ingest every binding independently and record a truthful per-source row.
 
@@ -166,11 +176,21 @@ def sync_sources(
     ``gmail_retention_days=0`` skips the prune entirely — used by the destructive
     reprocess rebuild, which re-applies monitored status only *after* re-ingest, so
     pruning mid-rebuild would wrongly drop a monitored sender's history.
+
+    ``progress`` streams one line per source stage (counts only, never message
+    content or sender addresses) so a long ingest is distinguishable from a hang
+    in the Run tab's output.log (#180).
     """
     outcome = MultiSourceSyncOutcome()
     prepare_source = prepare or (lambda _source, connector: ensure_connected(connector))
+
+    def _emit(line: str) -> None:
+        if progress is not None:
+            progress(line)
+
     for binding in bindings:
         result = SourceSyncOutcome(source=binding.source)
+        _emit(f"• {binding.source}: syncing…")
         try:
             prepare_source(binding.source, binding.connector)
             result.delta = ingest_chats(
@@ -182,6 +202,14 @@ def sync_sources(
             result.error = str(exc)
         finally:
             binding.connector.stop()
+        if result.ok:
+            _emit(
+                f"✓ {binding.source}: {result.delta.chats_seen} chat(s) · "
+                f"+{result.delta.chats_added} new chat(s) · "
+                f"+{result.delta.messages_added} message(s)"
+            )
+        else:
+            _emit(f"✗ {binding.source}: {result.error}")
         detail = result.error or ""
         if binding.source == "gmail" and result.ok and gmail_retention_days > 0:
             pruned = store.prune_gmail_unmonitored(
@@ -199,6 +227,7 @@ def sync_sources(
                     f"retention pruned {pruned.messages_pruned} msg / "
                     f"{pruned.senders_removed} sender(s)"
                 )
+                _emit(f"• gmail: {detail}")
         outcome.results.append(result)
         store.record_sync(
             conn,
@@ -220,6 +249,7 @@ def resync(
     source: str = "resync",
     prepare: PrepareSource | None = None,
     gmail_retention_days: int = 30,
+    progress: Progress | None = None,
 ) -> ResyncOutcome:
     """Upsert the connector's chats/messages into the store, reporting the delta.
 
@@ -244,6 +274,7 @@ def resync(
         operation=source,
         prepare=prepare,
         gmail_retention_days=gmail_retention_days,
+        progress=progress,
     )
     delta = synced.delta
     if not synced.successful_sources:

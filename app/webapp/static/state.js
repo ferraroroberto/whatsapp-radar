@@ -48,6 +48,7 @@ export const state = {
   audit: {
     runs: [],              // recent runs of every kind (funnel or summary, #163)
     syncs: [],             // resync/reprocess maintenance markers
+    coverageGaps: [],      // contiguous multi-run connector outages (#195)
     selected: null,        // selected run id, or null
     detail: null,          // last fetched {run, traces}
     kindFilter: 'all',     // 'all' | 'messages' | 'traffic-check' | 'calendar-scan'

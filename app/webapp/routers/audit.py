@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
+from math import ceil
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -77,6 +79,47 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _coverage_gap(
+    offline_runs: list[sqlite3.Row], recovery: sqlite3.Row | None
+) -> dict[str, Any] | None:
+    """Collapse a multi-run connector outage into one Audit timeline marker."""
+    if len(offline_runs) < 2:
+        return None
+    first = offline_runs[0]
+    last = offline_runs[-1]
+    elapsed = datetime.fromisoformat(last["started_at"]) - datetime.fromisoformat(
+        first["started_at"]
+    )
+    return {
+        "started_at": first["started_at"],
+        "ended_at": last["started_at"],
+        "duration_days": max(1, ceil(elapsed.total_seconds() / 86_400)),
+        "failed_runs": len(offline_runs),
+        "run_ids": [int(row["id"]) for row in offline_runs],
+        "recovered_at": recovery["started_at"] if recovery is not None else None,
+        "recovery_run_id": int(recovery["id"]) if recovery is not None else None,
+    }
+
+
+def _coverage_gaps(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    """Return contiguous multi-run offline windows, newest first."""
+    gaps: list[dict[str, Any]] = []
+    offline_runs: list[sqlite3.Row] = []
+    for row in rows:
+        offline = row["status"] == "failed" and row["notification_status"] == "offline"
+        if offline:
+            offline_runs.append(row)
+            continue
+        gap = _coverage_gap(offline_runs, row)
+        if gap is not None:
+            gaps.append(gap)
+        offline_runs = []
+    gap = _coverage_gap(offline_runs, None)
+    if gap is not None:
+        gaps.append(gap)
+    return list(reversed(gaps))
+
+
 def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
     """Shape one analysis_trace row (joined to chat name) into the full decision record."""
     return {
@@ -130,7 +173,8 @@ async def list_runs(
         for s in store.recent_syncs(conn, limit)
         if s["source"] in _MAINTENANCE_SOURCES
     ]
-    return {"runs": runs, "syncs": syncs}
+    coverage_gaps = _coverage_gaps(store.list_live_scan_runs(conn))
+    return {"runs": runs, "syncs": syncs, "coverage_gaps": coverage_gaps}
 
 
 @router.get("/api/audit/runs/{run_id}")

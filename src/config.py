@@ -392,15 +392,31 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return out
 
 
+def _local_config_path(root: Path) -> Path:
+    """Return the host override path, honoring the e2e-safe environment seam.
+
+    ``WR_LOCAL_CONFIG_PATH`` lets isolated processes such as the browser e2e
+    harness use a disposable override file instead of opening or modifying the
+    developer's ignored ``config/local.json``. Relative overrides stay rooted
+    at the repository, matching the normal local-config path.
+    """
+    configured = os.environ.get("WR_LOCAL_CONFIG_PATH")
+    if not configured:
+        return root / "config" / "local.json"
+    path = Path(configured)
+    return path if path.is_absolute() else root / path
+
+
 def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> Path:
-    """Deep-merge ``partial`` into the gitignored ``config/local.json`` (atomic).
+    """Deep-merge ``partial`` into the selected local-config file (atomically).
 
     This is the per-host override layer the webapp's safe-settings form writes to
-    — never the committed ``config/default.json``. Existing keys not present in
-    ``partial`` are preserved. Returns the path written.
+    — never the committed ``config/default.json``. ``WR_LOCAL_CONFIG_PATH``
+    redirects e2e writes to its disposable fixture. Existing keys not present
+    in ``partial`` are preserved. Returns the path written.
     """
     root = root or project_root()
-    target = root / "config" / "local.json"
+    target = _local_config_path(root)
     current = _load_json(target)
     merged = _deep_merge(current, partial)
 
@@ -533,7 +549,7 @@ def load_config(root: Path | None = None) -> Config:
 
     merged = _deep_merge(
         _load_json(root / "config" / "default.json"),
-        _load_json(root / "config" / "local.json"),
+        _load_json(_local_config_path(root)),
     )
     hub_raw = merged.get("hub", {})
     tr_raw = merged.get("transcription", {})

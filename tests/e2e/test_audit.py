@@ -68,6 +68,73 @@ def test_audit_collapses_offline_window_into_one_gap_marker(
 
 
 @pytest.mark.smoke
+def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> None:
+    run_payload = {
+        "runs": [],
+        "syncs": [],
+        "coverage_gaps": [],
+    }
+    filtered_payload = {
+        "days": 30,
+        "limit": 50,
+        "offset": 0,
+        "total": 1,
+        "has_more": False,
+        "items": [
+            {
+                "trace_id": 11,
+                "run_id": 7,
+                "created_at": "2026-07-18T18:00:00+00:00",
+                "source": "whatsapp",
+                "display_name": "School Parents Group",
+                "stage1_passed": True,
+                "stage1_roots": ["pickup"],
+                "llm_called": True,
+                "parsed_result": {
+                    "action_required": False,
+                    "priority": "low",
+                    "summary": "Routine pickup acknowledgement",
+                },
+                "final_action": "not_actionable",
+            }
+        ],
+    }
+    detail_payload = {
+        "run": {
+            "id": 7,
+            "kind": "scan",
+            "summary": None,
+            "mode": "live",
+            "status": "completed",
+            "params": None,
+            "started_at": "2026-07-18T18:00:00+00:00",
+            "completed_at": "2026-07-18T18:01:00+00:00",
+            "notification_status": "none",
+            "error": None,
+            "sources": {},
+            "funnel": {},
+        },
+        "traces": [],
+    }
+    page.route("**/api/audit/runs", lambda route: route.fulfill(json=run_payload))
+    page.route("**/api/audit/filtered?*", lambda route: route.fulfill(json=filtered_payload))
+    page.route("**/api/audit/runs/7", lambda route: route.fulfill(json=detail_payload))
+
+    page.goto(base_url)
+    page.locator("#tabAudit").click()
+
+    filtered = page.locator("#auditFilteredCard")
+    expect(filtered).not_to_have_attribute("open", "")
+    filtered.locator("summary").click()
+    row = page.locator("#auditFiltered .audit-filtered-row")
+    expect(row).to_contain_text("School Parents Group")
+    expect(row).to_contain_text("Routine pickup acknowledgement")
+    row.click()
+    expect(page.locator("#auditDetailCard")).to_be_visible()
+    expect(page.locator("#auditDetailTitle")).to_contain_text("#7")
+
+
+@pytest.mark.smoke
 def test_audit_drilldown_shows_trace(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:

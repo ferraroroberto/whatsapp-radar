@@ -49,6 +49,11 @@ export const state = {
     runs: [],              // recent runs of every kind (funnel or summary, #163)
     syncs: [],             // resync/reprocess maintenance markers
     coverageGaps: [],      // contiguous multi-run connector outages (#195)
+    filtered: [],          // recent cross-run decisions that did not alert (#194)
+    filteredDays: 30,
+    filteredTotal: 0,
+    filteredHasMore: false,
+    filteredRequest: 0,    // discard out-of-order responses after fast range changes
     selected: null,        // selected run id, or null
     detail: null,          // last fetched {run, traces}
     kindFilter: 'all',     // 'all' | 'messages' | 'traffic-check' | 'calendar-scan'
@@ -180,6 +185,13 @@ export const els = {
   auditRuns: document.getElementById('auditRuns'),
   auditRunsEmpty: document.getElementById('auditRunsEmpty'),
   auditKindFilter: document.getElementById('auditKindFilter'),
+  auditFilteredCard: document.getElementById('auditFilteredCard'),
+  auditFilteredCount: document.getElementById('auditFilteredCount'),
+  auditFilteredDays: document.getElementById('auditFilteredDays'),
+  auditFilteredStatus: document.getElementById('auditFilteredStatus'),
+  auditFiltered: document.getElementById('auditFiltered'),
+  auditFilteredEmpty: document.getElementById('auditFilteredEmpty'),
+  auditFilteredMore: document.getElementById('auditFilteredMore'),
   auditDetailCard: document.getElementById('auditDetailCard'),
   auditDetailTitle: document.getElementById('auditDetailTitle'),
   auditDetailClose: document.getElementById('auditDetailClose'),

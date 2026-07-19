@@ -517,8 +517,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   font-weight: 600;
   line-height: 1.2;
 }
-.source-badge.source-gmail { color: var(--accent); border-color: var(--accent-border-strong); }
-.source-badge.source-calendar { color: var(--accent); border-color: var(--accent-border-strong); }
+/* Source identity is icon + name only — every source pill shares one neutral
+   style (the WhatsApp look); color is reserved for state, not decoration. */
 /* Gmail sender chip in the history overlay (#166): identifies whose mail is shown. */
 .sender-chip {
   align-self: flex-start;

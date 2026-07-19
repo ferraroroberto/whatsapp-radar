@@ -1,10 +1,11 @@
 """Browser e2e for sender-level Gmail monitoring on the Messages tab (#166).
 
-Exercises the source-aware vocabulary (senders, not "channels"; "Not monitored",
-not "Ignored"), the promote/demote toggle on a discovered sender, and the
-sender-identity chip in the history overlay. Order-independent: the session DB is
-shared across the chromium/webkit projections, so the toggle is asserted to
-*flip* rather than land on an absolute state.
+Exercises the source-aware count noun (senders, not "channels" — the one
+wording difference that survives #182's monitored/ignored label unification),
+the promote/demote toggle on a discovered sender, and the sender-identity chip
+in the history overlay. Order-independent: the session DB is shared across the
+chromium/webkit projections, so the toggle is asserted to *flip* rather than
+land on an absolute state.
 """
 
 from __future__ import annotations
@@ -19,11 +20,12 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
 
-    # Switch the source filter to Gmail: the not-monitored bucket is relabelled and
-    # the count speaks of senders, not WhatsApp "channels".
+    # Switch the source filter to Gmail: the not-monitored bucket keeps the same
+    # "Ignored" label as WhatsApp (#182), but the count still speaks of senders,
+    # not WhatsApp "channels".
     page.locator("#chatsSourceGmail").click()
     page.locator("#chatsFilterAll").click()
-    expect(page.locator("#chatsFilterIgnored")).to_have_text("Not monitored")
+    expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
     expect(page.locator("#chatsCount")).to_contain_text("sender")
 
     # The discovered sender is promotable via the same watch toggle as WhatsApp.
@@ -44,6 +46,6 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
     page.locator("#historyClose").click()
     expect(page.locator("#historyOverlay")).to_be_hidden()
 
-    # Switching back to WhatsApp restores the "Ignored" wording — WhatsApp UX intact.
+    # Switching back to WhatsApp: the label stays "Ignored" either way (#182).
     page.locator("#chatsSourceWhatsapp").click()
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")

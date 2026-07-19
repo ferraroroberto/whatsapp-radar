@@ -54,8 +54,14 @@ def test_tripwire_card_promotes_candidate_in_one_tap(page: Page, base_url: str) 
     card = page.locator("#tripwireCard")
     expect(card).to_be_visible()
     expect(card).to_contain_text("Chats worth monitoring")
+
+    # Collapsed by default (#204) — expand via the summary before the row
+    # inside .collapse-body can be interacted with.
+    assert card.get_attribute("open") is None
+    card.locator("summary").click()
+
     suggestion = card.locator(".tripwire-row")
     expect(suggestion).to_contain_text("School Parents Group")
     expect(suggestion).to_contain_text("urgent")
-    suggestion.get_by_role("button", name="Monitor").click()
+    suggestion.get_by_role("button", name="Not monitored — tap to monitor").click()
     expect(card).to_be_hidden()

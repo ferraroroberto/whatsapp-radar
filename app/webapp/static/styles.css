@@ -483,7 +483,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .chats-search { margin-bottom: 10px; }
 #chatsCount { margin: 0 2px 10px; }
 
-.tripwire-card { border-color: var(--accent); }
 .tripwire-row {
   min-height: 56px;
   border-bottom: 1px solid var(--line);
@@ -507,19 +506,23 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Dim eye-icon toggle, matching .chat-watch's not-monitored state — every
+   row here is unmonitored by definition, so it never gets the active/accent
+   treatment. */
 .tripwire-promote {
-  min-height: 44px;
+  width: 44px;
+  height: 44px;
   flex: none;
-  padding: 0 14px;
-  border: 1px solid var(--accent);
+  background: var(--card-off);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--accent);
-  color: var(--accent-fg);
-  font: inherit;
-  font-size: var(--font-caption);
-  font-weight: 700;
+  color: var(--muted);
+  line-height: 1;
   cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
 }
+.tripwire-promote .icon { width: var(--icon-title); height: var(--icon-title); }
 .tripwire-promote:active { opacity: .82; }
 
 .card-list {

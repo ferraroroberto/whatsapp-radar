@@ -259,17 +259,6 @@
     </section>
 
     <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
-      <section id="tripwireCard" class="card tripwire-card" aria-live="polite" hidden>
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
-            Chats worth monitoring
-          </h2>
-        </div>
-        <p id="tripwireMeta" class="card-meta"></p>
-        <ul id="tripwireList" class="card-list" aria-label="Chats worth monitoring"></ul>
-      </section>
-
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">
@@ -301,6 +290,20 @@
           <p class="empty-state-message">No message channels match these filters.</p>
         </div>
       </section>
+
+      <details id="tripwireCard" class="card card--collapsible" aria-live="polite" hidden>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
+            <h3 class="collapse-title">Chats worth monitoring</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p id="tripwireMeta" class="card-meta"></p>
+          <ul id="tripwireList" class="card-list" aria-label="Chats worth monitoring"></ul>
+        </div>
+      </details>
 
       <details id="configCard" class="card card--collapsible">
         <summary class="collapse-summary">
@@ -612,7 +615,7 @@
     </section>
 
     <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
-      <details id="familyRulesCard" class="card card--collapsible">
+      <details id="familyRulesCard" class="card card--collapsible" open>
         <summary class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>

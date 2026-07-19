@@ -117,13 +117,14 @@ def _calendar_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         return _never()
     result = _loads(row["summary_json"]) or {}
     conflicts = len(result.get("conflicts") or [])
-    unknown = len(result.get("unknown_locations") or [])
-    alerts = conflicts + unknown
+    # Renamed unknown_locations -> missing_locations in #168; old rows persist.
+    missing = len(result.get("missing_locations") or result.get("unknown_locations") or [])
+    alerts = conflicts + missing
     if result.get("status") == "disabled":
         summary, alerts = "scan disabled", 0
     elif alerts:
         summary = f"{conflicts} conflict" + ("" if conflicts == 1 else "s") + \
-            f" · {unknown} missing location" + ("" if unknown == 1 else "s")
+            f" · {missing} missing location" + ("" if missing == 1 else "s")
     else:
         summary = "no conflicts"
     return {

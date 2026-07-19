@@ -72,13 +72,22 @@ def test_requires_commute_rules():
     assert rules.requires_commute(_event("Clinic", location="zoom.us/j and " + WORK), HOME)
 
 
-def test_location_kind():
-    assert rules.location_kind(_event("Call", video_link="meet"), HOME) == "home"
-    assert rules.location_kind(_event("Reunión (en casa)"), HOME) == "home"
-    assert rules.location_kind(_event("Meeting", location=WORK), HOME) == "away"
-    assert rules.location_kind(_event("Home thing", location=HOME), HOME) == "home"
-    # No location at all is Unknown, never home.
-    assert rules.location_kind(_event("Mystery"), HOME) == "unknown"
+def test_decide_location_table():
+    # Table-driven: (event, expected kind, expected source, expected assumed).
+    cases = [
+        (_event("Call", video_link="meet"), "home", "video_only", False),
+        (_event("Reunión (en casa)"), "home", "en_casa_marker", False),
+        (_event("Meeting", location=WORK), "away", "physical_address", False),
+        (_event("Home thing", location=HOME), "home", "home_address", False),
+        # Semantics flip (#168): no location at all is assumed home — visibly.
+        (_event("Mystery"), "home", "assumed_home", True),
+    ]
+    for event, kind, source, assumed in cases:
+        decision = rules.decide_location(event, HOME)
+        assert (decision.kind, decision.source, decision.assumed) == (kind, source, assumed), (
+            event.summary
+        )
+        assert rules.location_kind(event, HOME) == kind
 
 
 # --------------------------------------------------------------- origin
@@ -218,8 +227,72 @@ def test_find_conflicts_range_window_ignores_commitment_after_window():
     assert conflicts == []
 
 
-def test_find_unknown_locations():
-    unknown = _event("Mystery appointment")  # no location, no video
+def test_find_missing_locations():
+    missing = _event("Mystery appointment")  # no location, no video
     known = _event("Office", location=WORK)
-    out = rules.find_unknown_locations({"roberto": [unknown, known]}, home_address=HOME)
+    out = rules.find_missing_locations({"roberto": [missing, known]}, home_address=HOME)
     assert [e.summary for _, e in out] == ["Mystery appointment"]
+    # All-day events are never asked about — no time to be somewhere at.
+    allday = _event("Holiday", all_day=True)
+    assert rules.find_missing_locations({"ana": [allday]}, home_address=HOME) == []
+
+
+OTHER = "Carrer de la Marina 16, Barcelona"
+
+
+def test_find_overlaps_two_places_at_once():
+    t0 = datetime(2026, 7, 20, 17, 0, tzinfo=UTC)
+    a = _event("Dentist", location=WORK, start=t0, end=t0 + timedelta(hours=1), eid="a")
+    b = _event("Recital", location=OTHER, start=t0 + timedelta(minutes=30),
+               end=t0 + timedelta(hours=2), eid="b")
+    out = rules.find_overlaps({"ana": [a, b]}, home_address=HOME)
+    assert len(out) == 1
+    assert out[0].kind == "impossible_overlap"
+    assert "'Dentist' and 'Recital'" in out[0].detail
+
+
+def test_find_overlaps_table_of_non_conflicts():
+    t0 = datetime(2026, 7, 20, 17, 0, tzinfo=UTC)
+    one_hour = timedelta(hours=1)
+    # Table-driven: pairs that must NOT be flagged, and why.
+    cases = [
+        # Back-to-back adjacency at different addresses: travel feasibility
+        # needs live routing (#169) — not judged deterministically here.
+        (_event("A", location=WORK, start=t0, end=t0 + one_hour, eid="a"),
+         _event("B", location=OTHER, start=t0 + one_hour, end=t0 + 2 * one_hour, eid="b")),
+        # Same address overlapping: one place, physically possible.
+        (_event("A", location=WORK, start=t0, end=t0 + one_hour, eid="a"),
+         _event("B", location=WORK, start=t0, end=t0 + one_hour, eid="b")),
+        # Assumed-home vs away overlapping: the assumption is not proof.
+        (_event("A", start=t0, end=t0 + one_hour, eid="a"),
+         _event("B", location=WORK, start=t0, end=t0 + one_hour, eid="b")),
+        # Different people are allowed to be in different places.
+    ]
+    for a, b in cases:
+        assert rules.find_overlaps({"ana": [a, b]}, home_address=HOME) == [], (
+            a.summary, b.summary
+        )
+    x = _event("A", location=WORK, start=t0, end=t0 + one_hour, eid="a")
+    y = _event("B", location=OTHER, start=t0, end=t0 + one_hour, eid="b")
+    assert rules.find_overlaps({"ana": [x], "roberto": [y]}, home_address=HOME) == []
+
+
+def test_event_decisions_trace_every_event():
+    t0 = datetime(2026, 7, 20, 9, 0, tzinfo=UTC)
+    events = {
+        "roberto": [
+            _event("Office", location=WORK, start=t0, eid="a"),
+            _event("Mystery", start=t0 + timedelta(hours=2), eid="b"),
+            _event("Holiday", all_day=True, start=t0, eid="c"),
+        ]
+    }
+    records = rules.event_decisions(events, home_address=HOME)
+    assert len(records) == 3  # every event in the window is traced
+    by_event = {r["event"]: r for r in records}
+    assert by_event["Office"]["kind"] == "away"
+    assert by_event["Office"]["source"] == "physical_address"
+    assert by_event["Office"]["commute"] is True
+    assert by_event["Mystery"]["assumed"] is True
+    assert by_event["Mystery"]["source"] == "assumed_home"
+    assert by_event["Holiday"]["kind"] == "all_day"
+    assert by_event["Holiday"]["source"] == "not_assessed"

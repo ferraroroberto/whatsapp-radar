@@ -187,7 +187,7 @@ function renderCalendarHealth(source) {
   details.className = 'source-status-details';
   addStatusLine(details, 'State',
     (source.configured ? 'configured' : 'not configured') + ' · ' +
-    (source.enabled ? 'daily scan enabled' : 'daily scan disabled') + ' · ' +
+    (source.enabled ? 'calendar sync enabled' : 'calendar sync disabled') + ' · ' +
     (source.authorized ? 'authorized' : 'not authorized'));
   addStatusLine(details, 'Mode', 'read-only Google Calendar');
   addStatusLine(details, 'Authorization', source.token_present ? 'token present' : 'token missing');
@@ -636,7 +636,7 @@ function funnelCells(result) {
   if (result.kind === 'calendar-scan') {
     return [
       { label: 'Conflicts', value: (result.conflicts || []).length },
-      { label: 'Unknown loc.', value: (result.unknown_locations || []).length },
+      { label: 'Missing loc.', value: (result.missing_locations || result.unknown_locations || []).length },
       { label: 'Status', value: result.status },
     ];
   }

@@ -77,21 +77,46 @@ def requires_commute(event: CalendarEvent, home_address: str) -> bool:
     return not same_address(dest, home_address)
 
 
-def location_kind(event: CalendarEvent, home_address: str) -> str:
-    """Daily-scan location class: ``'home'`` | ``'away'`` | ``'unknown'``.
+@dataclass(frozen=True)
+class LocationDecision:
+    """Where an event places its person, and *why* — the traceable unit (#168).
 
-    At-home ONLY if ``(en casa)`` or a video link with no physical address. A
-    physical address is 'away' unless it is the home address. **No location at
-    all is Unknown, never home** (an explicit production correction).
+    ``assumed`` marks the missing-location fallback: no address, no video link,
+    no ``(en casa)`` marker ⇒ treated as home for the conflict math, but flagged
+    so the daily summary can ask for the location to be filled in. This
+    replaces the earlier Unknown-never-home semantics: the assumption is now
+    explicit and visible instead of a silent third state.
     """
+
+    kind: str  # 'home' | 'away'
+    source: str  # 'en_casa_marker' | 'home_address' | 'physical_address'
+    #             | 'video_only' | 'assumed_home'
+    assumed: bool
+
+
+def decide_location(event: CalendarEvent, home_address: str) -> LocationDecision:
+    """Classify an event's location with its reason — pure and deterministic."""
     if is_en_casa(event):
-        return "home"
+        return LocationDecision("home", "en_casa_marker", False)
     dest = physical_location(event)
     if dest is not None:
-        return "home" if same_address(dest, home_address) else "away"
+        if same_address(dest, home_address):
+            return LocationDecision("home", "home_address", False)
+        return LocationDecision("away", "physical_address", False)
     if event.video_link:
-        return "home"
-    return "unknown"
+        return LocationDecision("home", "video_only", False)
+    return LocationDecision("home", "assumed_home", True)
+
+
+def location_kind(event: CalendarEvent, home_address: str) -> str:
+    """Daily-scan location class: ``'home'`` | ``'away'``.
+
+    At-home if ``(en casa)``, a video link with no physical address, or — since
+    #168 — no location at all (assumed home; :func:`decide_location` carries the
+    ``assumed`` flag so the assumption is surfaced, never silent). A physical
+    address is 'away' unless it is the home address.
+    """
+    return decide_location(event, home_address).kind
 
 
 # --------------------------------------------------------------- origin / commutes
@@ -189,7 +214,7 @@ def in_quiet_hours(now: datetime, start_hour: int, end_hour: int) -> bool:
 class Conflict:
     """One flagged schedule problem for a given day."""
 
-    kind: str  # 'coverage_gap' | 'unknown_location'
+    kind: str  # 'coverage_gap' | 'impossible_overlap'
     day: str  # ISO date
     detail: str
 
@@ -285,15 +310,97 @@ def find_conflicts(
     return conflicts
 
 
-def find_unknown_locations(
+def find_missing_locations(
     events_by_person: dict[str, list[CalendarEvent]],
     *,
     home_address: str,
 ) -> list[tuple[str, CalendarEvent]]:
-    """Timed events whose location is Unknown — to ask about, never guess."""
+    """Timed events with no explicit location — assumed home, flagged to fix.
+
+    Selects exactly the events :func:`decide_location` marks ``assumed``: the
+    daily summary asks for their location so the assumption can be retired.
+    """
     out: list[tuple[str, CalendarEvent]] = []
     for person, events in events_by_person.items():
         for event in events:
-            if not event.all_day and location_kind(event, home_address) == "unknown":
+            if not event.all_day and decide_location(event, home_address).assumed:
                 out.append((person, event))
     return out
+
+
+def find_overlaps(
+    events_by_person: dict[str, list[CalendarEvent]],
+    *,
+    home_address: str,
+) -> list[Conflict]:
+    """Same person needed in two different physical places at the same time.
+
+    Flags strict time overlaps between a person's timed events whose resolved
+    physical destinations differ — being in both is impossible, so this is a
+    hard conflict regardless of childcare coverage. Deliberately conservative:
+    events without a physical address (home, video, assumed home) never pair
+    into an overlap, and exact back-to-back adjacency (``b.start == a.end``) is
+    not an overlap — judging whether the *travel* between two adjacent events
+    is feasible needs live routing and arrives with the presence work (#169).
+    """
+    conflicts: list[Conflict] = []
+    for person, events in events_by_person.items():
+        placed = sorted(
+            (e for e in events if not e.all_day and physical_location(e) is not None),
+            key=lambda e: e.start,
+        )
+        for i, first in enumerate(placed):
+            for second in placed[i + 1 :]:
+                if second.start >= first.end:
+                    break  # sorted by start: nothing later overlaps `first`
+                first_dest = physical_location(first)
+                second_dest = physical_location(second)
+                if first_dest and second_dest and not same_address(first_dest, second_dest):
+                    conflicts.append(
+                        Conflict(
+                            kind="impossible_overlap",
+                            day=first.start.date().isoformat(),
+                            detail=(
+                                f"{person} is booked in two places at once: "
+                                f"'{first.summary}' and '{second.summary}' overlap "
+                                f"at {second.start.strftime('%H:%M')}"
+                            ),
+                        )
+                    )
+    return conflicts
+
+
+def event_decisions(
+    events_by_person: dict[str, list[CalendarEvent]],
+    *,
+    home_address: str,
+) -> list[dict[str, object]]:
+    """Per-event decision trace: every event in the window, with the why (#168).
+
+    One record per event — person, raw location text, resolved kind, the source
+    rule that decided it, and whether the home assumption was applied. All-day
+    events are recorded but marked unassessed (the conflict math only weighs
+    timed events). Pure data, JSON-ready, persisted in the run's summary.
+    """
+    records: list[dict[str, object]] = []
+    for person, events in events_by_person.items():
+        for event in sorted(events, key=lambda e: e.start):
+            if event.all_day:
+                records.append({
+                    "person": person, "event": event.summary,
+                    "start": event.start.isoformat(), "end": event.end.isoformat(),
+                    "raw_location": event.location, "kind": "all_day",
+                    "source": "not_assessed", "assumed": False,
+                })
+                continue
+            decision = decide_location(event, home_address)
+            records.append({
+                "person": person, "event": event.summary,
+                "start": event.start.isoformat(), "end": event.end.isoformat(),
+                "raw_location": event.location,
+                "video_link": bool(event.video_link),
+                "kind": decision.kind, "source": decision.source,
+                "assumed": decision.assumed,
+                "commute": requires_commute(event, home_address),
+            })
+    return records

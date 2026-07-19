@@ -111,6 +111,12 @@ flowchart TB
   FSOURCE --> CALCLIENT
   FTRAFFIC --> ROUTESCLIENT
 
+  subgraph presence["src/presence/ — live phone location (#169, read-only)"]
+    PCLIENT["client.py — get_location: resolve person,\nderive freshness from last_seen (never trust 'stale'),\nrefresh when stale; typed result, coords never persisted"]
+  end
+  FTRAFFIC -->|live origin, fallback to calendar inference| PCLIENT
+  PCLIENT -->|GET /api/presence + POST /refresh| HOMEAUTO["home-automation presence API\n127.0.0.1:8447 (loopback bypasses bearer)"]
+
   subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
   end

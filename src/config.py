@@ -219,6 +219,36 @@ class TrafficConfig:
 
 
 @dataclass(frozen=True)
+class PresenceConfig:
+    """Live phone-location lookup via home-automation's presence API (#169).
+
+    Read-only cross-repo dependency: ``GET {base_url}/api/presence`` returns each
+    tracked device's ``last_seen``/``latitude``/``longitude``/``at_home``, and
+    ``POST {base_url}/api/presence/refresh`` forces a fresh Find My locate.
+    Loopback callers bypass its bearer token. Disabled by default so the suite
+    stays fully offline and the family checks keep working with no home-automation
+    running (the calendar-inference chain is the documented fallback).
+
+    Freshness is always derived client-side from ``last_seen`` — the API's own
+    ``stale`` flag is hard-coded ``false`` for iCloud entities (home-automation#483)
+    and must never be trusted. ``person_aliases`` maps a whatsapp-radar person key
+    (e.g. ``"roberto"``) to extra names/roles the presence API might carry for the
+    same person (e.g. ``["dad"]``); the person key itself already matches the
+    entity's display name, so aliases are only needed for role-based resolution.
+    """
+
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8447"
+    # A fix older than this many minutes is stale and triggers a forced refresh.
+    max_age_min: int = 5
+    # Per-request read timeout for the cached-snapshot GET.
+    timeout_s: float = 6.0
+    # The forced-locate POST does a real Apple round-trip, so it gets a longer bound.
+    refresh_timeout_s: float = 12.0
+    person_aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ChildcareWindow:
     """A recurring childcare moment (or time range) a parent must be present for."""
 
@@ -282,6 +312,9 @@ class Config:
     calendar: CalendarConfig = field(default_factory=CalendarConfig)
     traffic: TrafficConfig = field(default_factory=TrafficConfig)
     family: FamilyConfig = field(default_factory=FamilyConfig)
+    # Live phone-location lookup (#169). Defaulted (disabled) so library/test
+    # callers that build a Config without it get the offline-safe no-op behaviour.
+    presence: PresenceConfig = field(default_factory=PresenceConfig)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -424,6 +457,28 @@ def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:
         origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
         lookahead_hours=int(raw.get("lookahead_hours", 3)),
         cadence_min=int(raw.get("cadence_min", 30)),
+    )
+
+
+def _parse_presence(raw: dict[str, Any]) -> PresenceConfig:
+    aliases: dict[str, tuple[str, ...]] = {}
+    for person, names in (raw.get("person_aliases") or {}).items():
+        key = str(person).strip().lower()
+        if not key:
+            continue
+        values = names if isinstance(names, (list, tuple)) else [names]
+        cleaned = tuple(str(v).strip() for v in values if str(v).strip())
+        if cleaned:
+            aliases[key] = cleaned
+    return PresenceConfig(
+        enabled=_as_bool(os.environ.get("WR_PRESENCE_ENABLED"), raw.get("enabled", False)),
+        base_url=os.environ.get(
+            "WR_PRESENCE_BASE_URL", str(raw.get("base_url", "http://127.0.0.1:8447"))
+        ),
+        max_age_min=int(raw.get("max_age_min", 5)),
+        timeout_s=float(raw.get("timeout_s", 6.0)),
+        refresh_timeout_s=float(raw.get("refresh_timeout_s", 12.0)),
+        person_aliases=aliases,
     )
 
 
@@ -624,6 +679,7 @@ def load_config(root: Path | None = None) -> Config:
     calendar = _parse_calendar(merged.get("calendar", {}), root)
     traffic = _parse_traffic(merged.get("traffic", {}))
     family = _parse_family(merged.get("family", {}))
+    presence = _parse_presence(merged.get("presence", {}))
 
     return Config(
         db_path=resolved_db,
@@ -643,4 +699,5 @@ def load_config(root: Path | None = None) -> Config:
         calendar=calendar,
         traffic=traffic,
         family=family,
+        presence=presence,
     )

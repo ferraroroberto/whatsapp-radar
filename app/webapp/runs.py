@@ -32,6 +32,7 @@ from typing import IO, Any
 
 from app.webapp.routers._helpers import PROJECT_ROOT
 from src.runresult import parse_result
+from src.subprocess_flags import NO_WINDOW_DETACHED
 
 RUNS_DIR = PROJECT_ROOT / "webapp" / "runs"
 _LAUNCHER = PROJECT_ROOT / "launcher.py"
@@ -61,13 +62,6 @@ def _python() -> str:
     """The interpreter to launch the CLI with — this repo's venv, else current."""
     candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
     return str(candidate) if candidate.is_file() else sys.executable
-
-
-def _creationflags() -> int:
-    flags = 0
-    for name in ("CREATE_NO_WINDOW", "DETACHED_PROCESS"):
-        flags |= getattr(subprocess, name, 0)
-    return flags
 
 
 # ----------------------------------------------------------- run records
@@ -226,7 +220,7 @@ def start_run(
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,
                 env=env,
-                creationflags=_creationflags(),
+                creationflags=NO_WINDOW_DETACHED,
                 close_fds=True,
             )
         except OSError as exc:

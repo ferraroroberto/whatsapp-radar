@@ -36,6 +36,7 @@ from app.tray.single_instance import SingleInstance
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
 from src.config import load_config
 from src.connector import sidecar
+from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.webapp_config import append_auth_token, load_webapp_config
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,14 @@ def _clipboard_copy(text: str) -> bool:
     """Best-effort Windows clipboard. Returns True on success."""
     if sys.platform == "win32":
         try:
-            p = subprocess.run(["clip"], input=text, text=True, check=False, encoding="utf-8")
+            p = subprocess.run(
+                ["clip"],
+                input=text,
+                text=True,
+                check=False,
+                encoding="utf-8",
+                creationflags=NO_WINDOW,
+            )
             return p.returncode == 0
         except OSError as exc:
             logger.debug(f"clip failed: {exc}")
@@ -86,7 +94,6 @@ def _tailscale_binary() -> str | None:
 
 
 def _run_tailscale(binary: str, args: list[str]) -> subprocess.CompletedProcess[str]:
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return subprocess.run(
         [binary, *args],
         stdin=subprocess.DEVNULL,
@@ -94,7 +101,7 @@ def _run_tailscale(binary: str, args: list[str]) -> subprocess.CompletedProcess[
         text=True,
         timeout=12,
         check=False,
-        creationflags=creationflags,
+        creationflags=NO_WINDOW,
     )
 
 
@@ -193,9 +200,7 @@ def run_tray() -> int:
             stderr=subprocess.DEVNULL,
         )
         if sys.platform == "win32":
-            kw["creationflags"] = (
-                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-            )
+            kw["creationflags"] = NO_WINDOW_NEW_GROUP
         try:
             proc = subprocess.Popen(cmd, **kw)  # type: ignore[call-overload]
         except OSError as exc:

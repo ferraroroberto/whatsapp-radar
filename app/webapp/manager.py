@@ -22,6 +22,7 @@ import requests
 
 from app.tray import cloudflared_proc
 from app.tray.single_instance import cross_process_lock
+from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +79,12 @@ def check_tailscale_cert() -> None:
     try:
         result = subprocess.run(
             [sys.executable, str(script), "--check"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=90,
             cwd=str(PROJECT_ROOT),
+            creationflags=NO_WINDOW,
         )
         out = (result.stdout or "").strip()
         if out:
@@ -194,9 +197,7 @@ class WebappManager:
                     env=env,
                 )
                 if sys.platform == "win32":
-                    popen_kwargs["creationflags"] = (
-                        subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-                    )
+                    popen_kwargs["creationflags"] = NO_WINDOW_NEW_GROUP
                 self._proc = subprocess.Popen(cmd, **popen_kwargs)
             except FileNotFoundError as exc:
                 raise RuntimeError(f"❌ python launcher not found: {exc}") from exc

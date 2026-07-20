@@ -37,12 +37,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
 RENEW_WITHIN_DAYS = 30
 
+# ``--check`` is spawned from the (windowless) tray/webapp, so a plain
+# subprocess.run here would flash a new console — see #207.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def _tailscale_hostname() -> str:
     result = subprocess.run(
         ["tailscale", "status", "--json"],
         capture_output=True,
         text=True,
+        creationflags=_NO_WINDOW,
     )
     if result.returncode != 0:
         raise SystemExit("tailscale status failed. Is tailscale running?")
@@ -96,6 +101,7 @@ def _provision(hostname: str) -> None:
         ],
         capture_output=True,
         text=True,
+        creationflags=_NO_WINDOW,
     )
     if result.returncode != 0:
         msg = (result.stderr or result.stdout).strip()

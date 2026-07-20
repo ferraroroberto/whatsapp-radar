@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
+from src.subprocess_flags import NO_WINDOW_DETACHED
 
 # States, ordered roughly worst → best for the UI to colour.
 STATE_STOPPED = "stopped"
@@ -254,7 +255,7 @@ def launch_sidecar(
             stdout=log_fh,
             stderr=subprocess.STDOUT,
             env=child_env,
-            creationflags=_creationflags(),
+            creationflags=NO_WINDOW_DETACHED,
             close_fds=True,
         )
     except OSError as exc:
@@ -272,13 +273,6 @@ def launch_sidecar(
 
 def _default_spawner(*args: Any, **kwargs: Any) -> subprocess.Popen[bytes]:
     return subprocess.Popen(*args, **kwargs)
-
-
-def _creationflags() -> int:
-    flags = 0
-    for name in ("CREATE_NO_WINDOW", "DETACHED_PROCESS"):
-        flags |= getattr(subprocess, name, 0)
-    return flags
 
 
 def ensure_running(

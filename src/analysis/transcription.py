@@ -48,6 +48,7 @@ from src.analysis._common import Progress, _emit
 from src.config import Config, TranscriptionConfig
 from src.db import store
 from src.models import StoredMessage
+from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ def _read_as_wav(path: Path) -> tuple[bytes, str]:
         proc = subprocess.run(
             [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(path),
              "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"],
-            capture_output=True, check=True,
+            capture_output=True, check=True, creationflags=NO_WINDOW,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         detail = getattr(exc, "stderr", b"") or b""

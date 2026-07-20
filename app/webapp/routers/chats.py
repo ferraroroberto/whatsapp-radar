@@ -28,6 +28,7 @@ from src.analysis import summarize as summarize_client
 from src.analysis.tripwire import scan_tripwire
 from src.config import load_config
 from src.db import store
+from src.subprocess_flags import NO_WINDOW
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ def _transcode_to_mp3(src: Path) -> bytes:
     proc = subprocess.run(
         [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(src),
          "-vn", "-ac", "1", "-ar", "24000", "-b:a", "64k", "-f", "mp3", "pipe:1"],
-        capture_output=True, check=True,
+        capture_output=True, check=True, creationflags=NO_WINDOW,
     )
     return proc.stdout
 

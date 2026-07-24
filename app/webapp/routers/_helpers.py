@@ -4,6 +4,7 @@ lives here instead.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -88,6 +89,21 @@ def hub_base_url(request: Request) -> str:
     """
     base = getattr(request.app.state, "hub_base_url", None)
     return str(base) if base is not None else load_config().hub.base_url
+
+
+def loads_json_column(value: Any) -> Any:
+    """Parse a stored JSON column, tolerating null/blank/non-JSON values.
+
+    Every JSON column is TEXT written by this app via ``json.dumps``, so a
+    parse failure means the value is unexpectedly absent rather than a
+    structure worth surfacing raw — treat it as ``None``, same as null/blank.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return json.loads(value)
+    except (ValueError, TypeError):
+        return None
 
 
 def tts_profiles(request: Request) -> TtsConfig:

@@ -24,14 +24,13 @@ a second request returns 409.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.webapp import runs
-from app.webapp.routers._helpers import db_path, get_conn, maybe_json
+from app.webapp.routers._helpers import db_path, get_conn, loads_json_column, maybe_json
 from src.config import load_config
 from src.connector.factory import build_connectors
 from src.connector.gmail import GmailConnector
@@ -288,15 +287,6 @@ async def list_syncs(
     return {"syncs": rows, "totals": totals}
 
 
-def _loads(value: Any) -> Any:
-    if not value:
-        return None
-    try:
-        return json.loads(value)
-    except (ValueError, TypeError):
-        return None
-
-
 def _fs_mode(record: dict[str, Any]) -> str:
     argv = record.get("argv") or []
     return "dry_run" if "--dry-run" in argv else "live"
@@ -312,7 +302,7 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
     rid = int(row["id"])
     kind = row["kind"]
     if kind in ("calendar-scan", "traffic-check"):
-        result = _loads(row["summary_json"])
+        result = loads_json_column(row["summary_json"])
     else:
         result = {
             "kind": kind,
@@ -327,7 +317,7 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
                 "actionable": int(row["actionable"]),
             },
             "notification_status": row["notification_status"],
-            "sources": _loads(row["source_funnel_json"]) or {},
+            "sources": loads_json_column(row["source_funnel_json"]) or {},
         }
     return {
         "kind": kind,

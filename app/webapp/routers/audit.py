@@ -16,7 +16,6 @@ trace). It never triggers scans — that is the Execution tab (#11).
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from math import ceil
@@ -24,7 +23,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.webapp.routers._helpers import get_conn
+from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
 
 router = APIRouter()
@@ -33,18 +32,6 @@ router = APIRouter()
 # Surfaced in the audit timeline so resync/reprocess are visible alongside runs;
 # 'scan'-sourced syncs are omitted because scans already appear as review_runs.
 _MAINTENANCE_SOURCES = {"resync", "reprocess"}
-
-
-def _loads(value: Any) -> Any:
-    """Parse a stored JSON column, tolerating null/blank/legacy non-JSON text."""
-    if value is None or value == "":
-        return None
-    if not isinstance(value, str):
-        return value
-    try:
-        return json.loads(value)
-    except (ValueError, TypeError):
-        return value
 
 
 def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
@@ -57,15 +44,15 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": int(row["id"]),
         "kind": row["kind"],
-        "summary": _loads(row["summary_json"]),
+        "summary": loads_json_column(row["summary_json"]),
         "mode": row["mode"],
         "status": row["status"],
-        "params": _loads(row["params_json"]),
+        "params": loads_json_column(row["params_json"]),
         "started_at": row["started_at"],
         "completed_at": row["completed_at"],
         "notification_status": row["notification_status"],
         "error": row["error"],
-        "sources": _loads(row["source_funnel_json"]) or {},
+        "sources": loads_json_column(row["source_funnel_json"]) or {},
         "funnel": {
             "chats_synced": int(row["chats_synced"]),
             "messages_synced": int(row["messages_synced"]),
@@ -126,17 +113,17 @@ def _trace_row(row: sqlite3.Row) -> dict[str, Any]:
         "chat_id": int(row["chat_id"]),
         "source": row["source"],
         "display_name": row["display_name"],
-        "input_message_ids": _loads(row["input_message_ids_json"]),
+        "input_message_ids": loads_json_column(row["input_message_ids_json"]),
         "input_text": row["input_text"],
-        "messages": _loads(row["messages_json"]),
+        "messages": loads_json_column(row["messages_json"]),
         "stage1_passed": bool(row["stage1_passed"]),
-        "stage1_roots": _loads(row["stage1_roots_json"]),
-        "stage1_buckets": _loads(row["stage1_buckets_json"]),
+        "stage1_roots": loads_json_column(row["stage1_roots_json"]),
+        "stage1_buckets": loads_json_column(row["stage1_buckets_json"]),
         "llm_called": bool(row["llm_called"]),
         "llm_system_prompt": row["llm_system_prompt"],
         "llm_user_prompt": row["llm_user_prompt"],
         "llm_raw_response": row["llm_raw_response"],
-        "parsed_result": _loads(row["parsed_result_json"]),
+        "parsed_result": loads_json_column(row["parsed_result_json"]),
         "final_action": row["final_action"],
         "telegram_text": row["telegram_text"],
         "error": row["error"],
@@ -152,9 +139,9 @@ def _filtered_trace_row(row: sqlite3.Row) -> dict[str, Any]:
         "source": row["source"],
         "display_name": row["display_name"],
         "stage1_passed": bool(row["stage1_passed"]),
-        "stage1_roots": _loads(row["stage1_roots_json"]),
+        "stage1_roots": loads_json_column(row["stage1_roots_json"]),
         "llm_called": bool(row["llm_called"]),
-        "parsed_result": _loads(row["parsed_result_json"]),
+        "parsed_result": loads_json_column(row["parsed_result_json"]),
         "final_action": row["final_action"],
     }
 

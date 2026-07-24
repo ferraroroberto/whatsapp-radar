@@ -8,13 +8,12 @@ no cursor changes — so it is safe on the request path.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from app.webapp.routers._helpers import get_conn
+from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
 
 router = APIRouter()
@@ -40,16 +39,6 @@ def _run_summary(row: sqlite3.Row | None) -> dict[str, Any] | None:
     }
 
 
-def _loads(value: Any) -> Any:
-    """Parse a stored JSON column, tolerating null/blank/legacy non-JSON text."""
-    if not value or not isinstance(value, str):
-        return None
-    try:
-        return json.loads(value)
-    except (ValueError, TypeError):
-        return None
-
-
 def _never() -> dict[str, Any]:
     return {"kind": None, "db_run_id": None, "started_at": None,
             "status": None, "alerts": 0, "summary": ""}
@@ -65,7 +54,7 @@ def _message_activity(runs: list[sqlite3.Row], source: str) -> dict[str, Any]:
     for row in runs:
         if row["kind"] not in _MESSAGE_KINDS:
             continue
-        funnel = (_loads(row["source_funnel_json"]) or {}).get(source)
+        funnel = (loads_json_column(row["source_funnel_json"]) or {}).get(source)
         if funnel is None:
             continue
         synced = int(funnel.get("messages_synced") or 0)
@@ -86,7 +75,7 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     row = next((r for r in runs if r["kind"] == "traffic-check"), None)
     if row is None:
         return _never()
-    result = _loads(row["summary_json"]) or {}
+    result = loads_json_column(row["summary_json"]) or {}
     alerts = int(result.get("alerts") or 0)
     checked = len(result.get("checked") or [])
     rstatus = result.get("status")
@@ -115,7 +104,7 @@ def _calendar_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     row = next((r for r in runs if r["kind"] == "calendar-scan"), None)
     if row is None:
         return _never()
-    result = _loads(row["summary_json"]) or {}
+    result = loads_json_column(row["summary_json"]) or {}
     conflicts = len(result.get("conflicts") or [])
     # Renamed unknown_locations -> missing_locations in #168; old rows persist.
     missing = len(result.get("missing_locations") or result.get("unknown_locations") or [])

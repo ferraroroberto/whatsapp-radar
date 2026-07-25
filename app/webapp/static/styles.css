@@ -484,7 +484,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 #chatsCount { margin: 0 2px 10px; }
 
 .tripwire-row {
-  min-height: 56px;
+  min-height: 52px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -1119,6 +1119,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .audit-gap-li:last-child { border-bottom: 0; }
 .audit-gap-title { color: var(--attention); font-size: var(--font-label); }
+.audit-gap-title .icon { margin-right: var(--space-xs); }
 .audit-gap-range { color: var(--ink); font-size: var(--font-caption); }
 
 /* Maintenance markers (resync / reprocess) interleaved into the timeline. */
@@ -1238,6 +1239,10 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .family-rules dt,
 .family-rules dd { margin: 0; }
+/* Missing-credential notices (#209): the leading glyph stays in inline flow so
+   the copy wraps naturally under it on a phone — a flex row would centre the
+   icon against the whole wrapped block. */
+.family-warn .icon { margin-right: var(--space-xs); }
 
 /* Editable schedule (#167): field-group headings, one childcare-window block
    per row, and a weekday multi-select rendered as a chip row. */

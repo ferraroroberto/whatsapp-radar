@@ -103,11 +103,21 @@ function renderReadOnly(box) {
   box.append(dl);
 
   if (!d.token_present) {
-    box.append(el('p', 'muted small', '⚠️ No Calendar token — run the bootstrap (see docs/calendar-bootstrap.md).'));
+    box.append(warnNote('No Calendar token — run the bootstrap (see docs/calendar-bootstrap.md).'));
   }
   if (!d.traffic.api_key_set) {
-    box.append(el('p', 'muted small', '⚠️ No Routes API key configured — traffic checks will error.'));
+    box.append(warnNote('No Routes API key configured — traffic checks will error.'));
   }
+}
+
+// A missing-credential notice. The glyph is the sprite's triangle-alert, not an
+// emoji, so the tab carries one icon set (design.md Icons contract, #209).
+function warnNote(text) {
+  const p = el('p', 'muted small family-warn');
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  p.innerHTML = icon('triangle-alert');
+  p.append(text);
+  return p;
 }
 
 // -------------------------------------------------------------- widgets

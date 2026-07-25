@@ -11,6 +11,7 @@
 import { els, state } from './state.js';
 import { jsonApi } from './api.js';
 import { fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
+import { icon } from './_vendored/icons/icons.js';
 
 function auditState() { return state.audit; }
 
@@ -154,7 +155,9 @@ function coverageGapItem(gap) {
 
   const title = document.createElement('strong');
   title.className = 'audit-gap-title';
-  title.textContent = '⚠ Coverage gap';
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  title.innerHTML = icon('triangle-alert');
+  title.append('Coverage gap');
 
   const range = document.createElement('span');
   range.className = 'audit-gap-range';

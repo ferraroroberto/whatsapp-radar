@@ -238,6 +238,66 @@ def test_leave_now_alerts_on_live_fix_at_departure_moment(
     assert entry["alerted"] is False  # 0-min delay, so no separate delay alert
 
 
+def test_leave_now_merges_when_two_people_share_identical_event_text(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Both roberto and ana are live-tracked, overdue for the same shared event,
+    # with the same resulting text (#213) — one combined Telegram message, not
+    # two redundant ones.
+    harness["events"] = {
+        "roberto": [
+            _event("Movento", location=WORK,
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=2), eid="a")
+        ],
+        "ana": [
+            _event("Movento", location=WORK,
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=2), eid="b")
+        ],
+    }
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # 50 min, no delay
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    recorded: list[str] = []
+    monkeypatch.setattr(traffic_check.dedup, "record_alert",
+                        lambda key, **kw: recorded.append(key))
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    assert harness["sent"] == ['🚗 Leave now — roberto and ana: “Movento”. '
+                                'Drive is ~50 min with traffic; it starts at 09:30.']
+    assert payload["alerts"] == 1
+    entries = [e for e in payload["checked"] if e["leave_now_alerted"]]
+    assert len(entries) == 2  # both legs marked alerted from the one send
+    # Each person's own dedup key is still recorded so a later run doesn't
+    # re-fire for either of them individually.
+    assert sorted(recorded) == sorted([
+        "ana::movento::leave-now", "roberto::movento::leave-now",
+    ])
+
+
+def test_leave_now_not_merged_when_event_start_differs(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Same event name and live drive time, but different start times ⇒ the
+    # resulting text actually differs ("starts at HH:MM"), so no merge.
+    harness["events"] = {
+        "roberto": [
+            _event("Movento", location=WORK,
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=2), eid="a")
+        ],
+        "ana": [
+            _event("Movento", location=WORK,
+                   start=NOW + timedelta(minutes=40), end=NOW + timedelta(hours=2), eid="b")
+        ],
+    }
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # 50 min, both overdue
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    assert len(harness["sent"]) == 2 and payload["alerts"] == 2
+    assert not any(" and " in t for t in harness["sent"])
+    assert any("roberto" in t for t in harness["sent"])
+    assert any("ana" in t for t in harness["sent"])
+
+
 def test_leave_now_silent_when_departure_not_yet_due(
     harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -12,7 +12,10 @@ The leave-now alert (#185) closes the loop from *detection* to *action*: when a
 live phone fix puts the person far enough out that ``event.start - (now + eta +
 leave_margin_min) <= 0``, one Telegram nudge fires, deduped independently of the
 delay alert so both can coexist for one event. A calendar-inference origin never
-triggers it — no real position, no claim about where the person is.
+triggers it — no real position, no claim about where the person is. When more
+than one person's leave-now resolves to identical text (same event, ETA, and
+start — #213), they are combined into one message naming everyone instead of
+one redundant message per person.
 
 Origin resolution (#169): the responsible person's *live phone position* when
 home-automation reports a fresh fix, else the calendar-inference chain (home, or
@@ -56,10 +59,10 @@ def _infeasible_text(person: str, leg_summary: str, travel_min: int, gap_min: in
 
 
 def _leave_now_text(
-    person: str, leg_summary: str, eta_min: int, event_start: datetime
+    people: list[str], leg_summary: str, eta_min: int, event_start: datetime
 ) -> str:
     return (
-        f"🚗 Leave now — {person}: “{leg_summary}”. "
+        f"🚗 Leave now — {' and '.join(people)}: “{leg_summary}”. "
         f"Drive is ~{eta_min} min with traffic; it starts at "
         f"{event_start.strftime('%H:%M')}."
     )
@@ -120,6 +123,10 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
 
     checked: list[dict[str, Any]] = []
     alerts = 0
+    # Leave-now candidates ready to fire, grouped by the parts of the message
+    # that would otherwise be identical (#213) — merged into one send per group
+    # once every leg has been checked.
+    pending_leave_now: dict[tuple[str, datetime, int], list[dict[str, Any]]] = {}
     for leg in legs:
         key = rules.dedup_key(leg.person, leg.event.summary)
         origin = _resolve_origin_for_leg(config, leg, now=now)
@@ -199,18 +206,27 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             alerts += 1
 
         # A distinct dedup key lets a leave-now alert coexist with a delay alert
-        # for the same event without either suppressing the other.
+        # for the same event without either suppressing the other. Sending is
+        # deferred until every leg is checked, so people sharing one event with
+        # identical resulting text (#213) can be merged into one message.
         leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
         if leave_now and leave_key not in recent:
-            if not dry_run:
-                send_alert(config, _leave_now_text(
-                    leg.person, leg.event.summary, result.traffic_s // 60, leg.event.start
-                ))
-                dedup.record_alert(leave_key, now=now)
-                recent.add(leave_key)
-            entry["leave_now_alerted"] = True
-            alerts += 1
+            group_key = (leg.event.summary, leg.event.start, result.traffic_s // 60)
+            pending_leave_now.setdefault(group_key, []).append(
+                {"person": leg.person, "leave_key": leave_key, "entry": entry}
+            )
         checked.append(entry)
+
+    for (summary, event_start, eta_min), items in pending_leave_now.items():
+        if not dry_run:
+            people = [item["person"] for item in items]
+            send_alert(config, _leave_now_text(people, summary, eta_min, event_start))
+            for item in items:
+                dedup.record_alert(item["leave_key"], now=now)
+                recent.add(item["leave_key"])
+        for item in items:
+            item["entry"]["leave_now_alerted"] = True
+        alerts += 1
 
     return {
         "kind": "traffic-check", "status": "ok",

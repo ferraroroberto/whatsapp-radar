@@ -1,11 +1,12 @@
 # Calendar + traffic bootstrap
 
-This runbook provisions the two Google credentials the family checks need (issue #160):
+This runbook provisions the Google credentials the family checks (issue #160) and school-radar calendar reminders (issue #206) need:
 
 1. A read-only **Google Calendar** installed-app OAuth refresh token (`calendar.readonly` only), mirroring [`gmail-bootstrap.md`](gmail-bootstrap.md).
-2. A **Google Routes API** key for the traffic-jam check (API-key auth, a separate credential path from OAuth).
+2. A separate **write-scope** Calendar token (`calendar.events` only, #217) for reminder-event creation — its own grant, since scopes can't be upgraded in place on an existing token.
+3. A **Google Routes API** key for the traffic-jam check (API-key auth, a separate credential path from OAuth).
 
-Both stay under ignored local paths. Never commit `auth/calendar/`, the Maps API key, real addresses, calendar ids, or token output.
+All stay under ignored local paths. Never commit `auth/calendar/`, the Maps API key, real addresses, calendar ids, or token output.
 
 ## 1. Install dependencies
 
@@ -81,7 +82,48 @@ Never paste the token into config, docs, logs, or chat. The scheduled checks ref
 
 Repeat `--calendar` for each household calendar id. The smoke prints only privacy-safe aggregates (a masked summary + event count + soonest date), never full titles.
 
-## 8. Routes API key (traffic check)
+## 8. Write-scope token — event creation (#217)
+
+Reminder events (Step 4/5 of #206) need a **separate** OAuth grant: Google Calendar scopes cannot be upgraded in place on an existing token, so the read-only token from step 6 above can never gain write access. This mints a second, independent token.
+
+Open **Google Auth Platform → Data Access** again and add, alongside `calendar.readonly`:
+
+```text
+https://www.googleapis.com/auth/calendar.events
+```
+
+Do not add the broader `calendar` scope — `calendar.events` is the narrowest scope that permits event insert/update/delete without also granting calendar-list or ACL changes. It can reuse the same Desktop OAuth client (`auth/calendar/credentials.json`) and the same Cloud project.
+
+Run once, interactively, from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.auth_calendar_write
+```
+
+It opens the system browser on a loopback callback, separate from step 6's consent. Confirm the request is scoped to **Calendar events** (not full Calendar access) and approve. Google redirects back to localhost and the script writes:
+
+```text
+auth/calendar/write_token.json
+```
+
+Confirm the token is ignored without displaying its contents:
+
+```powershell
+git check-ignore auth\calendar\write_token.json
+Test-Path auth\calendar\write_token.json
+```
+
+Never paste the token into config, docs, logs, or chat — same discipline as the read-only token, and never reuse or overwrite `auth/calendar/token.json` with it.
+
+### Validate the write path (non-interactive)
+
+Creates one throwaway test event a few minutes out, confirms it round-trips with an id, then deletes it again — nothing is left behind:
+
+```powershell
+.\.venv\Scripts\python.exe -m calendar_write.smoke --calendar you@example.com
+```
+
+## 9. Routes API key (traffic check)
 
 Open **APIs & Services → Credentials → Create credentials → API key**. Restrict the key to the **Routes API** (Application restrictions may stay "None" for a server-side local job). Provide it to the checks via the ignored `config/local.json` (a `traffic` section, added with the main #160 build) or the `GOOGLE_MAPS_API_KEY` environment variable. Validate live:
 
@@ -94,8 +136,8 @@ Expected output is one line: normal vs. traffic minutes, the delay, and a `NORMA
 
 ## Rotation / recovery
 
-1. Remove the app grant from [Google Account third-party access](https://myaccount.google.com/connections).
-2. Delete only `auth/calendar/token.json` (never `data/`).
-3. Re-run `python -m scripts.auth_calendar`.
+1. Remove the app grant from [Google Account third-party access](https://myaccount.google.com/connections) — this revokes **both** the read-only and write-scope tokens at once, since they share the same OAuth client/consent.
+2. Delete `auth/calendar/token.json` and/or `auth/calendar/write_token.json` (never `data/`) — whichever grant is being rotated.
+3. Re-run `python -m scripts.auth_calendar` (read-only) and/or `python -m scripts.auth_calendar_write` (write-scope) as needed.
 
 Rotate the Routes API key from the Cloud Console Credentials page; update `config/local.json` / the env var.

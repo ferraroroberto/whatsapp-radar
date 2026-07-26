@@ -15,6 +15,7 @@ _ENV_KEYS = (
     "WR_FAMILY_ENABLED",
     "WR_CALENDAR_TOKEN_PATH",
     "WR_CALENDAR_CREDENTIALS_PATH",
+    "WR_CALENDAR_WRITE_TOKEN_PATH",
     "WR_PRESENCE_ENABLED",
     "WR_PRESENCE_BASE_URL",
 )
@@ -88,11 +89,27 @@ def test_family_defaults_disabled(tmp_path, _clean_env):
     assert cfg.traffic.cadence_min == 30  # new #164 default
     assert cfg.family.enabled is False
     assert cfg.calendar.accounts == ()
+    # Write-scope token (#217) defaults to a sibling path of the read-only token.
+    assert cfg.calendar.write_token_path.as_posix().endswith("auth/calendar/write_token.json")
     # Presence (#169) defaults: disabled, loopback home-automation, 5-min freshness.
     assert cfg.presence.enabled is False
     assert cfg.presence.base_url == "http://127.0.0.1:8447"
     assert cfg.presence.max_age_min == 5
     assert cfg.presence.person_aliases == {}
+
+
+def test_calendar_write_token_path_override(tmp_path, _clean_env):
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    (cfg_dir / "default.json").write_text(
+        json.dumps({"db_path": "data/x.sqlite3"}), encoding="utf-8"
+    )
+    (cfg_dir / "local.json").write_text(
+        json.dumps({"calendar": {"write_token_path": "auth/calendar/custom_write.json"}}),
+        encoding="utf-8",
+    )
+    cfg = load_config(root=tmp_path)
+    assert cfg.calendar.write_token_path == tmp_path / "auth" / "calendar" / "custom_write.json"
 
 
 def test_presence_config_parsing(tmp_path, _clean_env):

@@ -45,6 +45,7 @@
   "calendar": {
     "credentials_path": "auth/calendar/credentials.json",
     "token_path": "auth/calendar/token.json",
+    "write_token_path": "auth/calendar/write_token.json",
     "accounts": []
   },
   "traffic": {

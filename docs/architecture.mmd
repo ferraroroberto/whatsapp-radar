@@ -113,6 +113,10 @@ flowchart TB
   FSOURCE --> CALCLIENT
   FTRAFFIC --> ROUTESCLIENT
 
+  subgraph calwrite["calendar_write/ — Google write client (#217, staged for Step 4/5 of #206)"]
+    CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete; not yet called —\nevent creation wiring is a later step"]
+  end
+
   subgraph presence["src/presence/ — live phone location (#169, read-only)"]
     PCLIENT["client.py — get_location: resolve person,\nderive freshness from last_seen (never trust 'stale'),\nrefresh when stale; typed result, coords never persisted"]
   end
@@ -174,6 +178,7 @@ flowchart TB
     FFMPEG["ffmpeg — voice-note transcode (OGG -> WAV/MP3)"]
     GMAILAPI["Gmail API — gmail.readonly\nOAuth token under auth/gmail/"]
     CALAPI["Google Calendar API — calendar.readonly\nOAuth token under auth/calendar/"]
+    CALWRITEAPI["Google Calendar API — calendar.events\nOAuth token under auth/calendar/write_token.json"]
     ROUTESAPI["Google Routes API v2 — API key"]
   end
   CLASSIFIER -->|hub / cascade mode| HUB
@@ -185,4 +190,5 @@ flowchart TB
   TRANSCRIBE --> FFMPEG
   GMAILCORE --> GMAILAPI
   CALCLIENT --> CALAPI
+  CALWRITECLIENT --> CALWRITEAPI
   ROUTESCLIENT --> ROUTESAPI

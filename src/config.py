@@ -200,10 +200,17 @@ class CalendarAccount:
 
 @dataclass(frozen=True)
 class CalendarConfig:
-    """Read-only Google Calendar credentials + the household calendars (#160)."""
+    """Read-only Google Calendar credentials + the household calendars (#160).
+
+    ``write_token_path`` (#217) is a separate credential for the write-scope
+    adapter (``calendar_write``) — Google Calendar OAuth scopes cannot be
+    upgraded in place on an existing token, so event creation needs its own
+    grant and its own token file, distinct from ``token_path`` above.
+    """
 
     credentials_path: Path = Path("auth/calendar/credentials.json")
     token_path: Path = Path("auth/calendar/token.json")
+    write_token_path: Path = Path("auth/calendar/write_token.json")
     accounts: tuple[CalendarAccount, ...] = ()
 
 
@@ -499,6 +506,14 @@ def _parse_calendar(raw: dict[str, Any], root: Path) -> CalendarConfig:
     )
     if not token.is_absolute():
         token = root / token
+    write_token = Path(
+        os.environ.get(
+            "WR_CALENDAR_WRITE_TOKEN_PATH",
+            raw.get("write_token_path", "auth/calendar/write_token.json"),
+        )
+    )
+    if not write_token.is_absolute():
+        write_token = root / write_token
     accounts = tuple(
         CalendarAccount(
             calendar_id=str(item.get("calendar_id", "")).strip(),
@@ -508,7 +523,9 @@ def _parse_calendar(raw: dict[str, Any], root: Path) -> CalendarConfig:
         for item in raw.get("accounts", [])
         if isinstance(item, dict) and str(item.get("calendar_id", "")).strip()
     )
-    return CalendarConfig(credentials_path=creds, token_path=token, accounts=accounts)
+    return CalendarConfig(
+        credentials_path=creds, token_path=token, write_token_path=write_token, accounts=accounts
+    )
 
 
 def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:

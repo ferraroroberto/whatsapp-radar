@@ -30,7 +30,7 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Browser, Page, Playwright
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 
 def _app_padding(page: Page) -> dict[str, str]:

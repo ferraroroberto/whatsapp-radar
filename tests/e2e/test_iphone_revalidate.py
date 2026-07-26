@@ -15,7 +15,7 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Page, Response
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 
 def test_index_cache_control_visible_to_webkit(

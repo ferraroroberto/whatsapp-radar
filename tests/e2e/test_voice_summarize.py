@@ -57,6 +57,7 @@ def _open_class_4a_history(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_summarize_long_message(page: Page, base_url: str) -> None:
     # Mock the hub round-trip so the test is deterministic and offline.
     page.route(
@@ -81,6 +82,7 @@ def test_summarize_long_message(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: str) -> None:
     page.add_init_script(_AUDIO_MOCK)
     summarized_ids: list[str] = []

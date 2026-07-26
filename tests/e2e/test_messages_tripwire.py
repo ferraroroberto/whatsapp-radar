@@ -7,6 +7,7 @@ from playwright.sync_api import Page, expect
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_tripwire_card_promotes_candidate_in_one_tap(page: Page, base_url: str) -> None:
     chats_payload = {
         "chats": [

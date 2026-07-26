@@ -16,6 +16,7 @@ from playwright.sync_api import Page, expect
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_audit_collapses_offline_window_into_one_gap_marker(
     page: Page, base_url: str
 ) -> None:
@@ -68,6 +69,7 @@ def test_audit_collapses_offline_window_into_one_gap_marker(
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> None:
     run_payload = {
         "runs": [],
@@ -134,6 +136,10 @@ def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> N
     expect(page.locator("#auditDetailTitle")).to_contain_text("#7")
 
 
+# Not @pytest.mark.live_safe (issue #225): clicks #execRunScan, firing the
+# real backend pipeline unmocked — under WR_E2E_LIVE this would run whatever
+# connector/classifier the live tray is actually configured with, not the
+# stub/fixture env autoboot injects. Stays out of live mode until mocked.
 @pytest.mark.smoke
 def test_audit_drilldown_shows_trace(
     page: Page, base_url: str, scaled: Callable[[float], int]

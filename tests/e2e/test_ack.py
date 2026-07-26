@@ -12,6 +12,7 @@ from playwright.sync_api import Page, Route, expect
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_ack_list_and_acknowledge(page: Page, base_url: str) -> None:
     items_payload = {
         "items": [
@@ -59,6 +60,7 @@ def test_ack_list_and_acknowledge(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_ack_empty_state(page: Page, base_url: str) -> None:
     page.route("**/api/ack/items", lambda route: route.fulfill(json={"items": []}))
 

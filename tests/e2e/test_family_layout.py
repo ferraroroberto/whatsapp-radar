@@ -23,7 +23,7 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Browser, Playwright
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 
 def _open_family_with_two_new_windows(page, base_url: str, scaled: Callable[[float], int]) -> None:

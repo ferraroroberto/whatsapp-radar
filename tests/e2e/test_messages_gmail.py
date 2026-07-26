@@ -14,6 +14,9 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
+# Not @pytest.mark.live_safe (issue #225): clicks the unmocked .chat-watch
+# promote/demote toggle, which would flip a real sender's monitored status
+# via a real, un-mocked API call if pointed at the live tray.
 @pytest.mark.smoke
 def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str) -> None:
     page.goto(base_url)

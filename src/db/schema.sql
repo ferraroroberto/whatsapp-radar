@@ -151,7 +151,8 @@ CREATE TABLE IF NOT EXISTS analysis_items (
     created_at                TEXT NOT NULL,
     child                     TEXT,            -- resolved registered child name, Gmail-school only (#215)
     task_category             TEXT,            -- short free-text task category (#215)
-    prep_complexity           TEXT             -- 'routine' | 'non_routine' (#215)
+    prep_complexity           TEXT,            -- 'routine' | 'non_routine' (#215)
+    calendar_event_id         TEXT             -- created reminder event id, routine items only (#218)
 );
 
 CREATE TABLE IF NOT EXISTS notifications (

@@ -29,6 +29,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from calendar_write import CalendarWriteClient
+
 from src.analysis._common import Progress, _emit
 from src.analysis.classifier import (
     ClassificationOutcome,
@@ -37,6 +39,13 @@ from src.analysis.classifier import (
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
+from src.analysis.reminders import (
+    build_client as build_calendar_client,
+)
+from src.analysis.reminders import (
+    create_reminder_event,
+    is_eligible,
+)
 from src.analysis.review import (
     advance_family_cursors,
     hold_back_if_transcribing,
@@ -332,6 +341,7 @@ def scan(
     connector: MessageConnector | None = None,
     connectors: list[ConnectorBinding] | None = None,
     classifier: TracedClassifier | None = None,
+    calendar_client: CalendarWriteClient | None = None,
     progress: Progress | None = None,
 ) -> ScanOutcome:
     """Run one scan: sync (live) -> analyze monitored deltas -> digest -> deliver.
@@ -339,6 +349,14 @@ def scan(
     ``connector`` and ``classifier`` may be injected (tests, alternate wiring);
     otherwise they are built from ``config``. ``days`` windows the dry-run replay.
     ``progress`` receives human-readable stage lines for live output.
+
+    ``calendar_client`` may also be injected (tests); otherwise it is built lazily
+    from ``config.calendar.write_token_path`` the first time it's needed, and only
+    when ``config.family.reminder_calendar_id`` is configured — an unset reminder
+    calendar or a missing/invalid write token both leave it ``None``, which simply
+    means no routine-prep reminder events are created this run (#218). Reminder
+    creation is live-mode only: dry-run replays the same messages on every call,
+    which would otherwise mint a fresh duplicate event each time.
     """
     _emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
     run_id = store.start_run(
@@ -350,6 +368,11 @@ def scan(
     stage2 = classifier if classifier is not None else build_stage2_classifier(
         config.classifier, config.hub, config.children
     )
+    if calendar_client is None and mode == "live" and config.family.reminder_calendar_id:
+        try:
+            calendar_client = build_calendar_client(config.calendar)
+        except (FileNotFoundError, RuntimeError) as exc:
+            _emit(progress, f"⚠ calendar reminders disabled: {exc}")
 
     if mode == "live":
         live_bindings = connectors
@@ -494,7 +517,29 @@ def scan(
             )
             continue
 
-        persist_analysis_result(conn, run_id, chat_id, result)
+        item_id = persist_analysis_result(conn, run_id, chat_id, result)
+
+        # Additive only — never touches the Telegram digest path below (#218).
+        # live-only: dry-run replays the same messages every call, which would
+        # otherwise mint a fresh duplicate event each time. The reminder-calendar
+        # check guards even an injected client (tests) against writing to an
+        # unconfigured (empty-string) calendar id.
+        if (
+            mode == "live"
+            and calendar_client is not None
+            and config.family.reminder_calendar_id
+            and is_eligible(result)
+        ):
+            create_reminder_event(
+                conn,
+                calendar_client,
+                calendar_id=config.family.reminder_calendar_id,
+                family=config.family,
+                chat_id=chat_id,
+                item_id=item_id,
+                chat_display_name=chat["display_name"],
+                result=result,
+            )
 
         telegram_text: str | None = None
         final_action = "not_actionable"

@@ -53,6 +53,8 @@ def test_family_config_parsing(tmp_path, _clean_env):
                         "end_time": "17:00",
                     },
                 ],
+                "reminder_calendar_id": "family@example.test",
+                "reminder_time": "08:00",
             },
         }),
         encoding="utf-8",
@@ -77,6 +79,10 @@ def test_family_config_parsing(tmp_path, _clean_env):
     assert cfg.calendar.accounts[0].calendar_id == "a@x"
     assert cfg.calendar.accounts[0].person == "roberto"  # lowercased
 
+    # Routine-prep calendar reminders (#218)
+    assert cfg.family.reminder_calendar_id == "family@example.test"
+    assert cfg.family.reminder_time == "08:00"
+
 
 def test_family_defaults_disabled(tmp_path, _clean_env):
     cfg_dir = tmp_path / "config"
@@ -88,6 +94,8 @@ def test_family_defaults_disabled(tmp_path, _clean_env):
     assert cfg.traffic.enabled is False
     assert cfg.traffic.cadence_min == 30  # new #164 default
     assert cfg.family.enabled is False
+    assert cfg.family.reminder_calendar_id == ""  # feature off by default (#218)
+    assert cfg.family.reminder_time == "07:30"
     assert cfg.calendar.accounts == ()
     # Write-scope token (#217) defaults to a sibling path of the read-only token.
     assert cfg.calendar.write_token_path.as_posix().endswith("auth/calendar/write_token.json")

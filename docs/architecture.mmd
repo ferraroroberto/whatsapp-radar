@@ -49,6 +49,7 @@ flowchart TB
     CONTRACT["contract.py — parse_analysis / AnalysisResult"]
     REVIEW["review.py — cursor advance + alert memory"]
     SURVEY["gmail_survey.py — bounded whitelist survey\n-> generic Gmail taxonomy/rules"]
+    REMINDERS["reminders.py — routine-prep -> morning reminder event\nidempotent on evidence_message_ids; live-mode only (#218)"]
   end
   CLICMDS --> SCAN
   RUNS --> SCAN
@@ -58,6 +59,7 @@ flowchart TB
   SCAN --> CLASSIFIER
   CLASSIFIER --> CONTRACT
   SCAN --> REVIEW
+  SCAN --> REMINDERS
   CLICMDS --> SURVEY
 
   subgraph connector["src/connector/ — read-only connector boundary"]
@@ -113,9 +115,10 @@ flowchart TB
   FSOURCE --> CALCLIENT
   FTRAFFIC --> ROUTESCLIENT
 
-  subgraph calwrite["calendar_write/ — Google write client (#217, staged for Step 4/5 of #206)"]
-    CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete; not yet called —\nevent creation wiring is a later step"]
+  subgraph calwrite["calendar_write/ — Google write client (#217)"]
+    CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete"]
   end
+  REMINDERS --> CALWRITECLIENT
 
   subgraph presence["src/presence/ — live phone location (#169, read-only)"]
     PCLIENT["client.py — get_location: resolve person,\nderive freshness from last_seen (never trust 'stale'),\nrefresh when stale; typed result, coords never persisted"]

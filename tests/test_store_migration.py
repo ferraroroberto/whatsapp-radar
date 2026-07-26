@@ -325,6 +325,42 @@ def test_connect_migrates_analysis_items_child_fields(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_connect_migrates_analysis_items_calendar_event_id(tmp_path: Path) -> None:
+    """A pre-#218 analysis_items table gains `calendar_event_id`; old rows stay NULL."""
+    db = tmp_path / "legacy_items_calendar.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_ANALYSIS_ITEMS)
+    raw.execute(
+        "INSERT INTO analysis_items (run_id, chat_id, action_required, summary, created_at) "
+        "VALUES (1, 1, 1, 'Bring costume', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
+        assert "calendar_event_id" in cols
+        row = conn.execute(
+            "SELECT calendar_event_id FROM analysis_items WHERE id = 1"
+        ).fetchone()
+        assert row["calendar_event_id"] is None
+        item_id = store.insert_analysis_item(
+            conn, 1, 1,
+            action_required=True, priority="high", summary="Costume day",
+            suggested_next_action="Prepare costume", deadline="Friday",
+            deadline_date="2026-06-12", confidence=0.9, evidence_message_ids_json="[]",
+            child="Example Child", task_category="outing", prep_complexity="routine",
+            calendar_event_id="evt-1",
+        )
+        got = conn.execute(
+            "SELECT calendar_event_id FROM analysis_items WHERE id = ?", (item_id,)
+        ).fetchone()
+        assert got["calendar_event_id"] == "evt-1"
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_chats_source(tmp_path: Path) -> None:
     """A pre-#57 chats table gains `source`, backfills to 'whatsapp', stays idempotent."""
     db = tmp_path / "legacy_source.sqlite3"

@@ -10,6 +10,7 @@ tables this module writes.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from src.db.connection import _now, _rowid
@@ -154,6 +155,7 @@ def insert_analysis_item(
     child: str | None = None,
     task_category: str | None = None,
     prep_complexity: str | None = None,
+    calendar_event_id: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
@@ -161,8 +163,8 @@ def insert_analysis_item(
             (run_id, chat_id, action_required, priority, summary,
              suggested_next_action, deadline, deadline_date, confidence,
              evidence_message_ids_json, created_at, child, task_category,
-             prep_complexity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             prep_complexity, calendar_event_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -179,10 +181,45 @@ def insert_analysis_item(
             child,
             task_category,
             prep_complexity,
+            calendar_event_id,
         ),
     )
     conn.commit()
     return _rowid(cur)
+
+
+def set_calendar_event_id(conn: sqlite3.Connection, item_id: int, calendar_event_id: str) -> None:
+    """Record the created reminder event id on an already-persisted item (#218)."""
+    conn.execute(
+        "UPDATE analysis_items SET calendar_event_id = ? WHERE id = ?",
+        (calendar_event_id, item_id),
+    )
+    conn.commit()
+
+
+def find_calendar_event_for_evidence(
+    conn: sqlite3.Connection, chat_id: int, evidence_message_ids: list[str]
+) -> str | None:
+    """Return a prior ``calendar_event_id`` already created for this exact evidence set.
+
+    Identity is the evidence-message-id set, not ``run_id`` — a run is created
+    fresh on every scan (including a reprocess replay), but the same underlying
+    messages classifying to the same item must never mint a second calendar
+    event (#218). An empty evidence list can't be matched, so it always misses
+    (the caller creates a fresh event with no dedup guarantee in that rare case).
+    """
+    if not evidence_message_ids:
+        return None
+    target = frozenset(evidence_message_ids)
+    rows = conn.execute(
+        "SELECT evidence_message_ids_json, calendar_event_id FROM analysis_items "
+        "WHERE chat_id = ? AND calendar_event_id IS NOT NULL",
+        (chat_id,),
+    ).fetchall()
+    for row in rows:
+        if frozenset(json.loads(row["evidence_message_ids_json"] or "[]")) == target:
+            return str(row["calendar_event_id"])
+    return None
 
 
 def insert_analysis_trace(

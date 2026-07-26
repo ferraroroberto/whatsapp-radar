@@ -139,9 +139,13 @@ def note_delta_funnel(
 
 def persist_analysis_result(
     conn: sqlite3.Connection, run_id: int, chat_id: int, result: AnalysisResult
-) -> None:
-    """Insert a parsed :class:`AnalysisResult`; shared by scan and review."""
-    store.insert_analysis_item(
+) -> int:
+    """Insert a parsed :class:`AnalysisResult`; shared by scan and review.
+
+    Returns the new ``analysis_items`` row id — the scan pipeline needs it to
+    record a routine-prep reminder's ``calendar_event_id`` after the fact (#218).
+    """
+    return store.insert_analysis_item(
         conn,
         run_id,
         chat_id,

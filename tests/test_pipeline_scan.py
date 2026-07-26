@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,7 @@ import pytest
 
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
 from src.analysis.pipeline import scan, scan_outcome_to_dict
-from src.config import Config, HubConfig, TelegramConfig, TripwireConfig
+from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TripwireConfig
 from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
 from src.db import store
@@ -47,6 +48,30 @@ def _config(tmp_path: Path, *, notifier: str = "none") -> Config:
         telegram=TelegramConfig(bot_token="t", chat_id="c"),
         linked_device_dir=tmp_path / "ld",
     )
+
+
+def _config_with_reminders(tmp_path: Path) -> Config:
+    return replace(
+        _config(tmp_path),
+        family=FamilyConfig(reminder_calendar_id="family@example.test", reminder_time="07:30"),
+    )
+
+
+class _FakeWriteClient:
+    """A fake calendar_write client (#218) — records insert calls, never touches Google."""
+
+    def __init__(self) -> None:
+        self.insert_calls: list[dict[str, Any]] = []
+
+    def insert_event(self, *, calendar_id: str, event: dict[str, Any]) -> dict[str, Any]:
+        self.insert_calls.append({"calendar_id": calendar_id, "event": event})
+        return {"id": f"evt-{len(self.insert_calls)}", **event}
+
+    def delete_event(self, *, calendar_id: str, event_id: str) -> None:
+        raise AssertionError("not exercised in these tests")
+
+    def close(self) -> None:
+        return None
 
 
 def _monitor(conn: sqlite3.Connection, source_chat_id: str) -> int:
@@ -379,6 +404,121 @@ def test_resolved_deadline_date_round_trips_to_digest(
         (outcome.run_id, chat_id),
     ).fetchone()
     assert row["deadline_date"] == "2026-06-09"
+
+
+def _routine_json(**overrides: Any) -> str:
+    payload = {
+        "action_required": True,
+        "priority": "high",
+        "summary": "Bring the permission slip",
+        "suggested_next_action": "Sign and return it",
+        "deadline": "Friday",
+        "deadline_date": "2026-06-12",
+        "confidence": 0.95,
+        "evidence_message_ids": ["c4a-0002"],
+        "child": "Sam",
+        "task_category": "permission_slip",
+        "prep_complexity": "routine",
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
+def test_routine_item_creates_one_calendar_event(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A routine item with a resolved child + deadline creates one reminder (#218)."""
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    write_client = _FakeWriteClient()
+
+    outcome = scan(
+        ingested_conn, _config_with_reminders(tmp_path), mode="live",
+        connector=FixtureConnector(), classifier=_FakeTraced(_routine_json()),
+        calendar_client=write_client,
+    )
+
+    assert len(write_client.insert_calls) == 1
+    assert write_client.insert_calls[0]["calendar_id"] == "family@example.test"
+    row = ingested_conn.execute(
+        "SELECT calendar_event_id FROM analysis_items WHERE run_id = ? AND chat_id = ?",
+        (outcome.run_id, chat_id),
+    ).fetchone()
+    assert row["calendar_event_id"] == "evt-1"
+    # Additive only — the existing Telegram digest text is unaffected.
+    assert outcome.digest is not None
+    item = next(i for i in outcome.digest.items if i.chat == "Class 4A Group")
+    assert item.summary == "Bring the permission slip"
+
+
+def test_non_routine_item_creates_no_calendar_event(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _monitor(ingested_conn, "chat-class-4a")
+    write_client = _FakeWriteClient()
+
+    scan(
+        ingested_conn, _config_with_reminders(tmp_path), mode="live",
+        connector=FixtureConnector(),
+        classifier=_FakeTraced(_routine_json(prep_complexity="non_routine")),
+        calendar_client=write_client,
+    )
+
+    assert write_client.insert_calls == []
+
+
+def test_missing_child_or_deadline_falls_back_gracefully(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """No child/deadline resolved -> Telegram-only, exactly like before #218."""
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    write_client = _FakeWriteClient()
+
+    outcome = scan(
+        ingested_conn, _config_with_reminders(tmp_path), mode="live",
+        connector=FixtureConnector(),
+        classifier=_FakeTraced(_routine_json(child=None, deadline_date=None)),
+        calendar_client=write_client,
+    )
+
+    assert write_client.insert_calls == []
+    row = ingested_conn.execute(
+        "SELECT calendar_event_id FROM analysis_items WHERE run_id = ? AND chat_id = ?",
+        (outcome.run_id, chat_id),
+    ).fetchone()
+    assert row["calendar_event_id"] is None
+    assert outcome.digest is not None
+    assert any(i.chat == "Class 4A Group" for i in outcome.digest.items)  # still alerted
+
+
+def test_calendar_reminders_stay_off_without_configured_calendar(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """An injected client is still gated on `family.reminder_calendar_id` (#218)."""
+    _monitor(ingested_conn, "chat-class-4a")
+    write_client = _FakeWriteClient()
+
+    scan(
+        ingested_conn, _config(tmp_path), mode="live",  # default: reminder_calendar_id=""
+        connector=FixtureConnector(), classifier=_FakeTraced(_routine_json()),
+        calendar_client=write_client,
+    )
+
+    assert write_client.insert_calls == []
+
+
+def test_calendar_reminders_never_fire_in_dry_run(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Dry-run replays the same messages every call — must never mint an event."""
+    _monitor(ingested_conn, "chat-class-4a")
+    write_client = _FakeWriteClient()
+
+    scan(
+        ingested_conn, _config_with_reminders(tmp_path), mode="dry_run",
+        classifier=_FakeTraced(_routine_json()), calendar_client=write_client,
+    )
+
+    assert write_client.insert_calls == []
 
 
 def test_stage1_noise_skips_the_llm(

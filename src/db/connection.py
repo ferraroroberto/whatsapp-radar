@@ -153,6 +153,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN task_category TEXT")
     if "prep_complexity" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN prep_complexity TEXT")
+    # `analysis_items.calendar_event_id` (#218): the created Google Calendar
+    # reminder event id for a routine-prep item. Additive, non-destructive; old
+    # rows and every item that never got a reminder stay NULL.
+    if "calendar_event_id" not in item_cols:
+        conn.execute("ALTER TABLE analysis_items ADD COLUMN calendar_event_id TEXT")
     # `messages.transcription_status` + `messages.media_path` (#36): the voice-note
     # transcription lifecycle and a transient ref to the downloaded audio. Additive,
     # non-destructive; old rows (and every non-voice message) stay NULL, so the

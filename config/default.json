@@ -68,7 +68,9 @@
     "responsible_by_weekday": {},
     "childcare_windows": [],
     "unknown_scan_days": 7,
-    "assessment_days": 2
+    "assessment_days": 2,
+    "reminder_calendar_id": "",
+    "reminder_time": "07:30"
   },
   "presence": {
     "enabled": false,

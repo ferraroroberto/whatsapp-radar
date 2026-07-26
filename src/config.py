@@ -330,6 +330,12 @@ class FamilyConfig:
     childcare_windows: tuple[ChildcareWindow, ...] = ()
     unknown_scan_days: int = 7
     assessment_days: int = 2
+    # Routine-prep calendar reminders (#218, Step 4/5 of #206). An empty
+    # `reminder_calendar_id` means the feature is off: the pipeline never builds
+    # a calendar_write client and no event is ever created. `reminder_time` is
+    # the local "HH:MM" morning slot each reminder event is created at.
+    reminder_calendar_id: str = ""
+    reminder_time: str = "07:30"
 
 
 @dataclass(frozen=True)
@@ -600,6 +606,8 @@ def _parse_family(raw: dict[str, Any]) -> FamilyConfig:
         childcare_windows=windows,
         unknown_scan_days=int(raw.get("unknown_scan_days", 7)),
         assessment_days=int(raw.get("assessment_days", 2)),
+        reminder_calendar_id=str(raw.get("reminder_calendar_id", "")).strip(),
+        reminder_time=str(raw.get("reminder_time", "07:30")).strip(),
     )
 
 

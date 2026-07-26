@@ -110,7 +110,7 @@ def _cmd_set_status(conn: sqlite3.Connection, chat_id: int, status: str) -> int:
 
 def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     """Process piece: analyze monitored deltas since each cursor (no sync)."""
-    classifier = build_classifier(config.classifier, config.hub)
+    classifier = build_classifier(config.classifier, config.hub, config.children)
     _progress("▶ process starting — analyzing monitored chats since last cursor")
     outcome = review_monitored_chats(
         conn, classifier, since_days=config.hub.recent_alert_days, config=config

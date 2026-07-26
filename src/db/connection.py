@@ -144,6 +144,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     item_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
     if "deadline_date" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN deadline_date TEXT")
+    # `analysis_items.child`/`.task_category`/`.prep_complexity` (#215): resolved
+    # Gmail-school classification fields. Additive, non-destructive; old rows and
+    # every non-Gmail-school row stay NULL.
+    if "child" not in item_cols:
+        conn.execute("ALTER TABLE analysis_items ADD COLUMN child TEXT")
+    if "task_category" not in item_cols:
+        conn.execute("ALTER TABLE analysis_items ADD COLUMN task_category TEXT")
+    if "prep_complexity" not in item_cols:
+        conn.execute("ALTER TABLE analysis_items ADD COLUMN prep_complexity TEXT")
     # `messages.transcription_status` + `messages.media_path` (#36): the voice-note
     # transcription lifecycle and a transient ref to the downloaded audio. Additive,
     # non-destructive; old rows (and every non-voice message) stay NULL, so the

@@ -153,6 +153,9 @@ def persist_analysis_result(
         deadline_date=result.deadline_date,
         confidence=result.confidence,
         evidence_message_ids_json=json.dumps(result.evidence_message_ids),
+        child=result.child,
+        task_category=result.task_category,
+        prep_complexity=result.prep_complexity,
     )
 
 

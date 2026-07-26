@@ -6,3 +6,6 @@ layer       = "working-web"
 icon        = "💬"
 description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
+
+[vendored]
+e2e_live_guard = { src = "tests/e2e/_e2e_live_guard.py", sha = "727dfe8b9e4e625993c0e0286836e510015411cc", dest = "tests/e2e/_e2e_live_guard.py" }

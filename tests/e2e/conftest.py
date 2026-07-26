@@ -1,14 +1,33 @@
 """e2e harness: self-boot a disposable webapp on a free port.
 
-The whole suite is skipped unless ``WR_E2E_AUTOBOOT=1`` (then we boot uvicorn on
-a free port and tear it down after) or a tray is already serving on :8455. This
-keeps plain ``pytest`` fully offline while ``scripts/verify-before-ship.ps1``
-(which sets the env var) exercises the real browser path.
+Three run modes (issue #225, guard vendored from project-scaffolding's
+`_e2e_live_guard.py` — issue #191/#194/#197):
+
+* **Autoboot (default gate path).** ``WR_E2E_AUTOBOOT=1`` boots uvicorn on a
+  free port against a throwaway DB and tears it down after.
+  ``scripts/verify-before-ship.ps1`` / ``scripts/run-e2e.ps1`` set this — the
+  suite always drives a disposable instance, never the live tray.
+* **Live (explicit opt-in).** With no autoboot and a tray already serving on
+  :8455, the vendored guard refuses via ``pytest.exit`` naming
+  ``WR_E2E_LIVE`` unless it's set to ``1`` — a bare ``pytest tests/e2e`` must
+  not load-test the instance you're actually using. Once opted in, this
+  repo's own caller-side choice is to *adopt the tray read-only* and run only
+  the ``@pytest.mark.live_safe`` subset (route-mocked tests with no
+  unmocked mutating call) — never a reclaim/kill. `:8455` is a real
+  daily-driver tray with real chat/family/passkey state (see this repo's
+  CLAUDE.md "Safe restart"); a by-hand kill is unsafe and, if this repo ever
+  needed to reclaim the port, only `tray.bat --restart` (PID-scoped to this
+  repo's `.venv`) would be the canonical way. An unmarked test is excluded
+  from live mode by default — allowlist, not denylist — so a newly added
+  unmocked test can't silently start hitting the live backend.
+* **Offline (nothing set, no tray up).** The suite skips, keeping plain
+  ``pytest`` fully offline.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import shutil
 import socket
@@ -23,8 +42,16 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e._e2e_live_guard import require_disposable_instance
+
+logger = logging.getLogger(__name__)
+
 ROOT = Path(__file__).resolve().parents[2]
 TRAY_PORT = 8455
+# Explicit opt-in for acting on the LIVE tray on :8455 (issue #225) — passed
+# to the vendored guard. See the module docstring for what "acting" means
+# here (read-only, live_safe-only; never a kill).
+_LIVE_ENV = "WR_E2E_LIVE"
 
 # Env-aware wait budget (issue #64). The hosted Windows runner is markedly
 # slower than a local dev box, and the WebKit/iPhone projection is the
@@ -78,22 +105,37 @@ def pytest_collection_modifyitems(
     A sub-conftest hook still receives every collected item, so scope the skip
     to tests under this directory — never touch the offline unit suite.
 
+    Under the live-tray path (autoboot off, tray up), also allowlist to
+    ``@pytest.mark.live_safe`` tests only (issue #225): an unmocked test
+    could hit real WhatsApp/Gmail connectors or mutate real chat state if
+    pointed at the live tray, so exclusion is the default rather than
+    something anyone has to remember to add per test.
+
     Also give the WebKit/iPhone projection a bounded retry (issue #64): it is
     the known-flaky leg on the hosted runner, so a one-off slow round-trip
     self-heals rather than red-lighting an unrelated PR — while the Chromium
     projection stays loud (a Chromium failure is a real product bug). Needs
     pytest-rerunfailures (requirements-dev).
     """
-    serve = _autoboot() or _reachable(TRAY_PORT)
-    skip = pytest.mark.skip(
+    autoboot = _autoboot()
+    tray_up = _reachable(TRAY_PORT)
+    serve = autoboot or tray_up
+    live_path = tray_up and not autoboot
+    skip_offline = pytest.mark.skip(
         reason="e2e disabled: set WR_E2E_AUTOBOOT=1 or run a tray on :8455"
+    )
+    skip_not_live_safe = pytest.mark.skip(
+        reason="e2e live-tray path only runs @pytest.mark.live_safe tests "
+        "(issue #225) — this test is unmocked and could touch real data"
     )
     flaky = pytest.mark.flaky(reruns=2, reruns_delay=1)
     for item in items:
         if _E2E_DIR not in Path(item.fspath).parents:
             continue
         if not serve:
-            item.add_marker(skip)
+            item.add_marker(skip_offline)
+        elif live_path and item.get_closest_marker("live_safe") is None:
+            item.add_marker(skip_not_live_safe)
         if "[webkit" in item.nodeid:
             item.add_marker(flaky)
 
@@ -211,10 +253,19 @@ def _seed_e2e_db(db_path: Path) -> None:
 @pytest.fixture(scope="session")
 def base_url() -> Iterator[str]:
     if not _autoboot():
-        if _reachable(TRAY_PORT):
-            yield f"http://127.0.0.1:{TRAY_PORT}"
+        if not _reachable(TRAY_PORT):
+            pytest.skip("e2e disabled (no autoboot, no tray on :8455)")
             return
-        pytest.skip("e2e disabled (no autoboot, no tray on :8455)")
+        # Vendored guard (issue #225/#191/#194/#197): refuses via pytest.exit
+        # if the live tray is occupied and WR_E2E_LIVE isn't set. This repo's
+        # caller-side choice on an opt-in hit is to *adopt* the tray
+        # read-only (never reclaim/kill — see module docstring); collection
+        # already restricted the run to @pytest.mark.live_safe tests.
+        require_disposable_instance(TRAY_PORT, _LIVE_ENV)
+        logger.info(
+            "driving LIVE tray at http://127.0.0.1:%s (%s=1)", TRAY_PORT, _LIVE_ENV
+        )
+        yield f"http://127.0.0.1:{TRAY_PORT}"
         return
 
     port = _free_port()
@@ -290,6 +341,9 @@ def base_url() -> Iterator[str]:
             raise RuntimeError(
                 f"webapp did not become ready within {ready_budget:.0f}s"
             )
+        logger.info(
+            "driving disposable autoboot webapp at http://127.0.0.1:%s", port
+        )
         yield f"http://127.0.0.1:{port}"
     finally:
         proc.terminate()

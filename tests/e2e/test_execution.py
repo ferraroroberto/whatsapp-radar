@@ -13,6 +13,10 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
+# Not @pytest.mark.live_safe (issue #225): clicks #execRunScan, firing the
+# real backend pipeline unmocked — under WR_E2E_LIVE this would run whatever
+# connector/classifier the live tray is actually configured with, not the
+# stub/fixture env autoboot injects. Stays out of live mode until mocked.
 @pytest.mark.smoke
 def test_execution_dry_run_shows_funnel(
     page: Page, base_url: str, scaled: Callable[[float], int]
@@ -52,6 +56,7 @@ def test_execution_dry_run_shows_funnel(
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_execution_offline_shows_reconnect(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:

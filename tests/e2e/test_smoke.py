@@ -7,6 +7,7 @@ from playwright.sync_api import Page, expect
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_shell_loads(page: Page, base_url: str) -> None:
     page.goto(base_url)
     expect(page).to_have_title("WhatsApp Radar")
@@ -17,6 +18,7 @@ def test_shell_loads(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_tab_switching(page: Page, base_url: str) -> None:
     page.goto(base_url)
     page.locator("#tabAudit").click()
@@ -28,6 +30,7 @@ def test_tab_switching(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_dashboard_activity_grid_renders(page: Page, base_url: str) -> None:
     page.goto(base_url)
     # The Dashboard is the default pane; the last-activity grid (#165) always
@@ -42,6 +45,9 @@ def test_dashboard_activity_grid_renders(page: Page, base_url: str) -> None:
     expect(page.locator("#dashChannelsBody")).to_be_hidden()
 
 
+# Not @pytest.mark.live_safe (issue #225): clicks the unmocked .chat-watch
+# toggle, which would flip a real chat's monitored status via a real,
+# un-mocked API call if pointed at the live tray.
 @pytest.mark.smoke
 def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     page.goto(base_url)
@@ -90,6 +96,7 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.live_safe
 def test_build_readout_populates(page: Page, base_url: str) -> None:
     page.goto(base_url)
     # main.js fetches /api/version on boot and writes it into the page footer,

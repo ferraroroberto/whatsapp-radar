@@ -361,6 +361,39 @@ def test_connect_migrates_analysis_items_calendar_event_id(tmp_path: Path) -> No
         conn.close()
 
 
+def test_connect_creates_ack_items_on_a_legacy_db(tmp_path: Path) -> None:
+    """A pre-#219 DB (no ack_items table at all) gains it on connect.
+
+    Unlike a column addition, a brand-new table needs no ALTER — schema.sql's
+    `CREATE TABLE IF NOT EXISTS` alone backfills it on any existing DB.
+    """
+    db = tmp_path / "legacy_no_ack.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_REVIEW_RUNS)
+    raw.executescript(_LEGACY_CHATS)
+    raw.execute(
+        "INSERT INTO chats (source_chat_id, display_name, first_seen_at, last_seen_at) "
+        "VALUES ('g1', 'Class 4A Group', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        tables = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "ack_items" in tables
+        run_id = store.start_run(conn, kind="scan")
+        item_id = store.insert_ack_item(
+            conn, run_id, 1, child="Sam", task_category="permission_slip", summary=None
+        )
+        assert [r["id"] for r in store.pending_ack_items(conn)] == [item_id]
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_chats_source(tmp_path: Path) -> None:
     """A pre-#57 chats table gains `source`, backfills to 'whatsapp', stays idempotent."""
     db = tmp_path / "legacy_source.sqlite3"

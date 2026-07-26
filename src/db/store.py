@@ -16,6 +16,12 @@ keep working unchanged. See each submodule's docstring for what it owns.
 
 from __future__ import annotations
 
+from src.db.ack import (
+    acknowledge_item,
+    get_ack_item,
+    insert_ack_item,
+    pending_ack_items,
+)
 from src.db.chats import (
     LinkError,
     chat_id_for_source,
@@ -99,6 +105,7 @@ from src.db.tripwire import (
 __all__ = [
     "LinkError",
     "PruneOutcome",
+    "acknowledge_item",
     "actionable_items_for_run",
     "advance_cursor",
     "baseline_cursor",
@@ -123,7 +130,9 @@ __all__ = [
     "find_calendar_event_for_evidence",
     "finish_run",
     "finish_run_summary",
+    "get_ack_item",
     "get_chat",
+    "insert_ack_item",
     "insert_analysis_item",
     "insert_analysis_trace",
     "insert_message",
@@ -147,6 +156,7 @@ __all__ = [
     "source_overview",
     "messages_since_cursor",
     "monitored_chats",
+    "pending_ack_items",
     "pending_transcriptions",
     "prune_gmail_unmonitored",
     "recent_actionable_items",

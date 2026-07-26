@@ -26,6 +26,10 @@ class DigestItem:
     # deterministic today/overdue flag so the human never re-interprets a relative
     # word at reading time. Defaulted so existing call sites stay backward-compatible.
     deadline_date: str | None = None
+    # 'routine' | 'non_routine' | None (#215). A non_routine item additionally
+    # gets a distinct acknowledgeable follow-up in the webapp (#219) — the
+    # rendered text says so, so the reader knows a reminder alone isn't enough.
+    prep_complexity: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,8 @@ def render_item(item: DigestItem, *, today: date | None = None) -> str:
     deadline_line = _render_deadline_line(item, today)
     if deadline_line:
         lines.append(deadline_line)
+    if item.prep_complexity == "non_routine":
+        lines.append("  📋 Needs acknowledgment — open the WhatsApp Radar webapp to confirm")
     return "\n".join(lines)
 
 
@@ -124,6 +130,7 @@ def build_digest(conn: sqlite3.Connection, run_id: int) -> Digest:
             deadline_date=row["deadline_date"],
             confidence=row["confidence"],
             evidence_message_ids=json.loads(row["evidence_message_ids_json"] or "[]"),
+            prep_complexity=row["prep_complexity"],
         )
         for row in store_actionable(conn, run_id)
     ]

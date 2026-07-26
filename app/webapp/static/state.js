@@ -66,6 +66,10 @@ export const state = {
   },
   // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
   family: null,
+  // Follow-ups (#219): pending non-routine acknowledgment items.
+  ack: {
+    items: [],
+  },
 };
 
 export const EXECUTION_POLL_MS = 1500;
@@ -213,6 +217,10 @@ export const els = {
   // Family rules (#160, #167) — run controls + recent runs moved to the Run tab.
   familyReadOnly: document.getElementById('familyReadOnly'),
   familyEditable: document.getElementById('familyEditable'),
+
+  // Follow-ups (#219)
+  ackItems: document.getElementById('ackItems'),
+  ackEmpty: document.getElementById('ackEmpty'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

@@ -104,3 +104,19 @@ def test_render_falls_back_to_free_text_deadline() -> None:
 def test_render_keeps_unparseable_resolved_date() -> None:
     out = render_item(_item(deadline_date="next Friday"), today=date(2026, 6, 9))
     assert "⏰ next Friday" in out
+
+
+# --- non-routine acknowledgment note (#219) ---------------------------------
+
+def test_render_notes_acknowledgment_needed_for_non_routine() -> None:
+    out = render_item(_item(prep_complexity="non_routine"), today=date(2026, 6, 9))
+    assert "Needs acknowledgment" in out
+
+
+def test_render_omits_acknowledgment_note_for_routine_or_unset() -> None:
+    assert "Needs acknowledgment" not in render_item(
+        _item(prep_complexity="routine"), today=date(2026, 6, 9)
+    )
+    assert "Needs acknowledgment" not in render_item(
+        _item(prep_complexity=None), today=date(2026, 6, 9)
+    )

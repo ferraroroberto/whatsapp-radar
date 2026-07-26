@@ -7,7 +7,7 @@ from datetime import datetime
 
 from src.analysis.classifier import HubClassifier, _extract_json_object
 from src.analysis.contract import parse_analysis
-from src.config import HubConfig
+from src.config import ChildProfile, HubConfig
 from src.models import StoredMessage
 
 
@@ -83,6 +83,42 @@ def test_single_message_larger_than_budget_is_truncated() -> None:
     hub = _hub(200)
     prompt = hub._build_user_prompt("One", [_msg(1, "y" * 5000)], None)
     assert len(prompt) <= 200 + 200  # header slack; the lone message is truncated
+
+
+# --- child-registry hint injection (#206/#215) ------------------------------
+
+_CHILDREN = (
+    ChildProfile(name="Example Child A", aliases=("Ex",), class_name="4A"),
+    ChildProfile(name="Example Child B"),
+)
+
+
+def test_children_hint_injected_for_gmail_when_configured() -> None:
+    hub = HubClassifier(HubConfig(base_url="http://x", model="m"), _CHILDREN)
+    prompt = hub._build_user_prompt(
+        "School Updates", [_msg(1, "Bring a costume Friday")], None, source="gmail"
+    )
+    assert "Known children" in prompt
+    assert "Example Child A" in prompt
+    assert "aliases: Ex" in prompt
+    assert "class: 4A" in prompt
+    assert "Example Child B" in prompt
+
+
+def test_children_hint_omitted_for_whatsapp_even_when_configured() -> None:
+    hub = HubClassifier(HubConfig(base_url="http://x", model="m"), _CHILDREN)
+    prompt = hub._build_user_prompt(
+        "Family Group", [_msg(1, "Bring a costume Friday")], None, source="whatsapp"
+    )
+    assert "Known children" not in prompt
+
+
+def test_children_hint_omitted_when_registry_empty() -> None:
+    hub = HubClassifier(HubConfig(base_url="http://x", model="m"))
+    prompt = hub._build_user_prompt(
+        "School Updates", [_msg(1, "Bring a costume Friday")], None, source="gmail"
+    )
+    assert "Known children" not in prompt
 
 
 # --- date anchoring (#71) --------------------------------------------------

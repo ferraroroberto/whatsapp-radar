@@ -151,14 +151,18 @@ def insert_analysis_item(
     confidence: float | None,
     evidence_message_ids_json: str | None,
     deadline_date: str | None = None,
+    child: str | None = None,
+    task_category: str | None = None,
+    prep_complexity: str | None = None,
 ) -> int:
     cur = conn.execute(
         """
         INSERT INTO analysis_items
             (run_id, chat_id, action_required, priority, summary,
              suggested_next_action, deadline, deadline_date, confidence,
-             evidence_message_ids_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             evidence_message_ids_json, created_at, child, task_category,
+             prep_complexity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             run_id,
@@ -172,6 +176,9 @@ def insert_analysis_item(
             confidence,
             evidence_message_ids_json,
             _now(),
+            child,
+            task_category,
+            prep_complexity,
         ),
     )
     conn.commit()

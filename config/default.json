@@ -78,6 +78,7 @@
     "refresh_timeout_s": 12,
     "person_aliases": {}
   },
+  "children": [],
   "tts": {
     "profiles": {
       "en_female": { "model": "orpheus-tts", "voice": "tara" },

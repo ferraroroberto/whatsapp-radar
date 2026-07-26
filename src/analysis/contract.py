@@ -12,6 +12,7 @@ import json
 from dataclasses import dataclass
 
 _VALID_PRIORITIES = {"low", "medium", "high"}
+_VALID_PREP_COMPLEXITY = {"routine", "non_routine"}
 
 
 class ContractError(ValueError):
@@ -32,6 +33,18 @@ class AnalysisResult:
     # instead of re-interpreting a relative word ("tomorrow") at reading time. The
     # free-text ``deadline`` above stays for prose; this is the machine-readable form.
     deadline_date: str | None = None
+    # Gmail-school-source fields (#206/#215) — null for every other source and null
+    # whenever the model isn't confident. ``child`` is a resolved registry name (see
+    # ``src.config.ChildProfile``), never a guess when no registry entry matches.
+    child: str | None = None
+    # Free text rather than a fixed enum: the school taxonomy (outing, supply,
+    # deadline/form, ...) isn't settled yet and shouldn't fail the whole contract
+    # if the model names a category we didn't anticipate.
+    task_category: str | None = None
+    # Whether the requested prep is normally on hand ("routine") or must be
+    # specially sourced/bought/prepared ("non_routine") — drives whether a plain
+    # calendar reminder suffices or a distinct acknowledgeable follow-up is raised.
+    prep_complexity: str | None = None
 
 
 def _require(condition: bool, message: str) -> None:
@@ -83,9 +96,23 @@ def parse_analysis(payload: str | dict[str, object]) -> AnalysisResult:
         "'evidence_message_ids' must contain only strings",
     )
 
-    for key in ("summary", "suggested_next_action", "deadline", "deadline_date"):
+    for key in (
+        "summary",
+        "suggested_next_action",
+        "deadline",
+        "deadline_date",
+        "child",
+        "task_category",
+    ):
         value = data.get(key)
         _require(value is None or isinstance(value, str), f"'{key}' must be a string or null")
+
+    prep_complexity = data.get("prep_complexity")
+    if prep_complexity is not None:
+        _require(
+            isinstance(prep_complexity, str) and prep_complexity in _VALID_PREP_COMPLEXITY,
+            f"'prep_complexity' must be one of {sorted(_VALID_PREP_COMPLEXITY)}",
+        )
 
     # ``deadline_date`` is validated for *type* only here, not strict ISO parseability:
     # an auxiliary, model-resolved date must never fail the whole contract (which would
@@ -100,4 +127,7 @@ def parse_analysis(payload: str | dict[str, object]) -> AnalysisResult:
         confidence=confidence,
         evidence_message_ids=list(evidence),
         deadline_date=data.get("deadline_date"),
+        child=data.get("child"),
+        task_category=data.get("task_category"),
+        prep_complexity=prep_complexity,
     )

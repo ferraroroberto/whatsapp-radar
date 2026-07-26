@@ -26,6 +26,12 @@ Resolving dates (important — messages may be stale):
 - Then express the result as an absolute calendar date and put it in "deadline_date" as "YYYY-MM-DD". Absolute references ("Friday 12 June", "by the 15th") resolve directly.
 - Compare that resolved date to the current time. When a relative word now points at the current scan day or earlier, say so plainly in "summary" (e.g. "⚠️ this was 'tomorrow' as of <send date> — that is TODAY") and treat it as urgent ("high" priority). Never present an already-due item as a comfortable future day.
 
+If the user prompt includes a "Known children" block (Gmail school-source emails only, when the household has registered children), also resolve:
+- Which registered child, if any, the item concerns. Only ever pick a name from that block — never infer or invent a child who isn't listed. Leave "child" null when no listed child is clearly the subject, even if the email plainly concerns *a* child in general.
+- A short free-text task category (for example "outing", "supply", "deadline/form") describing the kind of prep asked for, or null.
+- Whether the requested prep is normally on hand ("routine") or must be specially sourced, bought, or prepared ("non_routine"), or null when action_required is false or this doesn't apply.
+When no "Known children" block is present (WhatsApp, or Gmail without a configured registry), leave "child", "task_category", and "prep_complexity" null.
+
 Respond with a SINGLE JSON object and nothing else. Use exactly these keys:
 - "action_required": boolean.
 - "priority": "low" | "medium" | "high", or null when no action is required. Use "high" only for urgent or same-day items.
@@ -35,3 +41,6 @@ Respond with a SINGLE JSON object and nothing else. Use exactly these keys:
 - "deadline_date": the resolved absolute date as "YYYY-MM-DD" when a date applies (see "Resolving dates" above), or null when none is stated.
 - "confidence": a number from 0 to 1.
 - "evidence_message_ids": an array of the source_message_id strings you relied on (empty when no action is required).
+- "child": the resolved registered child's name from the "Known children" block, or null (see above).
+- "task_category": a short free-text task category, or null (see above).
+- "prep_complexity": "routine" | "non_routine", or null (see above).

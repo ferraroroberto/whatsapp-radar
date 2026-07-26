@@ -284,6 +284,47 @@ def test_connect_migrates_analysis_items_deadline_date(tmp_path: Path) -> None:
         conn.close()
 
 
+def test_connect_migrates_analysis_items_child_fields(tmp_path: Path) -> None:
+    """A pre-#215 analysis_items table gains child/task_category/prep_complexity."""
+    db = tmp_path / "legacy_items_child.sqlite3"
+    raw = sqlite3.connect(db)
+    raw.executescript(_LEGACY_ANALYSIS_ITEMS)
+    raw.execute(
+        "INSERT INTO analysis_items (run_id, chat_id, action_required, summary, created_at) "
+        "VALUES (1, 1, 1, 'Bring costume', '2026-01-01T00:00:00+00:00')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = store.connect(db)
+    try:
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
+        assert {"child", "task_category", "prep_complexity"} <= cols
+        # The pre-existing row survives with NULLs and a new row accepts real values.
+        row = conn.execute(
+            "SELECT child, task_category, prep_complexity FROM analysis_items WHERE id = 1"
+        ).fetchone()
+        assert row["child"] is None
+        assert row["task_category"] is None
+        assert row["prep_complexity"] is None
+        item_id = store.insert_analysis_item(
+            conn, 1, 1,
+            action_required=True, priority="high", summary="Costume day",
+            suggested_next_action="Prepare costume", deadline="Friday",
+            deadline_date="2026-06-12", confidence=0.9, evidence_message_ids_json="[]",
+            child="Example Child", task_category="outing", prep_complexity="non_routine",
+        )
+        got = conn.execute(
+            "SELECT child, task_category, prep_complexity FROM analysis_items WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+        assert got["child"] == "Example Child"
+        assert got["task_category"] == "outing"
+        assert got["prep_complexity"] == "non_routine"
+    finally:
+        conn.close()
+
+
 def test_connect_migrates_chats_source(tmp_path: Path) -> None:
     """A pre-#57 chats table gains `source`, backfills to 'whatsapp', stays idempotent."""
     db = tmp_path / "legacy_source.sqlite3"

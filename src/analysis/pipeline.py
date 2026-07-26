@@ -348,7 +348,7 @@ def scan(
     for source in config.sources:
         ensure_source_funnel(outcome.source_funnels, source)
     stage2 = classifier if classifier is not None else build_stage2_classifier(
-        config.classifier, config.hub
+        config.classifier, config.hub, config.children
     )
 
     if mode == "live":

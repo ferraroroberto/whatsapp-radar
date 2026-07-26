@@ -35,6 +35,30 @@ def test_minimal_payload_parses() -> None:
     assert result.deadline_date is None
 
 
+def test_child_and_task_fields_parse() -> None:
+    result = parse_analysis(
+        json.dumps(
+            {
+                "action_required": True,
+                "evidence_message_ids": ["gm-0001"],
+                "child": "Example Child",
+                "task_category": "outing",
+                "prep_complexity": "non_routine",
+            }
+        )
+    )
+    assert result.child == "Example Child"
+    assert result.task_category == "outing"
+    assert result.prep_complexity == "non_routine"
+
+
+def test_child_and_task_fields_default_to_none() -> None:
+    result = parse_analysis(json.dumps({"action_required": False}))
+    assert result.child is None
+    assert result.task_category is None
+    assert result.prep_complexity is None
+
+
 def test_resolved_deadline_date_parses() -> None:
     result = parse_analysis(
         json.dumps(
@@ -63,6 +87,11 @@ def test_resolved_deadline_date_parses() -> None:
         json.dumps({"action_required": True, "evidence_message_ids": [1, 2]}),  # non-string ids
         json.dumps({"action_required": True, "summary": 5}),  # wrong type
         json.dumps({"action_required": True, "deadline_date": 20260609}),  # wrong type
+        json.dumps({"action_required": True, "child": 5}),  # wrong type
+        json.dumps({"action_required": True, "task_category": 5}),  # wrong type
+        json.dumps(
+            {"action_required": True, "prep_complexity": "sometimes"}
+        ),  # bad enum
     ],
 )
 def test_invalid_payloads_raise(payload: str) -> None:

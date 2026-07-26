@@ -291,6 +291,22 @@ class ChildcareWindow:
 
 
 @dataclass(frozen=True)
+class ChildProfile:
+    """One registered household child a Gmail school email might be about (#206/#215).
+
+    Personal, household-identifying detail — real entries live only in the
+    gitignored ``config/local.json``, mirroring ``GmailConfig.senders``/``.labels``.
+    ``aliases`` are extra name-matching hints (nicknames, how the school addresses
+    the child) beyond ``name`` itself; ``class_name`` is used verbatim in the
+    classifier hint since school naming conventions vary.
+    """
+
+    name: str
+    aliases: tuple[str, ...] = ()
+    class_name: str = ""
+
+
+@dataclass(frozen=True)
 class FamilyConfig:
     """Daily calendar-conflict scan knobs + the fixed household schedule (#160).
 
@@ -348,6 +364,11 @@ class Config:
     # Live phone-location lookup (#169). Defaulted (disabled) so library/test
     # callers that build a Config without it get the offline-safe no-op behaviour.
     presence: PresenceConfig = field(default_factory=PresenceConfig)
+    # Household child registry (#206/#215). Empty by default — ``default.json``
+    # ships an empty placeholder; real entries only ever live in the gitignored
+    # ``config/local.json``. Used to resolve which child a Gmail school-source
+    # email concerns (Stage-2 hint injection, HubClassifier._build_user_prompt).
+    children: tuple[ChildProfile, ...] = ()
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -565,6 +586,20 @@ def _parse_family(raw: dict[str, Any]) -> FamilyConfig:
     )
 
 
+def _parse_children(raw: list[Any]) -> tuple[ChildProfile, ...]:
+    return tuple(
+        ChildProfile(
+            name=str(item.get("name", "")).strip(),
+            aliases=tuple(
+                str(a).strip() for a in item.get("aliases", []) if str(a).strip()
+            ),
+            class_name=str(item.get("class_name", "")).strip(),
+        )
+        for item in raw
+        if isinstance(item, dict) and str(item.get("name", "")).strip()
+    )
+
+
 def load_config(root: Path | None = None) -> Config:
     """Build the effective :class:`Config` from defaults, local overrides, and env."""
     root = root or project_root()
@@ -772,6 +807,7 @@ def load_config(root: Path | None = None) -> Config:
     traffic = _parse_traffic(merged.get("traffic", {}))
     family = _parse_family(merged.get("family", {}))
     presence = _parse_presence(merged.get("presence", {}))
+    children = _parse_children(merged.get("children", []))
 
     return Config(
         db_path=resolved_db,
@@ -793,4 +829,5 @@ def load_config(root: Path | None = None) -> Config:
         traffic=traffic,
         family=family,
         presence=presence,
+        children=children,
     )

@@ -23,7 +23,7 @@ from typing import Protocol, runtime_checkable
 
 from src.analysis.keywords import has_actionable_signal
 from src.analysis.prompts import load_prompt
-from src.config import HubConfig
+from src.config import ChildProfile, HubConfig
 from src.models import StoredMessage
 
 # Returned by the cascade when the cheap prefilter finds no actionable signal, so
@@ -84,6 +84,27 @@ def _format_clock(iso_or_now: str | datetime) -> str:
             return iso_or_now
         dt = parsed.astimezone() if parsed.tzinfo is not None else parsed
     return dt.strftime("%Y-%m-%d %a %H:%M")
+
+
+def _format_children_hint(children: tuple[ChildProfile, ...]) -> str:
+    """Render the registered-children block injected into the Gmail user prompt (#215).
+
+    Household-identifying data, so this only ever appears in the per-request
+    prompt built here — never in the committed system prompt file.
+    """
+    lines = [
+        'Known children (resolve which one this email concerns; leave "child" '
+        "null if none clearly matches):"
+    ]
+    for child in children:
+        detail = []
+        if child.aliases:
+            detail.append(f"aliases: {', '.join(child.aliases)}")
+        if child.class_name:
+            detail.append(f"class: {child.class_name}")
+        suffix = f" ({'; '.join(detail)})" if detail else ""
+        lines.append(f"- {child.name}{suffix}")
+    return "\n".join(lines)
 
 
 def _extract_json_object(text: str) -> str:
@@ -239,8 +260,11 @@ _SYSTEM_PROMPT = load_prompt("classification_system")
 class HubClassifier:
     """Routes classification through the local LLM hub (opt-in)."""
 
-    def __init__(self, hub: HubConfig) -> None:
+    def __init__(self, hub: HubConfig, children: tuple[ChildProfile, ...] = ()) -> None:
         self._hub = hub
+        # Household child registry (#206/#215) — injected into the Gmail user
+        # prompt only, never the shared system prompt. Empty by default.
+        self._children = children
 
     def _build_user_prompt(
         self,
@@ -266,6 +290,8 @@ class HubClassifier:
             # verbatim rather than inline-labelled so its own heading carries the
             # "don't repeat unless new/escalated" instruction to the model.
             header.append(prior_context)
+        if source == "gmail" and self._children:
+            header.append(_format_children_hint(self._children))
         header.append(f"New {item_label} (each line is prefixed with its send time):")
 
         # Each line carries the message's send time so the model can anchor any
@@ -388,18 +414,22 @@ class CascadeClassifier:
         )
 
 
-def build_classifier(name: str, hub: HubConfig) -> Classifier:
+def build_classifier(
+    name: str, hub: HubConfig, children: tuple[ChildProfile, ...] = ()
+) -> Classifier:
     """Construct a classifier by config name ('stub' | 'hub' | 'cascade')."""
     if name == "stub":
         return StubClassifier()
     if name == "hub":
-        return HubClassifier(hub)
+        return HubClassifier(hub, children)
     if name == "cascade":
-        return CascadeClassifier(HubClassifier(hub))
+        return CascadeClassifier(HubClassifier(hub, children))
     raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")
 
 
-def build_stage2_classifier(name: str, hub: HubConfig) -> TracedClassifier:
+def build_stage2_classifier(
+    name: str, hub: HubConfig, children: tuple[ChildProfile, ...] = ()
+) -> TracedClassifier:
     """Construct the Stage-2 classifier for the scan pipeline.
 
     The pipeline owns Stage 1 (the keyword prefilter) itself, so it never wants a
@@ -410,5 +440,5 @@ def build_stage2_classifier(name: str, hub: HubConfig) -> TracedClassifier:
     if name == "stub":
         return StubClassifier()
     if name in ("hub", "cascade"):
-        return HubClassifier(hub)
+        return HubClassifier(hub, children)
     raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")

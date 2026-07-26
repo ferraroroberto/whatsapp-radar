@@ -167,6 +167,9 @@
     <symbol id="i-moon" viewBox="0 0 24 24" fill="none">
       <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
     </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none">
+      <path d="M20 6 9 17l-5-5" />
+    </symbol>
   </svg>
 
   <!-- Fleet navigation (vendored nav component): a body-level sibling of .app —
@@ -197,6 +200,11 @@
             role="tab" aria-selected="false" aria-controls="paneFamily" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-radar"></use></svg>
       <span class="tab-label">Family</span>
+    </button>
+    <button id="tabAck" type="button" class="tab" data-tab="ack"
+            role="tab" aria-selected="false" aria-controls="paneAck" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg>
+      <span class="tab-label">Follow-ups</span>
     </button>
   </nav>
 
@@ -636,6 +644,21 @@
           <div id="familyEditable"></div>
         </div>
       </details>
+    </section>
+
+    <section id="paneAck" class="pane" role="tabpanel" aria-labelledby="tabAck" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+            Follow-ups
+          </h2>
+        </div>
+        <p class="muted small">Non-routine prep items need a manual confirmation, alongside the
+          Telegram alert — tap Acknowledge once it's handled.</p>
+        <ul id="ackItems" class="card-list ack-items" aria-label="Pending follow-ups"></ul>
+        <div id="ackEmpty" class="empty-state" hidden></div>
+      </section>
     </section>
 
     <!-- Build identity: which build the PWA is running. Filled by main.js;

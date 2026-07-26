@@ -13,6 +13,7 @@ Routes (split across ``app/webapp/routers/``):
     GET/POST /api/config         → prompt + safe settings         (config)
     /api/execution/*            → run pipeline pieces + run log   (execution)
     /api/sidecar/*              → WhatsApp connection state/QR    (sidecar)
+    /api/ack/*                  → non-routine follow-ups (#219)   (ack)
 
 All four tabs are live. Routers under ``app/webapp/routers/``. The sidecar
 routes back the Execution health pill's relaunch / re-pair affordances.
@@ -34,6 +35,7 @@ from starlette.types import Scope
 
 from app.webapp.middleware import BearerTokenMiddleware
 from app.webapp.routers import (
+    ack,
     audit,
     auth,
     chats,
@@ -162,6 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(family.router)
     app.include_router(audit.router)
     app.include_router(sidecar.router)
+    app.include_router(ack.router)
 
     return app
 

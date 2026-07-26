@@ -541,6 +541,22 @@ def scan(
                 result=result,
             )
 
+        # Non-routine ack surface (Step 5/5 of #206, #219) — additive, live-only
+        # (dry-run replays the same messages every call, which would otherwise
+        # queue a fresh duplicate ack item each time). calendar_event_id is
+        # always None here: routine (#218) and non_routine are mutually
+        # exclusive prep_complexity states today, so this item never has one.
+        if mode == "live" and result.action_required and result.prep_complexity == "non_routine":
+            store.insert_ack_item(
+                conn,
+                run_id,
+                chat_id,
+                child=result.child,
+                task_category=result.task_category,
+                summary=result.summary,
+                calendar_event_id=None,
+            )
+
         telegram_text: str | None = None
         final_action = "not_actionable"
         if result.action_required:

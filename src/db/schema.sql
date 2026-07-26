@@ -164,6 +164,29 @@ CREATE TABLE IF NOT EXISTS notifications (
     error    TEXT
 );
 
+-- Non-routine acknowledgment surface (Step 5/5 of #206, #219): a distinct,
+-- acknowledgeable follow-up for a non-routine prep item, so it doesn't blend
+-- into routine reminders and get forgotten. A mutable-status queue, not a
+-- per-run decision record like analysis_items/analysis_trace — closer in
+-- shape to notifications' per-run tracking. calendar_event_id is nullable:
+-- routine (#218, calendar reminder) and non_routine (this table) are mutually
+-- exclusive prep_complexity states today, so it stays null under current
+-- wiring, but an ack item never requires a calendar event to exist.
+CREATE TABLE IF NOT EXISTS ack_items (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id            INTEGER NOT NULL REFERENCES review_runs(id) ON DELETE CASCADE,
+    chat_id           INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    child             TEXT,
+    task_category     TEXT,
+    summary           TEXT,
+    calendar_event_id TEXT,
+    status            TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'acknowledged'
+    created_at        TEXT NOT NULL,
+    acknowledged_at   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ack_items_status ON ack_items (status);
+
 -- One row per sync (ingest) so the operator can see, at a glance, that syncing is
 -- pulling new data: when it ran, how many chats/messages it added, and the running
 -- totals afterwards. Written by every sync path (resync + live scan + the resync

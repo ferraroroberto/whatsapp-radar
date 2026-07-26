@@ -32,7 +32,7 @@ flowchart TB
     MANAGER["manager.py — WebappManager (start/stop/restart)"]
     MIDDLEWARE["middleware.py — bearer-token gate"]
     RUNS["runs.py — spawns CLI pieces, streams output"]
-    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · misc"]
+    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · ack · misc"]
   end
   TRAYPY --> MANAGER
   MANAGER --> SERVER
@@ -136,12 +136,14 @@ flowchart TB
     STORE["store.py — re-export facade over\nconnection/chats/messages/runs/dashboard/\nsync_log/tripwire/reprocess_support/retention.py"]
     SYNC["sync.py — ingest_chats / resync\n+ Gmail unmonitored-sender retention prune"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
+    ACK["ack.py — non-routine follow-up queue,\npending/acknowledged (#219)"]
   end
   FANOUT --> SYNC
   SYNC --> STORE
   REPROCESS --> STORE
   REVIEW --> STORE
   SCAN --> STORE
+  SCAN -->|non_routine| ACK
   ROUTERS --> STORE
 
   subgraph report["src/report/digest.py"]

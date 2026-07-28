@@ -369,7 +369,7 @@ function renderEditable(box) {
   }));
   const trainWords = (lastData.traffic.train_keywords || []).join(', ');
   if (trainWords) {
-    target.append(el('p', 'muted small', 'Matches event titles containing: ' + trainWords));
+    target.append(el('p', 'opt-hint', 'Matches event titles containing: ' + trainWords));
   }
 
   const save = el('button', 'run-btn', 'Save schedule');

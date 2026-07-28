@@ -72,6 +72,15 @@ def test_requires_commute_rules():
     assert rules.requires_commute(_event("Clinic", location="zoom.us/j and " + WORK), HOME)
 
 
+def test_is_train_commute_matches_title_keyword():
+    words = ("tren", "train")
+    assert rules.is_train_commute(_event("Trabajo desde la oficina (en tren)"), words)
+    assert rules.is_train_commute(_event("Office by TRAIN"), words)  # case-insensitive
+    assert not rules.is_train_commute(_event("Dentist"), words)
+    # An empty keyword list disables the match entirely rather than matching all.
+    assert not rules.is_train_commute(_event("Office (en tren)"), ())
+
+
 def test_decide_location_table():
     # Table-driven: (event, expected kind, expected source, expected assumed).
     cases = [

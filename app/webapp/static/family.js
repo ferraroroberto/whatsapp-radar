@@ -5,7 +5,8 @@
  * Run controls (enable toggles, cadence, "run now") and recent runs moved to
  * the Run tab in #164/#163 — this tab's only job now is the rules themselves:
  * on-duty weekday pattern, kids-home time, childcare windows, quiet hours,
- * significant-delay threshold, and the daily-scan enable switch. Edits POST to
+ * significant-delay threshold, the train-commute leave-now exemption (#227),
+ * and the daily-scan enable switch. Edits POST to
  * /api/family (the same endpoint the Run tab's traffic card reads/writes) and
  * land in config/local.json; the next scan/traffic-check run picks them up
  * with no restart. All values go in via textContent/value only. */
@@ -70,6 +71,7 @@ function toDraft(d) {
     quiet_start_hour: d.traffic.quiet_start_hour,
     quiet_end_hour: d.traffic.quiet_end_hour,
     significant_delay_min: d.traffic.significant_delay_min,
+    skip_leave_now_for_train: !!d.traffic.skip_leave_now_for_train,
   };
 }
 
@@ -84,6 +86,7 @@ function serializeDraft() {
     quiet_start_hour: draft.quiet_start_hour,
     quiet_end_hour: draft.quiet_end_hour,
     significant_delay_min: draft.significant_delay_min,
+    skip_leave_now_for_train: draft.skip_leave_now_for_train,
   });
 }
 
@@ -304,6 +307,7 @@ async function saveDraft() {
     quiet_start_hour: draft.quiet_start_hour,
     quiet_end_hour: draft.quiet_end_hour,
     significant_delay_min: draft.significant_delay_min,
+    skip_leave_now_for_train: draft.skip_leave_now_for_train,
   };
   saveBtn.disabled = true;
   try {
@@ -355,6 +359,18 @@ function renderEditable(box) {
   const delayGrid = el('div', 'cfg-fields');
   delayGrid.append(numberField('Minutes', draft.significant_delay_min, 0, 240, function (v) { draft.significant_delay_min = v; }));
   target.append(delayGrid);
+
+  // #227: the leave-now nudge is a driving judgment, so a train-titled commute
+  // has no use for it. Keywords themselves stay file-edited (config/local.json).
+  target.append(fieldLabel('Leave-now alerts'));
+  target.append(toggleRow('Skip train commutes', draft.skip_leave_now_for_train, function (next) {
+    draft.skip_leave_now_for_train = next;
+    markDirty();
+  }));
+  const trainWords = (lastData.traffic.train_keywords || []).join(', ');
+  if (trainWords) {
+    target.append(el('p', 'muted small', 'Matches event titles containing: ' + trainWords));
+  }
 
   const save = el('button', 'run-btn', 'Save schedule');
   save.type = 'button';

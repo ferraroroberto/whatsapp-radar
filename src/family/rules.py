@@ -63,6 +63,19 @@ def is_en_casa(event: CalendarEvent) -> bool:
     return _EN_CASA in event.summary.lower()
 
 
+def is_train_commute(event: CalendarEvent, keywords: tuple[str, ...]) -> bool:
+    """True when the event's title marks the commute as taken by train (#227).
+
+    Same title-keyword shape as :func:`is_en_casa`, but with the vocabulary
+    configurable (``traffic.train_keywords``) since the marker is written by
+    hand in whichever language the calendar uses (e.g. the Spanish ``(en
+    tren)``). Used only to suppress the leave-now alert, whose ETA is a driving
+    ETA and therefore says nothing about a train departure.
+    """
+    summary = event.summary.lower()
+    return any(keyword and keyword.lower() in summary for keyword in keywords)
+
+
 def requires_commute(event: CalendarEvent, home_address: str) -> bool:
     """True when attending this event means physically driving somewhere.
 

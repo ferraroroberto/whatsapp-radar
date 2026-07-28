@@ -58,7 +58,9 @@
     "origin_lookback_min": 60,
     "lookahead_hours": 3,
     "cadence_min": 30,
-    "leave_margin_min": 5
+    "leave_margin_min": 5,
+    "skip_leave_now_for_train": true,
+    "train_keywords": ["tren", "train"]
   },
   "family": {
     "enabled": false,

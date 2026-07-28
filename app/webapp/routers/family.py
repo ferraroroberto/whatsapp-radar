@@ -5,9 +5,10 @@ Launcher execution is exactly as visible as a webapp-launched one; the Run tab
 (#164) is where a check is actually fired and where recent runs now live. This
 endpoint exposes the resolved rules/config (non-secret) and lets the webapp
 edit the household schedule in place — on-duty weekday pattern, kids-home time,
-childcare windows, quiet hours, significant delay, the daily-scan enable toggle
-— straight into the gitignored ``config/local.json``. Calendar accounts stay
-read-only (provisioned by the calendar-bootstrap flow, not the UI). This gives
+childcare windows, quiet hours, significant delay, the daily-scan enable toggle,
+the train-commute leave-now exemption (#227) — straight into the gitignored
+``config/local.json``. Calendar accounts stay read-only (provisioned by the
+calendar-bootstrap flow, not the UI). This gives
 the operator full transparency and control over the exact rules in force
 instead of a black box or a file edit.
 """
@@ -51,6 +52,7 @@ class FamilyUpdate(BaseModel):
 
     traffic_enabled: bool | None = None
     family_enabled: bool | None = None
+    skip_leave_now_for_train: bool | None = None
     significant_delay_min: int | None = None
     cadence_min: int | None = None
     run_hour: int | None = None
@@ -173,6 +175,8 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "dedup_window_min": traffic.dedup_window_min,
             "origin_lookback_min": traffic.origin_lookback_min,
             "lookahead_hours": traffic.lookahead_hours,
+            "skip_leave_now_for_train": traffic.skip_leave_now_for_train,
+            "train_keywords": list(traffic.train_keywords),
             "last_check": last_check,
             "last_alert": last_alert,
         },
@@ -218,6 +222,8 @@ async def update_family(
     family: dict[str, Any] = {}
     if payload.traffic_enabled is not None:
         traffic["enabled"] = payload.traffic_enabled
+    if payload.skip_leave_now_for_train is not None:
+        traffic["skip_leave_now_for_train"] = payload.skip_leave_now_for_train
     if payload.significant_delay_min is not None:
         if not 0 <= payload.significant_delay_min <= 240:
             raise HTTPException(status_code=400, detail="significant_delay_min must be 0..240")

@@ -175,16 +175,20 @@
   <!-- Fleet navigation (vendored nav component): a body-level sibling of .app —
        desktop renders a sticky top segmented control, coarse pointers get the
        floating bottom-tab pill. nav-tabs.js discovers the tabs from this markup. -->
+  <!-- Labels are kept short (<=6 chars) on purpose: the floating pill gives each
+       tab a fixed slice of a phone's width and ellipsizes anything longer, so
+       "Dashboard"/"Messages"/"Follow-ups" rendered as "Dashbo…"/"Messag…"/
+       "Follow-…". The pane headings keep the full words. -->
   <nav class="tabs" role="tablist" aria-label="Sections" data-active-tab="dashboard">
     <button id="tabDashboard" type="button" class="tab active" data-tab="dashboard"
             role="tab" aria-selected="true" aria-controls="paneDashboard">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
-      <span class="tab-label">Dashboard</span>
+      <span class="tab-label">Home</span>
     </button>
     <button id="tabChats" type="button" class="tab" data-tab="chats"
             role="tab" aria-selected="false" aria-controls="paneChats" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-message-circle"></use></svg>
-      <span class="tab-label">Messages</span>
+      <span class="tab-label">Inbox</span>
     </button>
     <button id="tabExecution" type="button" class="tab" data-tab="execution"
             role="tab" aria-selected="false" aria-controls="paneExecution" tabindex="-1">
@@ -204,7 +208,7 @@
     <button id="tabAck" type="button" class="tab" data-tab="ack"
             role="tab" aria-selected="false" aria-controls="paneAck" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg>
-      <span class="tab-label">Follow-ups</span>
+      <span class="tab-label">To-do</span>
     </button>
   </nav>
 

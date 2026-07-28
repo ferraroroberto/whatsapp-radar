@@ -240,6 +240,15 @@ class TrafficConfig:
     # bounded by `cadence_min`: the alert lands on the first check after the
     # departure moment, so set a low cadence when relying on leave-now.
     leave_margin_min: int = 5
+    # Train-commute suppression (#227). The leave-now alert is a *driving*
+    # judgment — its ETA comes from a Routes DRIVE request — so it is noise for
+    # a commute taken by train (the daily office run, titled e.g. "trabajo desde
+    # la oficina (en tren)"). When on, an event whose title contains one of
+    # `train_keywords` never fires a leave-now; the delay and infeasible-hop
+    # alerts are deliberately untouched. Keywords are configurable so a genuine
+    # *drive to the train station* can be tuned out without a code change.
+    skip_leave_now_for_train: bool = True
+    train_keywords: tuple[str, ...] = ("tren", "train")
     # How often a live check should actually run (#164). The webapp persists
     # this; the App Launcher job (`family-radar-traffic-check`, #170) is armed
     # at a fixed high frequency (every few minutes) regardless, and `wr
@@ -540,9 +549,16 @@ def _parse_traffic(raw: dict[str, Any]) -> TrafficConfig:
         or os.environ.get("GOOGLE_MAPS_API_KEY")
         or str(raw.get("api_key", ""))
     )
+    raw_keywords = raw.get("train_keywords")
+    if isinstance(raw_keywords, (list, tuple)):
+        keywords = tuple(str(k).strip().lower() for k in raw_keywords if str(k).strip())
+    else:
+        keywords = TrafficConfig.train_keywords
     return TrafficConfig(
         enabled=_as_bool(os.environ.get("WR_TRAFFIC_ENABLED"), raw.get("enabled", False)),
         api_key=api_key,
+        skip_leave_now_for_train=bool(raw.get("skip_leave_now_for_train", True)),
+        train_keywords=keywords,
         significant_delay_min=int(raw.get("significant_delay_min", 15)),
         quiet_start_hour=int(raw.get("quiet_start_hour", 20)),
         quiet_end_hour=int(raw.get("quiet_end_hour", 5)),

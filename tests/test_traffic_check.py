@@ -373,6 +373,84 @@ def test_leave_now_suppressed_when_key_already_recent(
     assert entry["leave_now_alerted"] is False and harness["sent"] == []
 
 
+def _train_office_leg(state: dict[str, Any]) -> None:
+    """The daily office run, titled as taken by train (#227)."""
+    state["events"] = {
+        "roberto": [
+            _event("Trabajo desde la oficina (en tren)", location=WORK,
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=2), eid="a")
+        ]
+    }
+
+
+def test_leave_now_skipped_for_train_titled_commute(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Same overdue-departure setup as the leave-now test above, but the event is
+    # a train ride: the driving ETA says nothing about it, so no nudge fires and
+    # the suppression is recorded in the trace rather than silently dropped.
+    _train_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # 50 min ⇒ overdue
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["depart_in_min"] == -25  # still computed and traced
+    assert entry["leave_now_alerted"] is False
+    assert entry["leave_now_suppressed"] is True
+    assert harness["sent"] == [] and payload["alerts"] == 0
+
+
+def test_leave_now_fires_for_train_commute_when_toggle_is_off(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _train_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    config = dataclasses.replace(
+        _config(),
+        traffic=TrafficConfig(
+            enabled=True, api_key="k", significant_delay_min=15,
+            skip_leave_now_for_train=False,
+        ),
+    )
+    payload = traffic_check.run_traffic_check(config, now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["leave_now_alerted"] is True and entry["leave_now_suppressed"] is False
+    assert "Leave now" in harness["sent"][0]
+
+
+def test_train_suppression_leaves_delay_alert_untouched(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A train-titled event still gets its delay alert — the exemption is scoped
+    # to the leave-now nudge only.
+    _train_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=600, traffic_s=2400)  # 40 min, +30 delay
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["alerted"] is True and entry["leave_now_alerted"] is False
+    assert entry["leave_now_suppressed"] is True
+    assert payload["alerts"] == 1 and len(harness["sent"]) == 1
+    assert "Traffic alert" in harness["sent"][0]
+
+
+def test_non_train_commute_is_never_suppressed(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert entry["leave_now_alerted"] is True
+    assert entry["leave_now_suppressed"] is False
+
+
 def test_disabled_check_is_silent(harness: dict[str, Any]) -> None:
     disabled = dataclasses.replace(_config(), traffic=TrafficConfig(enabled=False, api_key="k"))
     payload = traffic_check.run_traffic_check(disabled, now=NOW, dry_run=False)

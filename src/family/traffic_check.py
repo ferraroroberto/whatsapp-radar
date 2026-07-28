@@ -15,7 +15,10 @@ delay alert so both can coexist for one event. A calendar-inference origin never
 triggers it — no real position, no claim about where the person is. When more
 than one person's leave-now resolves to identical text (same event, ETA, and
 start — #213), they are combined into one message naming everyone instead of
-one redundant message per person.
+one redundant message per person. A commute whose title marks it as taken by
+train (#227) is exempt while ``traffic.skip_leave_now_for_train`` is on — the
+ETA behind the nudge is a driving ETA, so it says nothing about a train
+departure; the exemption is recorded per leg as ``leave_now_suppressed``.
 
 Origin resolution (#169): the responsible person's *live phone position* when
 home-automation reports a fresh fix, else the calendar-inference chain (home, or
@@ -166,13 +169,26 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         # Timeliness is bounded by the check cadence (#170): the alert lands on
         # the first fire after the departure moment, so `traffic.cadence_min`
         # should be low when relying on leave-now.
+        # A train-titled commute (#227) is exempt: the ETA above is a *driving*
+        # ETA, so its departure moment is meaningless for a train ride. The
+        # computed `depart_in` is still recorded — it stays informative — and the
+        # suppression is recorded explicitly rather than silently dropping the
+        # alert. The delay and infeasible-hop alerts are deliberately unaffected.
         depart_in: int | None = None
         leave_now = False
+        leave_now_suppressed = False
         if origin["location_source"] == _LIVE_PRESENCE:
             depart_in = rules.depart_in_min(
                 now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
             )
             leave_now = depart_in <= 0
+            if (
+                leave_now
+                and traffic.skip_leave_now_for_train
+                and rules.is_train_commute(leg.event, traffic.train_keywords)
+            ):
+                leave_now = False
+                leave_now_suppressed = True
 
         entry = {
             "person": leg.person, "event": leg.event.summary,
@@ -186,6 +202,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             "gap_min": gap_min, "feasible": feasible,
             "depart_in_min": depart_in, "leave_margin_min": traffic.leave_margin_min,
             "dedup_key": key, "alerted": False, "leave_now_alerted": False,
+            "leave_now_suppressed": leave_now_suppressed,
             "checked_at": now.isoformat(),
         }
         alert_needed = status == "SIGNIFICANT_DELAY" or feasible is False

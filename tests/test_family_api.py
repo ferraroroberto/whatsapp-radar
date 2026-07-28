@@ -49,6 +49,24 @@ def test_kids_home_time_invalid_rejected(
     assert "kids_home_time" in res.json()["detail"]
 
 
+# -------------------------------------------------- skip_leave_now_for_train (#227)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_skip_leave_now_for_train_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bool
+) -> None:
+    saved = _patched_save(monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        res = client.post("/api/family", json={"skip_leave_now_for_train": value})
+        assert res.status_code == 200
+        assert saved["traffic"]["skip_leave_now_for_train"] is value
+        # The GET side exposes both the toggle and the keyword list it matches on.
+        payload = client.get("/api/family").json()
+    assert "skip_leave_now_for_train" in payload["traffic"]
+    assert payload["traffic"]["train_keywords"] == ["tren", "train"]
+
+
 # --------------------------------------------------------- responsible_by_weekday
 
 

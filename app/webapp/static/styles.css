@@ -1233,8 +1233,10 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .family-control-label { flex: 1; font-weight: 600; }
 /* A control's explanatory line belongs to the row above it, not floating as a
    standalone paragraph — drop .opt-hint's leading gap so the two read as one
-   block instead of the hint dangling halfway to the next control. */
-.family-control-row + .opt-hint { margin-top: 0; }
+   block instead of the hint dangling halfway to the next control. Its 2px side
+   inset goes too: every other control in this panel starts at the card's own
+   padding edge, so the hint has to share that baseline. */
+.family-control-row + .opt-hint { margin: 0 0 var(--space-sm); }
 .family-rules {
   display: grid;
   grid-template-columns: max-content 1fr;

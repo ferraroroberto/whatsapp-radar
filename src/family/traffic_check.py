@@ -34,6 +34,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+import requests
+
 from src.config import Config
 from src.family import dedup, rules
 from src.family.calendar_source import fetch_events_by_person
@@ -72,7 +74,7 @@ def _leave_now_text(
 
 
 def _resolve_origin_for_leg(
-    config: Config, leg: rules.CommuteLeg, *, now: datetime
+    config: Config, leg: rules.CommuteLeg, *, now: datetime, session: requests.Session
 ) -> dict[str, Any]:
     """Pick the routing origin for one leg: live phone fix, else calendar chain.
 
@@ -80,7 +82,7 @@ def _resolve_origin_for_leg(
     a label/address (never coordinates) and ``origin_latlng`` (the raw fix) stays
     out of any persisted structure.
     """
-    location = get_location(config.presence, leg.person, now=now)
+    location = get_location(config.presence, leg.person, now=now, session=session)
     if isinstance(location, PresenceLocation):
         return {
             "origin_latlng": (location.latitude, location.longitude),
@@ -130,109 +132,111 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     # that would otherwise be identical (#213) — merged into one send per group
     # once every leg has been checked.
     pending_leave_now: dict[tuple[str, datetime, int], list[dict[str, Any]]] = {}
-    for leg in legs:
-        key = rules.dedup_key(leg.person, leg.event.summary)
-        origin = _resolve_origin_for_leg(config, leg, now=now)
-        try:
-            result = compute_route(
-                origin["origin_label"], leg.destination, api_key=traffic.api_key,
-                arrival_time=leg.event.start, origin_latlng=origin["origin_latlng"],
-            )
-        except TrafficReadError as exc:
-            checked.append({
-                "person": leg.person, "event": leg.event.summary,
-                "status": "error", "detail": str(exc), "dedup_key": key,
-                "location_source": origin["location_source"],
-                "presence_status": origin["presence_status"],
-                "checked_at": now.isoformat(),
-            })
-            continue
-        status = delay_status(result.delay_min, significant_min=traffic.significant_delay_min)
+    with requests.Session() as session:
+        for leg in legs:
+            key = rules.dedup_key(leg.person, leg.event.summary)
+            origin = _resolve_origin_for_leg(config, leg, now=now, session=session)
+            try:
+                result = compute_route(
+                    origin["origin_label"], leg.destination, api_key=traffic.api_key,
+                    arrival_time=leg.event.start, origin_latlng=origin["origin_latlng"],
+                    session=session,
+                )
+            except TrafficReadError as exc:
+                checked.append({
+                    "person": leg.person, "event": leg.event.summary,
+                    "status": "error", "detail": str(exc), "dedup_key": key,
+                    "location_source": origin["location_source"],
+                    "presence_status": origin["presence_status"],
+                    "checked_at": now.isoformat(),
+                })
+                continue
+            status = delay_status(result.delay_min, significant_min=traffic.significant_delay_min)
 
-        # Back-to-back adjacency feasibility (#169, completing #168's deferral):
-        # only meaningful for a calendar-chained origin, where the gap between the
-        # preceding event's end and this event's start is a real departure budget.
-        # A live-presence origin has no such fixed departure moment, so it is not
-        # feasibility-judged — only its delay is.
-        gap_min: int | None = None
-        feasible: bool | None = None
-        if (
-            origin["location_source"] == _CALENDAR_INFERENCE
-            and leg.origin_event_end is not None
-        ):
-            gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
-            feasible = (result.traffic_s / 60.0) <= gap_min
-
-        # Leave-now judgment (#185): the loop from detection to action. Only a
-        # live phone fix supports it — a calendar-inference origin makes no claim
-        # about where the person actually is, so it never triggers a leave-now.
-        # Timeliness is bounded by the check cadence (#170): the alert lands on
-        # the first fire after the departure moment, so `traffic.cadence_min`
-        # should be low when relying on leave-now.
-        # A train-titled commute (#227) is exempt: the ETA above is a *driving*
-        # ETA, so its departure moment is meaningless for a train ride. The
-        # computed `depart_in` is still recorded — it stays informative — and the
-        # suppression is recorded explicitly rather than silently dropping the
-        # alert. The delay and infeasible-hop alerts are deliberately unaffected.
-        depart_in: int | None = None
-        leave_now = False
-        leave_now_suppressed = False
-        if origin["location_source"] == _LIVE_PRESENCE:
-            depart_in = rules.depart_in_min(
-                now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
-            )
-            leave_now = depart_in <= 0
+            # Back-to-back adjacency feasibility (#169, completing #168's deferral):
+            # only meaningful for a calendar-chained origin, where the gap between the
+            # preceding event's end and this event's start is a real departure budget.
+            # A live-presence origin has no such fixed departure moment, so it is not
+            # feasibility-judged — only its delay is.
+            gap_min: int | None = None
+            feasible: bool | None = None
             if (
-                leave_now
-                and traffic.skip_leave_now_for_train
-                and rules.is_train_commute(leg.event, traffic.train_keywords)
+                origin["location_source"] == _CALENDAR_INFERENCE
+                and leg.origin_event_end is not None
             ):
-                leave_now = False
-                leave_now_suppressed = True
+                gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
+                feasible = (result.traffic_s / 60.0) <= gap_min
 
-        entry = {
-            "person": leg.person, "event": leg.event.summary,
-            "origin": origin["origin_label"], "destination": leg.destination,
-            "location_source": origin["location_source"],
-            "presence_age_min": origin["presence_age_min"],
-            "presence_refreshed": origin["presence_refreshed"],
-            "presence_status": origin["presence_status"],
-            "normal_min": result.normal_s // 60, "traffic_min": result.traffic_s // 60,
-            "delay_min": result.delay_min, "status": status,
-            "gap_min": gap_min, "feasible": feasible,
-            "depart_in_min": depart_in, "leave_margin_min": traffic.leave_margin_min,
-            "dedup_key": key, "alerted": False, "leave_now_alerted": False,
-            "leave_now_suppressed": leave_now_suppressed,
-            "checked_at": now.isoformat(),
-        }
-        alert_needed = status == "SIGNIFICANT_DELAY" or feasible is False
-        if alert_needed and key not in recent:
-            if not dry_run:
-                if feasible is False and gap_min is not None:
-                    text = _infeasible_text(
-                        leg.person, leg.event.summary, result.traffic_s // 60, gap_min
-                    )
-                else:
-                    text = _alert_text(
-                        leg.person, leg.event.summary, result, result.delay_min
-                    )
-                send_alert(config, text)
-                dedup.record_alert(key, now=now)
-                recent.add(key)
-            entry["alerted"] = True
-            alerts += 1
+            # Leave-now judgment (#185): the loop from detection to action. Only a
+            # live phone fix supports it — a calendar-inference origin makes no claim
+            # about where the person actually is, so it never triggers a leave-now.
+            # Timeliness is bounded by the check cadence (#170): the alert lands on
+            # the first fire after the departure moment, so `traffic.cadence_min`
+            # should be low when relying on leave-now.
+            # A train-titled commute (#227) is exempt: the ETA above is a *driving*
+            # ETA, so its departure moment is meaningless for a train ride. The
+            # computed `depart_in` is still recorded — it stays informative — and the
+            # suppression is recorded explicitly rather than silently dropping the
+            # alert. The delay and infeasible-hop alerts are deliberately unaffected.
+            depart_in: int | None = None
+            leave_now = False
+            leave_now_suppressed = False
+            if origin["location_source"] == _LIVE_PRESENCE:
+                depart_in = rules.depart_in_min(
+                    now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
+                )
+                leave_now = depart_in <= 0
+                if (
+                    leave_now
+                    and traffic.skip_leave_now_for_train
+                    and rules.is_train_commute(leg.event, traffic.train_keywords)
+                ):
+                    leave_now = False
+                    leave_now_suppressed = True
 
-        # A distinct dedup key lets a leave-now alert coexist with a delay alert
-        # for the same event without either suppressing the other. Sending is
-        # deferred until every leg is checked, so people sharing one event with
-        # identical resulting text (#213) can be merged into one message.
-        leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
-        if leave_now and leave_key not in recent:
-            group_key = (leg.event.summary, leg.event.start, result.traffic_s // 60)
-            pending_leave_now.setdefault(group_key, []).append(
-                {"person": leg.person, "leave_key": leave_key, "entry": entry}
-            )
-        checked.append(entry)
+            entry = {
+                "person": leg.person, "event": leg.event.summary,
+                "origin": origin["origin_label"], "destination": leg.destination,
+                "location_source": origin["location_source"],
+                "presence_age_min": origin["presence_age_min"],
+                "presence_refreshed": origin["presence_refreshed"],
+                "presence_status": origin["presence_status"],
+                "normal_min": result.normal_s // 60, "traffic_min": result.traffic_s // 60,
+                "delay_min": result.delay_min, "status": status,
+                "gap_min": gap_min, "feasible": feasible,
+                "depart_in_min": depart_in, "leave_margin_min": traffic.leave_margin_min,
+                "dedup_key": key, "alerted": False, "leave_now_alerted": False,
+                "leave_now_suppressed": leave_now_suppressed,
+                "checked_at": now.isoformat(),
+            }
+            alert_needed = status == "SIGNIFICANT_DELAY" or feasible is False
+            if alert_needed and key not in recent:
+                if not dry_run:
+                    if feasible is False and gap_min is not None:
+                        text = _infeasible_text(
+                            leg.person, leg.event.summary, result.traffic_s // 60, gap_min
+                        )
+                    else:
+                        text = _alert_text(
+                            leg.person, leg.event.summary, result, result.delay_min
+                        )
+                    send_alert(config, text)
+                    dedup.record_alert(key, now=now)
+                    recent.add(key)
+                entry["alerted"] = True
+                alerts += 1
+
+            # A distinct dedup key lets a leave-now alert coexist with a delay alert
+            # for the same event without either suppressing the other. Sending is
+            # deferred until every leg is checked, so people sharing one event with
+            # identical resulting text (#213) can be merged into one message.
+            leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
+            if leave_now and leave_key not in recent:
+                group_key = (leg.event.summary, leg.event.start, result.traffic_s // 60)
+                pending_leave_now.setdefault(group_key, []).append(
+                    {"person": leg.person, "leave_key": leave_key, "entry": entry}
+                )
+            checked.append(entry)
 
     for (summary, event_start, eta_min), items in pending_leave_now.items():
         if not dry_run:

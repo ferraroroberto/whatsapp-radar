@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
+from app.webapp import runs
 from app.webapp.middleware import BearerTokenMiddleware
 from app.webapp.routers import (
     ack,
@@ -114,6 +115,14 @@ class _VersionedStatic(StaticFiles):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Sweep any pre-existing backlog once at startup (#234) — post-run pruning
+    # only fires as new runs finish, so a directory grown before this shipped
+    # (or during downtime) needs one catch-up pass. Best-effort: a prune failure
+    # must never block startup.
+    try:
+        runs.prune_runs()
+    except OSError as exc:
+        _log.warning(f"⚠️ startup run-prune failed: {exc}")
     yield
 
 

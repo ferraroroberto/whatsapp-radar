@@ -11,7 +11,7 @@ a name-based guess (an unofficial/uncertain signal the issue explicitly rules
 out).
 
 ``src/tts_client.py`` stays a thin HTTP client with no opinion on which
-profile to use; this module owns the *selection*, and ``src/config.py``'s
+profile to use; this module owns the *selection*, and ``src/config/tts.py``'s
 ``TtsConfig`` owns the concrete model/voice each profile key maps to.
 """
 

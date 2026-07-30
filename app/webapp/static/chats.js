@@ -13,6 +13,7 @@ import { jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
+import { resetLinkPanel, syncLinkPanel, wireChatLinks } from './chat-links.js';
 
 // A sprite glyph wrapped for insertion next to textContent-only user data.
 // Static markup only — never user content — so innerHTML is safe here.
@@ -483,8 +484,6 @@ async function openHistory(chat, openPanel) {
   if (!els.historyOverlay.open) els.historyOverlay.showModal();
   hist.chat = chat;
   hist.chatId = chat.id;
-  // Panel starts collapsed on a normal open; the link badge opens it expanded.
-  panelOpen = chat.source === 'whatsapp' && !!openPanel;
   els.historySource.textContent = chat.source === 'gmail' ? 'Gmail' : 'WhatsApp';
   els.historySource.className = 'source-badge source-' + chat.source;
   // Filter parity (#166): viewing a monitored sender shows that sender's messages
@@ -498,7 +497,8 @@ async function openHistory(chat, openPanel) {
     els.historySenderChip.hidden = true;
   }
   els.historyLink.hidden = chat.source !== 'whatsapp';
-  syncLinkPanel();
+  // Panel starts collapsed on a normal open; the link badge opens it expanded.
+  syncLinkPanel(chat, linkDeps, chat.source === 'whatsapp' && !!openPanel);
   hist.oldestTs = null;
   hist.oldestId = null;
   hist.hasMore = false;
@@ -549,9 +549,7 @@ function onHistoryClosed() {
   els.historyBody.textContent = '';
   els.historySenderChip.hidden = true;
   els.historySenderChip.textContent = '';
-  els.historyLinkPanel.hidden = true;
-  els.historyLinkPanel.textContent = '';
-  panelOpen = false;
+  resetLinkPanel();
   hist.chat = null;
   hist.chatId = null;
 }
@@ -560,95 +558,11 @@ function closeHistory() {
   if (els.historyOverlay.open) els.historyOverlay.close();
 }
 
-// ----------------------------------------------------------- link management
-// All link maintenance happens inside a chat's overlay. The link button toggles
-// a panel whose content depends on the chat's role:
-//   standalone → "Link to a parent…" (opens the picker; this chat becomes a child)
-//   child      → "Linked to <parent>" + Unlink / Change parent…
-//   parent     → its children, each with an Unlink
-// The link is keyed on the child, so every mutation targets a child id and the
-// server enforces the depth-1 rules.
-let panelOpen = false;
-
-function linkBtn(text, onClick) {
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'link-btn';
-  b.textContent = text;
-  b.addEventListener('click', onClick);
-  return b;
-}
-
-function renderLinkPanel(chat) {
-  const panel = els.historyLinkPanel;
-  panel.textContent = '';
-  const kids = childrenOf(chat.id);
-
-  if (chat.parent_chat_id != null) {
-    // Child: show its parent with unlink / re-parent.
-    const parent = state.chats.find(function (c) { return c.id === chat.parent_chat_id; });
-    const status = document.createElement('div');
-    status.className = 'link-status';
-    status.textContent = 'Linked to: ' + (parent ? chatLabel(parent) : '#' + chat.parent_chat_id);
-    const actions = document.createElement('div');
-    actions.className = 'link-actions';
-    actions.append(
-      linkBtn('Unlink', function () { unlinkChat(chat); }),
-      linkBtn('Change parent…', function () { openPicker(chat); })
-    );
-    panel.append(status, actions);
-  } else if (kids.length) {
-    // Parent: list children, each unlinkable. No "set a parent" — a parent can't
-    // itself become a child.
-    const status = document.createElement('div');
-    status.className = 'link-status';
-    status.textContent = 'Linked chats (' + kids.length + '):';
-    panel.appendChild(status);
-    const ul = document.createElement('ul');
-    ul.className = 'link-children';
-    for (const k of kids) {
-      const li = document.createElement('li');
-      const nm = document.createElement('span');
-      nm.className = 'link-child-name';
-      nm.textContent = chatLabel(k);
-      const x = linkBtn('Unlink', function () { unlinkChat(k); });
-      x.title = 'Unlink this chat';
-      li.append(nm, x);
-      ul.appendChild(li);
-    }
-    panel.appendChild(ul);
-  } else {
-    // Standalone: offer to fold this chat into a canonical parent.
-    const hint = document.createElement('div');
-    hint.className = 'link-status muted';
-    hint.textContent = 'Not linked. Merge another number for the same person onto a parent chat.';
-    const actions = document.createElement('div');
-    actions.className = 'link-actions';
-    actions.appendChild(linkBtn('Link to a parent…', function () { openPicker(chat); }));
-    panel.append(hint, actions);
-  }
-}
-
-function syncLinkPanel() {
-  if (!hist.chat) return;
-  if (hist.chat.source !== 'whatsapp') {
-    els.historyLinkPanel.hidden = true;
-    return;
-  }
-  if (panelOpen) {
-    renderLinkPanel(hist.chat);
-    els.historyLinkPanel.hidden = false;
-  } else {
-    els.historyLinkPanel.hidden = true;
-    els.historyLinkPanel.textContent = '';
-  }
-}
-
-function toggleLinkPanel() {
-  if (!hist.chat) return;
-  panelOpen = !panelOpen;
-  syncLinkPanel();
-}
+// ------------------------------------------------------- link management
+// Extracted to chat-links.js (#240): the link/unlink/re-parent picker and the
+// rename (alias) control. This section keeps only what genuinely belongs to
+// chats.js — the post-mutation refresh and the `deps` chat-links.js is wired
+// with, since both need chats.js-owned state (`hist`, `render`, `fetchChats`).
 
 // After any link mutation: refresh the chat list, then reload the open overlay so
 // both the merged history and the link panel reflect the new family. If the chat
@@ -661,117 +575,21 @@ async function refreshAfterLink() {
   openHistory(fresh, true).catch(function () {});
 }
 
-async function unlinkChat(chat) {
-  try {
-    await jsonApi('/api/chats/' + chat.id + '/unlink', { method: 'POST' });
-    toast('Unlinked.', 'good');
-    await refreshAfterLink();
-  } catch (exc) {
-    toast('Unlink failed: ' + (exc.message || exc), 'error');
-  }
+// deps chat-links.js's link/rename/picker controls are wired with once, in
+// wireChats() below. getCurrentChat reads the live `hist.chat` (not a snapshot
+// taken at wiring time) so every click always acts on whichever chat's overlay
+// is currently open; onRenamed mirrors what a rename used to do inline here.
+function onChatRenamed(chat) {
+  els.historyTitle.textContent = chatLabel(chat);
+  render();
 }
 
-// ----------------------------------------------------------- parent picker
-const picker = { child: null };
-
-function pickerCandidates() {
-  const q = els.linkPickerSearch.value.trim().toLowerCase();
-  const child = picker.child;
-  return state.chats.filter(function (c) {
-    if (!child || c.id === child.id) return false;     // never itself
-    if (c.source !== 'whatsapp') return false;
-    if (c.parent_chat_id != null) return false;        // target must be top-level
-    if (c.id === child.parent_chat_id) return false;   // already this child's parent
-    if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
-    return true;
-  });
-}
-
-function renderPicker() {
-  const all = pickerCandidates();
-  const shown = all.slice(0, CHATS_RENDER_CAP);
-  els.linkPickerList.textContent = '';
-  els.linkPickerEmpty.hidden = all.length > 0;
-  els.linkPickerCount.textContent = all.length > shown.length
-    ? 'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.'
-    : (all.length ? fmtNum(all.length) + ' chat' + (all.length === 1 ? '' : 's') : '');
-
-  for (const c of shown) {
-    const li = document.createElement('li');
-    li.className = 'chat-row';
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chat-main';
-    const nm = document.createElement('span');
-    nm.className = 'chat-name';
-    nm.textContent = chatLabel(c);
-    const meta = document.createElement('span');
-    meta.className = 'chat-meta';
-    meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtTsFull(c.last_message_at);
-    b.append(nm, meta);
-    b.addEventListener('click', function () { doLink(picker.child, c); });
-    li.appendChild(b);
-    els.linkPickerList.appendChild(li);
-  }
-}
-
-function openPicker(child) {
-  picker.child = child;
-  els.linkPickerTitle.textContent = 'Link “' + chatLabel(child) + '” to…';
-  els.linkPickerSearch.value = '';
-  if (!els.linkPickerOverlay.open) els.linkPickerOverlay.showModal();
-  renderPicker();
-  els.linkPickerSearch.focus();
-}
-
-function onPickerClosed() {
-  els.linkPickerList.textContent = '';
-  picker.child = null;
-}
-
-function closePicker() {
-  if (els.linkPickerOverlay.open) els.linkPickerOverlay.close();
-}
-
-async function doLink(child, parent) {
-  if (!child || !parent) return;
-  try {
-    await jsonApi('/api/chats/' + child.id + '/link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parent_id: parent.id }),
-    });
-    toast('Linked to ' + chatLabel(parent) + '.', 'good');
-    closePicker();
-    await refreshAfterLink();
-  } catch (exc) {
-    toast('Link failed: ' + (exc.message || exc), 'error');
-  }
-}
-
-// Rename: set or clear the operator alias for the chat in the open overlay. The
-// derived name stays in the DB (and the parenthesized label); the alias is the
-// human-friendly override that shows first — useful when the connector could only
-// resolve a bare number (e.g. an unsaved contact).
-async function renameChat() {
-  const chat = hist.chat;
-  if (!chat) return;
-  const next = window.prompt('Alias for this chat (blank to clear):', chat.alias || '');
-  if (next === null) return; // cancelled
-  try {
-    const res = await jsonApi('/api/chats/' + chat.id + '/alias', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alias: next }),
-    });
-    chat.alias = res.alias;
-    els.historyTitle.textContent = chatLabel(chat);
-    render();
-    toast(res.alias ? 'Alias saved.' : 'Alias cleared.', 'good');
-  } catch (exc) {
-    toast('Rename failed: ' + (exc.message || exc), 'error');
-  }
-}
+const linkDeps = {
+  chatLabel: chatLabel,
+  getCurrentChat: function () { return hist.chat; },
+  onLinked: refreshAfterLink,
+  onRenamed: onChatRenamed,
+};
 
 // --------------------------------------------------------- wiring
 export function wireChats() {
@@ -798,8 +616,6 @@ export function wireChats() {
     state.chatsSearch = els.chatsSearch.value;
     render();
   });
-  els.historyRename.addEventListener('click', function () { renameChat().catch(function () {}); });
-  els.historyLink.addEventListener('click', toggleLinkPanel);
   els.historyClose.addEventListener('click', closeHistory);
   // Native <dialog>: a click on the element itself is the ::backdrop; Esc fires
   // 'close' natively, so the reset lives on the 'close' event for every path.
@@ -807,14 +623,9 @@ export function wireChats() {
     if (ev.target === els.historyOverlay) closeHistory();
   });
   els.historyOverlay.addEventListener('close', onHistoryClosed);
-  // Parent picker overlay (#25): search filters by name or alias; tap a result
-  // in renderPicker to link. Close on the close button or a backdrop tap.
-  els.linkPickerClose.addEventListener('click', closePicker);
-  els.linkPickerOverlay.addEventListener('click', function (ev) {
-    if (ev.target === els.linkPickerOverlay) closePicker();
-  });
-  els.linkPickerOverlay.addEventListener('close', onPickerClosed);
-  els.linkPickerSearch.addEventListener('input', renderPicker);
+  // Link/rename controls + the parent-picker overlay (#25) are chat-links.js's
+  // own feature (#240) — one call wires everything it owns.
+  wireChatLinks(linkDeps);
   // Newest is at the top; scrolling to the bottom pages in older messages.
   els.historyBody.addEventListener('scroll', function () {
     const b = els.historyBody;

@@ -10,8 +10,6 @@
 
 export const TOKEN_KEY = 'wa-radar.token';
 export const THEME_KEY = 'wa-radar.theme';
-export const UNLOCK_KEY = 'wa-radar.unlock';
-export const UNLOCK_EXP_KEY = 'wa-radar.unlock.exp';
 
 export const WEBAUTHN_POLL_MS = 15000;
 export const DASHBOARD_POLL_MS = 15000;

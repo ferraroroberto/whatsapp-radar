@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_UNLOCK_TTL_SECONDS = 12 * 3600
-
 
 @router.get("/api/webauthn/status")
 async def webauthn_status(request: Request) -> dict[str, Any]:
@@ -99,14 +97,14 @@ async def webauthn_auth_finish(request: Request) -> dict[str, Any]:
     gate: WebAuthnGate = request.app.state.webauthn_gate
     credential = await maybe_json(request)
     try:
-        token = gate.finish_authentication(cfg, credential)
+        gate.finish_authentication(cfg, credential)
     except PermissionError as exc:
         logger.warning(f"🚨 passkey auth refused from {client_ip(request)}: {exc}")
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — verification failure
         logger.warning(f"🚨 passkey auth failed from {client_ip(request)}: {exc}")
         raise HTTPException(status_code=400, detail=f"authentication failed: {exc}") from exc
-    return {"unlock_token": token, "ttl_seconds": _UNLOCK_TTL_SECONDS}
+    return {"ok": True}
 
 
 @router.delete("/api/webauthn/devices/{device_id}")

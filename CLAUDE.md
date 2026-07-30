@@ -10,21 +10,32 @@ It follows the fleet's standard layout (as in `E:\automation\app-launcher`): UI 
 
 ```
 whatsapp-radar/
-  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|notify|resync|reprocess|tray)
-  app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py,
-                         #   routers/ (misc, auth, webauthn), static/ (vanilla-JS shell)
+  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|gmail-survey|
+                         #   notify|resync|reprocess|calendar-scan|traffic-check|tray)
+  app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py, runs.py,
+                         #   routers/ (ack, audit, auth, chats, config, dashboard, execution,
+                         #   family, misc, sidecar, webauthn, _helpers), static/ (vanilla-JS shell)
   app/tray/tray.py       # pystray surface that owns the webapp lifecycle
+  calendar_readonly/     # portable Google Calendar read client (mirrors gmail_readonly/)
+  calendar_write/        # portable Google Calendar write client (family calendar automation)
+  gmail_readonly/        # portable Gmail read client
   src/                   # logic, imported as `from src.…`
     config.py  models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
-    connector/ (base, fixture, linked_device)
-    db/ (store.py facade over connection/chats/messages/runs/dashboard/
-         sync_log/reprocess_support.py, schema.sql)
-    analysis/ (classifier, contract, keywords, review, prompts/)
-    notify/ (base, factory, telegram)   report/digest.py
+    paths.py  tts_client.py  speech_profile.py  subprocess_flags.py  runresult.py  _loopback_http.py
+    connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
+    db/ (store.py facade over connection/ack/chats/messages/runs/dashboard/sync_log/
+         reprocess_support/retention/tripwire, plus sync.py/reprocess.py, schema.sql)
+    analysis/ (classifier, contract, keywords, pipeline, reminders, review, source_funnel,
+               summarize, transcription, tripwire, gmail_survey, _common, prompts/)
+    notify/ (base, factory, telegram, alert, delivery)   report/digest.py
+    family/ (calendar_scan, calendar_source, dedup, rules, traffic_check)
+    presence/client.py     traffic/routes_client.py
     fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env are gitignored
-  scripts/               # gen_token, set_password, gen_icons, gen_tailscale_cert, run_named_tunnel, verify-before-ship.ps1
+  scripts/               # gen_token, set_password, gen_icons, gen_tailscale_cert, run_named_tunnel,
+                         #   auth_calendar, auth_calendar_write, auth_gmail, gmail_school_backtest,
+                         #   traffic_smoke, run-e2e.ps1, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
   webapp/                # runtime log output + certificates/ (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
@@ -42,13 +53,14 @@ Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <comman
 
 ### Admin webapp & tray
 
-The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All six tabs (Dashboard · Chats & Config · Execution · Audit · Family · Follow-ups) are live; see `README.md` §"Admin Webapp" for per-tab endpoint lists.
+The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All six tabs (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups) are live; see `README.md` §"Admin Webapp" for per-tab endpoint lists.
 
 **Safe restart (never blanket-kill python):** the tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill, which would take down sister apps (App Launcher, local-llm-hub, …). To restart by hand, find the owner with `Get-NetTCPConnection -LocalPort 8455` and stop that PID, then relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart the `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import logic with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
+- `calendar_readonly/`, `calendar_write/`, and `gmail_readonly/` are portable Google API packages that deliberately live outside `src/` (so they can be lifted into another repo unchanged) and are imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule below, not a violation of it.
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) are resolved by path relative to `__file__`, never via `importlib.resources` package-data.
 - A script that lives **outside** the repo but imports `src.*`/`app.*` needs `$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`. Prefer `& .\.venv\Scripts\python.exe -m <module>` from the repo root when the script can live in-tree (a gitignored scratch dir is fine) — `-m` puts CWD on `sys.path` and needs no env var.
@@ -91,7 +103,7 @@ The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors 
   - app/webapp/static/**/*.css
   - app/webapp/static/**/*.{js,html}
 - key views:                      # single tabbed SPA served at `/`
-  - /          (Dashboard · Chats · Run · Audit tabs)
+  - /          (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups tabs)
 
 ## Verification
 

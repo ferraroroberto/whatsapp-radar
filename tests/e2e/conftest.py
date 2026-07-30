@@ -42,6 +42,7 @@ from pathlib import Path
 
 import pytest
 
+from src.subprocess_flags import NO_WINDOW
 from tests.e2e._e2e_live_guard import require_disposable_instance
 
 logger = logging.getLogger(__name__)
@@ -325,6 +326,7 @@ def base_url() -> Iterator[str]:
         env=env,
         stdout=log,
         stderr=subprocess.STDOUT,
+        creationflags=NO_WINDOW,
     )
     try:
         # Scale the readiness budget too (issue #64): a cold hosted runner can

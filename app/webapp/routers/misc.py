@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from app.webapp.routers._helpers import STATIC_DIR
 from src.paths import PROJECT_ROOT
 from src.static_versioning import asset_hash_for, rewrite_index_html
+from src.subprocess_flags import NO_WINDOW
 
 _log = logging.getLogger(__name__)
 
@@ -33,9 +34,8 @@ def _resolve_git_sha() -> str:
         text=True,
         timeout=5,
         check=False,
+        creationflags=NO_WINDOW,
     )
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
         result = subprocess.run(cmd, **kwargs)
     except (OSError, subprocess.SubprocessError) as exc:

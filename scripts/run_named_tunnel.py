@@ -28,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.tray import cloudflared_proc  # noqa: E402 — needs PROJECT_ROOT on sys.path
+from src.subprocess_flags import NO_WINDOW_NEW_GROUP  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "config" / "cloudflared.sample.yml"
@@ -64,11 +65,7 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen[bytes]:
         "warning",
     ]
     logger.info(f"🚀 Starting uvicorn: {' '.join(cmd)}")
-    kw: dict[str, object] = dict(cwd=str(PROJECT_ROOT))
-    if sys.platform == "win32":
-        kw["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-        )
+    kw: dict[str, object] = dict(cwd=str(PROJECT_ROOT), creationflags=NO_WINDOW_NEW_GROUP)
     return subprocess.Popen(cmd, **kw)  # type: ignore[arg-type]
 
 

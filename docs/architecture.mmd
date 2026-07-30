@@ -15,8 +15,10 @@ flowchart TB
 
   subgraph cli["app/cli/main.py — argparse CLI"]
     CLICMDS["status · ingest · chats · monitor · ignore ·\nreview · scan · notify · resync · reprocess · gmail-survey ·\ncalendar-scan · traffic-check · tray"]
+    RUNLOG["runlog.py — tees a launchable verb's own\noutput into a webapp-shaped run record (#233)"]
   end
   LAUNCHER --> CLICMDS
+  CLICMDS --> RUNLOG
 
   subgraph tray["app/tray/tray.py — pystray surface"]
     TRAYPY["owns webapp lifecycle + sidecar keep-alive\n+ optional cloudflared tunnel"]
@@ -31,7 +33,7 @@ flowchart TB
     SERVER["server.py — app assembly, static mount"]
     MANAGER["manager.py — WebappManager (start/stop/restart)"]
     MIDDLEWARE["middleware.py — bearer-token gate"]
-    RUNS["runs.py — spawns CLI pieces, streams output"]
+    RUNS["runs.py — spawns CLI pieces, streams output;\nowns the run-record shape both surfaces write"]
     ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · ack · misc"]
   end
   TRAYPY --> MANAGER
@@ -191,6 +193,7 @@ flowchart TB
   TRANSCRIBE --> HUB
   TELEGRAM --> TELEGRAMAPI
   APPLAUNCHER --> CLICMDS
+  RUNLOG -->|webapp/runs/<kind>/<id>/output.log| RUNS
   SERVER --> TAILSCALE
   TRANSCRIBE --> FFMPEG
   GMAILCORE --> GMAILAPI

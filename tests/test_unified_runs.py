@@ -35,7 +35,7 @@ _TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
 
 def test_db_and_webapp_timestamps_share_one_format() -> None:
     assert _TS.match(_now())
-    assert _TS.match(webapp_runs._now_iso())
+    assert _TS.match(webapp_runs.now_iso())
 
 
 # --- store: kinds + summary -------------------------------------------------
@@ -406,9 +406,17 @@ def test_audit_lists_family_runs_with_kind_and_summary(tmp_path: Path) -> None:
     assert detail["traces"] == []
 
 
-def test_execution_runs_merges_db_only_rows(
+def test_execution_runs_db_only_row_falls_back_to_placeholder(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A DB row with *no* filesystem record still synthesizes an entry (#163).
+
+    The "no captured output" placeholder is asserted deliberately, and only for
+    this case: a run row that has no filesystem record at all — a historical row
+    predating #233, or a verb that records no run record. It is no longer the
+    answer for a scheduled run, which now carries real output; that is
+    ``test_cli_runlog.py::test_cli_launched_run_surfaces_output_in_the_api``.
+    """
     monkeypatch.setattr(webapp_runs, "RUNS_DIR", tmp_path / "runs")
     db = tmp_path / "exec.sqlite3"
     run_id = _seed_family_run(db, mode="dry_run")
@@ -445,7 +453,7 @@ def test_execution_runs_dedups_webapp_launched_run(
     finally:
         conn.close()
 
-    run_dir = webapp_runs._new_run_dir("scan", "20260101T000000")
+    run_dir = webapp_runs.new_run_dir("scan", "20260101T000000")
     webapp_runs.write_run_json(
         run_dir,
         kind="scan",

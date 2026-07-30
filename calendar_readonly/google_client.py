@@ -7,6 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from google_oauth_common.credentials import load_or_refresh_credentials
+from google_oauth_common.token_store import write_token_atomically
+
 from calendar_readonly.core import CALENDAR_READONLY_SCOPE
 
 CredentialLoader = Callable[[str, list[str]], Any]
@@ -69,26 +72,21 @@ def build_google_calendar_client(
     service_builder: ServiceBuilder | None = None,
 ) -> GoogleCalendarReadClient:
     """Load/refresh an OAuth token and build the official read-only client."""
-    if not token_path.is_file():
-        raise FileNotFoundError(
-            "Calendar OAuth token missing; run the OAuth bootstrap interactively"
-        )
+    credentials = load_or_refresh_credentials(
+        token_path,
+        CALENDAR_READONLY_SCOPE,
+        missing_token_message="Calendar OAuth token missing; run the OAuth bootstrap interactively",
+        invalid_token_message="Calendar OAuth token is invalid or has been revoked",
+        token_writer=write_token_atomically,
+        credential_loader=credential_loader,
+        request_factory=request_factory,
+    )
 
-    if credential_loader is None or request_factory is None or service_builder is None:
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
+    if service_builder is None:
         from googleapiclient.discovery import build
 
-        credential_loader = credential_loader or Credentials.from_authorized_user_file
-        request_factory = request_factory or Request
-        service_builder = service_builder or build
+        service_builder = build
 
-    credentials = credential_loader(str(token_path), [CALENDAR_READONLY_SCOPE])
-    if credentials.expired and credentials.refresh_token:
-        credentials.refresh(request_factory())
-        write_token_atomically(token_path, credentials.to_json())
-    if not credentials.valid:
-        raise RuntimeError("Calendar OAuth token is invalid or has been revoked")
     service = service_builder(
         "calendar",
         "v3",
@@ -96,14 +94,6 @@ def build_google_calendar_client(
         cache_discovery=False,
     )
     return GoogleCalendarReadClient(service)
-
-
-def write_token_atomically(path: Path, token_json: str) -> None:
-    """Persist an OAuth token atomically without logging its contents."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
-    temporary_path.write_text(token_json, encoding="utf-8")
-    temporary_path.replace(path)
 
 
 def _rfc3339(moment: datetime) -> str:

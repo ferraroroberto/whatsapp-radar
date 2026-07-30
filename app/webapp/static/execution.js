@@ -8,10 +8,10 @@
  * Reprocess. Chat names / message text go in via textContent only (privacy). */
 
 import { els, state, EXECUTION_POLL_MS } from './state.js';
-import { jsonApi, toast } from './api.js';
+import { fetchQuiet, jsonApi, toast } from './api.js';
 import {
-  fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels,
-  sourceIcon, SOURCE_LABEL,
+  familyKindCells, fmtLocalDateTime, fmtNum, kindLabel, renderFunnelCells,
+  renderSourceFunnels, sourceIcon, SOURCE_LABEL,
 } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
@@ -150,8 +150,6 @@ function qrSrc() {
   return '/api/sidecar/qr?t=' + Math.floor(Date.now() / 20000);
 }
 
-function fmtCount(n) { return (n === undefined || n === null) ? '–' : Number(n).toLocaleString(); }
-
 // Compact local timestamp for sync/health lines — the one shared formatter so
 // no surface can drift to a different clock or format again (#163).
 function fmtSyncWhen(iso) {
@@ -192,7 +190,7 @@ function renderCalendarHealth(source) {
   addStatusLine(details, 'Mode', 'read-only Google Calendar');
   addStatusLine(details, 'Authorization', source.token_present ? 'token present' : 'token missing');
   addStatusLine(details, 'Calendars',
-    fmtCount(source.account_count) + ((source.accounts || []).length ? ' · ' + source.accounts.join(' · ') : ''));
+    fmtNum(source.account_count) + ((source.accounts || []).length ? ' · ' + source.accounts.join(' · ') : ''));
   addStatusLine(details, 'Last successful fetch', source.last_success_at ? fmtSyncWhen(source.last_success_at) : 'never');
   card.append(head, details);
   return card;
@@ -256,8 +254,8 @@ function renderSourceHealth() {
     const storedChannels = liveTotals.channels ?? source.stored_channels;
     const monitoredChannels = liveTotals.monitored ?? source.monitored_channels;
     const latestStored = liveTotals.latest_message_at || source.latest_stored_at;
-    addStatusLine(details, 'Stored', fmtCount(storedMessages) + ' messages in ' + fmtCount(storedChannels) + ' channels');
-    addStatusLine(details, 'Monitored', fmtCount(monitoredChannels) + ' channels');
+    addStatusLine(details, 'Stored', fmtNum(storedMessages) + ' messages in ' + fmtNum(storedChannels) + ' channels');
+    addStatusLine(details, 'Monitored', fmtNum(monitoredChannels) + ' channels');
     addStatusLine(details, 'Latest stored', fmtSyncWhen(latestStored));
     const sourceSyncs = ex.syncs.filter(function (row) { return row.connector_source === source.source; });
     const attempt = sourceSyncs[0] || source.last_attempt;
@@ -275,39 +273,31 @@ function renderSourceHealth() {
 }
 
 export async function fetchHealth() {
-  let s;
-  try {
-    s = await jsonApi('/api/sidecar/status');
-  } catch (_) {
-    return;
-  }
-  execState().sidecar = s;
-  const ex = execState();
-  if (!ex.sourceHealthAt || Date.now() - ex.sourceHealthAt > 60000) {
-    try {
-      const health = await jsonApi('/api/execution/health');
-      ex.sourceHealth = health.sources || [];
-      ex.sourceHealthAt = Date.now();
-    } catch (_) { /* retain the last truthful snapshot */ }
-  }
-  renderSourceHealth();
-  renderReconnect(s);
+  await fetchQuiet('/api/sidecar/status', async function (s) {
+    execState().sidecar = s;
+    const ex = execState();
+    if (!ex.sourceHealthAt || Date.now() - ex.sourceHealthAt > 60000) {
+      try {
+        const health = await jsonApi('/api/execution/health');
+        ex.sourceHealth = health.sources || [];
+        ex.sourceHealthAt = Date.now();
+      } catch (_) { /* retain the last truthful snapshot */ }
+    }
+    renderSourceHealth();
+    renderReconnect(s);
+  });
 }
 
 // Recent sync deltas (sync_log): proof the ingest is actually pulling new data,
 // covering scheduled Jobs the run viewer never sees.
 export async function fetchSyncs() {
-  let data;
-  try {
-    data = await jsonApi('/api/execution/syncs');
-  } catch (_) {
-    return;
-  }
-  const ex = execState();
-  ex.syncs = data.syncs || [];
-  ex.syncTotals = data.totals || null;
-  renderSyncs();
-  renderSourceHealth();
+  await fetchQuiet('/api/execution/syncs', function (data) {
+    const ex = execState();
+    ex.syncs = data.syncs || [];
+    ex.syncTotals = data.totals || null;
+    renderSyncs();
+    renderSourceHealth();
+  });
 }
 
 function syncRow(s) {
@@ -334,7 +324,7 @@ function renderSyncs() {
   els.execSyncsEmpty.hidden = ex.syncs.length > 0;
   for (const s of ex.syncs) els.execSyncs.appendChild(syncRow(s));
   els.execSyncTotals.textContent = ex.syncTotals
-    ? `${fmtCount(ex.syncTotals.chats)} chats · ${fmtCount(ex.syncTotals.messages)} msgs`
+    ? `${fmtNum(ex.syncTotals.chats)} chats · ${fmtNum(ex.syncTotals.messages)} msgs`
     : '';
 }
 
@@ -365,15 +355,11 @@ function renderTraffic() {
 export async function fetchTraffic(force) {
   const ex = execState();
   if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
-  let data;
-  try {
-    data = await jsonApi('/api/family');
-  } catch (_) {
-    return;  // 401 flips the login overlay; stay quiet otherwise.
-  }
-  ex.traffic = data.traffic || {};
-  ex.trafficAt = Date.now();
-  renderTraffic();
+  await fetchQuiet('/api/family', function (data) {
+    ex.traffic = data.traffic || {};
+    ex.trafficAt = Date.now();
+    renderTraffic();
+  });
 }
 
 async function patchTraffic(body) {
@@ -644,19 +630,8 @@ function funnelCells(result) {
   if (result.kind === 'notify') {
     return [{ label: 'Notify', value: result.notification_status }];
   }
-  if (result.kind === 'calendar-scan') {
-    return [
-      { label: 'Conflicts', value: (result.conflicts || []).length },
-      { label: 'Missing loc.', value: (result.missing_locations || result.unknown_locations || []).length },
-      { label: 'Status', value: result.status },
-    ];
-  }
-  if (result.kind === 'traffic-check') {
-    return [
-      { label: 'Checked', value: (result.checked || []).length },
-      { label: 'Alerts', value: result.alerts },
-      { label: 'Status', value: result.status },
-    ];
+  if (result.kind === 'calendar-scan' || result.kind === 'traffic-check') {
+    return familyKindCells(result.kind, result);
   }
   return null;
 }

@@ -51,6 +51,22 @@ export async function jsonApi(path, opts) {
   return body;
 }
 
+// Every tab's "load my data" entry point repeated the same
+// try/jsonApi/catch-and-return-undefined scaffold (#237): a 401 already flips
+// the login overlay open above in api(), so the catch here just needs to stay
+// quiet and skip the render. `onOk` runs only on a successful fetch, and may
+// itself be async — awaited so a caller that needs the whole thing settled
+// (a second fetch, a following state write) can `await fetchQuiet(...)`.
+export async function fetchQuiet(path, onOk) {
+  let data;
+  try {
+    data = await jsonApi(path);
+  } catch (exc) {
+    return; // stay quiet — 401 already handled, anything else retries next poll
+  }
+  await onOk(data);
+}
+
 // --------------------------------------------------------------- login
 export function showLogin() {
   if (!els.loginOverlay) return;

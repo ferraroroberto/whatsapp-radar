@@ -22,6 +22,28 @@ const KIND_META = {
 
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
+// Funnel-cell mapping for the two family-check kinds (calendar-scan ·
+// traffic-check), shared by the Run tab's live funnelCells() and the Audit
+// tab's renderFamilyDetail() so a label/field change can't render differently
+// on Run vs Audit (#237). `payload` is a flat object carrying the fields below
+// — either a live run's `result` or a persisted run's `summary`, both shaped
+// the same way.
+export function familyKindCells(kind, payload) {
+  const p = payload || {};
+  if (kind === 'traffic-check') {
+    return [
+      { label: 'Checked', value: (p.checked || []).length },
+      { label: 'Alerts', value: p.alerts },
+      { label: 'Status', value: p.status },
+    ];
+  }
+  return [
+    { label: 'Conflicts', value: (p.conflicts || []).length },
+    { label: 'Missing loc.', value: (p.missing_locations || p.unknown_locations || []).length },
+    { label: 'Status', value: p.status },
+  ];
+}
+
 // Per-source sprite icon + label, shared by the Run tab's source-health cards
 // and the Dashboard's last-activity grid + source list so a source is drawn
 // identically wherever it appears (#165). `traffic` reuses the car glyph (#164).
@@ -64,8 +86,10 @@ export function fmtRelative(ts) {
 }
 
 // Thousands separator with a period (29999 → "29.999"), deterministic across
-// browsers/locales (avoids `toLocaleString()` drift).
+// browsers/locales (avoids `toLocaleString()` drift). A missing value renders
+// as an em-dash rather than the literal string "undefined"/"null".
 export function fmtNum(n) {
+  if (n === undefined || n === null) return '–';
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 

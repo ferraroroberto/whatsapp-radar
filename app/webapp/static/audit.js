@@ -9,8 +9,8 @@
  * textContent only — never innerHTML (privacy). */
 
 import { els, state } from './state.js';
-import { jsonApi } from './api.js';
-import { fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
+import { fetchQuiet, jsonApi } from './api.js';
+import { familyKindCells, fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 
 function auditState() { return state.audit; }
@@ -457,18 +457,7 @@ function traceBlock(t) {
 // show the headline counts as funnel cells and the full payload verbatim.
 function renderFamilyDetail(run) {
   const s = run.summary || {};
-  const cells = run.kind === 'traffic-check'
-    ? [
-      { label: 'Checked', value: (s.checked || []).length },
-      { label: 'Alerts', value: s.alerts },
-      { label: 'Status', value: s.status },
-    ]
-    : [
-      { label: 'Conflicts', value: (s.conflicts || []).length },
-      { label: 'Missing loc.', value: (s.missing_locations || s.unknown_locations || []).length },
-      { label: 'Status', value: s.status },
-    ];
-  renderFunnelCells(els.auditFunnel, cells);
+  renderFunnelCells(els.auditFunnel, familyKindCells(run.kind, s));
   renderSourceFunnels(els.auditSourceFunnel, {});
   els.auditTraces.textContent = '';
   // Calendar-sync runs carry a per-event decision trace + the sent summary
@@ -582,23 +571,18 @@ function closeDetail() {
 
 export async function fetchAudit() {
   const filteredFetch = fetchFiltered(false);
-  let data;
-  try {
-    data = await jsonApi('/api/audit/runs');
-  } catch (_) {
-    await filteredFetch;
-    return;  // 401 flips the login overlay; stay quiet otherwise.
-  }
-  const ax = auditState();
-  ax.runs = data.runs || [];
-  ax.syncs = data.syncs || [];
-  ax.coverageGaps = data.coverage_gaps || [];
-  renderRuns();
+  await fetchQuiet('/api/audit/runs', function (data) {
+    const ax = auditState();
+    ax.runs = data.runs || [];
+    ax.syncs = data.syncs || [];
+    ax.coverageGaps = data.coverage_gaps || [];
+    renderRuns();
 
-  // If a previously-selected run is gone (e.g. after a reprocess reset), drop it.
-  if (ax.selected && !ax.runs.some(function (r) { return r.id === ax.selected; })) {
-    closeDetail();
-  }
+    // If a previously-selected run is gone (e.g. after a reprocess reset), drop it.
+    if (ax.selected && !ax.runs.some(function (r) { return r.id === ax.selected; })) {
+      closeDetail();
+    }
+  });
   await filteredFetch;
 }
 

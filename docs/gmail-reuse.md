@@ -1,6 +1,6 @@
 # Reusing the read-only Gmail component
 
-The canonical reusable component is the root-level [`gmail_readonly/`](../gmail_readonly/) package. It has no imports from `src`, `app`, FastAPI, SQLite, the scan pipeline, or WhatsApp Radar models. Another Python application can copy it unchanged and decide independently how to store, monitor, classify, or display the returned records.
+The canonical reusable component is the root-level [`gmail_readonly/`](../gmail_readonly/) package, plus its shared OAuth dependency [`google_oauth_common/`](../google_oauth_common/) (the installed-app bootstrap, token load/refresh, and atomic-write helpers also used by `calendar_readonly/` and `calendar_write/`). Neither has imports from `src`, `app`, FastAPI, SQLite, the scan pipeline, or WhatsApp Radar models. Another Python application can copy both unchanged and decide independently how to store, monitor, classify, or display the returned records.
 
 WhatsApp Radar continuously exercises the same component through the thin adapter in `src/connector/gmail.py`. Do not copy that adapter into another application; it exists only to map portable records into this repository's `ChatRecord`, `MessageRecord`, and `ConnectorStatus` types.
 
@@ -13,6 +13,10 @@ gmail_readonly/__init__.py
 gmail_readonly/core.py
 gmail_readonly/google_client.py
 gmail_readonly/oauth.py
+google_oauth_common/__init__.py
+google_oauth_common/bootstrap.py
+google_oauth_common/credentials.py
+google_oauth_common/token_store.py
 ```
 
 The portable offline contract is `tests/test_gmail_readonly.py`. Copy it into the consumer's test directory when adopting or upgrading the component.
@@ -92,10 +96,10 @@ finally:
 
 ## Adopt and upgrade byte-for-byte
 
-Record the source repository commit used by the consumer. Export only the canonical directory from that commit:
+Record the source repository commit used by the consumer. Export both canonical directories from that commit:
 
 ```powershell
-git -C E:\automation\whatsapp-radar archive <commit-sha> gmail_readonly |
+git -C E:\automation\whatsapp-radar archive <commit-sha> gmail_readonly google_oauth_common |
   tar -x -C <consumer-root>
 ```
 
@@ -105,10 +109,11 @@ Copy `tests/test_gmail_readonly.py` separately and run it in the consumer:
 python -m pytest tests\test_gmail_readonly.py
 ```
 
-To prove the consumer has not drifted, compare it with the canonical checkout:
+To prove the consumer has not drifted, compare both with the canonical checkout:
 
 ```powershell
 git diff --no-index -- E:\automation\whatsapp-radar\gmail_readonly <consumer-root>\gmail_readonly
+git diff --no-index -- E:\automation\whatsapp-radar\google_oauth_common <consumer-root>\google_oauth_common
 ```
 
 No output means the directories match byte-for-byte. Upgrade by exporting a newer reviewed commit, rerunning the portable contract, and updating the recorded source SHA. Application-specific adapters stay outside the copied directory.

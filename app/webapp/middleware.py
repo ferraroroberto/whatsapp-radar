@@ -1,9 +1,12 @@
 """Auth middleware for the admin webapp.
 
 The bearer-token middleware is the single auth choke point for the HTTP surface.
-Loopback callers (the PC itself) bypass the token; non-loopback callers must
-present it. The WebAuthn ceremony endpoints additionally require Tailscale —
-they are refused outright over the public Cloudflare tunnel.
+Callers that are genuinely local (the PC itself) bypass the token; every other
+caller must present it. "Local" is decided from the peer address *and* the
+absence of edge headers, because the tunnel daemon is co-located and forwards to
+localhost — so a peer address on its own proves nothing about who is calling.
+The WebAuthn ceremony endpoints additionally require Tailscale — they are
+refused outright over the public Cloudflare tunnel.
 """
 
 from __future__ import annotations
@@ -21,8 +24,9 @@ from starlette.types import ASGIApp
 logger = logging.getLogger(__name__)
 
 # Loopback addresses bypass the bearer-token gate so local probes keep working
-# without carrying the token. Tunnel traffic arrives with a non-loopback client
-# IP and must present the token.
+# without carrying the token. The bypass applies only to requests that carry no
+# edge headers — a forwarded request also presents a loopback peer, so see the
+# trust classification in ``BearerTokenMiddleware.dispatch``.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 AUTH_EXEMPT_PREFIXES = ("/static/", "/healthz")
@@ -93,7 +97,13 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         client_host = request.client.host if request.client else ""
-        is_loopback = client_host in LOOPBACK_HOSTS
+        # The peer address alone cannot establish that a caller is local: the
+        # tunnel daemon runs on this machine and forwards to localhost, so an
+        # anonymous request off the public edge also arrives with a loopback
+        # peer. Treat any request carrying edge headers as remote regardless of
+        # the address it appears to come from.
+        tunnelled = via_cloudflare(request.headers)
+        is_loopback = client_host in LOOPBACK_HOSTS and not tunnelled
         path = request.url.path
 
         # Passkey ceremonies are Tailscale-only, enforced even when no bearer
@@ -103,13 +113,24 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
             if gate_err is not None:
                 return gate_err
 
-        token = (self._get_token() or "").strip()
-        if not token or is_loopback:
+        if is_loopback:
             return await call_next(request)
 
         if path in AUTH_EXEMPT_EXACT or any(
             path.startswith(p) for p in AUTH_EXEMPT_PREFIXES
         ):
+            return await call_next(request)
+
+        token = (self._get_token() or "").strip()
+        if not token:
+            # Nothing is provisioned for a remote caller to present. A request
+            # off the public edge must fail closed rather than inherit the
+            # unconfigured-token pass-through meant for trusted local networks.
+            if tunnelled:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "remote access requires a configured token"},
+                )
             return await call_next(request)
 
         presented = ""

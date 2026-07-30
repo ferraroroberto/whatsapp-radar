@@ -99,6 +99,38 @@ def test_bearer_loopback_bypasses_token() -> None:
         assert c.get("/api/version").status_code == 200  # loopback never needs the token
 
 
+# --- trust classification: a local peer address is not proof of a local caller --
+
+EDGE_HEADERS = {"cf-ray": "abc123", "cf-connecting-ip": "203.0.113.9"}
+
+
+def test_edge_headers_are_not_trusted_as_local() -> None:
+    # A request forwarded by the co-located edge daemon reaches uvicorn over
+    # localhost, so its peer address is loopback while the caller is anonymous
+    # and remote. The peer address alone must not grant the loopback bypass.
+    with _client(LOOPBACK, token="secret") as c:
+        assert c.get("/api/version", headers=EDGE_HEADERS).status_code == 401
+        assert c.post("/api/execution/run", json={}, headers=EDGE_HEADERS).status_code == 401
+        ok = c.get(
+            "/api/version",
+            headers={**EDGE_HEADERS, "Authorization": "Bearer secret"},
+        )
+        assert ok.status_code == 200
+        # The passkey ceremony gate must also run on this path.
+        assert c.get("/api/webauthn/status", headers=EDGE_HEADERS).status_code == 403
+        # A genuine local caller (no edge headers) keeps its bypass.
+        assert c.get("/api/version").status_code == 200
+
+
+def test_edge_headers_fail_closed_when_no_token_configured() -> None:
+    # With no token provisioned there is nothing a remote caller could present,
+    # so an edge-forwarded request must be refused rather than allowed through.
+    with _client(LOOPBACK) as c:
+        assert c.get("/api/version", headers=EDGE_HEADERS).status_code == 403
+        assert c.get("/healthz", headers=EDGE_HEADERS).status_code == 200  # probe stays open
+        assert c.get("/api/version").status_code == 200  # local caller unaffected
+
+
 # --- passkey ceremony gate (Tailscale-only over the network) ----------------
 
 def test_webauthn_refused_for_public_remote() -> None:

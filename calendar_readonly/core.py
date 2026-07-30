@@ -72,7 +72,10 @@ def _parse_boundary(node: dict[str, Any]) -> tuple[datetime, bool]:
     raw_date = node.get("date")
     if raw_date:
         day = date.fromisoformat(str(raw_date))
-        return datetime(day.year, day.month, day.day), True
+        # All-day events carry no timezone in the API; anchor to local midnight
+        # so the returned datetime is aware, matching this function's contract
+        # and the tz-aware bounds callers compare it against.
+        return datetime(day.year, day.month, day.day).astimezone(), True
     raise ValueError("Calendar event boundary has neither dateTime nor date")
 
 

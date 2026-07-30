@@ -12,8 +12,7 @@ import sqlite3
 
 from src.config import Config
 from src.db import store
-from src.notify.base import NotifierError
-from src.notify.factory import build_notifier
+from src.notify.factory import _dispatch
 from src.report.digest import Digest
 
 
@@ -26,21 +25,6 @@ def deliver_digest(
     ``'failed'`` (misconfigured or send error). ``detail`` carries the error
     message on failure/skip, else ``None``.
     """
-    try:
-        notifier = build_notifier(config.notifier, config.telegram)
-    except (NotifierError, ValueError) as exc:
-        store.record_notification(conn, run_id, config.notifier, "failed", str(exc))
-        return "failed", str(exc)
-
-    if notifier is None:
-        store.record_notification(conn, run_id, config.notifier, "skipped", "no notifier (none)")
-        return "skipped", "no notifier (none)"
-
-    try:
-        notifier.send(digest)
-    except NotifierError as exc:
-        store.record_notification(conn, run_id, config.notifier, "failed", str(exc))
-        return "failed", str(exc)
-
-    store.record_notification(conn, run_id, config.notifier, "sent")
-    return "sent", None
+    status, detail = _dispatch(config, lambda notifier: notifier.send(digest))
+    store.record_notification(conn, run_id, config.notifier, status, detail)
+    return status, detail

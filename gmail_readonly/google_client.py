@@ -7,6 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from google_oauth_common.credentials import load_or_refresh_credentials
+from google_oauth_common.token_store import write_token_atomically as write_token_atomically
+
 from gmail_readonly.core import GMAIL_READONLY_SCOPE, GmailReadClient
 
 CredentialLoader = Callable[[str, list[str]], Any]
@@ -179,25 +182,22 @@ def build_google_read_client(
     request_timeout_s: int = DEFAULT_REQUEST_TIMEOUT_S,
 ) -> GmailReadClient:
     """Load/refresh an OAuth token and build the official read-only client."""
-    if not token_path.is_file():
-        raise FileNotFoundError("Gmail OAuth token missing; run the OAuth bootstrap interactively")
+    credentials = load_or_refresh_credentials(
+        token_path,
+        GMAIL_READONLY_SCOPE,
+        missing_token_message="Gmail OAuth token missing; run the OAuth bootstrap interactively",
+        invalid_token_message="Gmail OAuth token is invalid or has been revoked",
+        token_writer=write_token_atomically,
+        credential_loader=credential_loader,
+        request_factory=request_factory,
+    )
 
     injected_builder = service_builder is not None
-    if credential_loader is None or request_factory is None or service_builder is None:
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
+    if service_builder is None:
         from googleapiclient.discovery import build
 
-        credential_loader = credential_loader or Credentials.from_authorized_user_file
-        request_factory = request_factory or Request
-        service_builder = service_builder or build
+        service_builder = build
 
-    credentials = credential_loader(str(token_path), [GMAIL_READONLY_SCOPE])
-    if credentials.expired and credentials.refresh_token:
-        credentials.refresh(request_factory())
-        write_token_atomically(token_path, credentials.to_json())
-    if not credentials.valid:
-        raise RuntimeError("Gmail OAuth token is invalid or has been revoked")
     if injected_builder:
         # Test seam: injected builders receive the legacy credentials kwarg and
         # own their transport entirely.
@@ -223,11 +223,3 @@ def build_google_read_client(
 def _is_retryable(exc: Exception) -> bool:
     status = getattr(getattr(exc, "resp", None), "status", None)
     return status in _RETRYABLE_STATUSES or isinstance(exc, TimeoutError)
-
-
-def write_token_atomically(path: Path, token_json: str) -> None:
-    """Persist an OAuth token atomically without logging its contents."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
-    temporary_path.write_text(token_json, encoding="utf-8")
-    temporary_path.replace(path)

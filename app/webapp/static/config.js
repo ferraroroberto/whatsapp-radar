@@ -7,7 +7,7 @@
  * stored token untouched. */
 
 import { els, state } from './state.js';
-import { jsonApi, toast } from './api.js';
+import { fetchQuiet, jsonApi, toast } from './api.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 
 // Save is gated on an actual change: the rendered values are snapshotted and
@@ -44,14 +44,10 @@ function fillSelect(sel, options, current) {
 }
 
 export async function fetchConfig() {
-  let data;
-  try {
-    data = await jsonApi('/api/config');
-  } catch (exc) {
-    return; // 401 handled in api.js
-  }
-  state.config = data;
-  render(data);
+  await fetchQuiet('/api/config', function (data) {
+    state.config = data;
+    render(data);
+  });
 }
 
 function render(d) {

@@ -7,7 +7,7 @@
  * here too). Chat names go in via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
-import { jsonApi } from './api.js';
+import { fetchQuiet } from './api.js';
 import { fmtLocalDateTime, fmtNum, fmtRelative, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setTab } from './tabs.js';
 import { showRun } from './execution.js';
@@ -21,15 +21,10 @@ function fmtTsFull(ts) {
 }
 
 export async function fetchDashboard() {
-  let data;
-  try {
-    data = await jsonApi('/api/dashboard');
-  } catch (exc) {
-    // 401 already flips the login overlay open in api.js; stay quiet otherwise.
-    return;
-  }
-  state.dashboard = data;
-  render(data);
+  await fetchQuiet('/api/dashboard', function (data) {
+    state.dashboard = data;
+    render(data);
+  });
 }
 
 // The badge distils each card's outcome to one of: never ran · KO · running ·

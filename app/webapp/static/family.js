@@ -12,7 +12,7 @@
  * with no restart. All values go in via textContent/value only. */
 
 import { els, state } from './state.js';
-import { jsonApi, toast } from './api.js';
+import { fetchQuiet, jsonApi, toast } from './api.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 
@@ -39,17 +39,13 @@ let saveBtn = null;
 let statusEl = null;
 
 export async function fetchFamily() {
-  let data;
-  try {
-    data = await jsonApi('/api/family');
-  } catch (exc) {
-    return; // 401 flips the login overlay in api.js; stay quiet otherwise.
-  }
-  state.family = data;
-  lastData = data;
-  draft = toDraft(data);
-  baseline = serializeDraft();
-  render();
+  await fetchQuiet('/api/family', function (data) {
+    state.family = data;
+    lastData = data;
+    draft = toDraft(data);
+    baseline = serializeDraft();
+    render();
+  });
 }
 
 function toDraft(d) {
@@ -128,12 +124,11 @@ function warnNote(text) {
 function toggleRow(labelText, enabled, onToggle) {
   const row = el('div', 'family-control-row');
   row.append(el('span', 'family-control-label', labelText));
-  const btn = el('button', 'toggle' + (enabled ? ' on' : ''));
+  const btn = document.createElement('button');
   btn.type = 'button';
   btn.setAttribute('role', 'switch');
-  btn.setAttribute('aria-checked', enabled ? 'true' : 'false');
   btn.setAttribute('aria-label', labelText);
-  btn.innerHTML = '<span class="knob"></span><span class="toggle-label">' + (enabled ? 'ON' : 'OFF') + '</span>';
+  setSwitch(btn, enabled);
   btn.addEventListener('click', function () {
     const next = btn.getAttribute('aria-checked') !== 'true';
     setSwitch(btn, next);

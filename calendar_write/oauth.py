@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+
+from google_oauth_common.bootstrap import FlowLoader, authorize_installed_app, run_bootstrap_cli
+from google_oauth_common.token_store import write_token_atomically
 
 from calendar_write.core import CALENDAR_WRITE_SCOPE
-from calendar_write.google_client import write_token_atomically
 
 logger = logging.getLogger(__name__)
-FlowLoader = Callable[[str, list[str]], Any]
 
 
 def authorize(
@@ -26,54 +24,29 @@ def authorize(
     flow_loader: FlowLoader | None = None,
 ) -> None:
     """Run consent using explicit paths and persist the resulting refresh token."""
-    if not credentials_path.is_file():
-        raise FileNotFoundError(
-            f"Calendar OAuth client file not found: {credentials_path}"
-        )
-    if flow_loader is None:
-        from google_auth_oauthlib.flow import InstalledAppFlow
-
-        flow_loader = InstalledAppFlow.from_client_secrets_file
-    flow = flow_loader(str(credentials_path), [CALENDAR_WRITE_SCOPE])
-    credentials = flow.run_local_server(
+    authorize_installed_app(
+        credentials_path=credentials_path,
+        token_path=token_path,
+        scope=CALENDAR_WRITE_SCOPE,
+        not_found_label="Calendar",
+        token_writer=write_token_atomically,
         host=host,
         port=port,
-        access_type="offline",
-        prompt="consent",
         open_browser=open_browser,
+        flow_loader=flow_loader,
     )
-    if not credentials.refresh_token:
-        raise RuntimeError(
-            "Google returned no refresh token; revoke the old grant and retry"
-        )
-    write_token_atomically(token_path, credentials.to_json())
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the standalone explicit-path OAuth command."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--credentials", required=True, type=Path)
-    parser.add_argument("--token", required=True, type=Path)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", default=0, type=int)
-    parser.add_argument("--no-browser", action="store_true")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    try:
-        logger.info("ℹ️ Opening Google consent for write-scope Calendar events access.")
-        authorize(
-            credentials_path=args.credentials,
-            token_path=args.token,
-            host=args.host,
-            port=args.port,
-            open_browser=not args.no_browser,
-        )
-    except (FileNotFoundError, RuntimeError) as exc:
-        logger.error("❌ %s", exc)
-        return 1
-    logger.info("✅ Calendar write token stored at %s", args.token)
-    logger.info("ℹ️ Never copy the token into config, documentation, or logs.")
-    return 0
+    return run_bootstrap_cli(
+        argv,
+        description=__doc__,
+        opening_message="Opening Google consent for write-scope Calendar events access.",
+        success_label="Calendar write",
+        logger=logger,
+        authorize_fn=authorize,
+    )
 
 
 if __name__ == "__main__":

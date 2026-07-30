@@ -5,7 +5,7 @@
  */
 
 import { els, state } from './state.js';
-import { jsonApi, toast } from './api.js';
+import { fetchQuiet, jsonApi, toast } from './api.js';
 import { emptyStateEl } from './_vendored/empty-state/empty-state.js';
 
 function itemLi(item) {
@@ -63,12 +63,8 @@ async function acknowledge(item, btn) {
 }
 
 export async function fetchAck() {
-  let data;
-  try {
-    data = await jsonApi('/api/ack/items');
-  } catch (_) {
-    return;
-  }
-  state.ack.items = data.items || [];
-  render();
+  await fetchQuiet('/api/ack/items', function (data) {
+    state.ack.items = data.items || [];
+    render();
+  });
 }

@@ -11,8 +11,7 @@ so an alert failure can't worsen the situation it's reporting.
 from __future__ import annotations
 
 from src.config import Config
-from src.notify.base import NotifierError
-from src.notify.factory import build_notifier
+from src.notify.factory import _dispatch
 
 
 def send_alert(config: Config, text: str) -> tuple[str, str | None]:
@@ -23,14 +22,4 @@ def send_alert(config: Config, text: str) -> tuple[str, str | None]:
     failing. Every notifier implements ``send_text`` (part of the ``Notifier``
     contract), so an alert is never silently dropped for a wired notifier.
     """
-    try:
-        notifier = build_notifier(config.notifier, config.telegram)
-    except (NotifierError, ValueError) as exc:
-        return "failed", str(exc)
-    if notifier is None:
-        return "skipped", "no notifier (none)"
-    try:
-        notifier.send_text(text)
-    except NotifierError as exc:
-        return "failed", str(exc)
-    return "sent", None
+    return _dispatch(config, lambda notifier: notifier.send_text(text))

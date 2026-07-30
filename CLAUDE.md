@@ -19,6 +19,7 @@ whatsapp-radar/
   calendar_readonly/     # portable Google Calendar read client (mirrors gmail_readonly/)
   calendar_write/        # portable Google Calendar write client (family calendar automation)
   gmail_readonly/        # portable Gmail read client
+  google_oauth_common/   # shared installed-app OAuth bootstrap the three clients above wrap
   src/                   # logic, imported as `from src.…`
     config.py  models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     paths.py  tts_client.py  speech_profile.py  subprocess_flags.py  runresult.py  _loopback_http.py
@@ -60,7 +61,7 @@ The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors 
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import logic with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, and `gmail_readonly/` are portable Google API packages that deliberately live outside `src/` (so they can be lifted into another repo unchanged) and are imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule below, not a violation of it.
+- `calendar_readonly/`, `calendar_write/`, and `gmail_readonly/` are portable Google API packages that deliberately live outside `src/` (so they can be lifted into another repo unchanged) and are imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule below, not a violation of it. `google_oauth_common/` is a fourth, equally portable sibling: the installed-app OAuth bootstrap, token load/refresh, and atomic-write steps shared by all three, imported as `from google_oauth_common…`. It has the same "no imports from `src`/`app`/`scripts`" contract, so lifting one of the three clients into another repo means copying `google_oauth_common/` alongside it (see `docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) are resolved by path relative to `__file__`, never via `importlib.resources` package-data.
 - A script that lives **outside** the repo but imports `src.*`/`app.*` needs `$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`. Prefer `& .\.venv\Scripts\python.exe -m <module>` from the repo root when the script can live in-tree (a gitignored scratch dir is fine) — `-m` puts CWD on `sys.path` and needs no env var.

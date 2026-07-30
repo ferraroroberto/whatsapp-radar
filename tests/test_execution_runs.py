@@ -38,7 +38,7 @@ def test_parse_result_absent_and_last_wins() -> None:
 
 def test_write_read_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    run_dir = runs._new_run_dir("scan", runs.new_run_id())
+    run_dir = runs.new_run_dir("scan", runs.new_run_id())
     runs.write_run_json(run_dir, kind="scan", status="running")
     runs.write_run_json(run_dir, status="completed", exit_code=0)
     record = runs.read_run(run_dir)
@@ -49,7 +49,7 @@ def test_write_read_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_output_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    run_dir = runs._new_run_dir("resync", runs.new_run_id())
+    run_dir = runs.new_run_dir("resync", runs.new_run_id())
     (run_dir / "output.log").write_bytes(b"line one\nline two\nline three\n")
     tail = runs.read_output_tail(run_dir)
     assert "line three" in tail
@@ -57,9 +57,9 @@ def test_output_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_list_runs_newest_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    d1 = runs._new_run_dir("scan", "20260101T000000")
+    d1 = runs.new_run_dir("scan", "20260101T000000")
     runs.write_run_json(d1, kind="scan", status="completed", started_at="2026-01-01T00:00:00")
-    d2 = runs._new_run_dir("resync", "20260102T000000")
+    d2 = runs.new_run_dir("resync", "20260102T000000")
     runs.write_run_json(d2, kind="resync", status="completed", started_at="2026-01-02T00:00:00")
     listed = runs.list_runs()
     assert [r["kind"] for r in listed] == ["resync", "scan"]

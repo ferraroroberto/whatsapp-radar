@@ -14,7 +14,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.webapp.routers._helpers import PROJECT_ROOT, maybe_json
+from app.webapp.routers._helpers import maybe_json
+from src.paths import PROJECT_ROOT
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)

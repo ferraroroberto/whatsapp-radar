@@ -15,7 +15,6 @@ from fastapi import Request
 from src.config import TtsConfig, load_config
 from src.db import store
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 

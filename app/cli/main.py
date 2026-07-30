@@ -8,6 +8,10 @@ logic of its own.
 each streams human-readable progress to stdout and prints one final structured
 ``__WR_RESULT__`` sentinel line the webapp parses for the funnel/counts. They run
 identically whether fired here, from App Launcher Jobs, or spawned by the webapp.
+
+Since #233 a launchable verb fired *here* also writes its own filesystem run
+record — see :mod:`app.cli.runlog` — so the Execution tab shows a scheduled
+run's output, not merely its outcome.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from datetime import UTC, datetime
 
 from gmail_readonly import GmailReadError
 
+from app.cli import runlog
 from src.analysis.classifier import build_classifier
 from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
@@ -487,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
         if reconfigure is not None:
             reconfigure(encoding="utf-8")
 
+    raw_argv = list(sys.argv[1:]) if argv is None else list(argv)
     args = build_parser().parse_args(argv)
 
     # The tray owns the webapp lifecycle, not the message store — no DB needed.
@@ -495,6 +501,17 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_tray()
 
+    # Everything below is wrapped so a run launched here — a terminal, or an App
+    # Launcher Job — writes the same output-bearing run record the webapp writes
+    # for the runs it spawns (#233). A no-op for verbs that record no run, and
+    # for a process the webapp is already capturing. Installed after the UTF-8
+    # reconfigure above so the tee wraps streams that are already UTF-8.
+    return runlog.run_captured(args.command, raw_argv, lambda: _run_command(args))
+
+
+def _run_command(args: argparse.Namespace) -> int:
+    """Dispatch one parsed command. Split out of :func:`main` so the whole of it —
+    config load included — runs inside the output capture."""
     config = load_config()
     if args.command == "gmail-survey":
         try:

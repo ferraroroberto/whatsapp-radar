@@ -30,12 +30,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
-from app.webapp.routers._helpers import PROJECT_ROOT
+from src.paths import PROJECT_ROOT
 from src.runresult import parse_result
 from src.subprocess_flags import NO_WINDOW_DETACHED
 
 RUNS_DIR = PROJECT_ROOT / "webapp" / "runs"
 _LAUNCHER = PROJECT_ROOT / "launcher.py"
+
+#: Set on a child this module captures, so a CLI that would otherwise open its
+#: own run record (:mod:`app.cli.runlog`, #233) knows to stand down — one
+#: process must never be captured twice.
+CAPTURED_ENV_VAR = "WR_RUN_CAPTURED"
 # Cap the tail we scan for the result sentinel + return to the UI. Generous —
 # a scan's per-chat progress for a realistic monitored set stays well under it.
 _TAIL_BYTES = 256 * 1024
@@ -52,9 +57,14 @@ class RunBusyError(Exception):
     """Raised when a run is requested while another is still in flight."""
 
 
-def _now_iso() -> str:
-    # UTC with an explicit offset — the same discipline as the DB store, so the
-    # same run can never show two different times across surfaces (#163).
+def now_iso() -> str:
+    """The one clock every run record is stamped with.
+
+    UTC with an explicit offset — the same discipline as the DB store, so the
+    same run can never show two different times across surfaces (#163). Public
+    because the CLI writes records of its own (:mod:`app.cli.runlog`, #233) and
+    must share this clock rather than pick a second one.
+    """
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
@@ -72,17 +82,25 @@ def new_run_id() -> str:
     return datetime.now().strftime("%Y%m%dT%H%M%S")
 
 
-def _new_run_dir(kind: str, run_id: str) -> Path:
-    """Create ``webapp/runs/<kind>/<run_id>/``, disambiguating same-second ids."""
+def new_run_dir(kind: str, run_id: str) -> Path:
+    """Create ``webapp/runs/<kind>/<run_id>/``, disambiguating same-second ids.
+
+    ``mkdir`` *is* the claim: a check-then-create would race, and since #233 two
+    processes really can land in the same second (a scheduled App Launcher Job
+    firing while the operator launches from the webapp), where before only the
+    single-flight webapp created these.
+    """
     base = RUNS_DIR / kind
     base.mkdir(parents=True, exist_ok=True)
     target = base / run_id
     n = 2
-    while target.exists():
-        target = base / f"{run_id}-{n}"
-        n += 1
-    target.mkdir()
-    return target
+    while True:
+        try:
+            target.mkdir()
+            return target
+        except FileExistsError:
+            target = base / f"{run_id}-{n}"
+            n += 1
 
 
 def write_run_json(run_dir: Path, **fields: Any) -> None:
@@ -148,22 +166,36 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
 
 
 def list_runs(limit: int = 50) -> list[dict[str, Any]]:
-    """Newest-first run records across all kinds (no output bytes — cheap)."""
+    """Newest-first run records across all kinds (no output bytes — cheap).
+
+    Bounded per kind: run-id directory names are timestamp-sortable, so the
+    newest ``limit`` names of each kind are the only candidates that can survive
+    the final cross-kind truncation — reading the rest would be wasted I/O.
+
+    This matters since #233, because the CLI now writes a record too, and the
+    volume is real: App Launcher fires ``traffic-check`` every 5 minutes against
+    a 30-minute in-process cadence, so ~288 records a day land here (~240 of them
+    self-skips) and this function runs on every Execution-tab poll. Deliberately
+    a read bound and not a cleanup — nothing here deletes a run (retention, and
+    that fire-vs-cadence mismatch, are #234).
+    """
     if not RUNS_DIR.is_dir():
         return []
     rows: list[tuple[str, dict[str, Any]]] = []
-    for kind_dir in RUNS_DIR.iterdir():
+    for kind_dir in sorted(RUNS_DIR.iterdir()):
         if not kind_dir.is_dir():
             continue
-        for run_dir in kind_dir.iterdir():
-            if not run_dir.is_dir():
-                continue
+        names = sorted(
+            (entry.name for entry in kind_dir.iterdir() if entry.is_dir()), reverse=True
+        )
+        for name in names[:limit]:
+            run_dir = kind_dir / name
             record = read_run(run_dir)
             record.setdefault("kind", kind_dir.name)
-            record.setdefault("run_id", run_dir.name)
+            record.setdefault("run_id", name)
             # Sort key: the run id is timestamp-sortable within a kind; pair it
             # with started_at so cross-kind ordering is by wall-clock start.
-            rows.append((str(record.get("started_at") or run_dir.name), record))
+            rows.append((str(record.get("started_at") or name), record))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [record for _, record in rows[:limit]]
 
@@ -196,18 +228,27 @@ def start_run(
             )
 
         run_id = new_run_id()
-        run_dir = _new_run_dir(kind, run_id)
+        run_dir = new_run_dir(kind, run_id)
         rid = run_dir.name
         write_run_json(
             run_dir,
             kind=kind,
             run_id=rid,
             status="running",
-            started_at=_now_iso(),
+            started_at=now_iso(),
             argv=argv_tail,
+            origin="webapp",
         )
 
-        env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+        # CAPTURED_ENV_VAR tells the child's own capture layer to stand down:
+        # this run's output is already being written to output.log below, and a
+        # second record for the same process would double-list it (#233).
+        env = {
+            **os.environ,
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            CAPTURED_ENV_VAR: "1",
+        }
         if env_overrides:
             env.update(env_overrides)
 
@@ -226,7 +267,7 @@ def start_run(
         except OSError as exc:
             log_fh.close()
             write_run_json(
-                run_dir, status="failed", finished_at=_now_iso(), error=f"spawn failed: {exc}"
+                run_dir, status="failed", finished_at=now_iso(), error=f"spawn failed: {exc}"
             )
             raise
 
@@ -238,18 +279,22 @@ def start_run(
         return {"kind": kind, "run_id": rid}
 
 
-def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO[bytes]) -> None:
-    """Wait for the run to exit, then finalize run.json + extract the result."""
-    global _ACTIVE
-    try:
-        exit_code = proc.wait()
-    finally:
-        log_fh.close()
+def finalize_record(run_dir: Path, exit_code: int | None) -> None:
+    """Write a finished run's terminal ``run.json`` fields.
+
+    The one definition of what "finished" looks like on disk, shared by the
+    webapp's watcher thread and the CLI's own capture (:mod:`app.cli.runlog`,
+    #233) — two writers of the same record must not drift in shape.
+
+    ``exit_code`` is ``None`` when the process died without yielding one (an
+    exception escaping the CLI); that is a failure, and the field is simply
+    omitted rather than guessed at.
+    """
     result = parse_result(read_output_tail(run_dir))
     fields: dict[str, Any] = {
         "status": "completed" if exit_code == 0 else "failed",
         "exit_code": exit_code,
-        "finished_at": _now_iso(),
+        "finished_at": now_iso(),
     }
     if result is not None:
         fields["result"] = result
@@ -258,6 +303,16 @@ def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO
         if isinstance(result.get("run_id"), int):
             fields["db_run_id"] = result["run_id"]
     write_run_json(run_dir, **fields)
+
+
+def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO[bytes]) -> None:
+    """Wait for the run to exit, then finalize run.json + extract the result."""
+    global _ACTIVE
+    try:
+        exit_code = proc.wait()
+    finally:
+        log_fh.close()
+    finalize_record(run_dir, exit_code)
     with _LOCK:
         if _ACTIVE is not None and _ACTIVE["run_id"] == run_id:
             _ACTIVE = None

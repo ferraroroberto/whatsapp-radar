@@ -10,7 +10,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
+from app.webapp.routers._helpers import STATIC_DIR
+from src.paths import PROJECT_ROOT
 from src.static_versioning import asset_hash_for, rewrite_index_html
 
 _log = logging.getLogger(__name__)

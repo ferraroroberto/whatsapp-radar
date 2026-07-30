@@ -257,7 +257,8 @@ def test_runs_list_is_bounded_per_kind(
     Without a bound this scans every directory on every Execution-tab poll, and
     since #233 the scheduled ``traffic-check`` alone contributes ~288 a day (it
     fires every 5 minutes against a 30-minute cadence). A read bound, not a
-    cleanup — nothing here deletes a run (retention is #234).
+    cleanup — ``list_runs`` itself never deletes a run (the retention cap lives
+    in ``webapp_runs.prune_runs``, #234).
     """
     for i in range(12):
         run_dir = webapp_runs.new_run_dir("scan", f"202601{i + 1:02d}T000000")

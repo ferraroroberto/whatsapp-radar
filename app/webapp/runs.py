@@ -22,7 +22,9 @@ rejected (the router turns :class:`RunBusyError` into HTTP 409).
 from __future__ import annotations
 
 import json
+import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -34,8 +36,23 @@ from src.paths import PROJECT_ROOT
 from src.runresult import parse_result
 from src.subprocess_flags import NO_WINDOW_DETACHED
 
+logger = logging.getLogger(__name__)
+
 RUNS_DIR = PROJECT_ROOT / "webapp" / "runs"
 _LAUNCHER = PROJECT_ROOT / "launcher.py"
+
+#: Retention cap (#234): each kind directory keeps at most this many run
+#: records, newest first. A hard count bound, not an age cap — it directly
+#: guarantees "cannot grow without bound" regardless of fire rate.
+_RETENTION_PER_KIND = 200
+
+#: A "running" record older than this is presumed dead, not in-flight (#234).
+#: Only a CLI/Jobs-launched run can be stuck here — the webapp's own runs are
+#: always tracked by :func:`active_run` and excluded from pruning directly.
+#: Without this escape a crashed CLI run (killed before it could finalize its
+#: record) would stay "running" forever and be immortal against every future
+#: prune pass.
+_STALE_RUNNING_HOURS = 24
 
 #: Set on a child this module captures, so a CLI that would otherwise open its
 #: own run record (:mod:`app.cli.runlog`, #233) knows to stand down — one
@@ -176,8 +193,8 @@ def list_runs(limit: int = 50) -> list[dict[str, Any]]:
     volume is real: App Launcher fires ``traffic-check`` every 5 minutes against
     a 30-minute in-process cadence, so ~288 records a day land here (~240 of them
     self-skips) and this function runs on every Execution-tab poll. Deliberately
-    a read bound and not a cleanup — nothing here deletes a run (retention, and
-    that fire-vs-cadence mismatch, are #234).
+    a read bound and not a cleanup — this function never deletes a run; the
+    retention cap lives in :func:`prune_runs` (#234).
     """
     if not RUNS_DIR.is_dir():
         return []
@@ -198,6 +215,85 @@ def list_runs(limit: int = 50) -> list[dict[str, Any]]:
             rows.append((str(record.get("started_at") or name), record))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [record for _, record in rows[:limit]]
+
+
+def _is_stale_running(run_dir: Path, record: dict[str, Any]) -> bool:
+    """True if a still-"running" record is older than :data:`_STALE_RUNNING_HOURS`.
+
+    Prefers the recorded ``started_at`` (always stamped by :func:`now_iso` at
+    creation); falls back to the run directory's own mtime if that's missing
+    or unparseable, so a corrupt/partial ``run.json`` still ages out.
+    """
+    started_dt: datetime | None = None
+    started_at = record.get("started_at")
+    if isinstance(started_at, str):
+        try:
+            started_dt = datetime.fromisoformat(started_at)
+        except ValueError:
+            started_dt = None
+    if started_dt is None:
+        try:
+            started_dt = datetime.fromtimestamp(run_dir.stat().st_mtime, tz=UTC)
+        except OSError:
+            return False
+    if started_dt.tzinfo is None:
+        started_dt = started_dt.replace(tzinfo=UTC)
+    age_hours = (datetime.now(UTC) - started_dt).total_seconds() / 3600
+    return age_hours >= _STALE_RUNNING_HOURS
+
+
+def prune_runs() -> None:
+    """Cap each kind directory at the newest :data:`_RETENTION_PER_KIND` records (#234).
+
+    Called after every run finishes (webapp- and CLI-launched alike) and once at
+    webapp startup to sweep any backlog. Names are timestamp-sortable, so this is
+    a name sort, not a ``stat()`` scan.
+
+    Never deletes: the webapp's own in-flight run (:func:`active_run`), or a
+    still-"running" record younger than :data:`_STALE_RUNNING_HOURS` (a
+    genuinely in-flight CLI/Jobs run that has no webapp handle to check against).
+    An older "running" record has no live watcher left to finalize it — the
+    process behind it crashed or was killed — so it is treated as dead and
+    pruned like any other name past the cap.
+
+    Tolerant of a locked directory (an open ``output.log`` handle on Windows
+    cannot be unlinked): that directory is skipped this pass and retried next
+    time, logged rather than raised.
+    """
+    if not RUNS_DIR.is_dir():
+        return
+    active = active_run()
+    for kind_dir in sorted(RUNS_DIR.iterdir()):
+        if not kind_dir.is_dir():
+            continue
+        names = sorted(
+            (entry.name for entry in kind_dir.iterdir() if entry.is_dir()), reverse=True
+        )
+        stale_names = names[_RETENTION_PER_KIND:]
+        if not stale_names:
+            continue
+        pruned = 0
+        locked = 0
+        for name in stale_names:
+            if active is not None and active["kind"] == kind_dir.name and active["run_id"] == name:
+                continue
+            run_dir = kind_dir / name
+            record = read_run(run_dir)
+            if record.get("status") == "running" and not _is_stale_running(run_dir, record):
+                continue
+            try:
+                shutil.rmtree(run_dir)
+                pruned += 1
+            except OSError as exc:
+                locked += 1
+                logger.warning(f"⚠️ could not prune run {kind_dir.name}/{name} (locked?): {exc}")
+        if pruned:
+            logger.info(
+                f"🧹 pruned {pruned} run(s) for kind {kind_dir.name} "
+                f"(kept newest {_RETENTION_PER_KIND})"
+            )
+        if locked:
+            logger.info(f"⏭ left {locked} locked run(s) for kind {kind_dir.name}; will retry")
 
 
 # ----------------------------------------------------------- spawn / watch
@@ -289,6 +385,9 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
     ``exit_code`` is ``None`` when the process died without yielding one (an
     exception escaping the CLI); that is a failure, and the field is simply
     omitted rather than guessed at.
+
+    Also prunes (#234) — every finished run is exactly the moment volume grows,
+    so this is the one place both writers' post-run pruning needs to happen.
     """
     result = parse_result(read_output_tail(run_dir))
     fields: dict[str, Any] = {
@@ -303,6 +402,7 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
         if isinstance(result.get("run_id"), int):
             fields["db_run_id"] = result["run_id"]
     write_run_json(run_dir, **fields)
+    prune_runs()
 
 
 def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO[bytes]) -> None:

@@ -456,6 +456,7 @@ export async function fetchExecution() {
   const ex = execState();
   ex.runs = data.runs || [];
   ex.active = data.active || null;
+  ex.skippedCount = data.skipped_count || 0;
 
   // Advance a chained run once the current step finishes (server-authoritative).
   if (!firing && !ex.active && ex.queue.length > 0) await pumpQueue();
@@ -590,6 +591,14 @@ function renderRuns() {
   list.textContent = '';
   els.execRunsEmpty.hidden = ex.runs.length > 0;
   for (const run of ex.runs) list.appendChild(runsListItem(run));
+  // Cadence self-skips are hidden from the list above (#234) but must stay
+  // visible in count, not just fetchable — see execution.py's include_skipped.
+  const n = ex.skippedCount || 0;
+  els.execRunsSkipped.hidden = n === 0;
+  if (n > 0) {
+    els.execRunsSkipped.textContent =
+      n === 1 ? '1 cadence skip hidden' : `${n} cadence skips hidden`;
+  }
 }
 
 // Funnel cells per kind. Each cell is {label, value}; rendered as a small grid.

@@ -335,10 +335,21 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+#: Cadence self-skips are almost all of a full-rate ``traffic-check`` kind's
+#: newest records (#170/#234) — reading only the caller's requested `limit`
+#: from :func:`app.webapp.runs.list_runs` before filtering them out could
+#: starve the result of real runs entirely. Widen the read to the retention
+#: cap (:data:`app.webapp.runs._RETENTION_PER_KIND`) when filtering, which is
+#: still bounded — it can never scan more than what retention guarantees is on
+#: disk for that kind.
+_SKIP_FILTER_READ_LIMIT = 200
+
+
 @router.get("/api/execution/runs")
 async def list_execution_runs(
     request: Request,
     limit: int = 50,
+    include_skipped: bool = False,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
     """Unified recent runs: one entry per execution across both stores (#163).
@@ -346,15 +357,30 @@ async def list_execution_runs(
     Filesystem records (webapp-launched, carry live output) are merged with DB
     run rows (every launch) by the DB run id; DB-only rows — scheduled scans and
     family checks — synthesize a record so nothing that ran is invisible here.
+
+    Cadence self-skips (``result.status == "skipped"``, #170) are excluded from
+    the default response — at full fire rate they are ~11 of every 12
+    ``traffic-check`` records and would otherwise drown the real runs in
+    "Recent runs" (#234). They are never deleted — retention is the separate,
+    unrelated cap in :func:`app.webapp.runs.prune_runs` — and stay fetchable
+    with ``include_skipped=true``; ``skipped_count`` reports how many were
+    hidden so the count itself stays visible even when the rows don't.
     """
     limit = max(1, min(limit, 200))
+    read_limit = limit if include_skipped else max(limit, _SKIP_FILTER_READ_LIMIT)
     merged: list[dict[str, Any]] = []
     by_db_id: dict[int, dict[str, Any]] = {}
-    for record in runs.list_runs(limit):
+    skipped_count = 0
+    for record in runs.list_runs(read_limit):
         record.setdefault("mode", _fs_mode(record))
+        result = record.get("result")
+        is_skip = isinstance(result, dict) and result.get("status") == "skipped"
+        if is_skip:
+            skipped_count += 1
+            if not include_skipped:
+                continue
         db_id = record.get("db_run_id")
         if not isinstance(db_id, int):
-            result = record.get("result")
             db_id = result.get("run_id") if isinstance(result, dict) else None
         if isinstance(db_id, int):
             record["db_run_id"] = db_id
@@ -373,7 +399,7 @@ async def list_execution_runs(
             continue
         merged.append(_db_run_record(row))
     merged.sort(key=lambda r: str(r.get("started_at") or ""), reverse=True)
-    return {"active": runs.active_run(), "runs": merged[:limit]}
+    return {"active": runs.active_run(), "runs": merged[:limit], "skipped_count": skipped_count}
 
 
 @router.get("/api/execution/runs/{kind}/{run_id}")

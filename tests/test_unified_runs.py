@@ -475,6 +475,76 @@ def test_execution_runs_dedups_webapp_launched_run(
     assert record["mode"] == "dry_run"
 
 
+def _seed_skip(runs_dir: Path, run_id: str, started_at: str) -> None:
+    run_dir = webapp_runs.new_run_dir("traffic-check", run_id)
+    webapp_runs.write_run_json(
+        run_dir,
+        kind="traffic-check",
+        status="completed",
+        started_at=started_at,
+        result={
+            "kind": "traffic-check", "status": "skipped",
+            "reason": "cadence 30min not elapsed",
+        },
+    )
+
+
+def test_execution_runs_hides_cadence_skips_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(webapp_runs, "RUNS_DIR", tmp_path / "runs")
+    db = tmp_path / "exec.sqlite3"
+    _seed_skip(tmp_path / "runs", "20260101T000000", "2026-01-01T00:00:00+00:00")
+    _seed_skip(tmp_path / "runs", "20260101T000500", "2026-01-01T00:05:00+00:00")
+
+    with _client(db) as client:
+        body = client.get("/api/execution/runs").json()
+
+    assert body["runs"] == []
+    assert body["skipped_count"] == 2
+
+
+def test_execution_runs_include_skipped_reveals_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(webapp_runs, "RUNS_DIR", tmp_path / "runs")
+    db = tmp_path / "exec.sqlite3"
+    _seed_skip(tmp_path / "runs", "20260101T000000", "2026-01-01T00:00:00+00:00")
+
+    with _client(db) as client:
+        body = client.get("/api/execution/runs", params={"include_skipped": "true"}).json()
+
+    assert len(body["runs"]) == 1
+    assert body["runs"][0]["result"]["status"] == "skipped"
+    assert body["skipped_count"] == 1
+
+
+def test_execution_runs_skip_noise_does_not_starve_real_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A kind dominated by skips must still surface its real runs (#234)."""
+    monkeypatch.setattr(webapp_runs, "RUNS_DIR", tmp_path / "runs")
+    db = tmp_path / "exec.sqlite3"
+    for i in range(60):
+        run_id = f"20260101T{i:04d}00"
+        started = f"2026-01-01T{i // 60:02d}:{i % 60:02d}:00+00:00"
+        _seed_skip(tmp_path / "runs", run_id, started)
+    real_dir = webapp_runs.new_run_dir("traffic-check", "20260102T000000")
+    webapp_runs.write_run_json(
+        real_dir,
+        kind="traffic-check",
+        status="completed",
+        started_at="2026-01-02T00:00:00+00:00",
+        result={"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0},
+    )
+
+    with _client(db) as client:
+        body = client.get("/api/execution/runs", params={"limit": 50}).json()
+
+    assert any(r["run_id"] == "20260102T000000" for r in body["runs"])
+    assert body["skipped_count"] == 60
+
+
 def test_family_endpoint_reads_db_runs(tmp_path: Path) -> None:
     db = tmp_path / "family.sqlite3"
     _seed_family_run(db, kind="traffic-check")

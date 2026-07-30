@@ -38,6 +38,7 @@ export const state = {
     window: 'new',         // 'new' | 'days'      (dry-run scan only)
     days: 7,
     runs: [],
+    skippedCount: 0,       // cadence self-skips hidden from `runs` (#234)
     active: null,          // {kind, run_id} of the in-flight run, or null
     selected: null,        // {kind, run_id} the viewer is showing, or null
     detail: null,          // last fetched run detail
@@ -193,6 +194,7 @@ export const els = {
   execOutput: document.getElementById('execOutput'),
   execRuns: document.getElementById('execRuns'),
   execRunsEmpty: document.getElementById('execRunsEmpty'),
+  execRunsSkipped: document.getElementById('execRunsSkipped'),
 
   // Audit (#12)
   auditRuns: document.getElementById('auditRuns'),

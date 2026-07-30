@@ -65,6 +65,101 @@ def test_list_runs_newest_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert [r["kind"] for r in listed] == ["resync", "scan"]
 
 
+# --- retention (#234) -------------------------------------------------------
+
+def _seed_completed(kind_dir_kind: str, run_id: str, started_at: str) -> None:
+    run_dir = runs.new_run_dir(kind_dir_kind, run_id)
+    runs.write_run_json(
+        run_dir, kind=kind_dir_kind, status="completed", started_at=started_at
+    )
+
+
+def test_prune_runs_caps_each_kind_to_the_retention_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 3)
+    for i in range(5):
+        run_id = f"2026010{i + 1}T000000"
+        started = f"2026-01-0{i + 1}T00:00:00+00:00"
+        _seed_completed("traffic-check", run_id, started)
+
+    runs.prune_runs()
+
+    remaining = sorted(p.name for p in (tmp_path / "runs" / "traffic-check").iterdir())
+    assert remaining == ["20260103T000000", "20260104T000000", "20260105T000000"]
+
+
+def test_prune_runs_never_deletes_the_active_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 1)
+    monkeypatch.setattr(runs, "active_run", lambda: {"kind": "scan", "run_id": "20260101T000000"})
+    _seed_completed("scan", "20260101T000000", "2026-01-01T00:00:00+00:00")
+    _seed_completed("scan", "20260102T000000", "2026-01-02T00:00:00+00:00")
+
+    runs.prune_runs()
+
+    remaining = {p.name for p in (tmp_path / "runs" / "scan").iterdir()}
+    assert "20260101T000000" in remaining  # the active one, even though it's older
+
+
+def test_prune_runs_keeps_a_recent_running_record_past_the_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A genuinely in-flight CLI/Jobs run (no webapp handle) must survive."""
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "active_run", lambda: None)
+    run_dir = runs.new_run_dir("traffic-check", "20260101T000000")
+    runs.write_run_json(
+        run_dir, kind="traffic-check", status="running", started_at=runs.now_iso()
+    )
+
+    runs.prune_runs()
+
+    assert run_dir.is_dir()
+
+
+def test_prune_runs_removes_a_stale_running_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crashed CLI run must not stay 'running' — and immune to pruning — forever."""
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "active_run", lambda: None)
+    run_dir = runs.new_run_dir("traffic-check", "20260101T000000")
+    runs.write_run_json(
+        run_dir, kind="traffic-check", status="running",
+        started_at="2020-01-01T00:00:00+00:00",  # ancient — the process is long dead
+    )
+
+    runs.prune_runs()
+
+    assert not run_dir.exists()
+
+
+def test_prune_runs_tolerates_a_locked_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An open output.log (Windows can't unlink it) must not crash the sweep."""
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "active_run", lambda: None)
+    _seed_completed("scan", "20260101T000000", "2026-01-01T00:00:00+00:00")
+    log_path = tmp_path / "runs" / "scan" / "20260101T000000" / "output.log"
+    log_path.write_bytes(b"")
+    handle = log_path.open("rb")
+    try:
+        with caplog.at_level("WARNING"):
+            runs.prune_runs()  # must not raise
+        assert (tmp_path / "runs" / "scan" / "20260101T000000").is_dir()
+        assert "locked" in caplog.text.lower() or "could not prune" in caplog.text.lower()
+    finally:
+        handle.close()
+
+
 # --- spawn → poll → funnel (end to end) ------------------------------------
 
 def _poll(kind: str, run_id: str, timeout: float = 90.0) -> dict:

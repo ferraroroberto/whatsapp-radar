@@ -13,7 +13,7 @@ import dataclasses
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from calendar_readonly.core import CalendarEvent
+from calendar_readonly.core import CalendarEvent, normalize_event
 
 from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TrafficConfig
 from src.family import calendar_scan
@@ -33,6 +33,7 @@ def _event(
     start: datetime,
     end: datetime | None = None,
     eid: str = "e1",
+    all_day: bool = False,
 ) -> CalendarEvent:
     return CalendarEvent(
         event_id=eid,
@@ -42,7 +43,7 @@ def _event(
         description="",
         start=start,
         end=end or (start + timedelta(hours=1)),
-        all_day=False,
+        all_day=all_day,
         video_link=None,
         status="confirmed",
     )
@@ -145,6 +146,29 @@ def test_hard_alert_bypasses_quiet_hours(
     assert any(c["kind"] == "impossible_overlap" for c in payload["conflicts"])
     assert payload["summary"]["status"] == "sent"  # bypassed quiet hours
     assert "two places at once" in sent[0]
+
+
+def test_all_day_event_does_not_crash_the_daily_scan(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for #241: an all-day event's naive start used to raise
+    ``TypeError: can't compare offset-naive and offset-aware datetimes`` in
+    the per-day filter, taking out the whole scan. Build it through
+    ``normalize_event`` (the real code path from the Calendar API) rather
+    than the ``_event`` helper, so a regression in the tz-awareness fix
+    would actually surface here.
+    """
+    holiday_raw = {
+        "id": "holiday1",
+        "summary": "Public holiday",
+        "start": {"date": DAY_NOW.date().isoformat()},
+        "end": {"date": (DAY_NOW.date() + timedelta(days=1)).isoformat()},
+    }
+    holiday = normalize_event(holiday_raw, calendar_id="parent@example.com")
+    assert holiday.all_day is True
+    _with_events(monkeypatch, {"roberto": [holiday], "ana": []})
+    payload = calendar_scan.run_calendar_scan(_config(), now=DAY_NOW, dry_run=False)
+    assert payload["summary"]["status"] == "sent"
 
 
 def test_dry_run_composes_but_never_sends(sent: list[str]) -> None:

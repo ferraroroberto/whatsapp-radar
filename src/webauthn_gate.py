@@ -7,11 +7,10 @@ endpoints themselves — **not** by anything in this module. This module owns:
 - the enrolled-credential store (``config/webauthn_devices.json``),
 - the registration / authentication ceremonies (py_webauthn),
 - a one-time enrollment window (opened from the tray) so a new device can only
-  be added deliberately,
-- short-lived **unlock tokens** minted by a successful passkey assertion and
-  handed to the frontend as an informational "recently unlocked" signal — no
-  server route or middleware validates or revokes them, so they enforce
-  nothing today.
+  be added deliberately.
+
+A successful passkey assertion simply reports success to the caller — no
+unlock token is minted or tracked.
 
 Single-user by design: one logical user, a small whitelist of devices.
 """
@@ -58,7 +57,6 @@ _USER_ID = b"whatsapp-radar-user"
 _USER_NAME = "whatsapp-radar"
 
 _CHALLENGE_TTL = 300.0           # 5 min to complete a ceremony
-_UNLOCK_TOKEN_TTL = 12 * 3600.0  # a passkey unlock is good for 12 h
 _ENROLL_WINDOW_DEFAULT = 300.0   # tray "enroll device" window length
 
 
@@ -70,14 +68,13 @@ class _Challenge:
 
 
 class WebAuthnGate:
-    """Stateful holder for ceremonies, the device whitelist, and unlock tokens."""
+    """Stateful holder for ceremonies and the device whitelist."""
 
     def __init__(self, devices_path: Path | None = None) -> None:
         self._devices_path = devices_path or DEFAULT_DEVICES_PATH
         self._lock = threading.Lock()
         self._reg_challenge: _Challenge | None = None
         self._auth_challenge: _Challenge | None = None
-        self._unlock_tokens: dict[str, float] = {}
         self._enroll_until = 0.0
 
     # ----------------------------------------------------------- config
@@ -236,8 +233,8 @@ class WebAuthnGate:
         result: dict[str, Any] = json.loads(options_to_json(options))
         return result
 
-    def finish_authentication(self, cfg: WebappConfig, credential: Any) -> str:
-        """Verify an assertion against the whitelist and mint an unlock token."""
+    def finish_authentication(self, cfg: WebappConfig, credential: Any) -> None:
+        """Verify an assertion against the whitelist."""
         with self._lock:
             challenge = self._auth_challenge
             self._auth_challenge = None
@@ -264,22 +261,7 @@ class WebAuthnGate:
             match["sign_count"] = verification.new_sign_count
             match["last_used"] = datetime.now().isoformat(timespec="seconds")
             self._save_devices(devices)
-            token = self._mint_token_locked()
         logger.info(f"🔓 Passkey unlock by '{match.get('label')}'")
-        return token
-
-    # ------------------------------------------------- unlock tokens
-    # Informational only: minted on a successful ceremony and handed to the
-    # frontend to record "recently unlocked", but nothing server-side ever
-    # validates or revokes it — no route or middleware checks these tokens.
-    def _mint_token_locked(self) -> str:
-        now = time.time()
-        self._unlock_tokens = {
-            t: exp for t, exp in self._unlock_tokens.items() if exp > now
-        }
-        token = secrets.token_urlsafe(32)
-        self._unlock_tokens[token] = now + _UNLOCK_TOKEN_TTL
-        return token
 
 
 def _credential_id_of(credential: Any) -> str:

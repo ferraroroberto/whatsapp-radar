@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS chats (
     first_seen_at            TEXT NOT NULL,
     last_seen_at             TEXT NOT NULL,
     last_message_at          TEXT,
-    monitor_frequency_minutes INTEGER,
     -- Operator-declared link: when set, this chat is a *child* folded into the
     -- parent (a top-level chat) so the same person reached under two numbers is
     -- one family. Depth is capped at 1 (a child can't itself be a parent) by the

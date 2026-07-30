@@ -6,8 +6,8 @@ knobs, auth secrets, the WebAuthn relying-party identity, and (migrated off
 ``config/default.json`` (committed, non-secret) because this file is written
 from the UI and is gitignored.
 
-``src/config.py`` also reads the Telegram fields here so the CLI and webapp
-share one source of truth.
+``src/config/telegram.py`` also reads the Telegram fields here so the CLI and
+webapp share one source of truth.
 """
 
 from __future__ import annotations

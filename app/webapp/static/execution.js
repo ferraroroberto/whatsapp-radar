@@ -14,6 +14,7 @@ import {
   renderSourceFunnels, sourceIcon, SOURCE_LABEL,
 } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
+import { fetchTraffic, patchTraffic } from './family.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
@@ -330,53 +331,14 @@ function renderSyncs() {
 
 // ----------------------------------------------------- traffic jam insurance
 
-// The Run-tab traffic card (#164): the enable toggle + cadence are config
-// (persisted through the family safe-override path), and the status line reads
-// the last check / last alert from the unified run store (#163). The App
-// Launcher job (`family-radar-traffic-check`) is armed at a fixed high
-// frequency; `wr traffic-check` self-skips in-process against this cadence
-// (#170), so editing it here takes effect with no re-arm.
-function trafficWhen(iso) { return iso ? fmtSyncWhen(iso) : 'never'; }
-
-function renderTraffic() {
-  const t = execState().traffic;
-  if (!t) return;
-  setSwitch(els.execTrafficEnabled, !!t.enabled);
-  // Don't clobber the field while the operator is typing in it.
-  if (document.activeElement !== els.execTrafficCadence) {
-    els.execTrafficCadence.value = t.cadence_min != null ? String(t.cadence_min) : '30';
-  }
-  els.execTrafficStatus.textContent =
-    'Last check: ' + trafficWhen(t.last_check) + ' · Last alert: ' + trafficWhen(t.last_alert);
-}
-
-// Config comes from /api/family; throttled since it changes rarely (a POST also
-// returns the fresh slice). `force` bypasses the throttle after a run/edit.
-export async function fetchTraffic(force) {
-  const ex = execState();
-  if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
-  await fetchQuiet('/api/family', function (data) {
-    ex.traffic = data.traffic || {};
-    ex.trafficAt = Date.now();
-    renderTraffic();
-  });
-}
-
-async function patchTraffic(body) {
-  try {
-    const data = await jsonApi('/api/family', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    execState().traffic = data.traffic || {};
-    renderTraffic();
-  } catch (exc) {
-    toast(String(exc.message || exc), 'error');
-    fetchTraffic(true);  // re-sync the controls to the server's truth
-  }
-}
-
+// The Run-tab traffic card (#164): the enable toggle + cadence config and the
+// last-check/last-alert status line are family.js's own /api/family concern
+// (#240 — fetchTraffic/patchTraffic + their rendering moved there, since they
+// share nothing with this file's run queue). This is the one piece that does:
+// firing a one-off traffic-check run through the same queue every other
+// pipeline step uses. The App Launcher job (`family-radar-traffic-check`) is
+// armed at a fixed high frequency; `wr traffic-check` self-skips in-process
+// against the cadence config (#170), so editing it takes effect with no re-arm.
 function runTraffic(mode) {
   const ex = execState();
   if (ex.active || ex.queue.length > 0 || firing) {

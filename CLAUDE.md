@@ -21,7 +21,9 @@ whatsapp-radar/
   gmail_readonly/        # portable Gmail read client
   google_oauth_common/   # shared installed-app OAuth bootstrap the three clients above wrap
   src/                   # logic, imported as `from src.…`
-    config.py  models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
+    config/ (package: __init__.py's load_config aggregates one module per subsystem —
+             hub/transcription/tts/telegram/tripwire/gmail/calendar/traffic/presence/family)
+    models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     paths.py  tts_client.py  speech_profile.py  subprocess_flags.py  runresult.py  _loopback_http.py
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
     db/ (store.py facade over connection/ack/chats/messages/runs/dashboard/sync_log/

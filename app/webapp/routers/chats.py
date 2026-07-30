@@ -22,7 +22,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from app.webapp.routers._helpers import buffer_dir, db_path, get_conn, hub_base_url, tts_profiles
+from app.webapp.routers._helpers import (
+    buffer_dir,
+    get_conn,
+    hub_base_url,
+    short_lived_conn,
+    tts_profiles,
+)
 from src import speech_profile, tts_client
 from src.analysis import summarize as summarize_client
 from src.analysis.tripwire import scan_tripwire
@@ -351,11 +357,8 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
     already stored; the hub's own status (503 unreachable / upstream error / 502
     empty) is surfaced verbatim.
     """
-    conn = store.connect(db_path(request))
-    try:
+    with short_lived_conn(request) as conn:
         ctx = store.message_summary_context(conn, message_id)
-    finally:
-        conn.close()
     if ctx is None:
         raise HTTPException(status_code=404, detail="no text for this message")
     text, _sender_label, existing_summary = ctx
@@ -373,11 +376,8 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
     except summarize_client.SummarizeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
-    conn = store.connect(db_path(request))
-    try:
+    with short_lived_conn(request) as conn:
         store.set_message_summary(conn, message_id, summary)
-    finally:
-        conn.close()
     return {"message_id": message_id, "summary": summary}
 
 
@@ -412,11 +412,8 @@ async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingRespons
     specifically is unavailable (distinguished from a general hub outage,
     which surfaces as 502).
     """
-    conn = store.connect(db_path(request))
-    try:
+    with short_lived_conn(request) as conn:
         ctx = store.message_summary_context(conn, speech.message_id)
-    finally:
-        conn.close()
     if ctx is None:
         raise HTTPException(status_code=404, detail="no text for this message")
     original_text, sender_label, summary = ctx

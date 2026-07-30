@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,27 @@ async def get_conn(request: Request) -> AsyncIterator[sqlite3.Connection]:
     thread — a sync dependency would run in Starlette's threadpool and trip
     sqlite3's ``check_same_thread`` guard. This matches the prior behaviour, where
     each handler called :func:`store.connect` inline on the event-loop thread.
+    """
+    conn = store.connect(db_path(request))
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def short_lived_conn(request: Request) -> Iterator[sqlite3.Connection]:
+    """A store connection scoped to one call, not the whole request (#240).
+
+    ``get_conn`` above deliberately holds its connection open across the
+    *entire* request — right for a plain read/write handler, wrong for one
+    that must release the connection before a slow hub/TTS network call (the
+    handler would otherwise sit on a held sqlite connection for the duration
+    of that call). Those handlers can't use ``get_conn`` as a FastAPI
+    dependency, so this is the second, explicitly short-lived home for the
+    same ``store.connect`` / ``try: … finally: conn.close()`` idiom — used as
+    ``with short_lived_conn(request) as conn: …`` instead of repeating the
+    open/close inline.
     """
     conn = store.connect(db_path(request))
     try:

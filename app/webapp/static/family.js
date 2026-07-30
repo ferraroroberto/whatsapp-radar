@@ -13,6 +13,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
+import { fmtLocalDateTime } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 
@@ -389,4 +390,55 @@ function render() {
 
 export function wireFamily() {
   // No boot-time wiring beyond fetch-on-activate; controls bind on render.
+}
+
+// ----------------------------------------------- Run-tab traffic card (#164)
+// The enable toggle + cadence render on the Execution tab (`els.execTraffic*`)
+// but the config they edit is this module's own /api/family — the traffic-jam
+// insurance feature is a family/traffic domain concern that happens to be
+// surfaced from the Run tab (#240). execution.js keeps only `runTraffic`, the
+// one piece that genuinely belongs to its run queue (firing a one-off
+// traffic-check run); everything here is read/render/patch of config state,
+// sharing nothing with that queue.
+function trafficWhen(iso) {
+  return iso ? fmtLocalDateTime(iso, { withYear: false }) : 'never';
+}
+
+function renderTraffic() {
+  const t = state.execution.traffic;
+  if (!t) return;
+  setSwitch(els.execTrafficEnabled, !!t.enabled);
+  // Don't clobber the field while the operator is typing in it.
+  if (document.activeElement !== els.execTrafficCadence) {
+    els.execTrafficCadence.value = t.cadence_min != null ? String(t.cadence_min) : '30';
+  }
+  els.execTrafficStatus.textContent =
+    'Last check: ' + trafficWhen(t.last_check) + ' · Last alert: ' + trafficWhen(t.last_alert);
+}
+
+// Config comes from /api/family; throttled since it changes rarely (a POST also
+// returns the fresh slice). `force` bypasses the throttle after a run/edit.
+export async function fetchTraffic(force) {
+  const ex = state.execution;
+  if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
+  await fetchQuiet('/api/family', function (data) {
+    ex.traffic = data.traffic || {};
+    ex.trafficAt = Date.now();
+    renderTraffic();
+  });
+}
+
+export async function patchTraffic(body) {
+  try {
+    const data = await jsonApi('/api/family', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    state.execution.traffic = data.traffic || {};
+    renderTraffic();
+  } catch (exc) {
+    toast(String(exc.message || exc), 'error');
+    fetchTraffic(true);  // re-sync the controls to the server's truth
+  }
 }

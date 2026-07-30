@@ -166,8 +166,8 @@ flowchart TB
   TRIPWIRE -->|opt-in weekly nudge| ALERT
   ALERT --> NFACTORY
 
-  subgraph config["src/config.py + config/"]
-    CONFIGPY["Config — default.json -> local.json -> WR_* env/.env"]
+  subgraph config["src/config/ + config/"]
+    CONFIGPY["Config — default.json -> local.json -> WR_* env/.env\n(package: __init__.py + one module per subsystem)"]
     DEFAULTJSON["config/default.json (committed)"]
     LOCALJSON["config/local.json + webapp_config.json\n(gitignored secrets/local overrides)"]
   end

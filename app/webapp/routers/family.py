@@ -52,6 +52,7 @@ class FamilyUpdate(BaseModel):
 
     traffic_enabled: bool | None = None
     family_enabled: bool | None = None
+    ask_missing_locations: bool | None = None
     skip_leave_now_for_train: bool | None = None
     significant_delay_min: int | None = None
     cadence_min: int | None = None
@@ -193,6 +194,7 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "childcare_windows": windows,
             "unknown_scan_days": family.unknown_scan_days,
             "assessment_days": family.assessment_days,
+            "ask_missing_locations": family.ask_missing_locations,
         },
         "calendars": [
             {"person": account.person, "calendar_id": account.calendar_id, "label": account.label}
@@ -242,6 +244,8 @@ async def update_family(
         traffic["quiet_end_hour"] = _hour(payload.quiet_end_hour)
     if payload.family_enabled is not None:
         family["enabled"] = payload.family_enabled
+    if payload.ask_missing_locations is not None:
+        family["ask_missing_locations"] = payload.ask_missing_locations
     if payload.run_hour is not None:
         family["run_hour"] = _hour(payload.run_hour)
     if payload.kids_home_time is not None:

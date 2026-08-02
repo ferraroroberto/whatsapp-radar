@@ -69,6 +69,7 @@ function toDraft(d) {
     quiet_end_hour: d.traffic.quiet_end_hour,
     significant_delay_min: d.traffic.significant_delay_min,
     skip_leave_now_for_train: !!d.traffic.skip_leave_now_for_train,
+    ask_missing_locations: d.family.ask_missing_locations !== false,
   };
 }
 
@@ -84,6 +85,7 @@ function serializeDraft() {
     quiet_end_hour: draft.quiet_end_hour,
     significant_delay_min: draft.significant_delay_min,
     skip_leave_now_for_train: draft.skip_leave_now_for_train,
+    ask_missing_locations: draft.ask_missing_locations,
   });
 }
 
@@ -304,6 +306,7 @@ async function saveDraft() {
     quiet_end_hour: draft.quiet_end_hour,
     significant_delay_min: draft.significant_delay_min,
     skip_leave_now_for_train: draft.skip_leave_now_for_train,
+    ask_missing_locations: draft.ask_missing_locations,
   };
   saveBtn.disabled = true;
   try {
@@ -335,6 +338,15 @@ function renderEditable(box) {
     draft.enabled = next;
     markDirty();
   }));
+  // Sits directly under the switch it qualifies rather than at the far end of
+  // the form. #253: events with no location are always *assumed home* and
+  // always kept in the decision trace — this only controls whether the daily
+  // summary nags to fill them in, for a household where some never will be.
+  target.append(toggleRow('Ask for missing locations', draft.ask_missing_locations, function (next) {
+    draft.ask_missing_locations = next;
+    markDirty();
+  }));
+  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the Audit trace.'));
 
   renderResponsible(target);
 

@@ -212,3 +212,19 @@ def test_family_api_reports_the_effective_dedup_window(
     with _client(tmp_path / "x.sqlite3") as client:
         traffic = client.get("/api/family").json()["traffic"]
     assert traffic["effective_dedup_window_min"] >= traffic["dedup_window_min"]
+
+
+# ------------------------------------------------- ask_missing_locations (#253)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_ask_missing_locations_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bool
+) -> None:
+    saved = _patched_save(monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        res = client.post("/api/family", json={"ask_missing_locations": value})
+        assert res.status_code == 200
+        assert saved["family"]["ask_missing_locations"] is value
+        payload = client.get("/api/family").json()
+    assert payload["family"]["ask_missing_locations"] is True  # committed default

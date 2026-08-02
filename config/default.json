@@ -71,6 +71,7 @@
     "childcare_windows": [],
     "unknown_scan_days": 7,
     "assessment_days": 2,
+    "ask_missing_locations": true,
     "reminder_calendar_id": "",
     "reminder_time": "07:30"
   },

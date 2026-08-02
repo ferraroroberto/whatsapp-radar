@@ -187,3 +187,15 @@ def test_shipped_defaults_do_not_make_dedup_a_no_op() -> None:
     cfg = TrafficConfig()
     assert cfg.dedup_window_min > cfg.cadence_min
     assert cfg.effective_dedup_window_min == cfg.dedup_window_min
+
+
+def test_ask_missing_locations_defaults_to_on(monkeypatch) -> None:
+    """An existing config with no such key must behave exactly as before (#253)."""
+    from src.config.family import parse
+
+    monkeypatch.delenv("WR_FAMILY_ASK_MISSING_LOCATIONS", raising=False)
+    assert parse({}).ask_missing_locations is True
+    assert parse({"ask_missing_locations": False}).ask_missing_locations is False
+    # The env override wins over the file, mirroring WR_FAMILY_ENABLED.
+    monkeypatch.setenv("WR_FAMILY_ASK_MISSING_LOCATIONS", "0")
+    assert parse({"ask_missing_locations": True}).ask_missing_locations is False

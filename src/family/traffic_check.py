@@ -137,7 +137,9 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         origin_lookback_min=traffic.origin_lookback_min,
     )
     # Never shorter than the lookahead (#252) — see `effective_dedup_window_min`.
-    # Log the override so a configured-but-ignored value is never invisible.
+    # The window actually applied rides the run payload below, so a
+    # configured-but-overridden value is visible in the Audit tab: this repo
+    # configures no logging handlers, so the log line alone would be dropped.
     dedup_window_min = traffic.effective_dedup_window_min
     if dedup_window_min != traffic.dedup_window_min:
         logger.info(
@@ -198,8 +200,9 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             # ETA, so its departure moment is meaningless for a train ride. The
             # computed `depart_in` is still recorded — it stays informative — and the
             # suppression is recorded explicitly rather than silently dropping the
-            # alert. The delay and infeasible-hop alerts are deliberately unaffected.
-            # Both driving-ETA judgments below share one train check (#252):
+            # alert. The *delay* alert is deliberately unaffected.
+            #
+            # Both driving-ETA judgments below share this one train check (#252):
             # a "the drive is ~10 min" claim is meaningless for a train ride,
             # whether it is phrased as leave-now or as an infeasible hop.
             skip_driving = traffic.skip_leave_now_for_train and rules.is_train_commute(
@@ -301,4 +304,6 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     return {
         "kind": "traffic-check", "status": "ok",
         "checked": checked, "alerts": alerts, "dry_run": dry_run,
+        # The window actually applied, which may be higher than configured (#252).
+        "dedup_window_min": dedup_window_min,
     }

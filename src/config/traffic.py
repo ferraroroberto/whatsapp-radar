@@ -103,7 +103,7 @@ def parse(raw: dict[str, Any]) -> TrafficConfig:
         significant_delay_min=int(raw.get("significant_delay_min", 15)),
         quiet_start_hour=int(raw.get("quiet_start_hour", 20)),
         quiet_end_hour=int(raw.get("quiet_end_hour", 5)),
-        dedup_window_min=int(raw.get("dedup_window_min", 30)),
+        dedup_window_min=int(raw.get("dedup_window_min", 180)),
         origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
         lookahead_hours=int(raw.get("lookahead_hours", 3)),
         cadence_min=int(raw.get("cadence_min", 30)),

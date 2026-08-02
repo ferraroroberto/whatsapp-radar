@@ -475,8 +475,8 @@ def _shared_event_for_both(state: dict[str, Any]) -> None:
         end=NOW + timedelta(hours=2),
     )
     state["events"] = {
-        "roberto": [_event("Chequeo adeslas", eid="a", **event)],
-        "ana": [_event("Chequeo adeslas", eid="b", **event)],
+        "roberto": [_event("Medical checkup", eid="a", **event)],
+        "ana": [_event("Medical checkup", eid="b", **event)],
     }
 
 
@@ -563,3 +563,27 @@ def test_tight_schedule_still_fires_for_a_normal_drive(
     assert leg["feasible"] is False and leg["infeasible_suppressed"] is False
     assert leg["alerted"] is True
     assert [t for t in harness["sent"] if "Tight schedule" in t]
+
+
+def test_run_payload_reports_the_window_actually_applied(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The override must be inspectable, not just logged (#252).
+
+    This repo installs no logging handlers, so the `logger.info` announcing the
+    raised window is dropped in both the CLI and webapp paths. The run payload
+    feeds the Audit tab, so that is where the applied value has to surface.
+    """
+    _single_office_leg(harness)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    degenerate = dataclasses.replace(
+        _config(),
+        traffic=TrafficConfig(
+            enabled=True, api_key="k", dedup_window_min=30, cadence_min=30,
+            lookahead_hours=3,
+        ),
+    )
+
+    payload = traffic_check.run_traffic_check(degenerate, now=NOW, dry_run=True)
+
+    assert payload["dedup_window_min"] == 180  # not the configured 30

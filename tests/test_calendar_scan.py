@@ -307,3 +307,103 @@ def test_live_presence_unavailable_falls_back_silently(
 def test_live_coverage_absent_when_presence_disabled(sent: list[str]) -> None:
     payload = calendar_scan.run_calendar_scan(_config(), now=LIVE_NOW, dry_run=False)
     assert payload["live_coverage"] == []
+
+
+# ---------------------------------------------------------------- issue #253
+#
+# The "📍 No location set" ask is unconditional today, so a household where one
+# person never fills locations in gets the same two events re-listed every day
+# (observed 30 Jul, 31 Jul, 1 Aug) — drowning the coverage alerts it shares a
+# message with. The toggle silences the nag WITHOUT making the underlying
+# home-assumption invisible, which is the whole point of #168.
+
+
+def _locationless_config(*, ask: bool) -> Config:
+    return dataclasses.replace(
+        _config(),
+        family=dataclasses.replace(_config().family, ask_missing_locations=ask),
+    )
+
+
+def _two_locationless_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    _with_events(monkeypatch, {
+        "ana": [
+            _event("Digestive tests", start=DAY_NOW + timedelta(days=2, hours=1), eid="a"),
+            _event("Manicure", start=DAY_NOW + timedelta(days=2, hours=10), eid="b"),
+        ],
+        "roberto": [],
+    })
+
+
+def test_missing_location_ask_is_sent_by_default(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_locationless_events(monkeypatch)
+    payload = calendar_scan.run_calendar_scan(
+        _locationless_config(ask=True), now=DAY_NOW, dry_run=False
+    )
+    assert "No location set" in sent[0]
+    assert "Digestive tests" in sent[0] and "Manicure" in sent[0]
+    assert len(payload["missing_locations"]) == 2
+
+
+def test_missing_location_ask_can_be_switched_off(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_locationless_events(monkeypatch)
+    calendar_scan.run_calendar_scan(
+        _locationless_config(ask=False), now=DAY_NOW, dry_run=False
+    )
+
+    assert "No location set" not in sent[0]
+    assert "Digestive tests" not in sent[0] and "Manicure" not in sent[0]
+    # Silence is never a result (#168): with nothing else to report it degrades
+    # to the all-clear, not to a bare header.
+    assert "Everything is fine" in sent[0]
+
+
+def test_switching_the_ask_off_keeps_the_audit_trail(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The assumption stays visible in the payload — only the nag is silenced."""
+    _two_locationless_events(monkeypatch)
+    on = calendar_scan.run_calendar_scan(
+        _locationless_config(ask=True), now=DAY_NOW, dry_run=True
+    )
+    off = calendar_scan.run_calendar_scan(
+        _locationless_config(ask=False), now=DAY_NOW, dry_run=True
+    )
+
+    assert off["missing_locations"] == on["missing_locations"]
+    assert len(off["missing_locations"]) == 2
+    assert off["decisions"] == on["decisions"]
+    assert [d for d in off["decisions"] if d["assumed"]]  # still flagged assumed
+
+
+def test_switching_the_ask_off_leaves_conflicts_alone(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Coverage gaps are hard alerts and must survive the toggle in both states."""
+    _with_events(monkeypatch, {
+        "roberto": [
+            # On duty every weekday, but away across the 17:30 kids-home moment.
+            _event("Client meeting", location=WORK, eid="c",
+                   start=DAY_NOW.replace(hour=16), end=DAY_NOW.replace(hour=19)),
+        ],
+        "ana": [_event("Manicure", start=DAY_NOW + timedelta(days=2), eid="b")],
+    })
+    off = calendar_scan.run_calendar_scan(
+        _locationless_config(ask=False), now=DAY_NOW, dry_run=False
+    )
+
+    assert off["conflicts"], "the coverage gap must still be detected"
+    assert "issue(s)" in sent[0]
+    assert "No location set" not in sent[0]
+
+
+def test_ask_missing_locations_defaults_to_on() -> None:
+    """An existing config with no such key must behave exactly as before."""
+    from src.config.family import parse
+
+    assert parse({}).ask_missing_locations is True
+    assert parse({"ask_missing_locations": False}).ask_missing_locations is False

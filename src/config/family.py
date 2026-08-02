@@ -64,6 +64,13 @@ class FamilyConfig:
     childcare_windows: tuple[ChildcareWindow, ...] = ()
     unknown_scan_days: int = 7
     assessment_days: int = 2
+    # Whether the daily summary asks for locations on events that have none
+    # (#253). Off means the "📍 No location set" section is left out of the
+    # Telegram message — nothing else changes: the events are still assumed
+    # home, still flagged `assumed` in the decision trace, and still listed in
+    # the run's `missing_locations`. The setting silences the nag, it does not
+    # make the assumption invisible (the whole point of #168).
+    ask_missing_locations: bool = True
     # Routine-prep calendar reminders (#218, Step 4/5 of #206). An empty
     # `reminder_calendar_id` means the feature is off: the pipeline never builds
     # a calendar_write client and no event is ever created. `reminder_time` is
@@ -101,6 +108,10 @@ def parse(raw: dict[str, Any]) -> FamilyConfig:
         childcare_windows=windows,
         unknown_scan_days=int(raw.get("unknown_scan_days", 7)),
         assessment_days=int(raw.get("assessment_days", 2)),
+        ask_missing_locations=_as_bool(
+            os.environ.get("WR_FAMILY_ASK_MISSING_LOCATIONS"),
+            raw.get("ask_missing_locations", True),
+        ),
         reminder_calendar_id=str(raw.get("reminder_calendar_id", "")).strip(),
         reminder_time=str(raw.get("reminder_time", "07:30")).strip(),
     )

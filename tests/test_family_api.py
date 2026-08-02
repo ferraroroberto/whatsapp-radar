@@ -203,3 +203,19 @@ def test_childcare_window_bad_time_rejected(
     with _client(tmp_path / "x.sqlite3") as client:
         res = client.post("/api/family", json={"childcare_windows": windows})
     assert res.status_code == 400
+
+
+# ------------------------------------------------- ask_missing_locations (#253)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_ask_missing_locations_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bool
+) -> None:
+    saved = _patched_save(monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        res = client.post("/api/family", json={"ask_missing_locations": value})
+        assert res.status_code == 200
+        assert saved["family"]["ask_missing_locations"] is value
+        payload = client.get("/api/family").json()
+    assert payload["family"]["ask_missing_locations"] is True  # committed default

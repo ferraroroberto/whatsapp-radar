@@ -45,25 +45,34 @@ def build_summary_text(
     assessment_days: int,
     conflicts: list[dict[str, Any]],
     missing: list[dict[str, Any]],
+    ask_missing_locations: bool = True,
 ) -> str:
     """Compose the daily Telegram summary — always produced, even all-clear.
 
     Per-person coverage issues come first (they are the hard alerts), then the
     missing-location asks grouped by person, then the explicit all-clear when
     there is nothing at all — silence is never a result (#168).
+
+    ``ask_missing_locations=False`` drops the asks section (#253) for a
+    household where some events will never get a location, so the recurring
+    nag stops drowning the coverage alerts it shares a message with. It changes
+    only this text: ``missing`` is still computed and still persisted in the
+    run payload. With the asks hidden and no conflicts, the message correctly
+    degrades to the all-clear rather than to an empty header.
     """
+    asks = missing if ask_missing_locations else []
     lines = [f"📅 Calendar sync — checked the next {scan_days} days."]
     if conflicts:
         lines.append(f"⚠️ {len(conflicts)} issue(s) in the next {assessment_days} day(s):")
         lines.extend(f"• {c['detail']}" for c in conflicts[:6])
         if len(conflicts) > 6:
             lines.append(f"…and {len(conflicts) - 6} more.")
-    if missing:
+    if asks:
         lines.append("📍 No location set — please add one:")
         by_person: dict[str, list[str]] = {}
         # Sorted by (person, start) so the same inputs always compose the same
         # message regardless of fetch order — determinism is part of the spec.
-        for item in sorted(missing, key=lambda m: (str(m["person"]), str(m["start"]))):
+        for item in sorted(asks, key=lambda m: (str(m["person"]), str(m["start"]))):
             by_person.setdefault(item["person"], []).append(
                 f"{_fmt_when(item['start'])} — {item['event']}"
             )
@@ -72,7 +81,7 @@ def build_summary_text(
                 lines.append(f"• {person}: {entry}")
             if len(items) > 4:
                 lines.append(f"• {person}: …and {len(items) - 4} more.")
-    if not conflicts and not missing:
+    if not conflicts and not asks:
         lines.append("✅ Everything is fine — nothing needs your attention.")
     return "\n".join(lines)
 
@@ -214,6 +223,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         assessment_days=family.assessment_days,
         conflicts=conflict_dicts,
         missing=missing,
+        ask_missing_locations=family.ask_missing_locations,
     )
 
     # Always-send contract (#168): a live run produces exactly one summary —

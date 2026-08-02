@@ -203,3 +203,12 @@ def test_childcare_window_bad_time_rejected(
     with _client(tmp_path / "x.sqlite3") as client:
         res = client.post("/api/family", json={"childcare_windows": windows})
     assert res.status_code == 400
+
+
+def test_family_api_reports_the_effective_dedup_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Advertising only the configured value would name a window not in force (#252)."""
+    with _client(tmp_path / "x.sqlite3") as client:
+        traffic = client.get("/api/family").json()["traffic"]
+    assert traffic["effective_dedup_window_min"] >= traffic["dedup_window_min"]

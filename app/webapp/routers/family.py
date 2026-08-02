@@ -173,6 +173,10 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "quiet_start_hour": traffic.quiet_start_hour,
             "quiet_end_hour": traffic.quiet_end_hour,
             "dedup_window_min": traffic.dedup_window_min,
+            # What the check actually applies — may be higher than configured,
+            # since the window is floored at the lookahead (#252). Reporting only
+            # the configured value would advertise a window that is not in force.
+            "effective_dedup_window_min": traffic.effective_dedup_window_min,
             "origin_lookback_min": traffic.origin_lookback_min,
             "lookahead_hours": traffic.lookahead_hours,
             "skip_leave_now_for_train": traffic.skip_leave_now_for_train,

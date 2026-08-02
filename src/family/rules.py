@@ -69,8 +69,10 @@ def is_train_commute(event: CalendarEvent, keywords: tuple[str, ...]) -> bool:
     Same title-keyword shape as :func:`is_en_casa`, but with the vocabulary
     configurable (``traffic.train_keywords``) since the marker is written by
     hand in whichever language the calendar uses (e.g. the Spanish ``(en
-    tren)``). Used only to suppress the leave-now alert, whose ETA is a driving
-    ETA and therefore says nothing about a train departure.
+    tren)``). Used to suppress both alerts that reason from a driving ETA — the
+    leave-now nudge and the infeasible-hop "tight schedule" warning (#252) —
+    since a Routes DRIVE result says nothing about a train departure. The delay
+    alert is deliberately not suppressed.
     """
     summary = event.summary.lower()
     return any(keyword and keyword.lower() in summary for keyword in keywords)

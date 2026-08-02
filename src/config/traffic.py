@@ -24,7 +24,13 @@ class TrafficConfig:
     significant_delay_min: int = 15
     quiet_start_hour: int = 20  # local hour checks pause at (inclusive)
     quiet_end_hour: int = 5  # local hour checks resume at
-    dedup_window_min: int = 30
+    # Raised from 30 in #252. At 30 it exactly equalled `cadence_min`, so a
+    # record written one cadence ago sat precisely on the window boundary and
+    # any scheduler jitter pushed it out — the same event re-alerted on nearly
+    # every check (four "Tight schedule" messages for one event in two hours).
+    # See `effective_dedup_window_min` for the floor that makes that
+    # unexpressible regardless of what is configured here.
+    dedup_window_min: int = 180
     origin_lookback_min: int = 60
     lookahead_hours: int = 3  # how far ahead to look for the next commute
     # Slack (minutes) baked into the "leave now" alert (#185): the alert fires
@@ -35,13 +41,21 @@ class TrafficConfig:
     # bounded by `cadence_min`: the alert lands on the first check after the
     # departure moment, so set a low cadence when relying on leave-now.
     leave_margin_min: int = 5
-    # Train-commute suppression (#227). The leave-now alert is a *driving*
-    # judgment — its ETA comes from a Routes DRIVE request — so it is noise for
-    # a commute taken by train (the daily office run, titled e.g. "trabajo desde
-    # la oficina (en tren)"). When on, an event whose title contains one of
-    # `train_keywords` never fires a leave-now; the delay and infeasible-hop
-    # alerts are deliberately untouched. Keywords are configurable so a genuine
+    # Train-commute suppression (#227, widened in #252). Both the leave-now and
+    # the infeasible-hop ("Tight schedule") alerts are *driving* judgments —
+    # their minutes come from a Routes DRIVE request — so both are noise for a
+    # commute taken by train (the daily office run, titled e.g. "trabajo en la
+    # oficina (en tren)"): telling someone the drive is ~10 min says nothing
+    # about their train. When on, an event whose title contains one of
+    # `train_keywords` fires neither. The *delay* alert is deliberately still
+    # untouched: a significant delay on the road is at least a real-world signal
+    # even if this person is not driving. Keywords are configurable so a genuine
     # *drive to the train station* can be tuned out without a code change.
+    #
+    # The key keeps its original name: renaming it would churn the API payload,
+    # the Family tab's toggle, and every persisted config for a purely cosmetic
+    # gain. The UI label ("Skip train commutes") already describes the widened
+    # behaviour accurately.
     skip_leave_now_for_train: bool = True
     train_keywords: tuple[str, ...] = ("tren", "train")
     # How often a live check should actually run (#164). The webapp persists
@@ -52,6 +66,22 @@ class TrafficConfig:
     # editing this value here takes effect immediately, with no Task
     # Scheduler re-arm needed.
     cadence_min: int = 30
+
+    @property
+    def effective_dedup_window_min(self) -> int:
+        """The dedup window actually applied — never shorter than the lookahead.
+
+        A single event stays inside the lookahead window for `lookahead_hours`
+        and is re-checked every `cadence_min` throughout, so a dedup window
+        shorter than the lookahead *mathematically guarantees* the same event
+        alerts more than once (#252). The floor is derived from that, not a
+        magic multiplier: one approach to one event earns one alert.
+
+        Configuring a shorter window is therefore treated as a misconfiguration
+        and quietly raised rather than silently doing nothing — the caller logs
+        whenever it is raised, so the override is visible.
+        """
+        return max(self.dedup_window_min, self.lookahead_hours * 60)
 
 
 def parse(raw: dict[str, Any]) -> TrafficConfig:

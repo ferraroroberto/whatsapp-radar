@@ -456,3 +456,134 @@ def test_disabled_check_is_silent(harness: dict[str, Any]) -> None:
     payload = traffic_check.run_traffic_check(disabled, now=NOW, dry_run=False)
     assert payload["status"] == "disabled"
     assert harness["sent"] == []
+
+
+# ---------------------------------------------------------------- issue #252
+#
+# Three redundant-alert defects observed in the Telegram channel on 2026-07-30:
+# a per-person "Leave now" split, a "Tight schedule" repeating every cycle, and
+# that same alert quoting a driving ETA for a train commute.
+
+
+def _shared_event_for_both(state: dict[str, Any]) -> None:
+    """One appointment both parents are heading to (the 2026-07-30 case)."""
+    # Starts in 4 min: with a ~1 min drive and the 5 min leave-margin, both
+    # people are already past their departure moment — the 08:56-for-09:00
+    # shape of the reported alerts.
+    event = dict(
+        location=WORK, start=NOW + timedelta(minutes=4),
+        end=NOW + timedelta(hours=2),
+    )
+    state["events"] = {
+        "roberto": [_event("Medical checkup", eid="a", **event)],
+        "ana": [_event("Medical checkup", eid="b", **event)],
+    }
+
+
+def test_leave_now_merges_people_with_different_etas(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two people, one event, different per-person ETAs -> ONE message.
+
+    Reproduces the reported pair: roberto "~1 min" and ana "~0 min" for the
+    same 09:00 appointment produced two messages a minute apart, because the
+    #213 merge keyed on the ETA - a per-person value.
+    """
+    _shared_event_for_both(harness)
+    etas = iter([RouteResult(normal_s=60, traffic_s=60),    # roberto ~1 min
+                 RouteResult(normal_s=0, traffic_s=0)])     # ana      ~0 min
+
+    def per_person_route(origin: str, destination: str, **kw: Any) -> RouteResult:
+        harness["route_calls"].append({"origin": origin, "destination": destination})
+        return next(etas)
+
+    monkeypatch.setattr(traffic_check, "compute_route", per_person_route)
+    monkeypatch.setattr(
+        traffic_check, "get_location",
+        lambda cfg, person, **kw: _fresh_location(person),
+    )
+
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    leave_now = [t for t in harness["sent"] if "Leave now" in t]
+    assert len(leave_now) == 1, harness["sent"]
+    assert "roberto" in leave_now[0] and "ana" in leave_now[0]
+    # The larger ETA wins - the nudge has to be right for whoever is furthest out.
+    assert "~1 min" in leave_now[0]
+    assert payload["alerts"] == 1
+    assert all(e["leave_now_alerted"] for e in payload["checked"])
+
+
+def test_tight_schedule_skipped_for_train_titled_commute(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The infeasible-hop alert is a driving claim, so trains are exempt too.
+
+    The reported message said "Only 0 min between events but the drive is
+    ~10 min" for an event explicitly titled "(en tren)".
+    """
+    start = NOW + timedelta(minutes=30)
+    harness["events"] = {
+        "roberto": [
+            _event("Reunion cliente", location=LUNCH, eid="a",
+                   start=NOW - timedelta(hours=1), end=start),
+            _event("Trabajo en la oficina (en tren)", location=WORK, eid="b",
+                   start=start, end=NOW + timedelta(hours=3)),
+        ]
+    }
+    harness["route"] = RouteResult(normal_s=600, traffic_s=600)  # 10 min drive, 0 min gap
+
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    leg = [e for e in payload["checked"] if e["gap_min"] is not None][0]
+    assert leg["feasible"] is False          # still judged and traced...
+    assert leg["infeasible_suppressed"] is True
+    assert leg["alerted"] is False           # ...but not alerted
+    assert [t for t in harness["sent"] if "Tight schedule" in t] == []
+
+
+def test_tight_schedule_still_fires_for_a_normal_drive(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exemption must be scoped to train-titled events only."""
+    start = NOW + timedelta(minutes=30)
+    harness["events"] = {
+        "roberto": [
+            _event("Reunion cliente", location=LUNCH, eid="a",
+                   start=NOW - timedelta(hours=1), end=start),
+            _event("Trabajo en la oficina", location=WORK, eid="b",
+                   start=start, end=NOW + timedelta(hours=3)),
+        ]
+    }
+    harness["route"] = RouteResult(normal_s=600, traffic_s=600)
+
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    leg = [e for e in payload["checked"] if e["gap_min"] is not None][0]
+    assert leg["feasible"] is False and leg["infeasible_suppressed"] is False
+    assert leg["alerted"] is True
+    assert [t for t in harness["sent"] if "Tight schedule" in t]
+
+
+def test_run_payload_reports_the_window_actually_applied(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The override must be inspectable, not just logged (#252).
+
+    This repo installs no logging handlers, so the `logger.info` announcing the
+    raised window is dropped in both the CLI and webapp paths. The run payload
+    feeds the Audit tab, so that is where the applied value has to surface.
+    """
+    _single_office_leg(harness)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    degenerate = dataclasses.replace(
+        _config(),
+        traffic=TrafficConfig(
+            enabled=True, api_key="k", dedup_window_min=30, cadence_min=30,
+            lookahead_hours=3,
+        ),
+    )
+
+    payload = traffic_check.run_traffic_check(degenerate, now=NOW, dry_run=True)
+
+    assert payload["dedup_window_min"] == 180  # not the configured 30

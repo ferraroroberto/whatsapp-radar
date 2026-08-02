@@ -400,10 +400,3 @@ def test_switching_the_ask_off_leaves_conflicts_alone(
     assert "issue(s)" in sent[0]
     assert "No location set" not in sent[0]
 
-
-def test_ask_missing_locations_defaults_to_on() -> None:
-    """An existing config with no such key must behave exactly as before."""
-    from src.config.family import parse
-
-    assert parse({}).ask_missing_locations is True
-    assert parse({"ask_missing_locations": False}).ask_missing_locations is False

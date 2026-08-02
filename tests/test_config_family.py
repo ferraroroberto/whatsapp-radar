@@ -152,3 +152,50 @@ def test_presence_config_parsing(tmp_path, _clean_env):
     assert cfg.presence.timeout_s == 4.0
     # Person keys lowercased; a scalar alias is normalized to a tuple.
     assert cfg.presence.person_aliases == {"roberto": ("dad",), "ana": ("mom",)}
+
+
+# ---------------------------------------------------------------- issue #252
+
+
+def test_dedup_window_is_floored_at_the_lookahead() -> None:
+    """A window shorter than the lookahead guarantees duplicate alerts.
+
+    One event stays inside the lookahead for `lookahead_hours` and is
+    re-checked every `cadence_min` throughout, so anything shorter mathematically
+    re-alerts. The reported case was `dedup_window_min == cadence_min == 30`,
+    which put each record exactly on the window boundary and produced four
+    "Tight schedule" messages for one event.
+    """
+    from src.config.traffic import TrafficConfig
+
+    degenerate = TrafficConfig(dedup_window_min=30, cadence_min=30, lookahead_hours=3)
+    assert degenerate.effective_dedup_window_min == 180
+
+    # A window already longer than the lookahead is honoured as configured.
+    generous = TrafficConfig(dedup_window_min=360, cadence_min=30, lookahead_hours=3)
+    assert generous.effective_dedup_window_min == 360
+
+    # The floor tracks the lookahead rather than being a hardcoded constant.
+    long_horizon = TrafficConfig(dedup_window_min=30, cadence_min=30, lookahead_hours=8)
+    assert long_horizon.effective_dedup_window_min == 480
+
+
+def test_shipped_defaults_do_not_make_dedup_a_no_op() -> None:
+    """The committed default must not be degenerate out of the box."""
+    from src.config.traffic import TrafficConfig
+
+    cfg = TrafficConfig()
+    assert cfg.dedup_window_min > cfg.cadence_min
+    assert cfg.effective_dedup_window_min == cfg.dedup_window_min
+
+
+def test_ask_missing_locations_defaults_to_on(monkeypatch) -> None:
+    """An existing config with no such key must behave exactly as before (#253)."""
+    from src.config.family import parse
+
+    monkeypatch.delenv("WR_FAMILY_ASK_MISSING_LOCATIONS", raising=False)
+    assert parse({}).ask_missing_locations is True
+    assert parse({"ask_missing_locations": False}).ask_missing_locations is False
+    # The env override wins over the file, mirroring WR_FAMILY_ENABLED.
+    monkeypatch.setenv("WR_FAMILY_ASK_MISSING_LOCATIONS", "0")
+    assert parse({"ask_missing_locations": True}).ask_missing_locations is False

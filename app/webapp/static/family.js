@@ -338,6 +338,15 @@ function renderEditable(box) {
     draft.enabled = next;
     markDirty();
   }));
+  // Sits directly under the switch it qualifies rather than at the far end of
+  // the form. #253: events with no location are always *assumed home* and
+  // always kept in the decision trace — this only controls whether the daily
+  // summary nags to fill them in, for a household where some never will be.
+  target.append(toggleRow('Ask for missing locations', draft.ask_missing_locations, function (next) {
+    draft.ask_missing_locations = next;
+    markDirty();
+  }));
+  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the Audit trace.'));
 
   renderResponsible(target);
 
@@ -370,16 +379,6 @@ function renderEditable(box) {
   if (trainWords) {
     target.append(el('p', 'opt-hint', 'Matches event titles containing: ' + trainWords));
   }
-
-  // #253: events with no location are always *assumed home* and always kept in
-  // the decision trace — this only controls whether the daily summary nags to
-  // fill them in, for a household where some never will be.
-  target.append(fieldLabel('Daily calendar sync'));
-  target.append(toggleRow('Ask for missing locations', draft.ask_missing_locations, function (next) {
-    draft.ask_missing_locations = next;
-    markDirty();
-  }));
-  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the Audit trace.'));
 
   const save = el('button', 'run-btn', 'Save schedule');
   save.type = 'button';

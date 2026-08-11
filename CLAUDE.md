@@ -4,9 +4,9 @@ Canonical instructions for AI coding agents working in this repository. `AGENTS.
 
 ## This Repository
 
-WhatsApp Radar is a local-first personal utility for classifying new WhatsApp chat messages and surfacing only actionable items through a separate notification channel. Treat it as a sensitive-data project even though the repository is public.
+WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionable items through a separate notification channel. Treat it as a sensitive-data project even though the repository is public.
 
-It follows the fleet's standard layout (as in `E:\automation\app-launcher`): UI surfaces in `app/`, logic in `src/`, committed config in `config/`, reference docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. It is **not** an installable package — it runs from a checkout.
+Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. **Not** an installable package — runs from a checkout.
 
 ```
 whatsapp-radar/
@@ -52,21 +52,21 @@ Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <comman
 
 ### Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the CLI/tray/webapp entry points, the connector boundary, the scan pipeline, storage, notify, and the external dependencies) — the per-repo counterpart to the fleet-wide diagram `fleet-config`'s `/system-map` generates. Update it in the same PR as any material structural change (a connector added, a pipeline stage moved, a router split) — same anti-staleness contract as this repo's `.fleet.toml` `description` field. It is not auto-generated and not covered by `scripts/verify-before-ship.ps1`.
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's internal structure. Update it in the same PR as any material structural change (connector added, pipeline stage moved, router split) — anti-staleness contract, same as `.fleet.toml`'s `description`. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`.
 
 ### Admin webapp & tray
 
-The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth is the App Launcher model: a bearer token (loopback bypasses), an optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, and dormant Cloudflare scaffolding. Secrets + passkey state live in the gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All six tabs (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups) are live; see `README.md` §"Admin Webapp" for per-tab endpoint lists.
+FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, dormant Cloudflare scaffolding. Secrets + passkey state live in gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. Six tabs (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups) are live; endpoint lists in `README.md` §"Admin Webapp".
 
-**Safe restart (never blanket-kill python):** the tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill, which would take down sister apps (App Launcher, local-llm-hub, …). To restart by hand, find the owner with `Get-NetTCPConnection -LocalPort 8455` and stop that PID, then relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart the `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
+**Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 
 ## Layout & Imports
 
-- `src/` is the logic package; `app/` holds UI surfaces. Import logic with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, and `gmail_readonly/` are portable Google API packages that deliberately live outside `src/` (so they can be lifted into another repo unchanged) and are imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule below, not a violation of it. `google_oauth_common/` is a fourth, equally portable sibling: the installed-app OAuth bootstrap, token load/refresh, and atomic-write steps shared by all three, imported as `from google_oauth_common…`. It has the same "no imports from `src`/`app`/`scripts`" contract, so lifting one of the three clients into another repo means copying `google_oauth_common/` alongside it (see `docs/gmail-reuse.md`).
+- `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
+- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is a fourth portable sibling: the installed-app OAuth bootstrap, token load/refresh, and atomic-write steps shared by all three, imported as `from google_oauth_common…`. Same "no imports from `src`/`app`/`scripts`" contract — lifting one of the three clients means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
-- Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) are resolved by path relative to `__file__`, never via `importlib.resources` package-data.
-- A script that lives **outside** the repo but imports `src.*`/`app.*` needs `$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`. Prefer `& .\.venv\Scripts\python.exe -m <module>` from the repo root when the script can live in-tree (a gitignored scratch dir is fine) — `-m` puts CWD on `sys.path` and needs no env var.
+- Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
+- Out-of-tree script importing `src.*`/`app.*` → global PYTHONPATH gotcha applies (`$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`, or prefer `-m <module>` from repo root if it can live in-tree).
 
 ## Hard Privacy Rules
 
@@ -87,7 +87,7 @@ The phone-first admin PWA is **FastAPI + vanilla JS** on port **8455** (mirrors 
 
 - Reuse `E:\automation\local-llm-hub` for LLM calls.
 - Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI.
-- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8; see "Admin webapp & tray" above). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in the gitignored `config/webapp_config.json`; `WR_TELEGRAM_*` env / `config/local.json` still override it.
+- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in gitignored `config/webapp_config.json`; `WR_TELEGRAM_*` env / `config/local.json` still override it.
 
 ## Implementation Conventions
 
@@ -118,7 +118,7 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m mypy src app
 ```
 
-The suite runs entirely offline against sanitized fixtures (no WhatsApp credentials, no network, no Telegram). Do not claim tests pass without running them.
+Runs entirely offline against sanitized fixtures (no WhatsApp credentials, no network, no Telegram). Do not claim tests pass without running them.
 
 ## CI expectations
 

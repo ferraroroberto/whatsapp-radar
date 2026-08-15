@@ -1,6 +1,6 @@
 # Project Instructions
 
-Canonical instructions for AI coding agents working in this repository. `AGENTS.md` points here for non-Claude tools.
+`AGENTS.md` points here for non-Claude tools.
 
 ## This Repository
 
@@ -26,8 +26,7 @@ whatsapp-radar/
     models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     paths.py  tts_client.py  speech_profile.py  subprocess_flags.py  runresult.py  _loopback_http.py
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
-    db/ (store.py facade over connection/ack/chats/messages/runs/dashboard/sync_log/
-         reprocess_support/retention/tripwire, plus sync.py/reprocess.py, schema.sql)
+    db/ (store.py facade over the per-table modules, plus sync.py/reprocess.py, schema.sql)
     analysis/ (classifier, contract, keywords, pipeline, reminders, review, source_funnel,
                summarize, transcription, tripwire, gmail_survey, _common, prompts/)
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
@@ -36,9 +35,8 @@ whatsapp-radar/
     fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env are gitignored
-  scripts/               # gen_token, set_password, gen_icons, gen_tailscale_cert, run_named_tunnel,
-                         #   auth_calendar, auth_calendar_write, auth_gmail, gmail_school_backtest,
-                         #   traffic_smoke, run-e2e.ps1, verify-before-ship.ps1
+  scripts/               # helper CLIs (token/password/icons, tailscale cert, named tunnel, Google
+                         #   auth, backtests/smoke) + run-e2e.ps1, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
   webapp/                # runtime log output + certificates/ (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
@@ -52,7 +50,7 @@ Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <comman
 
 ### Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's internal structure. Update it in the same PR as any material structural change (connector added, pipeline stage moved, router split) — anti-staleness contract, same as `.fleet.toml`'s `description`. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`.
+[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of this repo's internal structure. Update it in the same PR as any material structural change (connector added, pipeline stage moved, router split) — anti-staleness contract, same as `.fleet.toml`'s `description`. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`.
 
 ### Admin webapp & tray
 
@@ -63,7 +61,7 @@ FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service p
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is a fourth portable sibling: the installed-app OAuth bootstrap, token load/refresh, and atomic-write steps shared by all three, imported as `from google_oauth_common…`. Same "no imports from `src`/`app`/`scripts`" contract — lifting one of the three clients means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
+- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is a fourth portable sibling: the installed-app OAuth bootstrap, token load/refresh and atomic-write steps all three share, imported as `from google_oauth_common…`. Same "no imports from `src`/`app`/`scripts`" contract — lifting one of the three clients means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
 - Out-of-tree script importing `src.*`/`app.*` → global PYTHONPATH gotcha applies (`$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`, or prefer `-m <module>` from repo root if it can live in-tree).
@@ -80,14 +78,14 @@ FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service p
 
 - The application behavior must be read-only: ingest, classify, and notify outside WhatsApp.
 - Do not implement WhatsApp sending, auto-replies, reactions, read-receipt manipulation, contact scraping, broadcast, or group administration unless a future issue explicitly changes scope.
-- Keep the connector boundary isolated so the rest of the system can be tested with sanitized fixtures and can swap connector implementations later.
+- Keep the connector boundary isolated — the rest of the system stays testable with sanitized fixtures and connector implementations stay swappable.
 - Document any unofficial library risk clearly in README or durable docs before implementation.
 
 ## Fleet Integration
 
 - Reuse `E:\automation\local-llm-hub` for LLM calls.
 - Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI.
-- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in gitignored `config/webapp_config.json`; `WR_TELEGRAM_*` env / `config/local.json` still override it.
+- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override.
 
 ## Implementation Conventions
 
@@ -99,7 +97,7 @@ FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service p
 - Notification delivery should be retryable independently of message analysis.
 
 ## UX surface
-*The design-conformance gate the `/issue-{start,finish,yolo}` skills read (convention: `project-scaffolding#83`). This is a live, parseable block — the product is the FastAPI + static PWA under `app/webapp/`.*
+*Live, parseable design-conformance-gate block read by `/issue-{start,finish,yolo}` (convention: `project-scaffolding#83`). The product is the FastAPI + static PWA under `app/webapp/`.*
 
 - design spec applies: yes        # `no` would make the gate a permanent no-op; this repo serves a real PWA
 - paths:

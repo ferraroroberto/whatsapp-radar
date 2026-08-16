@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,13 @@ from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.db.sync import sync_sources
 from src.models import ChatRecord, MessageRecord, StoredMessage
+
+# A fixed, small offset from "now" rather than a hardcoded absolute past
+# timestamp: sync_sources's default Gmail retention prune (30 days) is
+# wall-clock relative, so a hardcoded date silently ages out of that window
+# as real time passes and starts failing unrelated fan-out/idempotency
+# assertions once it crosses the cutoff (#258).
+_RECENT_TIMESTAMP = (datetime.now(UTC) - timedelta(days=2)).isoformat()
 
 
 def _fixture(path: Path, chat_id: str, message_id: str, text: str) -> FixtureConnector:
@@ -30,7 +38,7 @@ def _fixture(path: Path, chat_id: str, message_id: str, text: str) -> FixtureCon
                         "messages": [
                             {
                                 "source_message_id": message_id,
-                                "message_timestamp": "2026-07-10T08:00:00+00:00",
+                                "message_timestamp": _RECENT_TIMESTAMP,
                                 "text": text,
                                 "sender_label": "Example Sender",
                             }

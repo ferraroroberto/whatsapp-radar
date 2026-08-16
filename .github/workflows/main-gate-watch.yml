@@ -1,0 +1,54 @@
+# Files an issue the moment main's e2e gate goes red (#258).
+#
+# CI is advisory here — the local gate (pytest/ruff/mypy, CLAUDE.md) is the
+# real contract — but a red main should never rely on someone noticing it by
+# accident while reviewing an unrelated PR (that's exactly how #258's Gmail
+# idempotency regression went unreported for four days: two markdown-only
+# PRs correctly discounted the red gate for their own diffs, and nobody
+# treated "main is red" as a finding in its own right). This watches only
+# runs of the `e2e` workflow triggered by a push to `main` itself — PR runs
+# are excluded by the `branches: [main]` filter below, since a PR's own gate
+# is already visible in its own checks.
+name: main-gate-watch
+
+on:
+  workflow_run:
+    workflows: ["e2e"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+
+jobs:
+  report-red-main:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: File (or update) the red-main tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -e
+          gh label create ci-red-main \
+            --repo "$GITHUB_REPOSITORY" \
+            --color d73a4a \
+            --description "main's e2e gate failed on a push to main" \
+            --force
+
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --label ci-red-main --state open --json number --jq '.[0].number')"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still red on main at ${RUN_SHA}: ${RUN_URL}"
+          else
+            body="$(printf 'The `e2e` workflow failed on a direct push to `main`.\n\nRun: %s\nCommit: %s\n\nFiled automatically the first time this was observed. A markdown-only or otherwise-unrelated PR is entitled to discount this as unrelated to its own diff, but that is a separate finding from this one being fixed — leave this issue open until main is green again, and close it (with a note on root cause) once it is.' "$RUN_URL" "$RUN_SHA")"
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "main's e2e gate is red" \
+              --label bug --label ci-red-main \
+              --assignee ferraroroberto \
+              --body "$body"
+          fi

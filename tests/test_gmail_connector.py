@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,18 @@ def _encoded(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
 
 
+def _epoch_ms(days_ago: float) -> str:
+    """A Gmail-shaped ``internalDate`` a bounded distance in the past of *now*.
+
+    Sync's default retention prune (30 days, ``sync_sources``) and Gmail
+    discovery's default lookback (also 30 days) are both wall-clock relative.
+    A hardcoded absolute past timestamp ages out of both windows as real time
+    moves on and starts failing tests that have nothing to do with retention
+    (#258) — so fixtures compute a small, fixed offset from "now" instead.
+    """
+    return str(int((datetime.now(UTC) - timedelta(days=days_ago)).timestamp() * 1000))
+
+
 def _gmail_config(tmp_path: Path) -> GmailConfig:
     return GmailConfig(
         credentials_path=tmp_path / "credentials.json",
@@ -52,7 +65,7 @@ class _FakeClient:
             "newer": {
                 "id": "newer",
                 "threadId": "thread-2",
-                "internalDate": "1783681200000",
+                "internalDate": _epoch_ms(2),
                 "labelIds": ["LBL_ACT"],
                 "payload": {
                     "mimeType": "multipart/mixed",
@@ -80,7 +93,7 @@ class _FakeClient:
             "older": {
                 "id": "older",
                 "threadId": "thread-1",
-                "internalDate": "1783594800000",
+                "internalDate": _epoch_ms(3),
                 "payload": {
                     "mimeType": "text/html",
                     "headers": [

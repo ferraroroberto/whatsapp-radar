@@ -9,3 +9,123 @@ tag         = ["uses", "hub"]
 
 [vendored]
 e2e_live_guard = { src = "tests/e2e/_e2e_live_guard.py", sha = "727dfe8b9e4e625993c0e0286836e510015411cc", dest = "tests/e2e/_e2e_live_guard.py" }
+classify_e2e = { src = "scripts/classify_e2e.py", sha = "373344bdbaf9d8bd5029960a02e5f57281978fc0", dest = "scripts/classify_e2e.py" }
+
+# Diff-proportionate e2e routing (project-scaffolding#180, schema:
+# project-scaffolding/docs/e2e-routing.md). Rules are evaluated top-to-bottom;
+# FIRST MATCH WINS -- a narrow rule for a subtree must precede the broader
+# rule for its enclosing prefix. Unmatched paths fail safe to "full"
+# (scripts/classify_e2e.py); this table only ever narrows what an
+# already-recognized-as-narrow diff runs, never what an unmatched one runs.
+# Update in the same PR as any new e2e-relevant directory.
+[e2e]
+static_pytest_target = "tests/e2e/test_smoke.py"
+static_browsers       = ["chromium"]
+full_pytest_target    = "tests/e2e"
+
+# Inert image/font/manifest assets under the static tree -> smoke is enough.
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/"
+extensions = ["svg", "png", "jpg", "jpeg", "gif", "ico", "webp", "woff", "woff2", "ttf", "webmanifest"]
+
+# Vendored HTML fragments are pure markup; their .css/.js siblings are NOT
+# covered here and fall through to "full" below (real nav/icon behaviour).
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/_vendored/"
+extensions = ["html", "md"]
+
+# The e2e suite itself, and its shared conftest/helpers -- a harness change
+# must be exercised by running the harness.
+[[e2e.rule]]
+tier   = "full"
+prefix = "tests/e2e/"
+
+# The whole FastAPI + PWA product: routers (the browser's API surface),
+# middleware, server boot, the static tree.
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/"
+
+# The Windows tray that owns the webapp lifecycle.
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/tray/"
+
+# The argparse CLI has no browser UI of its own.
+[[e2e.rule]]
+tier       = "none"
+prefix     = "app/cli/"
+extensions = ["py"]
+
+# Domain logic with no UI template of its own -- no browser impact unless
+# paired with an app/webapp/ change (which already routes full above).
+[[e2e.rule]]
+tier       = "none"
+prefix     = "src/"
+extensions = ["py"]
+
+# Portable Google API clients + the read-only WhatsApp connector -- backend
+# only, no rendered surface.
+[[e2e.rule]]
+tier   = "none"
+prefix = "calendar_readonly/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "calendar_write/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "gmail_readonly/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "google_oauth_common/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "sidecar/"
+
+[[e2e.rule]]
+tier   = "none"
+prefix = "scripts/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "config/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "docs/"
+[[e2e.rule]]
+tier   = "none"
+prefix = "assets/"
+[[e2e.rule]]
+tier   = "none"
+prefix = ".github/"
+
+# Non-e2e tests (tests/e2e/ already matched full above).
+[[e2e.rule]]
+tier       = "none"
+prefix     = "tests/"
+extensions = ["py"]
+
+# Repo meta / docs / launcher scripts -- no runtime behaviour of their own;
+# the e2e fixture boots the app directly, not through these .bat wrappers.
+[[e2e.rule]]
+tier = "none"
+path = ".fleet.toml"
+[[e2e.rule]]
+tier = "none"
+path = ".gitignore"
+[[e2e.rule]]
+tier = "none"
+path = "LICENSE"
+[[e2e.rule]]
+tier = "none"
+path = "AGENTS.md"
+[[e2e.rule]]
+tier = "none"
+path = "CLAUDE.md"
+[[e2e.rule]]
+tier       = "none"
+extensions = ["md"]
+[[e2e.rule]]
+tier       = "none"
+extensions = ["bat", "sh"]

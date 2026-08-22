@@ -70,6 +70,16 @@ def _message_activity(runs: list[sqlite3.Row], source: str) -> dict[str, Any]:
     return _never()
 
 
+#: Per-leg statuses in a traffic-check payload that establish *nothing* about the
+#: road: ``anchor_in_the_past`` (the drive is over — never priced, no Routes call
+#: spent, ``src.family.traffic_check.STATUS_ANCHOR_IN_THE_PAST``, #270) and
+#: ``error`` (the Routes call itself failed). Neither may be folded into "no
+#: significant delay": a check that did not happen must never read as an
+#: all-clear. Spelled as literals rather than imported so the webapp does not pull
+#: the Google client libraries in through ``src.family`` at startup.
+_UNPRICED_LEG_STATUSES = frozenset({"anchor_in_the_past", "error"})
+
+
 def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     """Last-activity card for the traffic-jam check."""
     row = next((r for r in runs if r["kind"] == "traffic-check"), None)
@@ -77,7 +87,11 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
     alerts = int(result.get("alerts") or 0)
-    checked = len(result.get("checked") or [])
+    legs = result.get("checked") or []
+    unpriced = sum(
+        1 for leg in legs if isinstance(leg, dict) and leg.get("status") in _UNPRICED_LEG_STATUSES
+    )
+    priced = len(legs) - unpriced
     rstatus = result.get("status")
     if rstatus == "disabled":
         summary = "checks disabled"
@@ -85,8 +99,15 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         summary = "quiet hours"
     elif alerts:
         summary = f"{alerts} delay alert" + ("" if alerts == 1 else "s")
-    elif checked:
+    elif priced and unpriced:
+        # The mixed run: some roads were judged, some were not. Reporting only the
+        # judged half as "no significant delay" is the same all-clear-over-a-
+        # non-fact the unpriced states exist to prevent, just at run granularity.
+        summary = f"no significant delay · {unpriced} not priced"
+    elif priced:
         summary = "no significant delay"
+    elif unpriced:
+        summary = f"{unpriced} commute" + ("" if unpriced == 1 else "s") + " not priced"
     else:
         summary = "no commutes to check"
     return {

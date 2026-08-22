@@ -3,14 +3,15 @@
 Offline: the HTTP session is a stub that records the request body — nothing
 leaves the process, and no API key is needed.
 
-The travel-block sweep (#266) prices a leg as a **departure**, so the body it
-sends has to carry ``departureTime`` and not ``arrivalTime``. That distinction
-is not cosmetic: probing the live API showed Routes silently ignores
-``arrivalTime`` for ``DRIVE`` + ``TRAFFIC_AWARE`` (every arrival variant of one
-fixed route returned the depart-now baseline unchanged, while departures at
-04:00 and 08:00 differed by ~9%). A regression that swapped the field back
-would therefore not fail loudly — it would quietly price every future drive as
-if it started now. Hence a test on the wire format itself.
+Every caller (#266, #270) prices a leg as a **departure**, so the body has to
+carry ``departureTime`` and never ``arrivalTime``. That distinction is not
+cosmetic: probing the live API showed Routes silently ignores ``arrivalTime``
+for ``DRIVE`` + ``TRAFFIC_AWARE`` (every arrival variant of one fixed route
+returned the depart-now baseline unchanged, while departures at 04:00 and 08:00
+differed by ~9%). A regression that swapped the field back would therefore not
+fail loudly — it would quietly price every future drive as if it started now.
+Hence a test on the wire format itself, plus one on the refusal that keeps
+``arrival_time`` from reaching the wire at all (#270).
 """
 
 from __future__ import annotations
@@ -72,11 +73,20 @@ def test_departure_time_is_sent_as_departure_time_and_never_as_arrival_time() ->
     assert body["travelMode"] == "DRIVE"
 
 
-def test_arrival_time_still_sends_arrival_time_for_the_existing_traffic_check() -> None:
-    """#266 must not change what the #160 alerting path puts on the wire."""
-    body = _call(arrival_time=WHEN).body
-    assert body["arrivalTime"] == WHEN.astimezone().isoformat()
-    assert "departureTime" not in body
+def test_arrival_time_is_refused_instead_of_silently_pricing_depart_now() -> None:
+    """#270: `arrivalTime` never reaches the wire again, from any caller.
+
+    Until #270 this sent `arrivalTime` and Routes answered with the depart-now
+    baseline — real, plausible, and not the question asked. The parameter is kept
+    only to turn that silence into a loud refusal that names the right field.
+    """
+    session = _FakeSession()
+    with pytest.raises(TrafficReadError, match="departure_time"):
+        compute_route(
+            ORIGIN, DESTINATION, api_key="k", arrival_time=WHEN,
+            session=session,  # type: ignore[arg-type]
+        )
+    assert session.bodies == [], "the request must not be sent at all"
 
 
 def test_neither_time_field_means_depart_now() -> None:

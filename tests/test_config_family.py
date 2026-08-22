@@ -199,3 +199,47 @@ def test_ask_missing_locations_defaults_to_on(monkeypatch) -> None:
     # The env override wins over the file, mirroring WR_FAMILY_ENABLED.
     monkeypatch.setenv("WR_FAMILY_ASK_MISSING_LOCATIONS", "0")
     assert parse({"ask_missing_locations": True}).ask_missing_locations is False
+
+
+def test_travel_blocks_config_defaults_are_off_and_dry() -> None:
+    """A config with no such block must plan nothing and write nothing (#265)."""
+    from src.config.family import parse
+
+    blocks = parse({}).travel_blocks
+    assert blocks.enabled is False
+    assert blocks.dry_run is True
+    assert blocks.horizon_days == 2
+    assert blocks.min_home_dwell_min == 45
+    assert blocks.title_template == "🚗 Trayecto"
+
+
+def test_travel_blocks_config_parses_all_five_keys() -> None:
+    from src.config.family import parse
+
+    blocks = parse({
+        "travel_blocks": {
+            "enabled": True,
+            "dry_run": False,
+            "horizon_days": 3,
+            "min_home_dwell_min": 30,
+            "title_template": "Commute",
+        }
+    }).travel_blocks
+    assert (blocks.enabled, blocks.dry_run) == (True, False)
+    assert (blocks.horizon_days, blocks.min_home_dwell_min) == (3, 30)
+    assert blocks.title_template == "Commute"
+
+
+def test_travel_blocks_ship_disabled_in_committed_defaults() -> None:
+    """The committed default.json must never enable a calendar-writing feature."""
+    import json
+
+    from src.config import project_root
+
+    raw = json.loads((project_root() / "config" / "default.json").read_text(encoding="utf-8"))
+    shipped = raw["family"]["travel_blocks"]
+    assert shipped["enabled"] is False
+    assert shipped["dry_run"] is True
+    assert set(shipped) == {
+        "enabled", "dry_run", "horizon_days", "min_home_dwell_min", "title_template",
+    }

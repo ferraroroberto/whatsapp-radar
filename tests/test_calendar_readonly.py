@@ -53,3 +53,24 @@ def test_timed_event_start_and_end_are_timezone_aware() -> None:
     assert event.all_day is False
     assert event.start.tzinfo is not None
     assert event.end.tzinfo is not None
+
+
+# --------------------------------------------------------------- extendedProperties
+
+
+def test_extended_private_defaults_to_empty_dict() -> None:
+    """Every pre-existing resource shape keeps working — the field is defaulted."""
+    assert normalize_event(_RAW_TIMED, calendar_id="parent@example.com").extended_private == {}
+
+
+def test_extended_private_is_carried_through_and_coerced_to_strings() -> None:
+    raw = {**_RAW_TIMED, "extendedProperties": {"private": {"marker": 1, 2: "two"}}}
+    event = normalize_event(raw, calendar_id="parent@example.com")
+    assert event.extended_private == {"marker": "1", "2": "two"}
+
+
+def test_extended_private_degrades_on_a_malformed_node() -> None:
+    """A bad marker must never cost us the whole event."""
+    for node in ({}, {"private": "not-a-dict"}, "nonsense", None):
+        raw = {**_RAW_TIMED, "extendedProperties": node}
+        assert normalize_event(raw, calendar_id="parent@example.com").extended_private == {}

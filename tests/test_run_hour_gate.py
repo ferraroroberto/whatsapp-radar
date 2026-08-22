@@ -299,9 +299,53 @@ def test_a_skipped_scan_leaves_the_last_travel_sweep_alone(
     assert cli.main(["calendar-scan"]) == 0
 
     with _client(db) as client:
+        payload = client.get("/api/family").json()
+
+    sweep = payload["travel_blocks"]["last_sweep"]
+    assert sweep is not None
+    assert sweep["run_id"] == f"db-{genuine}"
+    assert sweep["status"] == "ok"
+    assert sweep["routes_calls"] == 3
+    # And the skip left no phantom behind in the tab's own run list: the only
+    # calendar-scan the Family tab knows about is the sweep that really ran.
+    assert [run["run_id"] for run in payload["runs"]] == [f"db-{genuine}"]
+
+
+def test_a_skip_row_would_not_be_read_as_a_sweep_either(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Belt and braces on ``_last_travel_sweep``'s section check.
+
+    The gate records no DB row, so this state is unreachable today — but the
+    lookup's "newest ``calendar-scan``" walk is one edit away from treating any
+    such row as the sweep, and the card would then read "never run" over a
+    perfectly good sweep from an hour earlier.
+    """
+    db = tmp_path / "family.sqlite3"
+    _isolated_config(tmp_path, monkeypatch, enabled=True)
+
+    conn = store.connect(db)
+    try:
+        genuine = store.start_run(conn, mode="live", kind="calendar-scan")
+        store.finish_run_summary(
+            conn, genuine, "completed",
+            json.dumps({
+                "kind": "calendar-scan", "status": "ok",
+                "travel_blocks": {"status": "ok", "dry_run": True, "routes_calls": 3},
+            }),
+        )
+        newer = store.start_run(conn, mode="live", kind="calendar-scan")
+        store.finish_run_summary(
+            conn, newer, "completed",
+            json.dumps({"kind": "calendar-scan", "status": "skipped",
+                        "reason": "before family.run_hour=07:00 (local hour 03)"}),
+        )
+    finally:
+        conn.close()
+
+    with _client(db) as client:
         sweep = client.get("/api/family").json()["travel_blocks"]["last_sweep"]
 
     assert sweep is not None
     assert sweep["run_id"] == f"db-{genuine}"
-    assert sweep["status"] == "ok"
     assert sweep["routes_calls"] == 3

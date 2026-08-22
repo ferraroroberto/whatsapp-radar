@@ -36,10 +36,12 @@ then ignored, returning the depart-now baseline. This check passed
 ``arrival_time`` from #160 until #270, so every alert above was in fact judging
 a 09:00 school run against whatever traffic existed at the 07:00 sweep. Which
 moment each leg is anchored to is decided in :func:`_departure_anchor` and
-recorded per leg as ``anchor`` / ``departure_anchor``. A leg whose anchor has
-already passed is reported as its own state, ``anchor_in_the_past``, and costs
-no Routes call — the API rejects a past ``departureTime`` outright, and a
-fabricated routes error would hide a schedule fact behind a transport fault.
+recorded per leg as ``anchor`` / ``departure_anchor``. A departure moment that
+has already passed is never *sent* (Routes rejects it outright), but it is only
+reported as the ``anchor_in_the_past`` state when the thing being judged is over
+— the event the leg travels *to* has started. A driver whose previous event
+ended ten minutes ago has not left yet, so their honest anchor is ``now``, and
+the tight-schedule warning they are about to need still fires.
 
 Origin resolution (#169): the responsible person's *live phone position* when
 home-automation reports a fresh fix, else the calendar-inference chain (home, or
@@ -73,15 +75,29 @@ _CALENDAR_INFERENCE = "calendar_inference"
 #: Which departure moment a leg was priced for (#270), carried on every checked
 #: leg so the Audit trace shows the anchor behind the number, not just the number.
 ANCHOR_DEPART_NOW = "depart_now"
+#: Depart-now, reached the other way: a chained hop whose preceding event has
+#: already ended while the driver is still sitting there. Distinguished from
+#: :data:`ANCHOR_DEPART_NOW` in the trace because the two answer different
+#: questions — "where are they right now" vs "they are already late leaving".
+ANCHOR_DEPART_NOW_OVERDUE = "depart_now_overdue"
 ANCHOR_PRECEDING_EVENT_END = "preceding_event_end"
 ANCHOR_EVENT_START = "event_start"
 
-#: A leg whose departure moment has already passed: reported as its own state,
-#: never as a routes error, and priced with no Routes call at all. Routes rejects
-#: a past ``departureTime`` with ``HTTP 400 "Timestamp must be set to a future
-#: time."``, and the advice both alerts carry ("leave earlier", "you may not make
-#: it") has expired along with the departure moment. Mirrors
-#: ``travel_blocks.FAILURE_ANCHOR_IN_THE_PAST``.
+#: The leg is over: the event it travels *to* has already started, so there is no
+#: departure left to price. Reported as its own state, never as a routes error,
+#: and priced with no Routes call at all — Routes rejects a past ``departureTime``
+#: with ``HTTP 400 "Timestamp must be set to a future time."``, and both alerts it
+#: would have fed ("leave earlier", "you may not make it") are advice about a
+#: drive that is already decided. Mirrors ``travel_blocks.FAILURE_ANCHOR_IN_THE_PAST``.
+#:
+#: A merely *elapsed* anchor is deliberately not this state: a driver whose
+#: previous event ended is late, not finished, and #282's first cut wrongly went
+#: silent on exactly the tight-schedule window where the warning matters most.
+#: :func:`_departure_anchor` folds that case to depart-now instead, so this state
+#: is reached only through the guard in :func:`run_traffic_check` — which
+#: ``upcoming_commutes`` already makes a boundary case (it admits no leg whose
+#: event has started). It is kept as a hard guarantee that no past timestamp can
+#: reach the wire however a future anchor comes to be derived.
 STATUS_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
 
 
@@ -153,7 +169,7 @@ def _resolve_origin_for_leg(
 
 
 def _departure_anchor(
-    leg: rules.CommuteLeg, location_source: str
+    leg: rules.CommuteLeg, location_source: str, *, now: datetime
 ) -> tuple[datetime | None, str]:
     """The moment this leg must be priced as a *departure*, and why (#270).
 
@@ -175,11 +191,17 @@ def _departure_anchor(
       right frame for someone being told whether to move. Deliberately *not*
       anchored to the event start: that would make ``depart_in_min`` an estimate
       for a drive starting hours later, and the nudge is the actionable half.
-    * **Chained off a preceding event** → that event's ``end``. The judgment is
-      the infeasible-hop check (#169, #252): can the gap between two events
-      absorb the drive? The person sets off when the first event ends, so that
-      is the departure being priced — and it is the same instant the ``gap_min``
-      it is compared against is measured from.
+    * **Chained off a preceding event** → that event's ``end``, or ``None``
+      (depart now) once that end has passed. The judgment is the infeasible-hop
+      check (#169, #252): can the gap between two events absorb the drive? The
+      person sets off when the first event ends, so that is the departure being
+      priced. Once it has passed they have *not* left — they are late — and the
+      honest anchor is ``now``: an office event ending at 13:00, lunch elsewhere
+      at 13:15 and a sweep at 13:10 is precisely the window where a 25-minute
+      drive most needs the "you may not make it" warning, and reporting that leg
+      as unpriceable silently dropped it (review of #282). ``gap_min`` is
+      measured from the preceding event's end either way, so the feasibility
+      verdict is unaffected by which of the two anchors priced the drive.
     * **From home, no live fix** → the event's ``start``. Only the delay alert
       applies, and the true departure is one drive-length *earlier* — which is
       the number the call is about to return, so it cannot be known first. Same
@@ -191,6 +213,11 @@ def _departure_anchor(
     if location_source == _LIVE_PRESENCE:
         return None, ANCHOR_DEPART_NOW
     if leg.origin_event_end is not None:
+        if leg.origin_event_end <= now:
+            # Not stale — late. Depart-now is expressed as "no time field" rather
+            # than a literal `now`, which would race the API's own clock into the
+            # past that Routes rejects.
+            return None, ANCHOR_DEPART_NOW_OVERDUE
         return leg.origin_event_end, ANCHOR_PRECEDING_EVENT_END
     return leg.event.start, ANCHOR_EVENT_START
 
@@ -240,13 +267,17 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         for leg in legs:
             key = rules.dedup_key(leg.person, leg.event.summary)
             origin = _resolve_origin_for_leg(config, leg, now=now, session=session)
-            anchor, anchor_kind = _departure_anchor(leg, origin["location_source"])
+            anchor, anchor_kind = _departure_anchor(
+                leg, origin["location_source"], now=now
+            )
             anchor_iso = anchor.isoformat() if anchor is not None else None
             if anchor is not None and anchor <= now:
-                # No call, and no error either: nothing failed — the departure
-                # moment simply passed. Sending it would be a hard HTTP 400, and
-                # quietly pricing depart-now instead would answer a question this
-                # leg is not asking, and spend a billable call to do it.
+                # Reached only for a leg whose own event has already started —
+                # `_departure_anchor` folds a merely-late departure to depart-now,
+                # and `upcoming_commutes` admits no leg whose event has begun, so
+                # this is the boundary guard that keeps a past timestamp off the
+                # wire (a hard HTTP 400) no matter how the anchor was derived.
+                # No call, and no error either: nothing failed, the drive is over.
                 checked.append({
                     "person": leg.person, "event": leg.event.summary,
                     "status": STATUS_ANCHOR_IN_THE_PAST,

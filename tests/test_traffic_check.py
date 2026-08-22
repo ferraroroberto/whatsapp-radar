@@ -719,22 +719,23 @@ def test_live_presence_leg_sends_no_time_field_at_all(
     assert entry["anchor"] == "depart_now" and entry["departure_anchor"] is None
 
 
-def test_past_departure_anchor_is_its_own_state_and_costs_no_routes_call(
+def test_a_leg_whose_own_event_has_started_is_its_own_state_and_costs_no_call(
     harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A departure moment that has passed is a fact, not a transport failure.
+    """A drive that is already over is a fact, not a transport failure.
 
     Routes rejects a past `departureTime` outright (`HTTP 400 "Timestamp must be
     set to a future time."`), so sending it would buy a fabricated `routes_error`
     with a billable call. The leg reports what is actually true instead.
+
+    `upcoming_commutes` admits no leg whose event has already started, so this is
+    the boundary of that filter — which is exactly what makes it worth pinning:
+    the guard has to hold whatever a future anchor derivation does.
     """
     harness["events"] = {
+        # Starting this very instant: there is no departure left to price.
         "roberto": [
-            # Office ended 15 min ago, so the hop's departure moment has passed.
-            _event("Office", location=WORK,
-                   start=NOW - timedelta(hours=1), end=NOW - timedelta(minutes=15), eid="a"),
-            _event("Lunch", location=LUNCH,
-                   start=NOW + timedelta(minutes=10), end=NOW + timedelta(hours=1), eid="b"),
+            _event("Office", location=WORK, start=NOW, end=NOW + timedelta(hours=2), eid="a")
         ]
     }
     _no_live_fix(monkeypatch)
@@ -745,12 +746,53 @@ def test_past_departure_anchor_is_its_own_state_and_costs_no_routes_call(
     )
 
     assert bodies == [], "a past departure must never be sent, and never billed"
-    entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
+    entry = payload["checked"][0]
     assert entry["status"] == "anchor_in_the_past"
     assert entry["status"] != "error" and "Routes" in entry["detail"]
-    assert entry["anchor"] == "preceding_event_end"
+    assert entry["anchor"] == "event_start"
     assert payload["status"] == "ok" and payload["alerts"] == 0
     assert harness["sent"] == []
+
+
+def test_late_departure_still_prices_the_hop_and_still_warns(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window the tight-schedule warning exists for must not go silent.
+
+    Office ran until 10 min ago, lunch elsewhere starts in 5, and the drive takes
+    25 min. The driver has not left — they are late — so the hop is still ahead
+    of them and the warning is more useful now than at any earlier sweep. #282's
+    first cut read the elapsed `origin_event_end` as `anchor_in_the_past` and
+    dropped the alert; the anchor is `now` instead, sent as no time field so the
+    request can never carry a past timestamp.
+    """
+    harness["events"] = {
+        "roberto": [
+            _event("Office", location=WORK,
+                   start=NOW - timedelta(hours=4), end=NOW - timedelta(minutes=10), eid="a"),
+            _event("Lunch", location=LUNCH,
+                   start=NOW + timedelta(minutes=5), end=NOW + timedelta(hours=1), eid="b"),
+        ]
+    }
+    harness["route"] = RouteResult(normal_s=1500, traffic_s=1500)  # 25 min, no "delay"
+    _no_live_fix(monkeypatch)
+
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=False
+    )
+
+    entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
+    assert entry["status"] != "anchor_in_the_past"
+    assert entry["anchor"] == "depart_now_overdue"
+    assert entry["departure_anchor"] is None
+    # Priced, and priced depart-now — never a past timestamp on the wire.
+    assert len(harness["route_calls"]) == 1
+    assert harness["route_calls"][0]["departure_time"] is None
+    # `gap_min` is still measured from the preceding event's end, so the
+    # feasibility verdict does not move with the anchor that priced the drive.
+    assert entry["gap_min"] == 15 and entry["feasible"] is False
+    assert entry["alerted"] is True and payload["alerts"] == 1
+    assert "Tight schedule" in harness["sent"][0]
 
 
 def test_delay_alert_names_the_moment_it_was_priced_for(

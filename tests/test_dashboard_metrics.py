@@ -276,20 +276,15 @@ def test_last_activity_cards_distill_each_kind(tmp_path: Path) -> None:
     assert cards["calendar"]["alerts"] == 0
 
 
-def test_unpriced_traffic_legs_do_not_read_as_an_all_clear(tmp_path: Path) -> None:
-    """#270: a departure moment that had already passed is not "no delay".
-
-    The leg spends no Routes call, so nothing was established about that road —
-    reporting it as an all-clear is the failure mode its own state exists to
-    prevent.
-    """
-    db = tmp_path / "unpriced.sqlite3"
+def _traffic_card_summary(tmp_path: Path, name: str, checked: list[dict[str, str]]) -> str:
+    """Render one traffic-check payload through the Dashboard's last-activity card."""
+    db = tmp_path / f"{name}.sqlite3"
     conn = store.connect(db)
     tid = store.start_run(conn, mode="live", kind="traffic-check")
     store.finish_run_summary(
         conn, tid, "completed",
         json.dumps({"kind": "traffic-check", "status": "ok", "alerts": 0,
-                    "checked": [{"status": "anchor_in_the_past"}]}),
+                    "checked": checked}),
     )
     conn.close()
 
@@ -298,8 +293,34 @@ def test_unpriced_traffic_legs_do_not_read_as_an_all_clear(tmp_path: Path) -> No
     app.state.db_path = db
     with TestClient(app, client=LOOPBACK) as client:
         cards = {c["source"]: c for c in client.get("/api/dashboard").json()["last_activity"]}
+    return str(cards["traffic"]["summary"])
 
-    assert cards["traffic"]["summary"] == "1 commute not priced"
+
+def test_unpriced_traffic_legs_do_not_read_as_an_all_clear(tmp_path: Path) -> None:
+    """#270: a leg that established nothing is never "no significant delay".
+
+    Three shapes, one principle. `anchor_in_the_past` spends no Routes call and
+    `error` spent one that failed — either way that road was not judged, and a
+    check that did not happen must not render as an all-clear. The mixed run is
+    the one that bites hardest: the judged half is real, so the card has to say
+    both things rather than quietly keep the reassuring one.
+    """
+    assert _traffic_card_summary(
+        tmp_path, "stale", [{"status": "anchor_in_the_past"}]
+    ) == "1 commute not priced"
+    assert _traffic_card_summary(
+        tmp_path, "failed", [{"status": "error"}]
+    ) == "1 commute not priced"
+    assert _traffic_card_summary(
+        tmp_path, "mixed", [{"status": "NORMAL"}, {"status": "anchor_in_the_past"}]
+    ) == "no significant delay · 1 not priced"
+    assert _traffic_card_summary(
+        tmp_path, "mixed_error", [{"status": "NORMAL"}, {"status": "error"}]
+    ) == "no significant delay · 1 not priced"
+    # An all-judged run still reads exactly as it always did.
+    assert _traffic_card_summary(
+        tmp_path, "clean", [{"status": "NORMAL"}, {"status": "DELAY"}]
+    ) == "no significant delay"
 
 
 def test_last_activity_never_ran_on_empty_db(tmp_path: Path) -> None:

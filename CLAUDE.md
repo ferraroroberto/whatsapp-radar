@@ -4,7 +4,7 @@
 
 ## This Repository
 
-WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionable items through a separate notification channel. Treat it as a sensitive-data project even though the repository is public.
+WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionable items through a separate notification channel. **Treat it as a sensitive-data project even though the repository is public.**
 
 Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. **Not** an installable package — runs from a checkout.
 
@@ -50,18 +50,18 @@ Run the CLI with `python launcher.py <command>`, `python -m app.cli.main <comman
 
 ### Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of this repo's internal structure. Update it in the same PR as any material structural change (connector added, pipeline stage moved, router split) — anti-staleness contract, same as `.fleet.toml`'s `description`. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`.
+[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of this repo's internal structure; not auto-generated, not covered by `scripts/verify-before-ship.ps1`. Update it in the **same PR** as any material structural change (connector added, pipeline stage moved, router split) — anti-staleness contract, same as `.fleet.toml`'s `description`.
 
 ### Admin webapp & tray
 
-FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service port). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, dormant Cloudflare scaffolding. Secrets + passkey state live in gitignored `config/webapp_config.json`; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. Six tabs (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups) are live; endpoint lists in `README.md` §"Admin Webapp".
+FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service port) — not Streamlit (#8). `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, dormant Cloudflare scaffolding. Secrets (bearer token, login password, Telegram token/chat id, passkey state) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`. All six tabs (listed under §UX surface) are live; endpoint lists in `README.md` §"Admin Webapp".
 
 **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`. **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — an intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is a fourth portable sibling: the installed-app OAuth bootstrap, token load/refresh and atomic-write steps all three share, imported as `from google_oauth_common…`. Same "no imports from `src`/`app`/`scripts`" contract — lifting one of the three clients means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
+- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/`, `google_oauth_common/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` / `from google_oauth_common…` — an intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is the installed-app OAuth bootstrap, token load/refresh and atomic-write steps the other three share. Same "no imports from `src`/`app`/`scripts`" contract; lifting one of the three clients means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
 - Out-of-tree script importing `src.*`/`app.*` → global PYTHONPATH gotcha applies (`$env:PYTHONPATH = (Get-Location).Path;` before `& .\.venv\Scripts\python.exe <path>`, or prefer `-m <module>` from repo root if it can live in-tree).
@@ -84,8 +84,7 @@ FastAPI + vanilla JS on port **8455** (mirrors App Launcher; no second service p
 ## Fleet Integration
 
 - Reuse `E:\automation\local-llm-hub` for LLM calls.
-- Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI.
-- The admin UI is **FastAPI + vanilla JS** mirroring App Launcher — not Streamlit (landed in #8). Its secrets (bearer token, login password, Telegram token/chat id, passkey state) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override.
+- Use App Launcher for scheduling and launch surfaces where appropriate: Jobs for periodic digest runs, Apps for a small admin UI (see §Admin webapp & tray).
 
 ## Implementation Conventions
 

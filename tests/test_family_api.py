@@ -308,6 +308,38 @@ def test_travel_blocks_reports_the_five_config_values(
     assert tb["min_home_dwell_min"] == 45
     assert tb["title_template"]
     assert tb["last_sweep"] is None
+    assert tb["duplicate_calendars"] == []
+
+
+def test_duplicate_calendars_are_reported_by_label_never_by_raw_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#273: a duplicate `calendar_id` collapses at config-parse time and is
+    surfaced on this same reporting endpoint — by label, never by the raw
+    calendar id, so this stays safe to render on the Family tab.
+    """
+    _isolated_config(
+        tmp_path,
+        monkeypatch,
+        calendar={
+            "accounts": [
+                {"calendar_id": "shared@example.com", "person": "parent-a", "label": "Parent A"},
+                {
+                    "calendar_id": "shared@example.com",
+                    "person": "parent-b",
+                    "label": "Parent A (shared calendar)",
+                },
+            ]
+        },
+    )
+    with _client(tmp_path / "x.sqlite3") as client:
+        tb = client.get("/api/family").json()["travel_blocks"]
+    assert tb["duplicate_calendars"] == ["Parent A (shared calendar)"]
+    # The name of this test is the point: the raw calendar id must never
+    # appear inside the `duplicate_calendars` entries themselves.
+    assert not any(
+        "shared@example.com" in entry for entry in tb["duplicate_calendars"]
+    )
 
 
 def test_travel_blocks_reports_write_token_presence(

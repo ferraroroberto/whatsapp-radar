@@ -1,18 +1,24 @@
-"""Desired-state planner for auto-written commute travel blocks (#265, umbrella #263).
+"""Desired-state planner for auto-written commute travel blocks (#265/#266, umbrella #263).
 
-Pure, like :mod:`src.family.rules`: no I/O, no network, no Google client, no
-filesystem. Everything here is a function of the events already fetched plus a
-mapping of leg durations supplied by the caller — so the Routes pricing (#266)
-and the calendar reconcile (step 3 of #263) can be tested and reasoned about
-separately from *which blocks should exist*.
+Everything above the "Routes pricing" divider is **pure**, like
+:mod:`src.family.rules`: no I/O, no network, no Google client, no filesystem.
+It is a function of the events already fetched plus a mapping of leg durations
+supplied by the caller — so the calendar reconcile (step 3 of #263) can be
+tested and reasoned about separately from *which blocks should exist*.
 
-The computation is deliberately split in two:
+The computation is deliberately split in three:
 
 1. :func:`desired_legs` — pure — decides which legs *should* exist and what each
    one must be priced for, without knowing any duration.
 2. :func:`build_planned_legs` — pure — turns those requests into concrete
    time-boxed blocks once the durations are known, and resolves the one
    decision that genuinely needs them (the home-dwell chaining threshold).
+3. :func:`price_legs` / :func:`plan_travel_blocks` (#266) — the module's only
+   I/O — supply those durations from the live Routes API, with the route
+   function injected so the whole sweep stays testable offline with a stub.
+
+Nothing in this module writes to a calendar. Step 3 of #263 owns insert/delete;
+until then a run produces a plan, a log and a payload, and touches nothing.
 
 This module also owns the product-specific marker vocabulary. ``calendar_readonly``
 stays product-neutral and only transports the ``extendedProperties.private`` map;
@@ -22,13 +28,20 @@ knowing that ``wr_travel_block`` means "we wrote this" belongs here.
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, time, timedelta
+from typing import Any, Protocol
 
+import requests
 from calendar_readonly.core import CalendarEvent
 
+from src.config import Config
 from src.family import rules
+from src.traffic import RouteResult, TrafficReadError, compute_route
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------- marker vocabulary
 
@@ -427,4 +440,425 @@ def _is_chained(
         drive_out_min = float(priced)
     return chains_directly(
         request.next_gap_min, drive_home_min, drive_out_min, min_home_dwell_min
+    )
+
+
+# --------------------------------------------------------------- Routes pricing (the I/O edge)
+#
+# Everything below this line talks to the network. The pure planner above never
+# imports it back, so `desired_legs` / `build_planned_legs` stay testable with a
+# plain dict of durations.
+
+#: A leg was dropped because the Routes call failed, was rejected, or returned
+#: no route. The fact could not be established — never a guessed duration.
+FAILURE_ROUTES_ERROR = "routes_error"
+#: A leg was dropped without calling Routes at all: its departure moment is in
+#: the past. Routes prices only future departures (verified live: a past
+#: ``departureTime`` is ``HTTP 400 "Timestamp must be set to a future time."``),
+#: and a block for a drive that already happened reserves nothing anyway.
+FAILURE_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
+
+STATUS_OK = "ok"
+STATUS_DISABLED = "disabled"
+STATUS_NO_ROUTES_API_KEY = "no_routes_api_key"
+STATUS_NO_HOME_ADDRESS = "no_home_address"
+
+
+class RouteFn(Protocol):
+    """The slice of :func:`~src.traffic.compute_route` this module depends on.
+
+    Injected rather than called directly so the sweep can be driven offline by a
+    stub — the whole test suite prices legs without a network or an API key.
+    """
+
+    def __call__(
+        self,
+        origin: str,
+        destination: str,
+        *,
+        api_key: str,
+        departure_time: datetime | None = ...,
+        session: requests.Session | None = ...,
+    ) -> RouteResult: ...
+
+
+@dataclass(frozen=True)
+class LegFailure:
+    """One leg that could not be priced, and why — its own reportable state.
+
+    A dropped leg must never be indistinguishable from "no commute needed":
+    silently writing nothing looks exactly like correctly deciding nothing was
+    needed, which is the failure mode ``CLAUDE.md`` forbids. ``reason`` is the
+    machine-readable discriminator (:data:`FAILURE_ROUTES_ERROR` /
+    :data:`FAILURE_ANCHOR_IN_THE_PAST`); ``detail`` is the privacy-safe text —
+    :class:`~src.traffic.TrafficReadError` messages never carry coordinates,
+    addresses or API keys.
+    """
+
+    person: str
+    calendar_id: str
+    source_event_id: str
+    leg: str
+    reason: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class PricedLegs:
+    """What one pricing sweep established: durations, non-facts, and its cost.
+
+    ``routes_calls`` counts *attempted* Routes calls after within-sweep dedup —
+    the number the per-leg billing is charged against. It is returned rather
+    than derived by the caller so the count can never drift from what actually
+    happened.
+    """
+
+    durations: dict[str, float]  # LegRequest.key -> minutes (unrounded)
+    failures: list[LegFailure]
+    routes_calls: int
+
+
+def _departure_anchor(request: LegRequest) -> datetime:
+    """The moment to price ``request`` as a *departure*.
+
+    Routes v2 honours exactly one time field for ``DRIVE`` + ``TRAFFIC_AWARE``:
+    ``departureTime``. Verified live against the API (#266) rather than taken
+    from the docs — for one fixed pair of addresses a departure at 04:00
+    returned 983 s and at 08:00 930 s, while *every* ``arrivalTime`` variant
+    returned the depart-now baseline (1085 s) unchanged, including under
+    ``TRAFFIC_AWARE_OPTIMAL``. An arrival-shaped call is therefore not a
+    different estimate, it is silently no estimate at all — precisely what a
+    07:00 sweep pricing a 09:00 school run must not get.
+
+    A return leg's anchor already *is* a departure (the source event's end), so
+    it is exact. An outbound leg's anchor is an arrival (the source event's
+    start) and the true departure is one drive-length earlier — which is the
+    number being computed, so it cannot be known before the call. Pricing the
+    departure at the arrival moment costs one call and is wrong by at most the
+    drive's own length (typically 10-30 min), against being wrong by the whole
+    sweep-to-event distance (hours) if the moment were dropped. Refining it
+    would take a second call per leg, which #266 explicitly rules out.
+    """
+    return request.anchor
+
+
+def _call_key(request: LegRequest, anchor: datetime) -> tuple[str, str, str]:
+    """Identity of the Routes call a leg needs — the within-sweep dedup key.
+
+    Normalised to UTC whole minutes so two legs carrying different but
+    equivalent tz offsets still share one call. Two people driving the same
+    road at the same minute, or an outbound whose origin/destination/time
+    coincide with another leg's, are one billable call, not two.
+    """
+    minute = anchor.astimezone(UTC).replace(second=0, microsecond=0)
+    return (request.origin, request.destination, minute.isoformat())
+
+
+def price_legs(
+    leg_requests: Sequence[LegRequest],
+    *,
+    api_key: str,
+    now: datetime,
+    session: requests.Session | None = None,
+    route_fn: RouteFn = compute_route,
+) -> PricedLegs:
+    """Price every leg with one live traffic-aware Routes call — the I/O edge.
+
+    One call per distinct ``(origin, destination, departure minute)``: identical
+    legs within a sweep share a call, and a *failed* call is cached too, so a
+    repeated bad leg costs one attempt rather than one per occurrence.
+
+    A failure degrades that leg alone — the loop never aborts the sweep — and is
+    recorded as a :class:`LegFailure` instead of a duration, so
+    :func:`build_planned_legs` drops the leg rather than emitting a guessed or
+    zero-length block.
+    """
+    durations: dict[str, float] = {}
+    failures: list[LegFailure] = []
+    # Cached outcome per call key: minutes on success, None on failure (with the
+    # detail alongside), so both halves of the dedup contract hold.
+    outcomes: dict[tuple[str, str, str], tuple[float | None, str]] = {}
+    routes_calls = 0
+
+    for request in leg_requests:
+        anchor = _departure_anchor(request)
+        if anchor <= now:
+            failures.append(
+                _failure(
+                    request,
+                    FAILURE_ANCHOR_IN_THE_PAST,
+                    "departure moment has already passed; Routes prices only future departures",
+                )
+            )
+            continue
+        key = _call_key(request, anchor)
+        cached = outcomes.get(key)
+        if cached is None:
+            routes_calls += 1
+            try:
+                result = route_fn(
+                    request.origin,
+                    request.destination,
+                    api_key=api_key,
+                    departure_time=anchor,
+                    session=session,
+                )
+            except TrafficReadError as exc:
+                # Transport failure, non-200 (quota included) and an empty
+                # `routes` list all arrive here, already phrased privacy-safely.
+                cached = (None, str(exc))
+            else:
+                cached = (result.traffic_s / 60.0, "")
+            outcomes[key] = cached
+        minutes, detail = cached
+        if minutes is None:
+            failures.append(_failure(request, FAILURE_ROUTES_ERROR, detail))
+            continue
+        durations[request.key] = minutes
+
+    return PricedLegs(durations=durations, failures=failures, routes_calls=routes_calls)
+
+
+def _failure(request: LegRequest, reason: str, detail: str) -> LegFailure:
+    return LegFailure(
+        person=request.person,
+        calendar_id=request.calendar_id,
+        source_event_id=request.source_event_id,
+        leg=request.leg,
+        reason=reason,
+        detail=detail,
+    )
+
+
+# --------------------------------------------------------------- the sweep
+
+
+@dataclass(frozen=True)
+class TravelBlockPlan:
+    """One sweep's outcome: what should exist, and what could not be established.
+
+    ``adds`` / ``deletes`` are the reconcile decision. At this step there is
+    nothing on the calendar to diff against, so ``adds == legs`` and ``deletes``
+    is always empty — the shape is already the final one, so step 3 of #263 only
+    has to fill it in and no downstream reader changes then.
+
+    ``event_summaries`` maps ``(calendar_id, event_id)`` to the source event's
+    title. It is carried for reporting only, and is deliberately *not* a field of
+    :class:`PlannedLeg`: a title must never be able to influence the plan or the
+    content hash.
+    """
+
+    status: str
+    dry_run: bool
+    legs: list[PlannedLeg]
+    adds: list[PlannedLeg]
+    deletes: list[dict[str, Any]]
+    failures: list[LegFailure]
+    routes_calls: int
+    horizon_start: datetime | None = None
+    horizon_end: datetime | None = None
+    event_summaries: dict[tuple[str, str], str] = field(default_factory=dict)
+
+    def summary_of(self, calendar_id: str, source_event_id: str) -> str:
+        return self.event_summaries.get((calendar_id, source_event_id), "")
+
+    def to_payload(self) -> dict[str, Any]:
+        """JSON-ready plan for the run payload — the rehearsal surface of #263.
+
+        A non-``ok`` status carries the marker alone: there is no plan to report,
+        and empty ``adds``/``failures`` lists next to ``"disabled"`` would read
+        like a computed all-clear.
+        """
+        if self.status != STATUS_OK:
+            return {"status": self.status}
+        return {
+            "status": self.status,
+            "dry_run": self.dry_run,
+            "horizon_start": _iso_or_none(self.horizon_start),
+            "horizon_end": _iso_or_none(self.horizon_end),
+            "routes_calls": self.routes_calls,
+            "counts": {
+                "desired": len(self.legs),
+                "adds": len(self.adds),
+                "deletes": len(self.deletes),
+                "failures": len(self.failures),
+            },
+            "adds": [self._leg_payload(leg) for leg in self.adds],
+            "deletes": list(self.deletes),
+            "failures": [self._failure_payload(failure) for failure in self.failures],
+        }
+
+    def _leg_payload(self, leg: PlannedLeg) -> dict[str, Any]:
+        return {
+            "leg": leg.leg,
+            "person": leg.person,
+            "calendar_id": leg.calendar_id,
+            "source_event_id": leg.source_event_id,
+            "event": self.summary_of(leg.calendar_id, leg.source_event_id),
+            "origin": leg.origin,
+            "destination": leg.destination,
+            "start": leg.start.isoformat(),
+            "end": leg.end.isoformat(),
+            "minutes": leg.minutes,
+            "hash": leg.content_hash,
+        }
+
+    def _failure_payload(self, failure: LegFailure) -> dict[str, Any]:
+        return {
+            "leg": failure.leg,
+            "person": failure.person,
+            "calendar_id": failure.calendar_id,
+            "source_event_id": failure.source_event_id,
+            "event": self.summary_of(failure.calendar_id, failure.source_event_id),
+            # `unpriced`, never `ok` and never absent: a leg we failed to price
+            # has to look different from one that needed no block at all.
+            "status": "unpriced",
+            "reason": failure.reason,
+            "detail": failure.detail,
+        }
+
+
+def _iso_or_none(moment: datetime | None) -> str | None:
+    return None if moment is None else moment.isoformat()
+
+
+def plan_travel_blocks(
+    config: Config,
+    events_by_person: Mapping[str, Sequence[CalendarEvent]],
+    *,
+    now: datetime,
+    session: requests.Session | None = None,
+    route_fn: RouteFn = compute_route,
+) -> TravelBlockPlan:
+    """Plan the horizon's travel blocks from events the caller already fetched.
+
+    Takes ``events_by_person`` rather than fetching: the daily sweep
+    (:func:`~src.family.calendar_scan.run_calendar_scan`) has already read the
+    window, and a second Calendar fetch would be a second read seam to keep the
+    feedback-loop guard on.
+
+    Gating, in order, each with its own reportable status and **zero** Routes
+    calls: the feature off; no Routes API key; no configured home address (the
+    committed default ships blank, and a plan built on it would reserve time for
+    a drive to nowhere). None of these may be folded into a plain empty plan,
+    which would read as "nothing to do".
+    """
+    family = config.family
+    settings = family.travel_blocks
+    if not settings.enabled:
+        return _empty_plan(STATUS_DISABLED, settings.dry_run)
+    if not config.traffic.api_key:
+        return _empty_plan(STATUS_NO_ROUTES_API_KEY, settings.dry_run)
+    if not family.home_address.strip():
+        return _empty_plan(STATUS_NO_HOME_ADDRESS, settings.dry_run)
+
+    # The same expression `run_calendar_scan` uses for its own fetch window, so
+    # the horizon can never start outside the events this was handed.
+    horizon_start = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
+    horizon_days = settings.horizon_days or family.assessment_days
+    horizon_end = horizon_start + timedelta(days=horizon_days)
+
+    leg_requests = desired_legs(
+        events_by_person,
+        home_address=family.home_address,
+        origin_lookback_min=config.traffic.origin_lookback_min,
+        horizon_start=horizon_start,
+        horizon_end=horizon_end,
+        train_keywords=config.traffic.train_keywords,
+    )
+    # One pooled session for the whole sweep — a bare connection per leg would
+    # park an ephemeral port in TIME_WAIT for every block priced.
+    owned = session is None
+    http = session or requests.Session()
+    try:
+        priced = price_legs(
+            leg_requests,
+            api_key=config.traffic.api_key,
+            now=now,
+            session=http,
+            route_fn=route_fn,
+        )
+    finally:
+        if owned:
+            http.close()
+
+    legs = build_planned_legs(
+        leg_requests, priced.durations, min_home_dwell_min=settings.min_home_dwell_min
+    )
+    plan = TravelBlockPlan(
+        status=STATUS_OK,
+        dry_run=settings.dry_run,
+        legs=legs,
+        # Nothing to diff against yet (step 3 of #263 lists the calendar's own
+        # marked blocks): every desired leg is a would-be add.
+        adds=list(legs),
+        deletes=[],
+        failures=priced.failures,
+        routes_calls=priced.routes_calls,
+        horizon_start=horizon_start,
+        horizon_end=horizon_end,
+        event_summaries={
+            (event.calendar_id, event.event_id): event.summary
+            for events in events_by_person.values()
+            for event in events
+        },
+    )
+    log_plan(plan)
+    return plan
+
+
+def _empty_plan(status: str, dry_run: bool) -> TravelBlockPlan:
+    return TravelBlockPlan(
+        status=status,
+        dry_run=dry_run,
+        legs=[],
+        adds=[],
+        deletes=[],
+        failures=[],
+        routes_calls=0,
+    )
+
+
+def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> None:
+    """Log the complete plan at INFO — one line per leg, plus a counted summary.
+
+    The per-leg lines are the rehearsal #263 asks for before any live write is
+    allowed: origins, destinations, minutes and time boxes, readable straight
+    from the run's output log. Unpriced legs are logged at WARNING with their
+    reason so they can never be mistaken for legs that needed no block.
+    """
+    out = log or logger
+    if plan.status != STATUS_OK:
+        out.info("ℹ️ travel blocks: %s — no plan computed, no Routes calls", plan.status)
+        return
+    for leg in plan.adds:
+        out.info(
+            "ℹ️ travel block [add] %s %s — “%s”: %s → %s, %s-%s (%d min)",
+            leg.person,
+            leg.leg,
+            plan.summary_of(leg.calendar_id, leg.source_event_id),
+            leg.origin,
+            leg.destination,
+            leg.start.strftime("%a %d %b %H:%M"),
+            leg.end.strftime("%H:%M"),
+            leg.minutes,
+        )
+    for failure in plan.failures:
+        out.warning(
+            "⚠️ travel block unpriced (%s) %s %s — “%s”: %s. No block planned: this is a "
+            "failure to establish the drive, not a decision that none is needed",
+            failure.reason,
+            failure.person,
+            failure.leg,
+            plan.summary_of(failure.calendar_id, failure.source_event_id),
+            failure.detail,
+        )
+    out.info(
+        "%s travel blocks: %d add(s), %d delete(s), %d unpriced leg(s), %d Routes call(s)%s",
+        "⚠️" if plan.failures else "✅",
+        len(plan.adds),
+        len(plan.deletes),
+        len(plan.failures),
+        plan.routes_calls,
+        " [dry-run]" if plan.dry_run else "",
     )

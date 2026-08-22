@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from calendar_readonly.core import CalendarEvent, normalize_event
@@ -400,3 +402,51 @@ def test_switching_the_ask_off_leaves_conflicts_alone(
     assert "issue(s)" in sent[0]
     assert "No location set" not in sent[0]
 
+
+
+# --------------------------------------------------------------- travel blocks (#266)
+
+
+def test_travel_blocks_ride_the_payload_without_disturbing_the_existing_keys(
+    sent: list[str],
+) -> None:
+    """One added key, nothing else moved — every downstream reader is untouched."""
+    payload = calendar_scan.run_calendar_scan(_config(), now=DAY_NOW, dry_run=True)
+    assert set(payload) == {
+        "kind", "status", "conflicts", "missing_locations", "decisions",
+        "live_coverage", "summary", "dry_run",
+        "travel_blocks",
+    }
+    # Off in the committed default: the marker alone, and not one Routes call.
+    assert payload["travel_blocks"] == {"status": "disabled"}
+
+
+def test_the_travel_block_plan_reuses_the_scan_fetch(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No second calendar read — the sweep is handed the events already fetched.
+
+    A second fetch would be a second read seam to keep #263's feedback-loop
+    guard on, and it would bill another Calendar round trip per run.
+    """
+    events = {"roberto": [_event("Checkup", location=WORK, start=DAY_NOW, eid="a")], "ana": []}
+    fetches = 0
+
+    def counting_fetch(*args: object, **kwargs: object) -> dict[str, list[CalendarEvent]]:
+        nonlocal fetches
+        fetches += 1
+        return events
+
+    seen: list[dict[str, list[CalendarEvent]]] = []
+
+    def fake_plan(config: Config, given: dict[str, list[CalendarEvent]], **kwargs: object) -> Any:
+        seen.append(given)
+        return SimpleNamespace(to_payload=lambda: {"status": "ok", "adds": [], "routes_calls": 0})
+
+    monkeypatch.setattr(calendar_scan, "fetch_events_by_person", counting_fetch)
+    monkeypatch.setattr(calendar_scan, "plan_travel_blocks", fake_plan)
+    payload = calendar_scan.run_calendar_scan(_config(), now=DAY_NOW, dry_run=True)
+
+    assert fetches == 1
+    assert seen == [events] and seen[0] is events
+    assert payload["travel_blocks"]["status"] == "ok"

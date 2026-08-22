@@ -94,13 +94,14 @@ flowchart TB
     FCAL["calendar_scan.py — conflict scan + decision trace + daily summary"]
     FSOURCE["calendar_source.py — events per person"]
     FDEDUP["dedup.py — data/family/ alert log"]
-    FBLOCKS["travel_blocks.py — pure desired-state planner for\ncommute blocks + the wr_travel_block marker vocabulary (#265)"]
+    FBLOCKS["travel_blocks.py — pure desired-state planner for commute\nblocks + the wr_travel_block marker vocabulary (#265);\nRoutes-priced plan, writes nothing to any calendar (#266)"]
   end
   CLICMDS --> FTRAFFIC
   CLICMDS --> FCAL
   FTRAFFIC --> FRULES
   FCAL --> FRULES
   FBLOCKS --> FRULES
+  FCAL -->|plan_travel_blocks: reuses the scan's fetched events| FBLOCKS
   FSOURCE -->|is_travel_block: one filter, five consumers| FBLOCKS
   FTRAFFIC --> FSOURCE
   FCAL --> FSOURCE
@@ -119,6 +120,7 @@ flowchart TB
   end
   FSOURCE --> CALCLIENT
   FTRAFFIC --> ROUTESCLIENT
+  FBLOCKS -->|one departure-time call per deduped leg| ROUTESCLIENT
 
   subgraph calwrite["calendar_write/ — Google write client (#217)"]
     CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete"]

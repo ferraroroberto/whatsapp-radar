@@ -100,6 +100,14 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         argv = [action]
         if mode == "dry_run":
             argv.append("--dry-run")
+        if action == "calendar-scan":
+            # Every run this router spawns is a button press: the Run tab's
+            # Calendar-sync step and the Family tab's Rehearse / Run sweep
+            # controls (#276). The webapp schedules nothing of its own, so an
+            # explicit human request must never be eaten by `family.run_hour`'s
+            # self-skip (#277) — a "Run sweep" at 22:00 has to sweep. The gate
+            # governs the unattended App Launcher fire, which passes no --force.
+            argv.append("--force")
         return argv
 
     raise HTTPException(status_code=400, detail=f"unknown action {action!r}")
@@ -335,8 +343,9 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-#: Cadence self-skips are almost all of a full-rate ``traffic-check`` kind's
-#: newest records (#170/#234) — reading only the caller's requested `limit`
+#: Self-skips are almost all of a full-rate ``traffic-check`` kind's newest
+#: records (#170/#234), and of a generously-armed ``calendar-scan``'s (#277)
+#: — reading only the caller's requested `limit`
 #: from :func:`app.webapp.runs.list_runs` before filtering them out could
 #: starve the result of real runs entirely. Widen the read to the retention
 #: cap (:data:`app.webapp.runs._RETENTION_PER_KIND`) when filtering, which is
@@ -358,9 +367,11 @@ async def list_execution_runs(
     run rows (every launch) by the DB run id; DB-only rows — scheduled scans and
     family checks — synthesize a record so nothing that ran is invisible here.
 
-    Cadence self-skips (``result.status == "skipped"``, #170) are excluded from
-    the default response — at full fire rate they are ~11 of every 12
-    ``traffic-check`` records and would otherwise drown the real runs in
+    Self-skips (``result.status == "skipped"``) are excluded from the default
+    response — at full fire rate ``traffic-check``'s cadence skips (#170) are
+    ~11 of every 12 of that kind's records, and ``calendar-scan``'s
+    ``family.run_hour`` skips (#277) scale the same way with how generously the
+    App Launcher job is armed. Both would otherwise drown the real runs in
     "Recent runs" (#234). They are never deleted — retention is the separate,
     unrelated cap in :func:`app.webapp.runs.prune_runs` — and stay fetchable
     with ``include_skipped=true``; ``skipped_count`` reports how many were

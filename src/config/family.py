@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
 from src.config._shared import _as_bool
 
+logger = logging.getLogger(__name__)
+
 _WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+#: ``family.run_hour`` gates the daily scan since #277, so an unusable value is
+#: no longer inert — it decides whether the household's conflict scan, traffic
+#: alerts and travel blocks happen at all. Unusable degrades to *no gate*, never
+#: to a restrictive hour: see :func:`_parse_run_hour`.
+_RUN_HOUR_UNGATED = 0
+
+#: Distinct bad values already warned about this process. ``load_config()`` is
+#: uncached and runs on essentially every webapp request, so without this a
+#: household carrying a typo would get a WARNING line on every poll instead of
+#: once. Mirrors ``src/config/calendar.py``'s duplicate-collapse dedup (#273).
+_WARNED_RUN_HOURS: set[str] = set()
 
 
 def _weekday_index(value: Any) -> int | None:
@@ -88,7 +103,13 @@ class FamilyConfig:
     """
 
     enabled: bool = False
-    run_hour: int = 7  # local hour the daily scan fires at/after
+    # Local hour before which `wr calendar-scan` self-skips (#277). It is a
+    # *floor*, not a fire time: the App Launcher job decides when the verb is
+    # invoked, this decides whether an unforced invocation does anything. An
+    # explicit `--force` (every webapp button) ignores it entirely. Always
+    # 0..23 by construction — `_parse_run_hour` degrades anything else to 0
+    # (no gate) with a warning rather than letting a typo suppress the scan.
+    run_hour: int = 7
     home_address: str = ""
     kids_home_time: str = "17:30"
     responsible_by_weekday: dict[int, str] = field(default_factory=dict)  # 0..6 -> person
@@ -112,6 +133,60 @@ class FamilyConfig:
     # so library/test callers that build a FamilyConfig without it get the
     # write-nothing behaviour.
     travel_blocks: TravelBlocksConfig = field(default_factory=TravelBlocksConfig)
+
+
+def _parse_run_hour(raw: Any) -> int:
+    """``family.run_hour`` coerced to 0..23, degrading to *no gate* on anything else.
+
+    Since #277 this knob gates ``wr calendar-scan``, so a value the app cannot
+    read is not a cosmetic problem: ``25`` would make ``now.hour >= run_hour``
+    false forever and silently stop the household's conflict scan, traffic
+    alerts and travel blocks; ``"seven"`` would raise out of ``load_config``
+    and take the webapp down on every request. ``POST /api/family`` validates
+    0..23, but a hand edit to ``config/local.json`` reaches here without ever
+    passing through it.
+
+    **Degrades to 0 — the documented opt-out — not to the nearest valid hour
+    and not to the default.** Clamping ``25`` to ``23`` would honour a typo by
+    inventing a preference nobody expressed, and would keep almost all of the
+    outage this exists to prevent. A knob whose only power is to *suppress* a
+    safety check must fail towards not suppressing it. The operator is told, so
+    "it silently ran anyway" is not the outcome either.
+
+    Rejecting the config outright was considered and rejected, following the
+    duplicate-calendar collapse in ``src/config/calendar.py`` (#273): refusing
+    to load would take down a live app for a household whose config already has
+    the mistake, which is a worse failure than running with the gate off.
+    """
+    hour: int | None = None
+    # `bool` is an `int` in Python and `run_hour: true` is not hour 1 — the same
+    # guard `_weekday_index` above already applies to weekday values.
+    if not isinstance(raw, bool):
+        try:
+            hour = int(raw)
+        except (TypeError, ValueError):
+            hour = None
+    if hour is not None and 0 <= hour <= 23:
+        return hour
+    _warn_bad_run_hour_once(raw)
+    return _RUN_HOUR_UNGATED
+
+
+def _warn_bad_run_hour_once(raw: Any) -> None:
+    """Loud, and exactly once per distinct bad value per process."""
+    key = repr(raw)
+    if key in _WARNED_RUN_HOURS:
+        return
+    _WARNED_RUN_HOURS.add(key)
+    logger.warning(
+        "⚠️ family.run_hour=%r is not an hour in 0..23 — running with no hour gate "
+        "(as if 0) so the daily calendar scan keeps happening. Since #277 that knob "
+        "self-skips `wr calendar-scan`, so honouring an unreadable value would have "
+        "stopped the household's conflict scan, traffic alerts and travel blocks "
+        "instead. Fix it in config/local.json; the Family tab's own save already "
+        "rejects anything outside 0..23",
+        raw,
+    )
 
 
 def parse_travel_blocks(raw: dict[str, Any]) -> TravelBlocksConfig:
@@ -153,7 +228,7 @@ def parse(raw: dict[str, Any]) -> FamilyConfig:
     )
     return FamilyConfig(
         enabled=_as_bool(os.environ.get("WR_FAMILY_ENABLED"), raw.get("enabled", False)),
-        run_hour=int(raw.get("run_hour", 7)),
+        run_hour=_parse_run_hour(raw.get("run_hour", 7)),
         home_address=str(raw.get("home_address", "")).strip(),
         kids_home_time=str(raw.get("kids_home_time", "17:30")).strip(),
         responsible_by_weekday=responsible,

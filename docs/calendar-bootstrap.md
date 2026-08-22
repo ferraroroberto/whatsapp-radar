@@ -139,7 +139,7 @@ The app never probes this by writing. It reads the calendar's published `accessR
 | **Not writable** | `accessRole` is `reader` or `freeBusyReader` — shared read-only. | Writes nothing, and says so. |
 | **Unknown** | The role could not be established at all: no sweep has reported on this calendar yet, or the listing failed. | Writes nothing — an unresolved probe is **not** permission. |
 
-`Unknown` is deliberately its own state rather than a shade of the other two, in the payload, in the log and in the UI. It is what you see before the first sweep has run, and it is what you see if the calendar listing itself broke. Fix it by running a calendar sync (`wr calendar-scan`, or the Run tab's Calendar-sync step) and re-reading the card — not by assuming the calendar is fine.
+`Unknown` is deliberately its own state rather than a shade of the other two, in the payload, in the log and in the UI. It is what you see before the first sweep has run, and it is what you see if the calendar listing itself broke. Fix it by running a calendar sync (`wr calendar-scan --force`, or the Run tab's Calendar-sync step) and re-reading the card — not by assuming the calendar is fine. `--force` is there because an unforced scan self-skips before `family.run_hour` (#277), and a fix-it-now command has to work at whatever hour you are reading this.
 
 The role is the *read* token's view, so it is a strong proxy rather than a proof: the write token is a second grant on the same account. That is why a failed insert still degrades per block instead of trusting this answer.
 

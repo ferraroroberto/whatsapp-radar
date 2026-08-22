@@ -6,7 +6,10 @@ location is *assumed home* and flagged, never silently dropped) → apply the
 fixed weekly responsibility pattern plus two-places-at-once detection over the
 assessment window → live phone-position ETA judgment for today's imminent
 windows when presence is enabled (#177; additive signal, calendar inference
-stays authoritative for intent and for anything beyond the lookahead) → always
+stays authoritative for intent and for anything beyond the lookahead) → a priced,
+write-nothing commute travel-block plan over the travel-blocks horizon (#266;
+off by default, reusing the same fetched events — it never touches a calendar,
+step 3 of #263 owns the writes) → always
 send one summary on a live run: coverage issues and missing-location asks, or
 an explicit all-clear. Coverage gaps and overlaps are
 hard alerts and bypass quiet hours; a clean summary inside quiet hours is
@@ -22,6 +25,7 @@ from typing import Any
 from src.config import Config
 from src.family import rules
 from src.family.calendar_source import fetch_events_by_person
+from src.family.travel_blocks import plan_travel_blocks
 from src.notify.alert import send_alert
 from src.presence import PresenceLocation, get_location
 from src.traffic import TrafficReadError, compute_route
@@ -212,6 +216,11 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             rules.find_overlaps(day_events, home_address=family.home_address)
         )
 
+    # Commute travel blocks (#266, umbrella #263) — reuses the events fetched
+    # above rather than re-reading the calendar. Off by default; this step only
+    # plans and reports, it writes nothing to any calendar (step 3 of #263).
+    travel_block_plan = plan_travel_blocks(config, events, now=now).to_payload()
+
     # Live phone-position judgment for today's imminent windows (#177) —
     # additive to the calendar-based gaps, never a replacement for them.
     live_conflicts, live_coverage = _assess_live_coverage(config, now=now)
@@ -251,4 +260,6 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         "live_coverage": live_coverage,
         "summary": summary,
         "dry_run": dry_run,
+        # Additive (#266): every pre-existing key above keeps its shape.
+        "travel_blocks": travel_block_plan,
     }

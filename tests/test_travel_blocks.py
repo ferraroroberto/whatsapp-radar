@@ -1,20 +1,33 @@
-"""Unit tests for the pure travel-block planner and its guards (issue #265).
+"""Unit tests for the travel-block planner, its guards and its pricing (#265, #266).
 
-Offline and deterministic: no Calendar client, no Routes call, no network.
-Durations are injected as a plain mapping, exactly as #266 will inject the real
-priced ones. All fixture people, addresses and calendar ids are invented.
+Offline and deterministic: no Calendar client, no Routes call, no network, no
+API key. The pure planner takes durations as a plain mapping; the #266 sweep
+takes its ``route_fn`` injected, so a stub answers every price. All fixture
+people, addresses and calendar ids are invented.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
 from calendar_readonly.core import CalendarEvent, normalize_event
 
-from src.config import CalendarAccount, CalendarConfig
+from src.config import (
+    CalendarAccount,
+    CalendarConfig,
+    Config,
+    FamilyConfig,
+    HubConfig,
+    TelegramConfig,
+    TrafficConfig,
+    TravelBlocksConfig,
+)
 from src.family import calendar_source, travel_blocks
 from src.family.travel_blocks import (
     LEG_OUTBOUND,
@@ -27,6 +40,7 @@ from src.family.travel_blocks import (
     desired_legs,
     is_travel_block,
 )
+from src.traffic import RouteResult, TrafficReadError
 
 HOME = "1 Example Street, Sample Town"
 OFFICE = "3 Example Road, Sample City"
@@ -54,11 +68,12 @@ def _event(
     end: datetime | None = None,
     all_day: bool = False,
     extended_private: dict[str, str] | None = None,
+    calendar_id: str = CALENDAR_ID,
 ) -> CalendarEvent:
     start = start or _at(9)
     return CalendarEvent(
         event_id=eid,
-        calendar_id=CALENDAR_ID,
+        calendar_id=calendar_id,
         summary=summary,
         location=location,
         description="",
@@ -446,3 +461,355 @@ def test_planner_ignores_travel_blocks_even_without_the_read_seam() -> None:
         for leg in baseline
     ]
     assert _shape(_plan([human, *blocks])) == _shape(baseline)
+
+
+# =============================================================== #266: Routes pricing + the sweep
+#
+# Still offline: `route_fn` is injected, so not one of these tests opens a
+# socket or needs an API key. Nothing below can write to a calendar — that is
+# step 3 of #263, and `test_this_step_contains_no_calendar_writes` enforces it.
+
+PERSON_B = "parent-b"
+CALENDAR_B = "parent-b@example.test"
+
+#: Before every fixture anchor, so nothing is skipped as a past departure.
+NOW = DAY.replace(hour=6)
+
+
+class _StubRoutes:
+    """A `RouteFn` that records its calls and answers from a fixed table.
+
+    ``minutes`` maps ``(origin, destination)`` to a duration; anything missing
+    falls back to ``default_minutes``. Any endpoint listed in ``fails`` raises
+    :class:`TrafficReadError`, exactly as the real client does for a transport
+    failure, a non-200 (quota included) or an empty ``routes`` list.
+    """
+
+    def __init__(
+        self,
+        *,
+        default_minutes: float = 20.0,
+        minutes: dict[tuple[str, str], float] | None = None,
+        fails: Iterable[str] = (),
+        failure: str = "Routes API returned HTTP 429",
+    ) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._default = default_minutes
+        self._minutes = minutes or {}
+        self._fails = set(fails)
+        self._failure = failure
+
+    def __call__(
+        self,
+        origin: str,
+        destination: str,
+        *,
+        api_key: str,
+        departure_time: datetime | None = None,
+        session: Any = None,
+    ) -> RouteResult:
+        self.calls.append(
+            {"origin": origin, "destination": destination, "departure_time": departure_time}
+        )
+        if origin in self._fails or destination in self._fails:
+            raise TrafficReadError(self._failure)
+        minutes = self._minutes.get((origin, destination), self._default)
+        return RouteResult(normal_s=int(minutes * 60), traffic_s=int(minutes * 60))
+
+    @property
+    def departures(self) -> list[datetime | None]:
+        return [call["departure_time"] for call in self.calls]
+
+
+def _config(
+    *,
+    enabled: bool = True,
+    api_key: str = "routes-key",
+    home_address: str = HOME,
+    dry_run: bool = True,
+    min_home_dwell_min: int = 45,
+    horizon_days: int = 2,
+) -> Config:
+    return Config(
+        db_path="unused.sqlite3",  # type: ignore[arg-type]
+        connector="fixture",
+        classifier="stub",
+        hub=HubConfig(base_url="http://127.0.0.1:8000", model="m"),
+        notifier="telegram",
+        telegram=TelegramConfig(bot_token="t", chat_id="c"),
+        linked_device_dir="ld",  # type: ignore[arg-type]
+        traffic=TrafficConfig(api_key=api_key, origin_lookback_min=60,
+                              train_keywords=TRAIN_KEYWORDS),
+        family=FamilyConfig(
+            enabled=True,
+            home_address=home_address,
+            travel_blocks=TravelBlocksConfig(
+                enabled=enabled,
+                dry_run=dry_run,
+                horizon_days=horizon_days,
+                min_home_dwell_min=min_home_dwell_min,
+            ),
+        ),
+    )
+
+
+def _sweep(
+    events: dict[str, list[CalendarEvent]],
+    *,
+    stub: _StubRoutes | None = None,
+    now: datetime = NOW,
+    **config_kwargs: Any,
+) -> tuple[travel_blocks.TravelBlockPlan, _StubRoutes]:
+    routes = stub or _StubRoutes()
+    plan = travel_blocks.plan_travel_blocks(
+        _config(**config_kwargs), events, now=now, route_fn=routes
+    )
+    return plan, routes
+
+
+# --------------------------------------------------------------- pricing
+
+
+def test_each_leg_is_priced_by_one_departure_call_for_its_own_anchor() -> None:
+    """Traffic depends on the clock: a 06:00 sweep must price the 09:00 drive."""
+    requests = _requests([_event(eid="e1", start=_at(9))])
+    routes = _StubRoutes(default_minutes=25)
+    priced = travel_blocks.price_legs(requests, api_key="k", now=NOW, route_fn=routes)
+
+    assert priced.routes_calls == len(requests) == 2
+    assert priced.failures == []
+    assert set(priced.durations) == {request.key for request in requests}
+    assert all(minutes == 25 for minutes in priced.durations.values())
+    # Outbound priced for its arrival moment, return for the event's end — the
+    # anchors travel with the request rather than defaulting to "now".
+    assert sorted(d for d in routes.departures if d is not None) == [_at(9), _at(10)]
+
+
+def test_priced_minutes_reach_the_block_boundaries() -> None:
+    """The Routes answer, not a guess, is what sizes the block."""
+    plan, _ = _sweep({PERSON: [_event(eid="e1", start=_at(9))]},
+                     stub=_StubRoutes(default_minutes=35))
+    assert _shape(plan.adds) == [
+        (LEG_OUTBOUND, HOME, OFFICE, _at(8, 25).isoformat(), _at(9).isoformat()),
+        (LEG_RETURN, OFFICE, HOME, _at(10).isoformat(), _at(10, 35).isoformat()),
+    ]
+
+
+def test_identical_legs_within_one_sweep_share_a_single_routes_call() -> None:
+    """Two people on the same road at the same minute cost one call, not two."""
+    plan, routes = _sweep({
+        PERSON: [_event(eid="e1", start=_at(9))],
+        PERSON_B: [_event(eid="e2", start=_at(9), calendar_id=CALENDAR_B)],
+    })
+    assert len(plan.adds) == 4  # outbound + return, each person
+    assert plan.routes_calls == 2  # HOME->OFFICE at 09:00, OFFICE->HOME at 10:00
+    assert len(routes.calls) == 2
+    assert {(leg.person, leg.leg) for leg in plan.adds} == {
+        (PERSON, LEG_OUTBOUND), (PERSON, LEG_RETURN),
+        (PERSON_B, LEG_OUTBOUND), (PERSON_B, LEG_RETURN),
+    }
+
+
+def test_the_same_road_at_a_different_minute_is_a_separate_call() -> None:
+    """Dedup keys on the anchor too — otherwise rush hour would be priced once."""
+    _, routes = _sweep({
+        PERSON: [_event(eid="e1", start=_at(9))],
+        PERSON_B: [_event(eid="e2", start=_at(15), calendar_id=CALENDAR_B)],
+    })
+    assert len(routes.calls) == 4
+
+
+# --------------------------------------------------------------- failure handling
+
+
+def test_a_failing_leg_degrades_that_leg_alone() -> None:
+    """One bad leg never aborts the sweep — the rest still get their blocks."""
+    plan, _ = _sweep(
+        {PERSON: [
+            _event(eid="e1", location=OFFICE, start=_at(9)),
+            _event(eid="e2", location=CLINIC, start=_at(15)),
+        ]},
+        stub=_StubRoutes(fails=[CLINIC]),
+    )
+    assert [(leg.leg, leg.source_event_id) for leg in plan.adds] == [
+        (LEG_OUTBOUND, "e1"), (LEG_RETURN, "e1"),
+    ]
+    assert {(f.leg, f.source_event_id) for f in plan.failures} == {
+        (LEG_OUTBOUND, "e2"), (LEG_RETURN, "e2"),
+    }
+    assert {f.reason for f in plan.failures} == {travel_blocks.FAILURE_ROUTES_ERROR}
+    assert all("429" in f.detail for f in plan.failures)
+
+
+def test_an_empty_route_response_produces_a_failure_and_never_a_zero_block() -> None:
+    """No route found is an unknown, not a zero-minute drive."""
+    plan, _ = _sweep(
+        {PERSON: [_event(eid="e1", start=_at(9))]},
+        stub=_StubRoutes(
+            fails=[OFFICE], failure="Routes API returned no route for this origin/destination"
+        ),
+    )
+    assert plan.adds == []
+    assert plan.legs == []
+    assert [f.reason for f in plan.failures] == [travel_blocks.FAILURE_ROUTES_ERROR] * 2
+    assert all("no route" in f.detail for f in plan.failures)
+
+
+def test_a_repeated_failing_call_is_deduped_like_a_successful_one() -> None:
+    """A broken road costs one attempt per distinct call, not one per leg."""
+    plan, routes = _sweep(
+        {
+            PERSON: [_event(eid="e1", start=_at(9))],
+            PERSON_B: [_event(eid="e2", start=_at(9), calendar_id=CALENDAR_B)],
+        },
+        stub=_StubRoutes(fails=[OFFICE]),
+    )
+    assert plan.routes_calls == 2 == len(routes.calls)
+    assert len(plan.failures) == 4
+
+
+def test_a_past_departure_is_reported_without_calling_routes() -> None:
+    """Routes rejects a past `departureTime` outright — don't spend the call.
+
+    It is still reported: a leg we declined to price must not look like a leg
+    that needed no block. Its reason distinguishes it from a Routes error too.
+    """
+    late = _at(12)  # after both of the 09:00 event's anchors
+    plan, routes = _sweep({PERSON: [_event(eid="e1", start=_at(9))]}, now=late)
+    assert routes.calls == []
+    assert plan.routes_calls == 0
+    assert plan.adds == []
+    assert [f.reason for f in plan.failures] == [travel_blocks.FAILURE_ANCHOR_IN_THE_PAST] * 2
+    assert travel_blocks.FAILURE_ANCHOR_IN_THE_PAST != travel_blocks.FAILURE_ROUTES_ERROR
+
+
+def test_a_failure_is_visibly_distinct_from_no_commute_needed() -> None:
+    """The whole point of #266's failure state, asserted on the payload itself.
+
+    The en-casa event correctly needs no block and leaves no trace at all; the
+    unpriceable drive leaves an explicit `unpriced` entry. An empty `adds` list
+    alone can never tell the two apart.
+    """
+    payload = _sweep(
+        {PERSON: [
+            _event(eid="home", summary="Trabajo (en casa)", location="", start=_at(9)),
+            _event(eid="e1", location=OFFICE, start=_at(14)),
+        ]},
+        stub=_StubRoutes(fails=[OFFICE]),
+    )[0].to_payload()
+
+    assert payload["adds"] == []
+    assert payload["counts"]["failures"] == 2
+    assert {f["source_event_id"] for f in payload["failures"]} == {"e1"}
+    assert {f["status"] for f in payload["failures"]} == {"unpriced"}
+    assert all(f["reason"] == travel_blocks.FAILURE_ROUTES_ERROR for f in payload["failures"])
+
+
+def test_the_log_line_marks_an_unpriced_leg_as_a_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`CLAUDE.md`: an unestablished fact needs its own visible state, in the log too."""
+    with caplog.at_level(logging.INFO, logger="src.family.travel_blocks"):
+        _sweep(
+            {PERSON: [_event(eid="e1", location=OFFICE, start=_at(9))]},
+            stub=_StubRoutes(fails=[OFFICE]),
+        )
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2
+    assert all("unpriced" in r.getMessage() for r in warnings)
+    assert all(travel_blocks.FAILURE_ROUTES_ERROR in r.getMessage() for r in warnings)
+    assert any("0 add(s)" in r.getMessage() and "2 unpriced" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_the_log_line_reports_the_routes_call_count(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="src.family.travel_blocks"):
+        _sweep({PERSON: [_event(eid="e1", start=_at(9))]})
+    assert any("2 Routes call(s)" in r.getMessage() for r in caplog.records)
+
+
+# --------------------------------------------------------------- gates
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "status"),
+    [
+        ({"enabled": False}, travel_blocks.STATUS_DISABLED),
+        ({"api_key": ""}, travel_blocks.STATUS_NO_ROUTES_API_KEY),
+        ({"home_address": "  "}, travel_blocks.STATUS_NO_HOME_ADDRESS),
+    ],
+)
+def test_a_gate_reports_itself_and_spends_no_routes_call(
+    kwargs: dict[str, Any], status: str
+) -> None:
+    """Never folded into an empty plan, which would read as a computed all-clear."""
+    plan, routes = _sweep({PERSON: [_event(eid="e1", start=_at(9))]}, **kwargs)
+    assert plan.status == status
+    assert routes.calls == []
+    assert plan.routes_calls == 0
+    assert plan.to_payload() == {"status": status}
+
+
+# --------------------------------------------------------------- payload shape
+
+
+def test_the_payload_carries_the_whole_plan() -> None:
+    payload = _sweep({PERSON: [_event(eid="e1", summary="Checkup", start=_at(9))]})[0].to_payload()
+
+    assert payload["status"] == travel_blocks.STATUS_OK
+    assert payload["dry_run"] is True
+    assert payload["routes_calls"] == 2
+    assert payload["counts"] == {"desired": 2, "adds": 2, "deletes": 0, "failures": 0}
+    assert payload["deletes"] == []
+    assert payload["failures"] == []
+    assert payload["horizon_start"] < payload["horizon_end"]
+
+    outbound = payload["adds"][0]
+    assert set(outbound) == {
+        "leg", "person", "calendar_id", "source_event_id", "event",
+        "origin", "destination", "start", "end", "minutes", "hash",
+    }
+    assert outbound["leg"] == LEG_OUTBOUND
+    assert outbound["person"] == PERSON
+    assert outbound["event"] == "Checkup"
+    assert outbound["origin"] == HOME and outbound["destination"] == OFFICE
+    assert outbound["minutes"] == 20
+    assert outbound["hash"]
+
+
+def test_the_payload_is_json_serializable() -> None:
+    """It is persisted verbatim as the run's `summary_json` (#163)."""
+    payload = _sweep(
+        {PERSON: [
+            _event(eid="e1", location=OFFICE, start=_at(9)),
+            _event(eid="e2", location=CLINIC, start=_at(15)),
+        ]},
+        stub=_StubRoutes(fails=[CLINIC]),
+    )[0].to_payload()
+    assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload
+
+
+def test_the_add_delete_shape_is_already_final() -> None:
+    """Step 3 of #263 fills the diff in; no downstream reader changes then."""
+    plan, _ = _sweep({PERSON: [_event(eid="e1", start=_at(9))]})
+    assert plan.adds == plan.legs  # nothing on the calendar to diff against yet
+    assert plan.deletes == []
+
+
+# --------------------------------------------------------------- no writes, ever
+
+
+def test_this_step_contains_no_calendar_writes() -> None:
+    """#266 is the rehearsal: the plan is computed, logged, and written nowhere.
+
+    Asserted on the source rather than on behaviour because the guarantee is
+    "there is no code path at all", which no amount of stubbing can demonstrate.
+    Step 3 of #263 introduces the writer — and deletes this test with it.
+    """
+    root = Path(__file__).resolve().parents[1]
+    for relative in ("src/family/travel_blocks.py", "src/family/calendar_scan.py"):
+        source = (root / relative).read_text(encoding="utf-8")
+        for forbidden in ("insert_event", "delete_event", "calendar_write"):
+            assert forbidden not in source, f"{relative} must not write to a calendar yet"

@@ -74,19 +74,39 @@ def compute_route(
     *,
     api_key: str,
     arrival_time: datetime | None = None,
+    departure_time: datetime | None = None,
     origin_latlng: tuple[float, float] | None = None,
     session: requests.Session | None = None,
 ) -> RouteResult:
     """Compute the driving route ``origin`` → ``destination`` with live traffic.
 
-    ``arrival_time`` (aware datetime) requests a traffic estimate for that
-    arrival; omitted, the estimate is for departing now. ``origin_latlng``
-    (a ``(lat, lng)`` pair) routes from an exact position — the live phone fix
-    (#169) — instead of the ``origin`` address string, which is then unused.
-    Raises :class:`TrafficReadError` on any transport/API failure.
+    ``departure_time`` (aware datetime) requests a traffic estimate for leaving
+    at that moment — the one time field Routes v2 actually honours for
+    ``DRIVE`` + ``TRAFFIC_AWARE``, verified live against the API (#266): the
+    same pair of addresses returns 983 s for a 04:00 departure and 930 s for an
+    08:00 one, while every ``arrivalTime`` variant returns the depart-now
+    baseline unchanged. It must be **in the future** — Routes rejects a past
+    timestamp with ``HTTP 400 "Timestamp must be set to a future time."``, so
+    callers pricing a schedule have to drop past anchors rather than send them.
+
+    ``arrival_time`` is kept for the existing traffic check (#160), which has
+    passed it since day one. Per the probe above Routes silently ignores it for
+    driving routes, so it yields a depart-now estimate; that is a pre-existing
+    behaviour of the alerting path and is deliberately not changed here. New
+    callers should use ``departure_time``.
+
+    ``origin_latlng`` (a ``(lat, lng)`` pair) routes from an exact position —
+    the live phone fix (#169) — instead of the ``origin`` address string, which
+    is then unused. Raises :class:`TrafficReadError` on any transport/API
+    failure.
     """
     if not api_key:
         raise TrafficReadError("Routes API key is not configured")
+    if arrival_time is not None and departure_time is not None:
+        # Routes documents the two as mutually exclusive. It does not enforce it
+        # (sending both returns 200 and honours the departure), so refusing here
+        # is what stops a caller silently getting the other field's answer.
+        raise TrafficReadError("arrival_time and departure_time are mutually exclusive")
     if origin_latlng is not None:
         origin_waypoint: dict[str, Any] = {
             "location": {"latLng": {"latitude": origin_latlng[0], "longitude": origin_latlng[1]}}
@@ -100,10 +120,10 @@ def compute_route(
         "routingPreference": "TRAFFIC_AWARE",
     }
     if arrival_time is not None:
-        # Routes requires an RFC-3339 UTC 'Z' timestamp.
+        # Routes requires an RFC-3339 timestamp; a local UTC offset is accepted.
         body["arrivalTime"] = arrival_time.astimezone().isoformat()
-        # arrivalTime is incompatible with departure-based fields; TRAFFIC_AWARE
-        # still applies historical/live modelling for the arrival window.
+    if departure_time is not None:
+        body["departureTime"] = departure_time.astimezone().isoformat()
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,

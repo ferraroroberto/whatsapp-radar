@@ -20,6 +20,7 @@ import argparse
 import sqlite3
 import sys
 from datetime import UTC, datetime
+from typing import Any
 
 from gmail_readonly import GmailReadError
 
@@ -430,6 +431,55 @@ def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> st
     return None
 
 
+def _progress_travel_blocks(section: dict[str, Any]) -> None:
+    """Print the travel-block plan (#266) — the write-nothing rehearsal of #263.
+
+    One line per would-be block with its origin, destination, time box and
+    minutes, then every leg that could **not** be priced, phrased so it can
+    never be read as "no commute was needed", then a counted summary carrying
+    the Routes call count. Nothing here writes to a calendar.
+    """
+    status = str(section.get("status") or "")
+    # `disabled` is a decision, not an unestablished fact, and it is the state
+    # of every default install — printing it on every scan would be pure noise.
+    # It still rides the run payload. The other non-ok statuses are
+    # misconfigurations of an *enabled* feature and stay loud.
+    if not status or status == "disabled":
+        return
+    if status != "ok":
+        _progress(f"🚗 travel blocks: {status} — no plan computed, no Routes calls")
+        return
+    for leg in section.get("adds", []):
+        _progress(
+            f"   + {leg['person']} {leg['leg']} — “{leg['event']}”: "
+            f"{leg['origin']} → {leg['destination']}, "
+            f"{_fmt_block_when(leg['start'])}–{_fmt_block_when(leg['end'], time_only=True)} "
+            f"({leg['minutes']} min)"
+        )
+    for failure in section.get("failures", []):
+        _progress(
+            f"   ⚠️ unpriced ({failure['reason']}) {failure['person']} {failure['leg']} — "
+            f"“{failure['event']}”: {failure['detail']}. No block planned — the drive "
+            f"could not be established, this is not a decision that none is needed"
+        )
+    counts = section.get("counts") or {}
+    _progress(
+        f"🚗 travel blocks: {counts.get('adds', 0)} add(s), "
+        f"{counts.get('deletes', 0)} delete(s), "
+        f"{counts.get('failures', 0)} unpriced leg(s), "
+        f"{section.get('routes_calls', 0)} Routes call(s)"
+        + (" [dry-run]" if section.get("dry_run") else "")
+    )
+
+
+def _fmt_block_when(iso: str, *, time_only: bool = False) -> str:
+    try:
+        moment = datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    return moment.strftime("%H:%M" if time_only else "%a %d %b %H:%M")
+
+
 def _cmd_family_check(
     conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool
 ) -> int:
@@ -467,6 +517,10 @@ def _cmd_family_check(
             f"{len(payload.get('missing_locations', []))} missing location(s)"
             + (" [dry-run]" if dry_run else "")
         )
+        # This repo configures no logging handlers, so `plan_travel_blocks`'
+        # INFO lines are dropped — without this the priced plan (#266) would
+        # only ever be visible by opening the persisted run payload.
+        _progress_travel_blocks(payload.get("travel_blocks") or {})
     else:
         _progress(
             f"🚗 traffic-check: {payload['status']} — "

@@ -1300,6 +1300,70 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 #familyEditable .run-btn { margin-top: var(--space-md); }
 
+/* ------------------------------------------------- travel blocks (#268)
+   Layout + the three status roles only — every colour is an existing token
+   (--on / --deficit / --attention / --muted), so both themes follow for free. */
+
+/* Mode banner. A sweep that plans but does not write must never look like one
+   that writes: off / dry run / live differ by word, glyph, colour and (for
+   the two active modes) a solid leading rule. */
+.tb-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-sm) 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--font-label);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.tb-mode .icon { flex: none; margin-top: 2px; }
+.tb-mode--off { color: var(--muted); }
+.tb-mode--dry { color: var(--attention); border-color: var(--attention); }
+.tb-mode--live { color: var(--on); border-color: var(--on); }
+
+/* Per-calendar write capability: flat separator rows (list-row contract),
+   text block + a state badge pinned right. */
+.tb-cap-list { display: flex; flex-direction: column; }
+.tb-cap-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+.tb-cap-row + .tb-cap-row { border-top: 1px solid var(--line-muted); }
+.tb-cap-text { flex: 1; min-width: 0; }
+.tb-cap-name { display: block; font-weight: 600; }
+.tb-cap-note { display: block; }
+.tb-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.tb-cap .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.tb-cap--writable { color: var(--on); border-color: var(--on); }
+.tb-cap--not-writable { color: var(--deficit); border-color: var(--deficit); }
+/* `unknown` is its own state, not a shade of either other one: the probe never
+   resolved, so it is neither permission nor a refusal. Attention colour, its
+   own glyph (never a tick, never a cross) and a dashed border, so it still
+   reads apart with colour stripped out. */
+.tb-cap--unknown {
+  color: var(--attention);
+  border-color: var(--attention);
+  border-style: dashed;
+}
+#familyTravelBlocks .run-btn { margin-top: var(--space-md); }
+
 /* ============================================================ ack (#219) */
 /* Follow-ups tab: flat separator rows (fleet list-row canon), each with a
    text block + an inline tint action button — mirrors .chat-row's hairline

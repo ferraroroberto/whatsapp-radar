@@ -217,6 +217,8 @@ export const els = {
   // Family rules (#160, #167) — run controls + recent runs moved to the Run tab.
   familyReadOnly: document.getElementById('familyReadOnly'),
   familyEditable: document.getElementById('familyEditable'),
+  // Commute travel blocks (#268): knobs + per-calendar write capability.
+  familyTravelBlocks: document.getElementById('familyTravelBlocks'),
 
   // Follow-ups (#219)
   ackItems: document.getElementById('ackItems'),

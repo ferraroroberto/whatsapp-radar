@@ -1370,6 +1370,17 @@ def test_a_calendar_read_that_fails_entirely_reports_unknown_not_empty(
     }
 
 
+def _stub_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wire `run_calendar_scan` for offline use: fake read client, no events, no alert."""
+    from src.family import calendar_scan
+
+    monkeypatch.setattr(
+        calendar_source, "build_google_calendar_client", lambda _p: _FakeReadClient()
+    )
+    monkeypatch.setattr(calendar_scan, "fetch_events_by_person", lambda *_a, **_k: {PERSON: []})
+    monkeypatch.setattr(calendar_scan, "send_alert", lambda *_a, **_k: ("sent", None))
+
+
 def test_the_scan_never_raises_when_the_write_side_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1379,18 +1390,92 @@ def test_the_scan_never_raises_when_the_write_side_fails(
     def explode_write(_path: Path) -> Any:
         raise RuntimeError("write token revoked")
 
-    monkeypatch.setattr(
-        calendar_source, "build_google_calendar_client", lambda _p: _FakeReadClient()
-    )
-    monkeypatch.setattr(calendar_scan, "fetch_events_by_person", lambda *_a, **_k: {PERSON: []})
+    _stub_scan(monkeypatch)
     monkeypatch.setattr(
         travel_blocks_write, "build_google_calendar_write_client", explode_write
     )
 
-    payload = calendar_scan.run_calendar_scan(_config(), now=NOW, dry_run=True)
+    # A *live* scan: only that reaches the write side at all now that
+    # `--dry-run` forces the sweep dry (#276), and reaching the write side is
+    # this test's whole point.
+    payload = calendar_scan.run_calendar_scan(_config(), now=NOW, dry_run=False)
     assert payload["status"] == "ok"
     assert payload["travel_blocks"]["status"] == travel_blocks.STATUS_OK
     assert payload["travel_blocks"]["apply"]["status"] == travel_blocks_write.APPLY_NO_WRITE_TOKEN
+
+
+# --------------------------------------------------------------- issue #276
+
+
+def test_scan_dry_run_forces_the_sweep_dry_even_when_configured_live(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`calendar-scan --dry-run` must not write to a calendar. Ever.
+
+    Before #276 this verb's ``--dry-run`` suppressed only the summary alert:
+    the sweep riding along inside it still inserted and deleted real events
+    whenever ``travel_blocks.dry_run`` was off. The Family tab's rehearse
+    control fires exactly this, so the refusal has to live here — in the server
+    — not in whether a button was disabled.
+    """
+    from src.family import calendar_scan
+
+    _stub_scan(monkeypatch)
+    write_client = _FakeWriteClient()
+    monkeypatch.setattr(
+        travel_blocks_write, "build_google_calendar_write_client", lambda _p: write_client
+    )
+
+    live_config = _config(dry_run=False)
+    payload = calendar_scan.run_calendar_scan(live_config, now=NOW, dry_run=True)
+
+    section = payload["travel_blocks"]
+    assert section["status"] == travel_blocks.STATUS_OK
+    # The plan says it was a rehearsal, and the apply never left the short-circuit.
+    assert section["dry_run"] is True
+    assert section["apply"]["status"] == travel_blocks_write.APPLY_DRY_RUN
+    assert write_client.inserted == [] and write_client.deleted == []
+    # The override only ever tightens: a live scan on the same config still writes.
+    assert live_config.family.travel_blocks.dry_run is False
+
+
+def test_force_dry_run_cannot_loosen_a_dry_run_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``force_dry_run=False`` is "no opinion", never "go live"."""
+    write_client = _FakeWriteClient()
+    monkeypatch.setattr(
+        calendar_source, "build_google_calendar_client", lambda _p: _FakeReadClient()
+    )
+    monkeypatch.setattr(
+        travel_blocks_write, "build_google_calendar_write_client", lambda _p: write_client
+    )
+    payload = travel_blocks_write.run_travel_blocks(
+        _config(dry_run=True),
+        {PERSON: []},
+        now=NOW,
+        route_fn=_StubRoutes(),
+        backup_root=tmp_path,
+        force_dry_run=False,
+    )
+    assert payload["dry_run"] is True
+    assert payload["apply"]["status"] == travel_blocks_write.APPLY_DRY_RUN
+    assert write_client.inserted == [] and write_client.deleted == []
+
+
+def test_a_gated_sweep_forced_dry_still_reports_its_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A rehearsal of a disabled feature reports `disabled`, not an empty plan."""
+    payload = travel_blocks_write.run_travel_blocks(
+        _config(enabled=False, dry_run=False),
+        {PERSON: []},
+        now=NOW,
+        route_fn=_StubRoutes(),
+        backup_root=tmp_path,
+        force_dry_run=True,
+    )
+    assert payload == {"status": travel_blocks.STATUS_DISABLED}
 
 
 # --------------------------------------------------------------- issue #273

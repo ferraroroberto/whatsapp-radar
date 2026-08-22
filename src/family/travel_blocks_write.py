@@ -510,6 +510,7 @@ def run_travel_blocks(
     session: requests.Session | None = None,
     route_fn: RouteFn = compute_route,
     backup_root: Path | None = None,
+    force_dry_run: bool = False,
 ) -> dict[str, Any]:
     """Plan, reconcile and (unless dry-run) apply the horizon's travel blocks.
 
@@ -523,11 +524,22 @@ def run_travel_blocks(
     default) short-circuits before a write client is ever built: not "build one
     and don't call it", but no token load, no client, no writer, and therefore
     no object in the process capable of an insert, a delete or a backup.
+
+    ``force_dry_run`` tightens the configured mode for this one call and can
+    only ever tighten it — ``settings.dry_run or force_dry_run``, never the
+    other way round, so no caller can talk a dry-run install into writing. It
+    exists because ``calendar-scan --dry-run`` used to suppress only the
+    *summary alert*: the sweep riding along inside it still wrote to real
+    calendars whenever ``travel_blocks.dry_run`` was off, which made "dry run"
+    a lie for the one part of the verb that mutates anything outside this
+    process. The Family tab's rehearse control (#276) depends on that being
+    server-enforced, not merely a disabled button.
     """
     settings = config.family.travel_blocks
+    dry_run = settings.dry_run or force_dry_run
     gate = gate_status(config)
     if gate is not None:
-        plan = empty_plan(gate, settings.dry_run)
+        plan = empty_plan(gate, dry_run)
         log_plan(plan)
         return plan.to_payload()
 
@@ -550,11 +562,14 @@ def run_travel_blocks(
         existing=_existing_blocks(marked),
         session=session,
         route_fn=route_fn,
+        dry_run=dry_run,
     )
     capability = {
         calendar_id: classify_access_role(role) for calendar_id, role in marked.access_roles.items()
     }
-    result = _apply(config, plan, capability=capability, now=now, backup_root=backup_root)
+    result = _apply(
+        config, plan, capability=capability, now=now, backup_root=backup_root, dry_run=dry_run
+    )
     _log_apply(result)
 
     payload = plan.to_payload()
@@ -626,13 +641,20 @@ def _apply(
     capability: Mapping[str, str],
     now: datetime,
     backup_root: Path | None,
+    dry_run: bool,
 ) -> ApplyResult:
-    """Build the writer and apply, or report exactly why nothing was written."""
+    """Build the writer and apply, or report exactly why nothing was written.
+
+    ``dry_run`` is passed in rather than re-read off the config so this decision
+    and the plan's own ``dry_run`` flag can never disagree: one value, decided
+    once in :func:`run_travel_blocks`, drives the short-circuit *and* what the
+    payload claims happened.
+    """
     settings = config.family.travel_blocks
     if plan.status != STATUS_OK:
         return ApplyResult(status=APPLY_NOT_PLANNED, write_capability=dict(capability))
     planned = len(plan.adds) + len(plan.deletes)
-    if settings.dry_run:
+    if dry_run:
         return ApplyResult(
             status=APPLY_DRY_RUN,
             kept=len(plan.keeps),

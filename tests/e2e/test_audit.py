@@ -181,3 +181,178 @@ def test_audit_drilldown_shows_trace(
     messages = trace.locator(".audit-msg")
     expect(messages.first).to_be_visible()
     expect(messages.first.locator(".audit-msg-badge").first).to_be_visible()
+
+
+# ------------------------------------------- travel-block sweep record (#276)
+
+# A calendar-scan whose payload carries a full travel-block sweep. Sanitized:
+# `example.com` calendar ids and generic labels only. The point of the block
+# under test is that none of those ids reach the DOM inside it.
+_TRAVEL_SECTION = {
+    "status": "ok",
+    "dry_run": False,
+    "horizon_start": "2026-08-21T12:00:00+00:00",
+    "horizon_end": "2026-08-23T12:00:00+00:00",
+    "routes_calls": 4,
+    "counts": {"desired": 3, "adds": 1, "deletes": 1,
+               "keeps": 1, "protected": 1, "failures": 1},
+    "adds": [
+        {
+            "leg": "out", "person": "parent-a", "calendar_id": "parent-a@example.com",
+            "source_event_id": "e1", "event": "Class 4A Group meeting",
+            "origin": "home", "destination": "school",
+            "start": "2026-08-21T12:00:00+00:00", "end": "2026-08-21T12:25:00+00:00",
+            "minutes": 25, "hash": "abc",
+        },
+    ],
+    "deletes": [
+        {
+            "reason": "source_event_gone", "calendar_id": "parent-a@example.com",
+            "event_id": "b1", "source_event_id": "e0", "leg": "home",
+            "start": "2026-08-21T15:00:00+00:00", "hash": "old", "schema_version": 1,
+        },
+    ],
+    "protected": [
+        {
+            "reason": "leg_unpriced", "calendar_id": "parent-b@example.com",
+            "event_id": "b2", "source_event_id": "e2", "leg": "out",
+            "start": "2026-08-22T07:00:00+00:00", "hash": "keep", "schema_version": 1,
+        },
+    ],
+    "failures": [
+        {
+            "leg": "out", "person": "parent-b", "calendar_id": "parent-b@example.com",
+            "source_event_id": "e2", "event": "School Parents Group",
+            "status": "unpriced", "reason": "routes_error", "detail": "Routes API 429",
+        },
+    ],
+    "apply": {
+        "status": "applied",
+        "counts": {"inserted": 1, "deleted": 1, "kept": 1, "skipped": 0, "backups": 1},
+        "failures": [],
+        "write_capability": {"parent-a@example.com": "writable"},
+    },
+}
+
+
+def _calendar_run(section: dict[str, object] | None) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "kind": "calendar-scan", "status": "ok",
+        "conflicts": [], "missing_locations": [], "decisions": [],
+    }
+    if section is not None:
+        summary["travel_blocks"] = section
+    return {
+        "id": 9,
+        "kind": "calendar-scan",
+        "summary": summary,
+        "mode": "live",
+        "status": "completed",
+        "params": None,
+        "started_at": "2026-08-21T12:00:00+00:00",
+        "completed_at": "2026-08-21T12:01:00+00:00",
+        "notification_status": "none",
+        "error": None,
+        "sources": {},
+        "funnel": {},
+    }
+
+
+def _open_travel_run(page: Page, base_url: str, section: dict[str, object] | None) -> None:
+    run = _calendar_run(section)
+    page.route(
+        "**/api/audit/runs",
+        lambda route: route.fulfill(json={"runs": [run], "syncs": [], "coverage_gaps": []}),
+    )
+    page.route(
+        "**/api/audit/filtered?*",
+        lambda route: route.fulfill(
+            json={"days": 30, "limit": 50, "offset": 0, "total": 0,
+                  "has_more": False, "items": []}
+        ),
+    )
+    page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
+    page.goto(base_url)
+    page.locator("#tabAudit").click()
+    page.locator("#auditRuns .audit-run-li").first.click()
+    expect(page.locator("#auditDetailCard")).to_be_visible()
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_audit_renders_the_travel_block_sweep_readably(
+    page: Page, base_url: str, color_scheme: str
+) -> None:
+    """The sweep record reads as legs and reasons, not as a JSON dump (#276)."""
+    page.emulate_media(color_scheme=color_scheme)
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open_travel_run(page, base_url, _TRAVEL_SECTION)
+
+    block = page.locator("#auditTraces .audit-travel")
+    expect(block).to_have_count(1)
+    expect(block).to_contain_text("live — blocks were written")
+    expect(block).to_contain_text("3 leg(s) · 1 add · 1 delete · 1 kept · 1 left alone")
+
+    # A planned block: person, leg kind, event title, time box and minutes.
+    expect(block).to_contain_text("parent-a · out · \"Class 4A Group meeting\"")
+    expect(block).to_contain_text("25 min")
+    # A removal and a left-alone block, each with the reason that put it there —
+    # and `left alone` is its own heading, never folded into `kept`.
+    expect(block).to_contain_text("Travel blocks — planned removals (1)")
+    expect(block).to_contain_text("source_event_gone")
+    expect(block).to_contain_text("Travel blocks — left alone (1)")
+    expect(block).to_contain_text("leg_unpriced")
+    # An unpriced leg keeps its `unpriced` discriminator and its reason.
+    expect(block).to_contain_text("unpriced (routes_error)")
+
+    # The privacy line: no calendar id anywhere inside this block. The raw
+    # payload dump below it is a separate, pre-existing surface.
+    assert "@" not in (block.inner_text() or "")
+
+    # It sits above the raw dump, which stays as the last resort.
+    order = page.evaluate(
+        """
+        () => {
+          const kids = [...document.querySelector('#auditTraces').children];
+          const travel = kids.findIndex((el) => el.classList.contains('audit-travel'));
+          const dump = kids.findIndex(
+            (el) => el.querySelector('.audit-field-title')?.textContent === 'Run payload');
+          return [travel, dump];
+        }
+        """
+    )
+    assert order[0] >= 0 and order[1] > order[0], order
+
+    # Funnel cells carry the headline counts too, at phone width, without
+    # pushing the pane sideways.
+    expect(page.locator("#auditFunnel")).to_contain_text("Block adds")
+    overflowing = page.evaluate(
+        """
+        () => {
+          const vw = window.innerWidth;
+          const bad = [];
+          document.querySelectorAll('#auditDetailCard *').forEach((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.right > vw + 0.5 && getComputedStyle(el).overflowX !== 'auto') {
+              bad.push(String(el.className));
+            }
+          });
+          return bad;
+        }
+        """
+    )
+    assert overflowing == [], f"travel-block audit section overflows 390px: {overflowing}"
+
+
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_audit_gated_sweep_is_named_not_zeroed(page: Page, base_url: str) -> None:
+    """A gated sweep names its gate instead of rendering a plan of zeros."""
+    _open_travel_run(page, base_url, {"status": "disabled"})
+    block = page.locator("#auditTraces .audit-travel")
+    expect(block).to_contain_text("Gated: travel blocks are off")
+    expect(block).to_contain_text("not a sweep that looked and found nothing to do")
+    expect(block).not_to_contain_text("0 add")
+    expect(page.locator("#auditFunnel")).to_contain_text("Blocks")
+    expect(page.locator("#auditFunnel")).not_to_contain_text("Block adds")

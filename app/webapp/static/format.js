@@ -37,10 +37,48 @@ export function familyKindCells(kind, payload) {
       { label: 'Status', value: p.status },
     ];
   }
-  return [
+  const cells = [
     { label: 'Conflicts', value: (p.conflicts || []).length },
     { label: 'Missing loc.', value: (p.missing_locations || p.unknown_locations || []).length },
     { label: 'Status', value: p.status },
+  ];
+  return cells.concat(travelBlockCells(p.travel_blocks));
+}
+
+/* Travel-block vocabulary (#276), in one place because three surfaces say it:
+ * the Family tab's last-sweep line, the Run tab's funnel cells and the Audit
+ * drill-down. `short` fits a funnel cell, `label` reads as a sentence fragment.
+ *
+ * A gated sweep is never spelled with numbers. `disabled` / `no_routes_api_key`
+ * / `no_home_address` mean nothing was computed, and a row of zeros there would
+ * claim the opposite — a sweep that looked and found nothing to do. */
+const TRAVEL_STATUS = {
+  ok: { short: 'ok', label: 'ran' },
+  disabled: { short: 'off', label: 'travel blocks are off' },
+  no_routes_api_key: { short: 'no key', label: 'no Routes API key' },
+  no_home_address: { short: 'no home', label: 'no home address configured' },
+  unknown: { short: '?', label: 'not recorded' },
+};
+
+function travelStatus(status) {
+  return TRAVEL_STATUS[status] || { short: String(status), label: String(status) };
+}
+
+function travelStatusShort(status) { return travelStatus(status).short; }
+export function travelStatusLabel(status) { return travelStatus(status).label; }
+
+// Headline travel-block numbers for a calendar-scan funnel row (#276). A run
+// recorded before the sweep existed carries no section at all and gets no
+// cells — an absent feature must not render as a feature that did nothing.
+// A gated sweep gets one cell naming its gate, never a row of zeros.
+function travelBlockCells(section) {
+  if (!section || typeof section !== 'object') return [];
+  const counts = section.counts;
+  if (!counts) return [{ label: 'Blocks', value: travelStatusShort(section.status) }];
+  return [
+    { label: 'Block adds', value: counts.adds },
+    { label: 'Block dels', value: counts.deletes },
+    { label: 'Unpriced', value: counts.failures },
   ];
 }
 

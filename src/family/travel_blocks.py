@@ -1282,6 +1282,7 @@ def plan_travel_blocks(
     existing: ExistingBlocks,
     session: requests.Session | None = None,
     route_fn: RouteFn = compute_route,
+    dry_run: bool | None = None,
 ) -> TravelBlockPlan:
     """Plan and reconcile the horizon's travel blocks — the desired-state half.
 
@@ -1300,12 +1301,18 @@ def plan_travel_blocks(
     calls: the feature off; no Routes API key; no configured home address (the
     committed default ships blank, and a plan built on it would reserve time for
     a drive to nowhere) — see :func:`gate_status`.
+
+    ``dry_run`` overrides the configured mode for this one call and may only
+    ever tighten it (:func:`~src.family.travel_blocks_write.run_travel_blocks`
+    passes ``settings.dry_run or force_dry_run``). ``None`` — the default —
+    means "whatever the config says", so every existing caller is unchanged.
     """
     family = config.family
     settings = family.travel_blocks
+    planned_dry_run = settings.dry_run if dry_run is None else dry_run
     gate = gate_status(config)
     if gate is not None:
-        return empty_plan(gate, settings.dry_run)
+        return empty_plan(gate, planned_dry_run)
 
     horizon_start, horizon_end = travel_block_horizon(config, now)
 
@@ -1374,7 +1381,7 @@ def plan_travel_blocks(
     )
     plan = TravelBlockPlan(
         status=STATUS_OK,
-        dry_run=settings.dry_run,
+        dry_run=planned_dry_run,
         legs=legs,
         adds=diff.adds,
         deletes=diff.deletes,

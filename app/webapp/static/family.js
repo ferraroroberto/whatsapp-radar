@@ -13,7 +13,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime } from './format.js';
+import { fmtLocalDateTime, travelStatusLabel } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 
@@ -530,6 +530,16 @@ function sweepMode(sweep) {
   return '';
 }
 
+/* A gated sweep says so in words. `disabled`/`no_routes_api_key`/
+ * `no_home_address` mean the sweep never got as far as computing anything, and
+ * the server sends `dry_run: null` / `counts: null` precisely so this line
+ * cannot be dressed up as a mode and a row of zeros. */
+function outcomeText(sweep) {
+  if (sweep.status === 'ok') return 'ran' + sweepMode(sweep);
+  if (sweep.status === 'unknown') return 'unknown — the run recorded no sweep status';
+  return 'gated — ' + travelStatusLabel(sweep.status) + ' · nothing was planned';
+}
+
 function renderLastSweep(box, tb) {
   box.append(fieldLabel('Last sweep'));
   const sweep = tb.last_sweep;
@@ -539,7 +549,7 @@ function renderLastSweep(box, tb) {
   }
   const dl = el('dl', 'family-rules');
   defRow(dl, 'When', fmtLocalDateTime(sweep.started_at, { withYear: false }));
-  defRow(dl, 'Outcome', sweep.status + sweepMode(sweep));
+  defRow(dl, 'Outcome', outcomeText(sweep));
   const counts = sweep.counts;
   if (counts) {
     defRow(dl, 'Plan', counts.desired + ' leg(s) · ' + counts.adds + ' add · '
@@ -557,6 +567,209 @@ function renderLastSweep(box, tb) {
     }
   }
   box.append(dl);
+  if (!counts) {
+    box.append(el('p', 'opt-hint', 'No plan was computed, so there are no counts to show. '
+      + 'This is not a sweep that looked and found nothing to do.'));
+  }
+}
+
+// --------------------------------------------- sweep run controls (#276)
+
+/* Firing a sweep reuses the one execution pipeline every other run goes
+ * through: POST /api/execution/run with the existing `calendar-scan` verb, then
+ * poll /api/execution/runs until it leaves the active slot — the same shape as
+ * the Run tab's traffic card. #266 rejected a travel-blocks-only verb (it would
+ * need either a second calendar read seam or a re-run of the whole scan), so
+ * the sweep rides along inside the scan exactly as the scheduled job runs it.
+ *
+ * Deliberately *not* routed through execution.js's client-side queue: that
+ * module already imports this one (the Run-tab traffic card), and the Family
+ * tab has to work whether or not the Run tab has ever been rendered. What
+ * actually serialises runs is the server's single-flight guard, so a 409 is the
+ * contract — and it renders as "already running", not as a failure.
+ *
+ * Neither button is a safety mechanism. `run_travel_blocks` re-checks the gate,
+ * the dry-run short-circuit and the write token on every invocation, and
+ * `calendar-scan --dry-run` now forces the sweep dry server-side (#276), so a
+ * rehearsal cannot write even if this file were wrong about what to disable. */
+const SWEEP_POLL_MS = 2500;
+// A run that never shows up in the list (killed before it registered, a record
+// pruned) must not leave the buttons disabled for the rest of the session.
+const SWEEP_MISSING_TICKS = 8;
+
+const sweep = { running: false, runId: null, message: '', tone: '', ticks: 0 };
+let sweepTimer = null;
+const sweepEls = { rehearse: null, live: null, status: null };
+
+function liveSweepBlockers() {
+  return ((lastData && lastData.travel_blocks) || {}).live_sweep_blockers || [];
+}
+
+function setSweep(patch) {
+  Object.assign(sweep, patch);
+  syncSweepControls();
+}
+
+/* The controls are updated in place rather than by re-rendering the card: a
+ * poll tick that rebuilt the DOM would throw away whatever the operator is
+ * typing into the dwell/title fields (they commit on `change`, i.e. on blur). */
+function syncSweepControls() {
+  if (!sweepEls.status) return;
+  const blocked = liveSweepBlockers().length > 0;
+  sweepEls.rehearse.disabled = sweep.running;
+  sweepEls.live.disabled = sweep.running || blocked;
+  sweepEls.status.textContent = sweep.message;
+  sweepEls.status.classList.toggle('tb-run-status--error', sweep.tone === 'error');
+}
+
+function sweepButton(text, glyph, extraClass, mode) {
+  const btn = el('button', 'run-btn' + (extraClass ? ' ' + extraClass : ''));
+  btn.type = 'button';
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  btn.innerHTML = icon(glyph);
+  btn.append(text);
+  btn.addEventListener('click', function () { startSweep(mode); });
+  return btn;
+}
+
+function renderSweepControls(box, tb) {
+  box.append(fieldLabel('Run a sweep'));
+  const actions = el('div', 'tb-actions');
+  const rehearse = sweepButton('Rehearse (dry run)', 'eye', 'secondary', 'dry_run');
+  const live = sweepButton('Run sweep', 'car', '', 'live');
+  actions.append(rehearse, live);
+  box.append(actions);
+
+  const status = el('p', 'muted small tb-run-status', '');
+  box.append(status);
+  sweepEls.rehearse = rehearse;
+  sweepEls.live = live;
+  sweepEls.status = status;
+
+  box.append(el('p', 'opt-hint', 'Both fire the daily calendar sync — the run that '
+    + 'performs the sweep. A rehearsal forces the sweep to plan only and sends no summary '
+    + 'message. Both run against the saved settings above, not unsaved edits.'));
+
+  const blockers = tb.live_sweep_blockers || [];
+  if (blockers.length) {
+    box.append(el('p', 'opt-hint', 'A live sweep is unavailable. The sweep itself refuses '
+      + 'for these same reasons — this button is not what is stopping it:'));
+    for (const b of blockers) box.append(warnNote(b.message));
+  }
+  syncSweepControls();
+}
+
+async function startSweep(mode) {
+  if (sweep.running) return;
+  setSweep({ running: true, runId: null, ticks: 0, tone: '',
+    message: 'Starting the calendar sync…' });
+  let started;
+  try {
+    started = await jsonApi('/api/execution/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'calendar-scan', mode: mode }),
+    });
+  } catch (exc) {
+    // 409 is the single-flight guard doing its job, not a failure: something
+    // else is running, and it will be runnable again shortly.
+    if (exc.status === 409) {
+      setSweep({ running: false, tone: '',
+        message: 'A run is already in progress — try again when it finishes.' });
+      toast('A run is already in progress', '');
+    } else {
+      const message = String(exc.message || exc);
+      setSweep({ running: false, tone: 'error', message: 'Could not start: ' + message });
+      toast(message, 'error');
+    }
+    return;
+  }
+  setSweep({
+    runId: started.run_id,
+    message: mode === 'dry_run'
+      ? 'Rehearsing — the sweep will plan only and write nothing…'
+      : 'Sweeping — planned blocks may be written to the calendars above…',
+  });
+  scheduleSweepPoll();
+}
+
+function scheduleSweepPoll() {
+  clearTimeout(sweepTimer);
+  sweepTimer = setTimeout(pollSweep, SWEEP_POLL_MS);
+}
+
+async function pollSweep() {
+  if (!sweep.running) return;
+  let data;
+  try {
+    data = await jsonApi('/api/execution/runs?limit=10');
+  } catch (_) {
+    scheduleSweepPoll();  // transient — the run is still out there, keep waiting
+    return;
+  }
+  const record = (data.runs || []).find(function (r) { return r.run_id === sweep.runId; });
+  const active = !!(data.active && data.active.run_id === sweep.runId);
+  const running = active
+    || (record && (record.status === 'running' || record.status === 'pending'));
+  if (running || (!record && sweep.ticks < SWEEP_MISSING_TICKS)) {
+    sweep.ticks += 1;
+    scheduleSweepPoll();
+    return;
+  }
+  await finishSweep(record);
+}
+
+/* What the sweep inside the finished scan actually did. Every branch that could
+ * not establish something says so: a run with no section at all is not a sweep
+ * that found nothing, and a gated sweep is named by its gate. */
+function sweepOutcome(result) {
+  const section = result && result.travel_blocks;
+  if (!section) return 'The calendar sync finished, but recorded no travel-block sweep.';
+  if (section.status !== 'ok') {
+    return 'Sweep gated: ' + travelStatusLabel(section.status)
+      + ' — nothing was planned and nothing was written.';
+  }
+  const c = section.counts;
+  if (!c) return 'The sweep ran but recorded no counts — see the Audit tab for its payload.';
+  const mode = section.dry_run === false ? 'live' : 'planned only, nothing written';
+  return 'Sweep finished (' + mode + ') — ' + c.adds + ' add · ' + c.deletes + ' delete · '
+    + c.keeps + ' kept · ' + c.protected + ' left alone · ' + c.failures + ' unpriced.';
+}
+
+async function finishSweep(record) {
+  clearTimeout(sweepTimer);
+  sweep.running = false;
+  sweep.runId = null;
+  if (!record) {
+    setSweep({ tone: 'error', message: 'The run left the queue but no record could be read — '
+      + 'open the Audit tab to see what it did.' });
+  } else if (record.status === 'failed' || record.error) {
+    // The record's own `error` is often empty for a webapp-launched run (the
+    // captured output carries the detail), so always name where to go look.
+    setSweep({ tone: 'error', message: 'The calendar sync failed'
+      + (record.error ? ': ' + record.error : '')
+      + '. Nothing was swept — open the Audit tab for the run.' });
+  } else {
+    setSweep({ tone: '', message: sweepOutcome(record.result) });
+  }
+  await refreshAfterSweep();
+}
+
+/* Pull the fresh reported state so "Last sweep" reflects the run just fired —
+ * without a page reload, and without discarding unsaved edits: `adopt` resets
+ * both drafts to the server's answer, which is right after a save but would
+ * silently throw away half-typed settings here. */
+async function refreshAfterSweep() {
+  await fetchQuiet('/api/family', function (data) {
+    const dirty = serializeDraft() !== baseline || serializeTravel() !== travelBaseline;
+    if (!dirty) {
+      adopt(data);
+      return;
+    }
+    state.family = data;
+    lastData = data;
+    render();
+  });
 }
 
 function renderTravel(box) {
@@ -618,6 +831,10 @@ function renderTravel(box) {
   const status = el('p', 'muted small', '');
   target.append(status);
   registerForm('travel', serializeTravel, travelBaseline, save, status);
+
+  // Last, below the Save button: the settings are edited and saved, *then* a
+  // sweep is asked for. Rendering these never fires anything — only a click does.
+  renderSweepControls(target, tb);
 }
 
 async function saveTravel() {

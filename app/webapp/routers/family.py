@@ -17,7 +17,13 @@ The travel-block section (#268, closing umbrella #263) is *reported*, never
 recomputed here: its per-calendar write capability and last-sweep counts are
 read off the newest ``calendar-scan`` run already being listed for the
 recent-runs card. Rendering this tab must never trigger a sweep — a sweep
-spends Routes quota and, out of dry run, writes to real calendars.
+spends Routes quota and, out of dry run, writes to real calendars. That still
+holds with the run controls added in #276: the buttons post to
+``/api/execution/run`` (``calendar-scan``, the existing verb — no second
+calendar read path), and this endpoint stays a pure read. What it does add is
+``travel_blocks.live_sweep_blockers``: the reasons a live sweep would write
+nothing, so the control can state them. They are reported here and enforced
+where the writing happens, never only here.
 """
 
 from __future__ import annotations
@@ -33,7 +39,13 @@ from pydantic import BaseModel
 from app.webapp.routers._helpers import get_conn
 from src.config import Config, load_config, save_local_overrides
 from src.db import store
+from src.family.travel_blocks import (
+    STATUS_DISABLED,
+    STATUS_NO_HOME_ADDRESS,
+    STATUS_NO_ROUTES_API_KEY,
+)
 from src.family.travel_blocks_write import (
+    APPLY_NO_WRITE_TOKEN,
     NOT_WRITABLE,
     WRITABLE,
     WRITE_CAPABILITY_UNKNOWN,
@@ -256,6 +268,56 @@ def _sweep_summary(row: sqlite3.Row, section: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: Why a *live* sweep would write nothing right now, keyed by the same codes the
+#: sweep itself reports so a blocker here and a gated run payload name the same
+#: thing. Static, secret-free sentences: never a calendar id, never an address.
+_LIVE_SWEEP_BLOCKER_TEXT = {
+    STATUS_DISABLED: "Travel blocks are off. Turn them on and save first.",
+    "dry_run": (
+        "Dry run is on, so a sweep plans only. Turn it off and save before running a live sweep."
+    ),
+    APPLY_NO_WRITE_TOKEN: (
+        "No Calendar write token — nothing can be written. See docs/calendar-bootstrap.md."
+    ),
+    STATUS_NO_ROUTES_API_KEY: (
+        "No Routes API key — no leg can be priced, so no block would be planned."
+    ),
+    STATUS_NO_HOME_ADDRESS: (
+        "No home address configured — a leg has nothing to measure from."
+    ),
+}
+
+
+def _live_sweep_blockers(config: Config) -> list[dict[str, str]]:
+    """Every reason a live sweep would write nothing, for the run control (#276).
+
+    Reported, not enforced. The authoritative refusals live where the writing
+    happens — :func:`~src.family.travel_blocks.gate_status` for the three gates
+    and :func:`~src.family.travel_blocks_write._apply` for the dry-run
+    short-circuit and the missing write token — and they run again on every
+    invocation regardless of what this list said or what the button looked
+    like. This exists so the control can *state* its reason instead of being a
+    silently greyed-out box, which is the whole difference between a disabled
+    button and an explained one.
+
+    All of them are listed, not just the first: fixing one gate only to meet
+    the next is exactly the loop this card exists to end.
+    """
+    settings = config.family.travel_blocks
+    codes: list[str] = []
+    if not settings.enabled:
+        codes.append(STATUS_DISABLED)
+    if settings.dry_run:
+        codes.append("dry_run")
+    if not config.calendar.write_token_path.is_file():
+        codes.append(APPLY_NO_WRITE_TOKEN)
+    if not config.traffic.api_key:
+        codes.append(STATUS_NO_ROUTES_API_KEY)
+    if not config.family.home_address.strip():
+        codes.append(STATUS_NO_HOME_ADDRESS)
+    return [{"code": code, "message": _LIVE_SWEEP_BLOCKER_TEXT[code]} for code in codes]
+
+
 def _travel_blocks_payload(
     config: Config, recent_runs: Sequence[sqlite3.Row]
 ) -> dict[str, Any]:
@@ -298,6 +360,10 @@ def _travel_blocks_payload(
         # yet (deferred, see PR body); this is the reportable state itself.
         "duplicate_calendars": list(calendar.collapsed_duplicate_labels),
         "last_sweep": _sweep_summary(found[0], section) if found else None,
+        # What the Family tab's live-sweep control says when it is unavailable
+        # (#276). Empty means "nothing here would stop a write" — which is a
+        # statement about configuration, not a promise: the sweep re-checks.
+        "live_sweep_blockers": _live_sweep_blockers(config),
     }
 
 

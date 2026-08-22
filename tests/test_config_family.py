@@ -243,3 +243,82 @@ def test_travel_blocks_ship_disabled_in_committed_defaults() -> None:
     assert set(shipped) == {
         "enabled", "dry_run", "horizon_days", "min_home_dwell_min", "title_template",
     }
+
+
+# ---------------------------------------------------------------- issue #273
+
+
+def test_duplicate_calendar_id_collapses_to_the_first_entry_with_a_warning(
+    tmp_path, _clean_env, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Two accounts sharing one calendar id must never reach the reconcile.
+
+    A duplicate `calendar_id` makes the travel-blocks reconcile's `leg_key`
+    collide, churning 2 deletes + 2 inserts forever (#273). Collapsing at
+    config-parse time — rather than refusing to boot, which would take down a
+    live app for a household whose existing `config/local.json` already has
+    the mistake — is the chosen fix; this pins that the collapse actually
+    happens, keeps the *first* entry, and logs a warning naming the calendar by
+    label, never by its raw id.
+    """
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    (cfg_dir / "default.json").write_text(
+        json.dumps({"db_path": "data/x.sqlite3"}), encoding="utf-8"
+    )
+    (cfg_dir / "local.json").write_text(
+        json.dumps({
+            "calendar": {
+                "accounts": [
+                    {
+                        "calendar_id": "shared@example.test",
+                        "person": "parent-a",
+                        "label": "Parent A",
+                    },
+                    {
+                        "calendar_id": "shared@example.test",
+                        "person": "parent-b",
+                        "label": "Parent A (shared calendar)",
+                    },
+                    {"calendar_id": "solo@example.test", "person": "parent-b", "label": "Parent B"},
+                ]
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING", logger="src.config.calendar"):
+        cfg = load_config(root=tmp_path)
+
+    # Only the first entry for the shared id survives, plus the unrelated one.
+    assert [account.label for account in cfg.calendar.accounts] == ["Parent A", "Parent B"]
+    assert cfg.calendar.collapsed_duplicate_labels == ("Parent A (shared calendar)",)
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any(
+        "Parent A" in message and "Parent A (shared calendar)" in message for message in warnings
+    )
+    # Privacy: the raw calendar id never appears in the log line, only labels.
+    assert not any("shared@example.test" in message for message in warnings)
+
+
+def test_a_config_with_no_duplicates_reports_none_collapsed(tmp_path, _clean_env) -> None:
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    (cfg_dir / "default.json").write_text(
+        json.dumps({"db_path": "data/x.sqlite3", "calendar": {"accounts": []}}), encoding="utf-8"
+    )
+    (cfg_dir / "local.json").write_text(
+        json.dumps({
+            "calendar": {
+                "accounts": [
+                    {"calendar_id": "a@x", "person": "parent-a", "label": "Parent A"},
+                    {"calendar_id": "b@x", "person": "parent-b", "label": "Parent B"},
+                ]
+            }
+        }),
+        encoding="utf-8",
+    )
+    cfg = load_config(root=tmp_path)
+    assert len(cfg.calendar.accounts) == 2
+    assert cfg.calendar.collapsed_duplicate_labels == ()

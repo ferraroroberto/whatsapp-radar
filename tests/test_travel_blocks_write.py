@@ -32,6 +32,7 @@ from src.config import (
     TrafficConfig,
     TravelBlocksConfig,
 )
+from src.config.calendar import parse as parse_calendar_accounts
 from src.family import calendar_source, travel_blocks, travel_blocks_write
 from src.family.travel_blocks import (
     LEG_OUTBOUND,
@@ -1124,3 +1125,89 @@ def test_the_scan_never_raises_when_the_write_side_fails(
     assert payload["status"] == "ok"
     assert payload["travel_blocks"]["status"] == travel_blocks.STATUS_OK
     assert payload["travel_blocks"]["apply"]["status"] == travel_blocks_write.APPLY_NO_WRITE_TOKEN
+
+
+# --------------------------------------------------------------- issue #273
+
+
+def test_duplicate_calendar_id_across_accounts_stops_churning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A calendar_id repeated across two `calendar.accounts` entries must not churn.
+
+    Reproduces the reported mechanism end to end, through the real read seam:
+    `fetch_events_by_person` iterates `calendar.accounts` once per entry, so
+    two entries pointing at the same physical calendar used to pull the same
+    event twice, tagged with an identical `calendar_id`. Since `leg_key` is
+    `(calendar_id, source_event_id, leg)`, the two duplicate desired legs
+    collided — `reconcile` never dedupes the desired side (a duplicate there is
+    a bug upstream, not something to paper over, per its own docstring), so
+    every sweep after the first deleted one of the pair and re-inserted it,
+    forever: exactly the "2 deletes + 2 inserts on every run" this issue
+    reports.
+
+    The fix collapses the duplicate account at config-parse time
+    (`src.config.calendar.parse`), so the fetch only ever sees the calendar
+    once and the collision never reaches `reconcile` at all.
+    """
+    calendar_cfg = parse_calendar_accounts(
+        {
+            "accounts": [
+                {"calendar_id": CALENDAR_ID, "person": PERSON, "label": "Parent A"},
+                {
+                    "calendar_id": CALENDAR_ID,
+                    "person": PERSON_B,
+                    "label": "Parent A's calendar, mistakenly also under Parent B",
+                },
+            ]
+        },
+        tmp_path,
+    )
+
+    def _fetch() -> dict[str, list[Any]]:
+        client = _FakeReadClient({CALENDAR_ID: [_raw_event("e1")]})
+        monkeypatch.setattr(calendar_source, "build_google_calendar_client", lambda _p: client)
+        return calendar_source.fetch_events_by_person(
+            calendar_cfg, time_min=DAY, time_max=DAY + timedelta(days=2)
+        )
+
+    def _sweep(
+        events: dict[str, list[Any]], marked: dict[str, list[dict[str, Any]]]
+    ) -> tuple[dict[str, Any], _FakeWriteClient]:
+        read_client = _FakeReadClient(marked)
+        write_client = _FakeWriteClient()
+        write_client.backup_root = tmp_path
+        monkeypatch.setattr(calendar_source, "build_google_calendar_client", lambda _p: read_client)
+        monkeypatch.setattr(
+            travel_blocks_write, "build_google_calendar_write_client", lambda _p: write_client
+        )
+        payload = travel_blocks_write.run_travel_blocks(
+            _config(accounts=calendar_cfg.accounts),
+            events,
+            now=NOW,
+            route_fn=_StubRoutes(),
+            backup_root=tmp_path,
+        )
+        return payload, write_client
+
+    events = _fetch()
+    first_payload, first_write = _sweep(events, marked={})
+    # Self-guard: this test means nothing if the fixture wrote no blocks at all.
+    assert first_write.inserted, "the fixture must produce at least one travel block"
+    assert first_payload["counts"]["adds"] == len(first_write.inserted)
+
+    written = [
+        {"id": f"blk-{index}", **event}
+        for index, (_calendar_id, event) in enumerate(first_write.inserted)
+    ]
+    second_payload, second_write = _sweep(events, marked={CALENDAR_ID: written})
+
+    # The acceptance criterion #273 exists for: unchanged inputs, the second
+    # sweep must write nothing at all.
+    assert second_write.inserted == [] and second_write.deleted == [], (
+        "expected zero churn on an unchanged second sweep, got "
+        f"{len(second_write.inserted)} insert(s) and {len(second_write.deleted)} "
+        "delete(s) — a calendar_id duplicated across `calendar.accounts` entries "
+        "must be collapsed before it ever reaches the travel-blocks reconcile"
+    )
+    assert second_payload["counts"]["adds"] == 0 and second_payload["counts"]["deletes"] == 0

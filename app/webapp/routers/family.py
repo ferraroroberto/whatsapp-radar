@@ -292,6 +292,11 @@ def _travel_blocks_payload(
             }
             for account in calendar.accounts
         ],
+        # Duplicate `calendar_id` entries collapsed at config-parse time
+        # (#273), by label — never the raw calendar id. Empty on every
+        # household config that has no such collision. No dedicated UI card
+        # yet (deferred, see PR body); this is the reportable state itself.
+        "duplicate_calendars": list(calendar.collapsed_duplicate_labels),
         "last_sweep": _sweep_summary(found[0], section) if found else None,
     }
 

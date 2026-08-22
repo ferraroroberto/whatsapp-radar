@@ -562,7 +562,11 @@ def _sweep(
 ) -> tuple[travel_blocks.TravelBlockPlan, _StubRoutes]:
     routes = stub or _StubRoutes()
     plan = travel_blocks.plan_travel_blocks(
-        _config(**config_kwargs), events, now=now, route_fn=routes
+        # An explicitly-empty `existing` — nothing on the calendars to diff
+        # against, said out loud. The parameter has no default precisely so a
+        # caller can never omit it and silently re-add the whole horizon.
+        _config(**config_kwargs), events, now=now,
+        existing=travel_blocks.ExistingBlocks(), route_fn=routes,
     )
     return plan, routes
 
@@ -761,7 +765,9 @@ def test_the_payload_carries_the_whole_plan() -> None:
     assert payload["status"] == travel_blocks.STATUS_OK
     assert payload["dry_run"] is True
     assert payload["routes_calls"] == 2
-    assert payload["counts"] == {"desired": 2, "adds": 2, "deletes": 0, "failures": 0}
+    assert payload["counts"] == {
+        "desired": 2, "adds": 2, "deletes": 0, "keeps": 0, "protected": 0, "failures": 0
+    }
     assert payload["deletes"] == []
     assert payload["failures"] == []
     assert payload["horizon_start"] < payload["horizon_end"]
@@ -791,25 +797,27 @@ def test_the_payload_is_json_serializable() -> None:
     assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload
 
 
-def test_the_add_delete_shape_is_already_final() -> None:
-    """Step 3 of #263 fills the diff in; no downstream reader changes then."""
+def test_an_empty_calendar_makes_every_desired_leg_an_add() -> None:
+    """The diff's degenerate case — nothing exists, so everything is new."""
     plan, _ = _sweep({PERSON: [_event(eid="e1", start=_at(9))]})
-    assert plan.adds == plan.legs  # nothing on the calendar to diff against yet
+    assert plan.adds == plan.legs
     assert plan.deletes == []
+    assert plan.keeps == []
 
 
-# --------------------------------------------------------------- no writes, ever
+# --------------------------------------------------------------- no writes from the planner
 
 
-def test_this_step_contains_no_calendar_writes() -> None:
-    """#266 is the rehearsal: the plan is computed, logged, and written nowhere.
+def test_the_planner_module_still_contains_no_calendar_writes() -> None:
+    """The plan is computed here and applied elsewhere — deliberately (#267).
 
     Asserted on the source rather than on behaviour because the guarantee is
     "there is no code path at all", which no amount of stubbing can demonstrate.
-    Step 3 of #263 introduces the writer — and deletes this test with it.
+    `src/family/travel_blocks_write.py` owns every write, and its own structural
+    test (tests/test_travel_blocks_write.py) pins the guard around the delete.
     """
     root = Path(__file__).resolve().parents[1]
     for relative in ("src/family/travel_blocks.py", "src/family/calendar_scan.py"):
         source = (root / relative).read_text(encoding="utf-8")
         for forbidden in ("insert_event", "delete_event", "calendar_write"):
-            assert forbidden not in source, f"{relative} must not write to a calendar yet"
+            assert forbidden not in source, f"{relative} must not write to a calendar"

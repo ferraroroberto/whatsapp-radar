@@ -6,10 +6,11 @@ location is *assumed home* and flagged, never silently dropped) → apply the
 fixed weekly responsibility pattern plus two-places-at-once detection over the
 assessment window → live phone-position ETA judgment for today's imminent
 windows when presence is enabled (#177; additive signal, calendar inference
-stays authoritative for intent and for anything beyond the lookahead) → a priced,
-write-nothing commute travel-block plan over the travel-blocks horizon (#266;
-off by default, reusing the same fetched events — it never touches a calendar,
-step 3 of #263 owns the writes) → always
+stays authoritative for intent and for anything beyond the lookahead) → a priced
+commute travel-block plan reconciled against the blocks already on the
+calendars, and (only when explicitly enabled *and* taken out of dry run)
+applied to them (#267; off and dry-run by default, reusing the same fetched
+events) → always
 send one summary on a live run: coverage issues and missing-location asks, or
 an explicit all-clear. Coverage gaps and overlaps are
 hard alerts and bypass quiet hours; a clean summary inside quiet hours is
@@ -25,7 +26,8 @@ from typing import Any
 from src.config import Config
 from src.family import rules
 from src.family.calendar_source import fetch_events_by_person
-from src.family.travel_blocks import plan_travel_blocks
+from src.family.travel_blocks import scan_window_days
+from src.family.travel_blocks_write import run_travel_blocks
 from src.notify.alert import send_alert
 from src.presence import PresenceLocation, get_location
 from src.traffic import TrafficReadError, compute_route
@@ -189,7 +191,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
 
     # One fetch over the full missing-location window covers the assessment days.
     midnight = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
-    scan_days = max(family.unknown_scan_days, family.assessment_days)
+    scan_days = scan_window_days(config)
     window_end = midnight + timedelta(days=scan_days)
     events = fetch_events_by_person(config.calendar, time_min=midnight, time_max=window_end)
 
@@ -216,10 +218,12 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             rules.find_overlaps(day_events, home_address=family.home_address)
         )
 
-    # Commute travel blocks (#266, umbrella #263) — reuses the events fetched
-    # above rather than re-reading the calendar. Off by default; this step only
-    # plans and reports, it writes nothing to any calendar (step 3 of #263).
-    travel_block_plan = plan_travel_blocks(config, events, now=now).to_payload()
+    # Commute travel blocks (#267, umbrella #263) — reuses the events fetched
+    # above rather than re-reading them (the reconcile's own marker-scoped read
+    # is a separate, narrower query). Off by default, and dry-run by default even
+    # once enabled: a dry run computes and logs the whole add/delete plan and
+    # touches no calendar. Never raises — a write failure is a recorded status.
+    travel_block_plan = run_travel_blocks(config, events, now=now)
 
     # Live phone-position judgment for today's imminent windows (#177) —
     # additive to the calendar-based gaps, never a replacement for them.

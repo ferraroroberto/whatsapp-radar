@@ -3,7 +3,7 @@
 This runbook provisions the Google credentials the family checks (issue #160) and school-radar calendar reminders (issue #206) need:
 
 1. A read-only **Google Calendar** installed-app OAuth refresh token (`calendar.readonly` only), mirroring [`gmail-bootstrap.md`](gmail-bootstrap.md).
-2. A separate **write-scope** Calendar token (`calendar.events` only, #217) for reminder-event creation — its own grant, since scopes can't be upgraded in place on an existing token.
+2. A separate **write-scope** Calendar token (`calendar.events` only, #217) for reminder-event creation — its own grant, since scopes can't be upgraded in place on an existing token. Commute travel blocks (#263) reuse this same token; they additionally need each shared calendar re-shared at **"Make changes to events"** (see [step 8](#sharing-level-what-make-changes-to-events-buys-you-268)).
 3. A **Google Routes API** key for the traffic-jam check (API-key auth, a separate credential path from OAuth).
 
 All stay under ignored local paths. Never commit `auth/calendar/`, the Maps API key, real addresses, calendar ids, or token output.
@@ -51,6 +51,8 @@ The token is authorized as **one** Google account and can read that account's ow
 
 If sharing is not possible, run the bootstrap a second time signed in as the other account, writing a second token path — but the default design is one token over two shared calendars.
 
+"See all event details" is a read grant and is all the conflict scan and the traffic check ever need. Commute travel blocks write to the shared calendar, so they need the next level up — see [step 8's sharing note](#sharing-level-what-make-changes-to-events-buys-you-268).
+
 ## 6. Mint the refresh token (interactive)
 
 Run once, interactively, from the repository root:
@@ -82,9 +84,9 @@ Never paste the token into config, docs, logs, or chat. The scheduled checks ref
 
 Repeat `--calendar` for each household calendar id. The smoke prints only privacy-safe aggregates (a masked summary + event count + soonest date), never full titles.
 
-## 8. Write-scope token — event creation (#217)
+## 8. Write-scope token — event creation (#217, reused by travel blocks #263)
 
-Reminder events (Step 4/5 of #206) need a **separate** OAuth grant: Google Calendar scopes cannot be upgraded in place on an existing token, so the read-only token from step 6 above can never gain write access. This mints a second, independent token.
+Reminder events (Step 4/5 of #206) and commute travel blocks (#263) need a **separate** OAuth grant: Google Calendar scopes cannot be upgraded in place on an existing token, so the read-only token from step 6 above can never gain write access. This mints a second, independent token.
 
 Open **Google Auth Platform → Data Access** again and add, alongside `calendar.readonly`:
 
@@ -122,6 +124,24 @@ Creates one throwaway test event a few minutes out, confirms it round-trips with
 ```powershell
 .\.venv\Scripts\python.exe -m calendar_write.smoke --calendar you@example.com
 ```
+
+### Sharing level: what "Make changes to events" buys you (#268)
+
+The write-scope token is authorized as **one** Google account, exactly like the read token in step 5 — so it can create and delete events on that account's own calendars, and on any calendar shared with it **at a level that permits writing**. Step 5's *"See all event details"* is a **read** grant: it is enough for the conflict scan and the traffic check, and not enough for commute travel blocks.
+
+For a second household member's calendar to be maintained, they re-share it with the bootstrapping account at **"Make changes to events"** (Google Calendar → the calendar's *Settings and sharing → Share with specific people → permission dropdown*). Nothing else changes: same token, same client, same consent.
+
+The app never probes this by writing. It reads the calendar's published `accessRole` and reports one of three states per person, visible on the **Family** tab's *Travel blocks → Write access per calendar* list:
+
+| State | What it means | What the sweep does |
+| --- | --- | --- |
+| **Writable** | `accessRole` is `owner` or `writer` — the sharing level above. | Creates and removes blocks. |
+| **Not writable** | `accessRole` is `reader` or `freeBusyReader` — shared read-only. | Writes nothing, and says so. |
+| **Unknown** | The role could not be established at all: no sweep has reported on this calendar yet, or the listing failed. | Writes nothing — an unresolved probe is **not** permission. |
+
+`Unknown` is deliberately its own state rather than a shade of the other two, in the payload, in the log and in the UI. It is what you see before the first sweep has run, and it is what you see if the calendar listing itself broke. Fix it by running a calendar sync (`wr calendar-scan`, or the Run tab's Calendar-sync step) and re-reading the card — not by assuming the calendar is fine.
+
+The role is the *read* token's view, so it is a strong proxy rather than a proof: the write token is a second grant on the same account. That is why a failed insert still degrades per block instead of trusting this answer.
 
 ## 9. Routes API key (traffic check)
 

@@ -36,17 +36,37 @@ function defRow(dl, term, value) {
 let lastData = null;   // last /api/family payload (read-only display + option lists)
 let draft = null;       // editable working copy, mutated in place by the widgets below
 let baseline = '';      // serializeDraft() snapshot at load/save time (dirty gate)
-let saveBtn = null;
-let statusEl = null;
+let travelDraft = null;      // travel-block working copy (#268), same contract
+let travelBaseline = '';
+
+/* The tab has two independently-savable forms (the schedule and the
+ * travel blocks), each in its own card with its own Save button — a control
+ * whose Save sits in a different card reads as broken. They share one dirty
+ * gate: every widget calls markDirty(), which re-evaluates each registered
+ * form against its own baseline. Re-registered on every render because the
+ * buttons are rebuilt with the DOM; the baselines are module state and only
+ * move when the server's answer does. */
+const forms = { rules: null, travel: null };
+
+function registerForm(name, serialize, base, btn, status) {
+  forms[name] = { serialize: serialize, baseline: base, btn: btn, status: status };
+  btn.disabled = serialize() === base;
+}
 
 export async function fetchFamily() {
-  await fetchQuiet('/api/family', function (data) {
-    state.family = data;
-    lastData = data;
-    draft = toDraft(data);
-    baseline = serializeDraft();
-    render();
-  });
+  await fetchQuiet('/api/family', adopt);
+}
+
+// The server's answer is the single source of truth for both drafts and both
+// baselines — after a load or a save, nothing is dirty.
+function adopt(data) {
+  state.family = data;
+  lastData = data;
+  draft = toDraft(data);
+  baseline = serializeDraft();
+  travelDraft = toTravelDraft(data);
+  travelBaseline = serializeTravel();
+  render();
 }
 
 function toDraft(d) {
@@ -89,9 +109,27 @@ function serializeDraft() {
   });
 }
 
+function toTravelDraft(d) {
+  const tb = d.travel_blocks || {};
+  return {
+    enabled: !!tb.enabled,
+    dry_run: tb.dry_run !== false,
+    min_home_dwell_min: tb.min_home_dwell_min != null ? tb.min_home_dwell_min : 45,
+    title_template: tb.title_template || '',
+  };
+}
+
+function serializeTravel() {
+  return JSON.stringify(travelDraft);
+}
+
 function markDirty() {
-  if (saveBtn) saveBtn.disabled = serializeDraft() === baseline;
-  if (statusEl) statusEl.textContent = '';
+  for (const name of Object.keys(forms)) {
+    const form = forms[name];
+    if (!form) continue;
+    if (form.btn) form.btn.disabled = form.serialize() === form.baseline;
+    if (form.status) form.status.textContent = '';
+  }
 }
 
 // ----------------------------------------------------------- read-only
@@ -202,6 +240,20 @@ function numberField(labelText, value, min, max, onChange) {
   return label;
 }
 
+// Same stacked label/control shape as timeField/numberField, for free text.
+function labelledTextField(labelText, value, maxLength, onChange) {
+  const label = el('label', 'stacked');
+  label.append(el('span', undefined, labelText));
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'input-native';
+  input.value = value;
+  if (maxLength) input.maxLength = maxLength;
+  input.addEventListener('change', function () { onChange(input.value); markDirty(); });
+  label.append(input);
+  return label;
+}
+
 function textField(placeholder, value, onChange) {
   const input = document.createElement('input');
   input.type = 'text';
@@ -308,23 +360,29 @@ async function saveDraft() {
     skip_leave_now_for_train: draft.skip_leave_now_for_train,
     ask_missing_locations: draft.ask_missing_locations,
   };
-  saveBtn.disabled = true;
+  await postForm('rules', payload, 'Schedule saved.');
+}
+
+/* One POST path for both cards: disable the form's own button, send, adopt the
+ * server's fresh payload (which re-renders and re-baselines both forms), and on
+ * a rejection surface the server's message — which names the offending field —
+ * in that card rather than as a toast alone. */
+async function postForm(name, payload, okText) {
+  const form = forms[name];
+  if (form && form.btn) form.btn.disabled = true;
   try {
     const data = await jsonApi('/api/family', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    state.family = data;
-    lastData = data;
-    draft = toDraft(data);
-    baseline = serializeDraft();
-    toast('Schedule saved.', 'good');
-    render();
+    toast(okText, 'good');
+    adopt(data);
   } catch (exc) {
-    toast(exc.message || String(exc), 'error');
-    statusEl.textContent = exc.message || String(exc);
-    saveBtn.disabled = false;
+    const message = exc.message || String(exc);
+    toast(message, 'error');
+    if (form && form.status) form.status.textContent = message;
+    if (form && form.btn) form.btn.disabled = false;
   }
 }
 
@@ -382,14 +440,193 @@ function renderEditable(box) {
 
   const save = el('button', 'run-btn', 'Save schedule');
   save.type = 'button';
-  save.disabled = serializeDraft() === baseline;
   save.addEventListener('click', saveDraft);
   target.append(save);
-  saveBtn = save;
 
   const status = el('p', 'muted small', '');
   target.append(status);
-  statusEl = status;
+  registerForm('rules', serializeDraft, baseline, save, status);
+}
+
+// ------------------------------------------------- travel blocks (#268)
+
+/* Three states, three shapes. `unknown` is never a quieter `writable` and
+ * never a softer `not_writable`: the probe did not resolve, so nothing was
+ * attempted and nobody may read the row as a pass. It gets its own colour,
+ * its own glyph (never a tick, never a cross), its own word, and a dashed
+ * border so it still reads apart in greyscale. Omitting the row entirely —
+ * the other tempting shortcut — is exactly the failure this card exists to
+ * fix. */
+const CAP_LABEL = { writable: 'Writable', not_writable: 'Not writable', unknown: 'Unknown' };
+const CAP_ICON = { writable: 'check', not_writable: 'x', unknown: 'triangle-alert' };
+const CAP_NOTE = {
+  writable: 'Blocks are created and removed on this calendar.',
+  not_writable:
+    'Shared read-only. Ask for "Make changes to events" — nothing is written until then.',
+  unknown:
+    'Not established — no sweep has reported on this calendar, so nothing was attempted. '
+    + 'This is neither permission nor a refusal.',
+};
+const CAP_CLASS = {
+  writable: 'tb-cap--writable',
+  not_writable: 'tb-cap--not-writable',
+  unknown: 'tb-cap--unknown',
+};
+
+function capState(value) {
+  return CAP_LABEL[value] ? value : 'unknown';
+}
+
+function capabilityBadge(state) {
+  const badge = el('span', 'tb-cap ' + CAP_CLASS[state]);
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  badge.innerHTML = icon(CAP_ICON[state]);
+  badge.append(CAP_LABEL[state]);
+  return badge;
+}
+
+/* The banner a glance has to land on: planning-only must never look like
+ * writing. Off / dry run / live are three different words, glyphs and colours.
+ * It reports the state the server currently holds — never the unsaved draft —
+ * so it can never claim a mode that is not yet in force. */
+function travelModeBanner(tb) {
+  const mode = !tb.enabled ? 'off' : (tb.dry_run !== false ? 'dry' : 'live');
+  const text = {
+    off: 'Off — no plan is computed and no Routes call is made.',
+    dry: 'Dry run — the plan is computed and logged. Nothing is written to any calendar.',
+    live: 'Live — planned blocks are written to and deleted from the calendars below.',
+  }[mode];
+  const banner = el('p', 'tb-mode tb-mode--' + mode);
+  banner.innerHTML = icon({ off: 'square', dry: 'eye', live: 'car' }[mode]);
+  banner.append(text);
+  return banner;
+}
+
+function renderCapability(box) {
+  box.append(fieldLabel('Write access per calendar'));
+  const rows = (lastData.travel_blocks || {}).write_capability || [];
+  if (!rows.length) {
+    box.append(el('p', 'muted small', 'No household calendars configured yet.'));
+    return;
+  }
+  const list = el('div', 'tb-cap-list');
+  for (const row of rows) {
+    // Person/label only — a calendar id is an email address (privacy rule).
+    const state = capState(row.state);
+    const item = el('div', 'tb-cap-row');
+    const text = el('div', 'tb-cap-text');
+    text.append(el('span', 'tb-cap-name', row.label || row.person || '—'));
+    text.append(el('span', 'tb-cap-note muted small', CAP_NOTE[state]));
+    item.append(text);
+    item.append(capabilityBadge(state));
+    list.append(item);
+  }
+  box.append(list);
+}
+
+function sweepMode(sweep) {
+  if (sweep.dry_run === true) return ' · planned only, nothing written';
+  if (sweep.dry_run === false) return ' · live';
+  return '';
+}
+
+function renderLastSweep(box, tb) {
+  box.append(fieldLabel('Last sweep'));
+  const sweep = tb.last_sweep;
+  if (!sweep) {
+    box.append(el('p', 'muted small', 'No calendar sync has recorded a sweep yet.'));
+    return;
+  }
+  const dl = el('dl', 'family-rules');
+  defRow(dl, 'When', fmtLocalDateTime(sweep.started_at, { withYear: false }));
+  defRow(dl, 'Outcome', sweep.status + sweepMode(sweep));
+  const counts = sweep.counts;
+  if (counts) {
+    defRow(dl, 'Plan', counts.desired + ' leg(s) · ' + counts.adds + ' add · '
+      + counts.deletes + ' delete · ' + counts.keeps + ' kept · '
+      + counts.protected + ' left alone');
+    defRow(dl, 'Unpriced legs', String(counts.failures));
+    defRow(dl, 'Routes calls', String(sweep.routes_calls));
+  }
+  if (sweep.apply) {
+    const a = sweep.apply.counts;
+    defRow(dl, 'Written', a.inserted + ' inserted · ' + a.deleted + ' deleted · '
+      + a.skipped + ' skipped · ' + a.backups + ' backup(s) [' + sweep.apply.status + ']');
+    if (sweep.apply.failures) {
+      defRow(dl, 'Write failures', String(sweep.apply.failures));
+    }
+  }
+  box.append(dl);
+}
+
+function renderTravel(box) {
+  const target = box || els.familyTravelBlocks;
+  target.textContent = '';
+  const tb = lastData.travel_blocks || {};
+
+  target.append(travelModeBanner(tb));
+
+  target.append(toggleRow('Write travel blocks', travelDraft.enabled, function (next) {
+    travelDraft.enabled = next;
+    markDirty();
+  }));
+  target.append(toggleRow('Dry run', travelDraft.dry_run, function (next) {
+    travelDraft.dry_run = next;
+    markDirty();
+  }));
+  target.append(el('p', 'opt-hint', 'Leave dry run on until you have read a full plan in '
+    + 'the Audit tab and confirmed nothing unexpected is listed for deletion. Every delete '
+    + 'backs the event up to data/calendar_backups/ first.'));
+
+  if (tb.enabled && !tb.write_token_present) {
+    target.append(warnNote('No Calendar write token — nothing can be written. '
+      + 'See docs/calendar-bootstrap.md.'));
+  }
+
+  target.append(fieldLabel('Minimum time at home'));
+  const dwellGrid = el('div', 'cfg-fields');
+  dwellGrid.append(numberField('Minutes', travelDraft.min_home_dwell_min, 0, 480, function (v) {
+    travelDraft.min_home_dwell_min = v;
+  }));
+  target.append(dwellGrid);
+  target.append(el('p', 'opt-hint', 'Below this much free time at home between two events, '
+    + 'a direct hop is assumed and no drive-home block is written.'));
+
+  target.append(fieldLabel('Block title'));
+  const titleGrid = el('div', 'cfg-fields');
+  titleGrid.append(labelledTextField('Shown on the calendar', travelDraft.title_template,
+    tb.max_title_template || 60, function (v) { travelDraft.title_template = v; }));
+  target.append(titleGrid);
+  target.append(el('p', 'opt-hint', 'Never the destination — a shared calendar view must '
+    + 'leak nothing about where anyone is going.'));
+
+  renderCapability(target);
+  renderLastSweep(target, tb);
+
+  // Read-only, file-edited: widening the horizon past the days the daily scan
+  // actually fetches is clamped, so it is changed next to family.unknown_scan_days.
+  const dl = el('dl', 'family-rules');
+  defRow(dl, 'Horizon', (tb.horizon_days || 0) + ' day(s) (config/local.json)');
+  defRow(dl, 'Write token', tb.write_token_present ? 'present' : 'missing');
+  target.append(dl);
+
+  const save = el('button', 'run-btn', 'Save travel blocks');
+  save.type = 'button';
+  save.addEventListener('click', saveTravel);
+  target.append(save);
+
+  const status = el('p', 'muted small', '');
+  target.append(status);
+  registerForm('travel', serializeTravel, travelBaseline, save, status);
+}
+
+async function saveTravel() {
+  await postForm('travel', {
+    travel_blocks_enabled: travelDraft.enabled,
+    travel_blocks_dry_run: travelDraft.dry_run,
+    min_home_dwell_min: travelDraft.min_home_dwell_min,
+    title_template: travelDraft.title_template,
+  }, 'Travel blocks saved.');
 }
 
 // ---------------------------------------------------------------- boot
@@ -398,6 +635,7 @@ function render() {
   els.familyReadOnly.textContent = '';
   renderReadOnly(els.familyReadOnly);
   renderEditable(els.familyEditable);
+  renderTravel(els.familyTravelBlocks);
 }
 
 export function wireFamily() {

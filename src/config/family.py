@@ -48,6 +48,37 @@ class ChildProfile:
 
 
 @dataclass(frozen=True)
+class TravelBlocksConfig:
+    """Auto-written commute travel blocks (#265, umbrella #263). Off by default.
+
+    ``dry_run`` defaults **on** even once ``enabled`` is flipped: the first live
+    days should log the plan and touch nothing, because this feature writes to
+    (and later deletes from) real household calendars. ``horizon_days`` mirrors
+    ``FamilyConfig.assessment_days`` so the sweep maintains exactly the window
+    the daily scan already reasons about.
+
+    ``min_home_dwell_min`` is the chaining knob: below
+    ``drive_home + drive_out + min_home_dwell_min`` of gap between two events
+    there is not enough time at home for the round trip to be worth anything,
+    so a direct A→B hop is assumed and no return-home block is written. Keep it
+    roughly consistent with ``traffic.origin_lookback_min``, which is the
+    authority on the *outbound* side (``rules.resolve_origin``): a much larger
+    dwell threshold makes the two disagree for mid-length gaps, and the
+    conservative outcome — no return block, a fresh outbound from home — is
+    what you get.
+
+    ``title_template`` is deliberately not the destination: a shared calendar
+    view must leak nothing about where the person is going.
+    """
+
+    enabled: bool = False
+    dry_run: bool = True
+    horizon_days: int = 2
+    min_home_dwell_min: int = 45
+    title_template: str = "🚗 Trayecto"
+
+
+@dataclass(frozen=True)
 class FamilyConfig:
     """Daily calendar-conflict scan knobs + the fixed household schedule (#160).
 
@@ -77,6 +108,27 @@ class FamilyConfig:
     # the local "HH:MM" morning slot each reminder event is created at.
     reminder_calendar_id: str = ""
     reminder_time: str = "07:30"
+    # Auto-written commute travel blocks (#265). Defaulted (disabled, dry-run)
+    # so library/test callers that build a FamilyConfig without it get the
+    # write-nothing behaviour.
+    travel_blocks: TravelBlocksConfig = field(default_factory=TravelBlocksConfig)
+
+
+def parse_travel_blocks(raw: dict[str, Any]) -> TravelBlocksConfig:
+    """Parse the ``family.travel_blocks`` sub-block. No ``WR_`` env overrides.
+
+    Deliberately plain ``raw.get``: unlike ``family.enabled`` these knobs are
+    never toggled from a scheduler environment — they are edited in
+    ``config/local.json`` (or, from step 4 of #263, the webapp Family tab).
+    """
+    defaults = TravelBlocksConfig()
+    return TravelBlocksConfig(
+        enabled=bool(raw.get("enabled", defaults.enabled)),
+        dry_run=bool(raw.get("dry_run", defaults.dry_run)),
+        horizon_days=int(raw.get("horizon_days", defaults.horizon_days)),
+        min_home_dwell_min=int(raw.get("min_home_dwell_min", defaults.min_home_dwell_min)),
+        title_template=str(raw.get("title_template") or defaults.title_template).strip(),
+    )
 
 
 def parse(raw: dict[str, Any]) -> FamilyConfig:
@@ -114,6 +166,7 @@ def parse(raw: dict[str, Any]) -> FamilyConfig:
         ),
         reminder_calendar_id=str(raw.get("reminder_calendar_id", "")).strip(),
         reminder_time=str(raw.get("reminder_time", "07:30")).strip(),
+        travel_blocks=parse_travel_blocks(raw.get("travel_blocks") or {}),
     )
 
 

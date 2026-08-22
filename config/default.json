@@ -73,7 +73,14 @@
     "assessment_days": 2,
     "ask_missing_locations": true,
     "reminder_calendar_id": "",
-    "reminder_time": "07:30"
+    "reminder_time": "07:30",
+    "travel_blocks": {
+      "enabled": false,
+      "dry_run": true,
+      "horizon_days": 2,
+      "min_home_dwell_min": 45,
+      "title_template": "🚗 Trayecto"
+    }
   },
   "presence": {
     "enabled": false,

@@ -43,7 +43,7 @@ from src.config._shared import (
     save_local_overrides,
 )
 from src.config.calendar import CalendarAccount, CalendarConfig
-from src.config.family import ChildcareWindow, ChildProfile, FamilyConfig
+from src.config.family import ChildcareWindow, ChildProfile, FamilyConfig, TravelBlocksConfig
 from src.config.gmail import GmailConfig, GmailLabel, GmailSender
 from src.config.hub import HubConfig
 from src.config.presence import PresenceConfig
@@ -68,6 +68,7 @@ __all__ = [
     "TelegramConfig",
     "TrafficConfig",
     "TranscriptionConfig",
+    "TravelBlocksConfig",
     "TripwireConfig",
     "TtsConfig",
     "VoiceProfile",

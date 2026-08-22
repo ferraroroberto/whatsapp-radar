@@ -10,7 +10,7 @@ the deterministic family-schedule logic can be unit-tested against plain dicts.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Protocol
 
@@ -27,6 +27,14 @@ class CalendarEvent:
     midnight. ``video_link`` is the Meet/Zoom/Teams URL when present (used later
     to distinguish a virtual meeting from a hybrid appointment that also carries
     a physical ``location``).
+
+    ``extended_private`` carries the event's ``extendedProperties.private`` map
+    verbatim. It is deliberately generic — this package stays product-neutral
+    and liftable, so it transports whatever keys the writer stored without
+    knowing what any of them mean. A consumer that writes its own events uses
+    it to recognize them again on the next read (whatsapp-radar#265): matching
+    on the title instead would be unsound, since a human can type the same
+    title. Defaulted so every existing construction site is untouched.
     """
 
     event_id: str
@@ -39,6 +47,7 @@ class CalendarEvent:
     all_day: bool
     video_link: str | None
     status: str
+    extended_private: dict[str, str] = field(default_factory=dict)
 
 
 class CalendarReadClient(Protocol):
@@ -96,6 +105,21 @@ def _video_link(raw: dict[str, Any]) -> str | None:
     return None
 
 
+def _extended_private(raw: dict[str, Any]) -> dict[str, str]:
+    """``extendedProperties.private`` as a plain ``{str: str}`` map, ``{}`` if absent.
+
+    Keys and values are coerced to ``str`` (the API models them as strings, but
+    a hand-written resource or a fixture may not) and anything malformed — a
+    missing node, a non-dict — degrades to the empty map rather than raising:
+    a bad marker must never cost us the whole event.
+    """
+    node = raw.get("extendedProperties")
+    private = node.get("private") if isinstance(node, dict) else None
+    if not isinstance(private, dict):
+        return {}
+    return {str(key): str(value) for key, value in private.items()}
+
+
 def normalize_event(raw: dict[str, Any], *, calendar_id: str) -> CalendarEvent:
     """Normalize one Calendar API v3 event resource into a :class:`CalendarEvent`."""
     event_id = str(raw.get("id") or "")
@@ -114,6 +138,7 @@ def normalize_event(raw: dict[str, Any], *, calendar_id: str) -> CalendarEvent:
         all_day=start_all_day or end_all_day,
         video_link=_video_link(raw),
         status=str(raw.get("status") or "confirmed"),
+        extended_private=_extended_private(raw),
     )
 
 

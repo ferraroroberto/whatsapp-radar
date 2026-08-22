@@ -11,6 +11,7 @@ from calendar_readonly.core import (
     CalendarReadClient,
     CalendarReadError,
     normalize_event,
+    safe_error_detail,
 )
 from calendar_readonly.google_client import (
     GoogleCalendarReadClient,
@@ -25,4 +26,5 @@ __all__ = [
     "GoogleCalendarReadClient",
     "build_google_calendar_client",
     "normalize_event",
+    "safe_error_detail",
 ]

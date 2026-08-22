@@ -29,8 +29,16 @@ class GoogleCalendarReadClient:
         calendar_id: str,
         time_min: datetime,
         time_max: datetime,
+        private_extended_property: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return expanded single events in ``[time_min, time_max)``, time-ordered."""
+        """Return expanded single events in ``[time_min, time_max)``, time-ordered.
+
+        ``private_extended_property`` (``"key=value"``) is passed straight to
+        Calendar's ``privateExtendedProperty`` filter, so the *server* narrows
+        the result set. A consumer listing only the events it wrote itself
+        therefore never fetches anyone else's event in the first place, which is
+        a stronger guarantee than filtering the response locally.
+        """
         events: list[dict[str, Any]] = []
         page_token: str | None = None
         while True:
@@ -42,6 +50,8 @@ class GoogleCalendarReadClient:
                 "orderBy": "startTime",
                 "maxResults": 250,
             }
+            if private_extended_property:
+                kwargs["privateExtendedProperty"] = private_extended_property
             if page_token:
                 kwargs["pageToken"] = page_token
             response = self._service.events().list(**kwargs).execute()
@@ -49,6 +59,22 @@ class GoogleCalendarReadClient:
             page_token = response.get("nextPageToken")
             if not page_token:
                 return events
+
+    def calendar_access_role(self, calendar_id: str) -> str | None:
+        """The authenticated user's ``accessRole`` on ``calendar_id``, or ``None``.
+
+        A **non-mutating** capability probe: it reads the calendar-list entry
+        instead of attempting a write and undoing it. Google returns one of
+        ``owner`` / ``writer`` / ``reader`` / ``freeBusyReader``; ``None`` means
+        the entry carried no role at all. A calendar that is not in the list, or
+        an API failure, raises — the caller decides what an *unestablished*
+        capability means, and must not read it as either a pass or a fail.
+        """
+        entry: dict[str, Any] = (
+            self._service.calendarList().get(calendarId=calendar_id).execute()
+        )
+        role = entry.get("accessRole")
+        return str(role) if role else None
 
     def calendar_summary(self, calendar_id: str) -> str:
         """Return the calendar's display summary (a cheap reachability probe)."""

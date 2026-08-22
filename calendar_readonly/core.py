@@ -51,7 +51,15 @@ class CalendarEvent:
 
 
 class CalendarReadClient(Protocol):
-    """Minimal read surface; implementations must expose no writes."""
+    """Minimal read surface; implementations must expose no writes.
+
+    ``private_extended_property`` is the generic transport for Calendar's
+    ``privateExtendedProperty`` server-side filter (``"key=value"``). It stays
+    optional — and product-neutral, this package never learns what any key
+    means — so a consumer that writes its own events can list *only its own*
+    without this package knowing the marker, and every existing caller is
+    untouched.
+    """
 
     def list_events(
         self,
@@ -59,7 +67,10 @@ class CalendarReadClient(Protocol):
         calendar_id: str,
         time_min: datetime,
         time_max: datetime,
+        private_extended_property: str | None = None,
     ) -> list[dict[str, Any]]: ...
+
+    def calendar_access_role(self, calendar_id: str) -> str | None: ...
 
     def close(self) -> None: ...
 
@@ -142,7 +153,7 @@ def normalize_event(raw: dict[str, Any], *, calendar_id: str) -> CalendarEvent:
     )
 
 
-def _safe_error_detail(exc: Exception) -> str:
+def safe_error_detail(exc: Exception) -> str:
     """A privacy-safe error string that never echoes calendar content."""
     status = getattr(getattr(exc, "resp", None), "status", None)
     if status == 401:

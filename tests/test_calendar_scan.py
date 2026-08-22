@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -439,12 +438,12 @@ def test_the_travel_block_plan_reuses_the_scan_fetch(
 
     seen: list[dict[str, list[CalendarEvent]]] = []
 
-    def fake_plan(config: Config, given: dict[str, list[CalendarEvent]], **kwargs: object) -> Any:
+    def fake_run(config: Config, given: dict[str, list[CalendarEvent]], **kwargs: object) -> Any:
         seen.append(given)
-        return SimpleNamespace(to_payload=lambda: {"status": "ok", "adds": [], "routes_calls": 0})
+        return {"status": "ok", "adds": [], "routes_calls": 0}
 
     monkeypatch.setattr(calendar_scan, "fetch_events_by_person", counting_fetch)
-    monkeypatch.setattr(calendar_scan, "plan_travel_blocks", fake_plan)
+    monkeypatch.setattr(calendar_scan, "run_travel_blocks", fake_run)
     payload = calendar_scan.run_calendar_scan(_config(), now=DAY_NOW, dry_run=True)
 
     assert fetches == 1

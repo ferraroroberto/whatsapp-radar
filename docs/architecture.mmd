@@ -92,16 +92,20 @@ flowchart TB
     FRULES["rules.py — pure classification / origin / dedup / conflicts"]
     FTRAFFIC["traffic_check.py — commute -> Routes -> alert"]
     FCAL["calendar_scan.py — conflict scan + decision trace + daily summary"]
-    FSOURCE["calendar_source.py — events per person"]
+    FSOURCE["calendar_source.py — events per person (guarded seam)\n+ fetch_marked_events: marker-scoped listing\n+ non-mutating accessRole probe (#267)"]
     FDEDUP["dedup.py — data/family/ alert log"]
-    FBLOCKS["travel_blocks.py — pure desired-state planner for commute\nblocks + the wr_travel_block marker vocabulary (#265);\nRoutes-priced plan, writes nothing to any calendar (#266)"]
+    FBLOCKS["travel_blocks.py — pure desired-state planner + reconcile\nfor commute blocks + the wr_travel_block marker vocabulary\n(#265); Routes-priced plan (#266); writes nothing itself"]
+    FBLOCKW["travel_blocks_write.py — the only write path (#267):\nTravelBlockWriter owns the client privately, so delete_event\nis reachable only via marker guard + pre-delete JSON backup;\ndry-run builds no client at all"]
   end
   CLICMDS --> FTRAFFIC
   CLICMDS --> FCAL
   FTRAFFIC --> FRULES
   FCAL --> FRULES
   FBLOCKS --> FRULES
-  FCAL -->|plan_travel_blocks: reuses the scan's fetched events| FBLOCKS
+  FCAL -->|run_travel_blocks: reuses the scan's fetched events| FBLOCKW
+  FBLOCKW -->|plan + reconcile| FBLOCKS
+  FBLOCKW -->|marker-scoped list + accessRole| FSOURCE
+  FBLOCKW -->|data/calendar_backups/YYYY-MM-DD/| BACKUPS["pre-delete event backups\n(gitignored data/ tree)"]
   FSOURCE -->|is_travel_block: one filter, five consumers| FBLOCKS
   FTRAFFIC --> FSOURCE
   FCAL --> FSOURCE
@@ -126,6 +130,7 @@ flowchart TB
     CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete"]
   end
   REMINDERS --> CALWRITECLIENT
+  FBLOCKW --> CALWRITECLIENT
 
   subgraph presence["src/presence/ — live phone location (#169, read-only)"]
     PCLIENT["client.py — get_location: resolve person,\nderive freshness from last_seen (never trust 'stale'),\nrefresh when stale; typed result, coords never persisted"]

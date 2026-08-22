@@ -1,4 +1,4 @@
-"""Desired-state planner for auto-written commute travel blocks (#265/#266, umbrella #263).
+"""Desired-state planner + reconcile for auto-written commute travel blocks (#263).
 
 Everything above the "Routes pricing" divider is **pure**, like
 :mod:`src.family.rules`: no I/O, no network, no Google client, no filesystem.
@@ -16,9 +16,13 @@ The computation is deliberately split in three:
 3. :func:`price_legs` / :func:`plan_travel_blocks` (#266) — the module's only
    I/O — supply those durations from the live Routes API, with the route
    function injected so the whole sweep stays testable offline with a stub.
+4. :func:`reconcile` (#267) — pure again — diffs the desired legs against the
+   blocks *already* on the calendar and produces the add/delete decision.
 
-Nothing in this module writes to a calendar. Step 3 of #263 owns insert/delete;
-until then a run produces a plan, a log and a payload, and touches nothing.
+Nothing in this module writes to a calendar: it computes what should exist,
+what does exist, and the difference. :mod:`src.family.travel_blocks_write` owns
+the whole write side — the insert, the marker-guarded delete and its backup —
+so a delete can never be issued from the module that also decides the plan.
 
 This module also owns the product-specific marker vocabulary. ``calendar_readonly``
 stays product-neutral and only transports the ``extendedProperties.private`` map;
@@ -53,6 +57,12 @@ SOURCE_EVENT_KEY = "wr_source_event_id"
 LEG_KEY = "wr_leg"
 SCHEMA_VERSION_KEY = "wr_schema_version"
 HASH_KEY = "wr_hash"
+
+#: The ``privateExtendedProperty`` filter the reconcile lists with. Server-side,
+#: so a human's event is never even fetched — the first line of defence for a
+#: feature that can delete, and the reason it belongs at the query rather than
+#: in a post-filter. ``calendar_readonly`` transports it without knowing it.
+MARKER_FILTER = f"{MARKER_KEY}={MARKER_VALUE}"
 
 #: Bumped when the block *shape* changes in a way that must force a rewrite of
 #: already-written blocks. It is part of :func:`content_hash`, so a bump makes
@@ -443,6 +453,222 @@ def _is_chained(
     )
 
 
+# --------------------------------------------------------------- existing state & reconcile
+#
+# Still pure. Everything here is a function of "what should exist" (the planned
+# legs above) and "what does exist" (blocks handed in by the caller, fetched
+# through the marker-scoped query). No client, no filesystem, no network.
+
+#: Why a block is being removed. Reported per delete so the log and the payload
+#: can never say "deleted" without saying what made it stale.
+DELETE_REASON_REPLACED = "replaced"  # a desired leg exists, but its hash/schema differs
+DELETE_REASON_ORPHANED = "orphaned"  # no desired leg — source cancelled, moved or out of horizon
+DELETE_REASON_DUPLICATE = "duplicate"  # a second block for a leg already satisfied by another
+
+
+@dataclass(frozen=True)
+class ExistingBlock:
+    """One block *we* already wrote, as read back from the calendar.
+
+    ``resource`` is the complete fetched event resource, kept verbatim for two
+    reasons that both matter more than tidiness: it is what the pre-delete
+    backup persists, and it is what the delete guard re-checks the marker on.
+    Carrying the resource (rather than a bare event id) is what makes
+    :meth:`src.family.travel_blocks_write.TravelBlockWriter.delete_block`
+    *able* to refuse — an id alone would leave nothing to verify.
+
+    Excluded from equality so two parses of the same block compare equal and
+    the record stays hashable.
+    """
+
+    calendar_id: str
+    event_id: str
+    source_event_id: str
+    leg: str
+    schema_version: str
+    stored_hash: str
+    start: str = ""
+    resource: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
+
+    @property
+    def key(self) -> str:
+        """Same identity as the planned leg's — the join column of the diff."""
+        return leg_key(self.calendar_id, self.source_event_id, self.leg)
+
+
+@dataclass(frozen=True)
+class ExistingBlocks:
+    """What the reconcile knows about the calendars' current contents.
+
+    ``unreadable`` maps a calendar id to why its marked-block listing failed.
+    Such a calendar is **not** "empty": planning adds against an unknown current
+    state would duplicate every block on it. It gets its own reportable failure
+    (:data:`FAILURE_BLOCKS_UNREADABLE`) and is left entirely alone for the run —
+    the ``CLAUDE.md`` rule that an unestablished fact is never folded into a
+    passing one, applied to the riskiest place it could be folded.
+    """
+
+    blocks: tuple[ExistingBlock, ...] = ()
+    unreadable: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlannedDelete:
+    """One existing block the reconcile wants gone, and the reason it is stale."""
+
+    block: ExistingBlock
+    reason: str
+
+
+@dataclass(frozen=True)
+class Reconciliation:
+    """The three-way diff: what to insert, what to remove, and what to leave alone.
+
+    ``keeps`` is the whole point of the exercise. Identical desired state must
+    cost **zero** API writes, so an unchanged block is neither re-inserted nor
+    touched — it is only counted.
+    """
+
+    adds: list[PlannedLeg]
+    deletes: list[PlannedDelete]
+    keeps: list[ExistingBlock]
+
+
+def parse_existing_block(raw: Mapping[str, Any], *, calendar_id: str) -> ExistingBlock | None:
+    """Read one fetched resource back into an :class:`ExistingBlock`, or ``None``.
+
+    Refuses anything without our marker even though the listing query already
+    filtered on it: this is the only constructor of the record the delete path
+    accepts, so making it marker-checking means an unmarked resource can never
+    reach a delete decision in the first place. A resource with no id is
+    likewise refused — there would be nothing to delete or to name in a backup.
+    """
+    private = _private_properties(raw)
+    if private.get(MARKER_KEY) != MARKER_VALUE:
+        logger.warning(
+            "⚠️ travel blocks: ignoring calendar event %r returned by the %s query without "
+            "the marker — it is not ours and will never be touched",
+            raw.get("id"),
+            MARKER_FILTER,
+        )
+        return None
+    event_id = str(raw.get("id") or "")
+    if not event_id:
+        logger.warning("⚠️ travel blocks: ignoring a marked event with no id")
+        return None
+    start = raw.get("start") or {}
+    return ExistingBlock(
+        calendar_id=calendar_id,
+        event_id=event_id,
+        source_event_id=private.get(SOURCE_EVENT_KEY, ""),
+        leg=private.get(LEG_KEY, ""),
+        schema_version=private.get(SCHEMA_VERSION_KEY, ""),
+        stored_hash=private.get(HASH_KEY, ""),
+        start=str(start.get("dateTime") or start.get("date") or "")
+        if isinstance(start, Mapping)
+        else "",
+        resource=dict(raw),
+    )
+
+
+def _private_properties(raw: Mapping[str, Any]) -> dict[str, str]:
+    """``extendedProperties.private`` as ``{str: str}``; ``{}`` when absent or malformed."""
+    node = raw.get("extendedProperties")
+    private = node.get("private") if isinstance(node, Mapping) else None
+    if not isinstance(private, Mapping):
+        return {}
+    return {str(key): str(value) for key, value in private.items()}
+
+
+def carries_marker(raw: Mapping[str, Any]) -> bool:
+    """Whether a raw event resource carries our marker — the delete guard's predicate.
+
+    The resource-level twin of :func:`is_travel_block` (which reads a normalized
+    :class:`~calendar_readonly.core.CalendarEvent`). Both spell the same rule
+    once, here, next to the marker constants they check.
+    """
+    return _private_properties(raw).get(MARKER_KEY) == MARKER_VALUE
+
+
+def reconcile(
+    desired: Sequence[PlannedLeg], existing: Sequence[ExistingBlock]
+) -> Reconciliation:
+    """Diff desired against existing on ``(calendar, source event, leg)`` — pure.
+
+    Matching is on the leg key and *equality* is on the stored content hash, so:
+
+    * unchanged block → kept, zero writes;
+    * hash differs (the source event moved, or its location changed) → the old
+      block is deleted and the new one inserted, because Calendar's ``patch``
+      would leave a half-updated block behind if it failed midway;
+    * unrecognised :data:`SCHEMA_VERSION` → treated as changed, never as a keep.
+      A build that cannot vouch for a block's shape must not certify it;
+    * no desired counterpart → deleted (source cancelled, or out of horizon);
+    * a duplicate for an already-satisfied leg → deleted. Duplicates should not
+      happen, but a run interrupted between insert and its next sweep can leave
+      one, and quietly tolerating it would let them accumulate forever.
+    """
+    by_key: dict[str, list[ExistingBlock]] = {}
+    for block in existing:
+        by_key.setdefault(block.key, []).append(block)
+
+    adds: list[PlannedLeg] = []
+    deletes: list[PlannedDelete] = []
+    keeps: list[ExistingBlock] = []
+    for leg in desired:
+        candidates = by_key.pop(leg.key, [])
+        match = next(
+            (
+                block
+                for block in candidates
+                if block.schema_version == SCHEMA_VERSION and block.stored_hash == leg.content_hash
+            ),
+            None,
+        )
+        if match is None:
+            adds.append(leg)
+            deletes.extend(PlannedDelete(block, DELETE_REASON_REPLACED) for block in candidates)
+            continue
+        keeps.append(match)
+        deletes.extend(
+            PlannedDelete(block, DELETE_REASON_DUPLICATE)
+            for block in candidates
+            if block is not match
+        )
+    for orphans in by_key.values():
+        deletes.extend(PlannedDelete(block, DELETE_REASON_ORPHANED) for block in orphans)
+
+    deletes.sort(key=lambda pending: (pending.block.calendar_id, pending.block.start,
+                                      pending.block.event_id))
+    return Reconciliation(adds=adds, deletes=deletes, keeps=keeps)
+
+
+def build_block_event(leg: PlannedLeg, *, title_template: str) -> dict[str, Any]:
+    """The Calendar event resource to insert for ``leg``.
+
+    Deliberate choices, each of them a requirement rather than a preference:
+
+    * ``summary`` is the configured title verbatim and never the destination —
+      a shared calendar view must leak nothing about where the person is going.
+    * ``location`` **is** the destination address: tapping the block in Google
+      Calendar has to open navigation, which is most of the feature's value.
+      (``visibility: "private"`` is what keeps that from being shared.)
+    * ``opaque`` so the block actually defends the time as busy.
+    * reminders explicitly overridden to none — these are placeholders around
+      real events, and a notification for each one would be unusable.
+    """
+    return {
+        "summary": title_template,
+        "location": leg.destination,
+        "start": {"dateTime": leg.start.isoformat()},
+        "end": {"dateTime": leg.end.isoformat()},
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {"useDefault": False, "overrides": []},
+        "extendedProperties": {"private": block_marker(leg)},
+    }
+
+
 # --------------------------------------------------------------- Routes pricing (the I/O edge)
 #
 # Everything below this line talks to the network. The pure planner above never
@@ -457,6 +683,11 @@ FAILURE_ROUTES_ERROR = "routes_error"
 #: ``departureTime`` is ``HTTP 400 "Timestamp must be set to a future time."``),
 #: and a block for a drive that already happened reserves nothing anyway.
 FAILURE_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
+#: A leg was priced but *not* planned as an add, because the blocks already on
+#: its calendar could not be listed (#267). The current state being unknown, an
+#: add would risk duplicating a block that is already there — so the calendar is
+#: left untouched for this run and the leg says so out loud.
+FAILURE_BLOCKS_UNREADABLE = "existing_blocks_unreadable"
 
 STATUS_OK = "ok"
 STATUS_DISABLED = "disabled"
@@ -637,10 +868,10 @@ def _failure(request: LegRequest, reason: str, detail: str) -> LegFailure:
 class TravelBlockPlan:
     """One sweep's outcome: what should exist, and what could not be established.
 
-    ``adds`` / ``deletes`` are the reconcile decision. At this step there is
-    nothing on the calendar to diff against, so ``adds == legs`` and ``deletes``
-    is always empty — the shape is already the final one, so step 3 of #263 only
-    has to fill it in and no downstream reader changes then.
+    ``legs`` is the desired state; ``adds`` / ``deletes`` / ``keeps`` are the
+    reconcile decision against what is already on the calendars (#267). ``adds``
+    is a subset of ``legs``: a leg on a calendar whose current contents could not
+    be read is deliberately *not* an add, and appears in ``failures`` instead.
 
     ``event_summaries`` maps ``(calendar_id, event_id)`` to the source event's
     title. It is carried for reporting only, and is deliberately *not* a field of
@@ -652,9 +883,10 @@ class TravelBlockPlan:
     dry_run: bool
     legs: list[PlannedLeg]
     adds: list[PlannedLeg]
-    deletes: list[dict[str, Any]]
+    deletes: list[PlannedDelete]
     failures: list[LegFailure]
     routes_calls: int
+    keeps: list[ExistingBlock] = field(default_factory=list)
     horizon_start: datetime | None = None
     horizon_end: datetime | None = None
     event_summaries: dict[tuple[str, str], str] = field(default_factory=dict)
@@ -681,10 +913,11 @@ class TravelBlockPlan:
                 "desired": len(self.legs),
                 "adds": len(self.adds),
                 "deletes": len(self.deletes),
+                "keeps": len(self.keeps),
                 "failures": len(self.failures),
             },
             "adds": [self._leg_payload(leg) for leg in self.adds],
-            "deletes": list(self.deletes),
+            "deletes": [_delete_payload(pending) for pending in self.deletes],
             "failures": [self._failure_payload(failure) for failure in self.failures],
         }
 
@@ -718,8 +951,80 @@ class TravelBlockPlan:
         }
 
 
+def _delete_payload(pending: PlannedDelete) -> dict[str, Any]:
+    """One planned removal, named well enough to audit after the fact.
+
+    No event title: the block's own summary is the configured template (it says
+    nothing), and the *source* event's title is not knowable from the block.
+    ``reason`` is what makes the entry reviewable — a delete list without one
+    would be exactly the unaccountable output this feature must not produce.
+    """
+    block = pending.block
+    return {
+        "reason": pending.reason,
+        "calendar_id": block.calendar_id,
+        "event_id": block.event_id,
+        "source_event_id": block.source_event_id,
+        "leg": block.leg,
+        "start": block.start,
+        "hash": block.stored_hash,
+        "schema_version": block.schema_version,
+    }
+
+
 def _iso_or_none(moment: datetime | None) -> str | None:
     return None if moment is None else moment.isoformat()
+
+
+def gate_status(config: Config) -> str | None:
+    """The reason travel blocks must not run at all, or ``None`` to proceed.
+
+    Split out of :func:`plan_travel_blocks` so the write-side orchestrator can
+    answer the same question *before* spending a Calendar read on a feature that
+    is off — which is the state of every default install. Each gate keeps its own
+    reportable status; none may be folded into a plain empty plan, which would
+    read as "nothing to do".
+    """
+    family = config.family
+    if not family.travel_blocks.enabled:
+        return STATUS_DISABLED
+    if not config.traffic.api_key:
+        return STATUS_NO_ROUTES_API_KEY
+    if not family.home_address.strip():
+        return STATUS_NO_HOME_ADDRESS
+    return None
+
+
+def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datetime]:
+    """The window the sweep maintains — the one expression, shared by both callers.
+
+    Starts at local midnight, the same expression ``run_calendar_scan`` uses for
+    its own fetch window, so the horizon can never start outside the events the
+    planner was handed — nor outside the blocks the reconcile listed.
+
+    And it is **clamped** to that fetch window's length for the same reason
+    (:func:`scan_window_days`). Once the reconcile can delete, a horizon longer
+    than the events it was handed is not merely wasteful: every block beyond the
+    fetched days would have no desired counterpart, be judged an orphan and be
+    deleted on every single run — the exact opposite of the zero-writes-when-
+    unchanged contract. Prefer clamping the knob to widening the scan.
+    """
+    family = config.family
+    horizon_start = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
+    horizon_days = family.travel_blocks.horizon_days or family.assessment_days
+    return horizon_start, horizon_start + timedelta(
+        days=min(horizon_days, scan_window_days(config))
+    )
+
+
+def scan_window_days(config: Config) -> int:
+    """How many days of events the daily scan fetches — ``run_calendar_scan``'s own expression.
+
+    Named here rather than duplicated as a literal because the travel-block
+    horizon has to stay inside it; the two must move together.
+    """
+    family = config.family
+    return max(family.unknown_scan_days, family.assessment_days)
 
 
 def plan_travel_blocks(
@@ -727,36 +1032,35 @@ def plan_travel_blocks(
     events_by_person: Mapping[str, Sequence[CalendarEvent]],
     *,
     now: datetime,
+    existing: ExistingBlocks,
     session: requests.Session | None = None,
     route_fn: RouteFn = compute_route,
 ) -> TravelBlockPlan:
-    """Plan the horizon's travel blocks from events the caller already fetched.
+    """Plan and reconcile the horizon's travel blocks — the desired-state half.
 
     Takes ``events_by_person`` rather than fetching: the daily sweep
     (:func:`~src.family.calendar_scan.run_calendar_scan`) has already read the
     window, and a second Calendar fetch would be a second read seam to keep the
     feedback-loop guard on.
 
+    ``existing`` is **required**, with no default. What is already on the
+    calendar is exactly the fact an add/delete decision cannot be guessed at, and
+    a defaulted "nothing" would silently re-insert the whole horizon on every
+    sweep. A caller with genuinely nothing to diff against passes an empty
+    :class:`ExistingBlocks` and says so.
+
     Gating, in order, each with its own reportable status and **zero** Routes
     calls: the feature off; no Routes API key; no configured home address (the
     committed default ships blank, and a plan built on it would reserve time for
-    a drive to nowhere). None of these may be folded into a plain empty plan,
-    which would read as "nothing to do".
+    a drive to nowhere) — see :func:`gate_status`.
     """
     family = config.family
     settings = family.travel_blocks
-    if not settings.enabled:
-        return _empty_plan(STATUS_DISABLED, settings.dry_run)
-    if not config.traffic.api_key:
-        return _empty_plan(STATUS_NO_ROUTES_API_KEY, settings.dry_run)
-    if not family.home_address.strip():
-        return _empty_plan(STATUS_NO_HOME_ADDRESS, settings.dry_run)
+    gate = gate_status(config)
+    if gate is not None:
+        return empty_plan(gate, settings.dry_run)
 
-    # The same expression `run_calendar_scan` uses for its own fetch window, so
-    # the horizon can never start outside the events this was handed.
-    horizon_start = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
-    horizon_days = settings.horizon_days or family.assessment_days
-    horizon_end = horizon_start + timedelta(days=horizon_days)
+    horizon_start, horizon_end = travel_block_horizon(config, now)
 
     leg_requests = desired_legs(
         events_by_person,
@@ -785,16 +1089,34 @@ def plan_travel_blocks(
     legs = build_planned_legs(
         leg_requests, priced.durations, min_home_dwell_min=settings.min_home_dwell_min
     )
+    # A calendar whose own blocks could not be listed is skipped whole: its legs
+    # stay in `legs` (they are still desired) but become reportable failures
+    # rather than adds, and no existing block of its can be a delete candidate
+    # either, since none were fetched.
+    reconcilable = [leg for leg in legs if leg.calendar_id not in existing.unreadable]
+    diff = reconcile(reconcilable, existing.blocks)
+    failures = list(priced.failures)
+    failures.extend(
+        LegFailure(
+            person=leg.person,
+            calendar_id=leg.calendar_id,
+            source_event_id=leg.source_event_id,
+            leg=leg.leg,
+            reason=FAILURE_BLOCKS_UNREADABLE,
+            detail=existing.unreadable[leg.calendar_id],
+        )
+        for leg in legs
+        if leg.calendar_id in existing.unreadable
+    )
     plan = TravelBlockPlan(
         status=STATUS_OK,
         dry_run=settings.dry_run,
         legs=legs,
-        # Nothing to diff against yet (step 3 of #263 lists the calendar's own
-        # marked blocks): every desired leg is a would-be add.
-        adds=list(legs),
-        deletes=[],
-        failures=priced.failures,
+        adds=diff.adds,
+        deletes=diff.deletes,
+        failures=failures,
         routes_calls=priced.routes_calls,
+        keeps=diff.keeps,
         horizon_start=horizon_start,
         horizon_end=horizon_end,
         event_summaries={
@@ -807,7 +1129,8 @@ def plan_travel_blocks(
     return plan
 
 
-def _empty_plan(status: str, dry_run: bool) -> TravelBlockPlan:
+def empty_plan(status: str, dry_run: bool) -> TravelBlockPlan:
+    """A gated, nothing-computed plan carrying only its reason."""
     return TravelBlockPlan(
         status=status,
         dry_run=dry_run,
@@ -843,6 +1166,16 @@ def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> Non
             leg.end.strftime("%H:%M"),
             leg.minutes,
         )
+    for pending in plan.deletes:
+        out.info(
+            "ℹ️ travel block [delete: %s] %s on %s — %s leg of source event %s (starts %s)",
+            pending.reason,
+            pending.block.event_id,
+            pending.block.calendar_id,
+            pending.block.leg or "?",
+            pending.block.source_event_id or "?",
+            pending.block.start or "?",
+        )
     for failure in plan.failures:
         out.warning(
             "⚠️ travel block unpriced (%s) %s %s — “%s”: %s. No block planned: this is a "
@@ -854,10 +1187,12 @@ def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> Non
             failure.detail,
         )
     out.info(
-        "%s travel blocks: %d add(s), %d delete(s), %d unpriced leg(s), %d Routes call(s)%s",
+        "%s travel blocks: %d add(s), %d delete(s), %d kept, %d unpriced leg(s), "
+        "%d Routes call(s)%s",
         "⚠️" if plan.failures else "✅",
         len(plan.adds),
         len(plan.deletes),
+        len(plan.keeps),
         len(plan.failures),
         plan.routes_calls,
         " [dry-run]" if plan.dry_run else "",

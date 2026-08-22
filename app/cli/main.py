@@ -432,12 +432,17 @@ def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> st
 
 
 def _progress_travel_blocks(section: dict[str, Any]) -> None:
-    """Print the travel-block plan (#266) — the write-nothing rehearsal of #263.
+    """Print the travel-block plan and what was applied (#266/#267).
 
-    One line per would-be block with its origin, destination, time box and
-    minutes, then every leg that could **not** be priced, phrased so it can
-    never be read as "no commute was needed", then a counted summary carrying
-    the Routes call count. Nothing here writes to a calendar.
+    One line per block to add with its origin, destination, time box and
+    minutes, one per block to delete *with the reason it is stale*, then every
+    leg that could **not** be priced, phrased so it can never be read as "no
+    commute was needed", then a counted summary carrying the Routes call count
+    and, when the feature is live, what the apply actually did.
+
+    The delete lines are the rehearsal #263 requires before any live write is
+    allowed: read them on a dry run and confirm nothing outside the plan is
+    listed for deletion.
     """
     status = str(section.get("status") or "")
     # `disabled` is a decision, not an unestablished fact, and it is the state
@@ -456,6 +461,12 @@ def _progress_travel_blocks(section: dict[str, Any]) -> None:
             f"{_fmt_block_when(leg['start'])}–{_fmt_block_when(leg['end'], time_only=True)} "
             f"({leg['minutes']} min)"
         )
+    for pending in section.get("deletes", []):
+        _progress(
+            f"   − delete ({pending['reason']}) {pending['leg']} block {pending['event_id']} "
+            f"on {pending['calendar_id']} — source event {pending['source_event_id']}, "
+            f"starting {_fmt_block_when(pending['start'])}"
+        )
     for failure in section.get("failures", []):
         _progress(
             f"   ⚠️ unpriced ({failure['reason']}) {failure['person']} {failure['leg']} — "
@@ -466,9 +477,40 @@ def _progress_travel_blocks(section: dict[str, Any]) -> None:
     _progress(
         f"🚗 travel blocks: {counts.get('adds', 0)} add(s), "
         f"{counts.get('deletes', 0)} delete(s), "
+        f"{counts.get('keeps', 0)} kept, "
         f"{counts.get('failures', 0)} unpriced leg(s), "
         f"{section.get('routes_calls', 0)} Routes call(s)"
         + (" [dry-run]" if section.get("dry_run") else "")
+    )
+    _progress_travel_block_apply(section.get("apply") or {})
+
+
+def _progress_travel_block_apply(apply: dict[str, Any]) -> None:
+    """Print what the apply actually did, and every calendar it may not write to.
+
+    A calendar whose capability is ``unknown`` gets its own line: it is neither
+    a permission nor a refusal, and folding it into either would hide the one
+    state that means "we never found out".
+    """
+    if not apply:
+        return
+    for calendar_id, state in sorted((apply.get("write_capability") or {}).items()):
+        if state == "writable":
+            continue
+        _progress(f"   ⚠️ calendar {calendar_id}: write capability {state} — nothing written to it")
+    for failure in apply.get("failures", []):
+        _progress(
+            f"   ⚠️ {failure['operation']} skipped ({failure['reason']}) on "
+            f"{failure['calendar_id']}"
+            + (f": {failure['detail']}" if failure.get("detail") else "")
+        )
+    counts = apply.get("counts") or {}
+    _progress(
+        f"🚗 travel blocks [{apply.get('status', '?')}]: "
+        f"{counts.get('inserted', 0)} inserted, {counts.get('deleted', 0)} deleted, "
+        f"{counts.get('kept', 0)} kept, {counts.get('skipped', 0)} skipped, "
+        f"{counts.get('backups', 0)} backup(s)"
+        + (f" — {apply['detail']}" if apply.get("detail") else "")
     )
 
 
@@ -517,9 +559,9 @@ def _cmd_family_check(
             f"{len(payload.get('missing_locations', []))} missing location(s)"
             + (" [dry-run]" if dry_run else "")
         )
-        # This repo configures no logging handlers, so `plan_travel_blocks`'
-        # INFO lines are dropped — without this the priced plan (#266) would
-        # only ever be visible by opening the persisted run payload.
+        # This repo configures no logging handlers, so `run_travel_blocks`'
+        # INFO lines are dropped — without this the reconciled plan (#267)
+        # would only ever be visible by opening the persisted run payload.
         _progress_travel_blocks(payload.get("travel_blocks") or {})
     else:
         _progress(

@@ -18,12 +18,14 @@ config layer is redirected to a disposable file, and the clock is pinned at
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import src.config.family as family_config
 from app.cli import main as cli
 from app.webapp import runs as webapp_runs
 from src.db import store
@@ -349,3 +351,82 @@ def test_a_skip_row_would_not_be_read_as_a_sweep_either(
     assert sweep is not None
     assert sweep["run_id"] == f"db-{genuine}"
     assert sweep["routes_calls"] == 3
+
+
+# ------------------------------------------- an unreadable value cannot gate
+
+
+@pytest.fixture
+def forget_run_hour_warnings() -> None:
+    """The warn-once dedup is process-global; the two caplog tests need it clear.
+
+    Deliberately not autouse: the value-coercion tests below must be able to
+    fail on their own assertions rather than on this fixture, so a revert-proof
+    run reports behaviour rather than a missing attribute.
+    """
+    family_config._WARNED_RUN_HOURS.clear()
+
+
+@pytest.mark.parametrize("value", [25, 24, -1, "seven", "", None, True, [7], {"h": 7}])
+def test_an_unusable_run_hour_degrades_to_no_gate(value: Any) -> None:
+    """Never the nearest valid hour, never an exception — always 0 (#277 review).
+
+    ``25`` would make ``now.hour >= run_hour`` false forever and silently stop
+    the daily scan; ``"seven"`` would raise out of ``load_config`` and take the
+    webapp down on every request. ``True`` is an ``int`` in Python and is not
+    hour 1.
+    """
+    assert family_config.parse({"run_hour": value}).run_hour == 0
+
+
+@pytest.mark.parametrize("value", [0, 1, 7, 18, 23])
+def test_a_usable_run_hour_is_passed_through_untouched(value: int) -> None:
+    assert family_config.parse({"run_hour": value}).run_hour == value
+
+
+def test_an_absent_run_hour_keeps_the_shipped_default_and_says_nothing(
+    caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        assert family_config.parse({}).run_hour == 7
+    assert caplog.records == []
+
+
+def test_the_degrade_is_loud_and_names_the_value(
+    caplog: pytest.LogCaptureFixture, forget_run_hour_warnings: None
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        family_config.parse({"run_hour": 25})
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "25" in message
+    assert "0..23" in message
+
+
+def test_the_warning_fires_once_per_process_not_once_per_config_load(
+    caplog: pytest.LogCaptureFixture, forget_run_hour_warnings: None
+) -> None:
+    """`load_config()` is uncached and runs on ~every webapp request (#273)."""
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        for _ in range(5):
+            family_config.parse({"run_hour": 25})
+        family_config.parse({"run_hour": -1})  # a *different* bad value still warns
+    assert len(caplog.records) == 2
+
+
+def test_a_typo_cannot_switch_the_daily_scan_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The regression this guard exists for, end to end through the CLI.
+
+    A hand edit to `config/local.json` never passes `POST /api/family`'s 0..23
+    validation, and before this guard `run_hour: 25` gated every unforced scan
+    off permanently — no conflict summary, no travel-block sweep, ever.
+    """
+    monkeypatch.setenv("WR_DB_PATH", str(tmp_path / "family.sqlite3"))
+    _isolated_config(tmp_path, monkeypatch, enabled=True, run_hour=25)
+    calls = _stub_scan(monkeypatch)
+    _at(monkeypatch, _AT_0300)
+
+    assert cli.main(["calendar-scan"]) == 0
+    assert len(calls) == 1

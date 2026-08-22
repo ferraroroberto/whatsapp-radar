@@ -34,7 +34,7 @@ flowchart TB
     MANAGER["manager.py — WebappManager (start/stop/restart)"]
     MIDDLEWARE["middleware.py — bearer-token gate"]
     RUNS["runs.py — spawns CLI pieces, streams output;\nowns the run-record shape both surfaces write"]
-    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · ack · misc\n(family also owns the travel-block knobs + the three-state\nper-calendar write-capability readout, #268)"]
+    ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · ack · misc\n(family also owns the travel-block knobs, the three-state\nper-calendar write-capability readout #268, and the\nreported live-sweep blockers #276 — enforcement stays\nin src/family/)"]
   end
   TRAYPY --> MANAGER
   MANAGER --> SERVER

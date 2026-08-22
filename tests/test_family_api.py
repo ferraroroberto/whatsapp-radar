@@ -501,6 +501,127 @@ def test_family_tab_renders_from_one_store_read(
     assert len(calls) == 1
 
 
+# --------------------------------- travel blocks: live-sweep blockers (#276)
+
+# The Family tab's live-sweep button states why it is unavailable instead of
+# greying out silently. These reasons are *reported* here and *enforced* in
+# `gate_status` / `_apply`, which re-run on every invocation — so the list
+# being wrong could at worst mislabel a button, never authorize a write.
+#
+# The Routes key is read from the environment before config (`src/config/traffic.py`
+# `parse`), and this repo's `.env` may supply one, so every test below pins both
+# env spellings explicitly rather than assuming an empty environment.
+
+
+def _no_routes_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WR_TRAFFIC_API_KEY", "")
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "")
+
+
+def _blockers(client: Any) -> dict[str, str]:
+    rows = client.get("/api/family").json()["travel_blocks"]["live_sweep_blockers"]
+    return {row["code"]: row["message"] for row in rows}
+
+
+def _clear_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every gate open: enabled, live, write token present, key and home set."""
+    monkeypatch.setenv("WR_TRAFFIC_API_KEY", "routes-key")
+    token = tmp_path / "write_token.json"
+    token.write_text("{}", encoding="utf-8")
+    _isolated_config(
+        tmp_path,
+        monkeypatch,
+        family={
+            "home_address": "1 Example Street",
+            "travel_blocks": {"enabled": True, "dry_run": False},
+        },
+        calendar={"write_token_path": str(token)},
+    )
+
+
+def test_committed_defaults_block_a_live_sweep_and_say_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Off + dry run is the shipped state; the control must name both."""
+    _no_routes_key(monkeypatch)
+    _isolated_config(tmp_path, monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        blockers = _blockers(client)
+    assert "disabled" in blockers
+    assert "dry_run" in blockers
+    # Every reason is stated, not just the first one to fire — otherwise
+    # clearing one gate only reveals the next, one round-trip at a time.
+    assert {"no_write_token", "no_routes_api_key", "no_home_address"} <= set(blockers)
+    assert all(blockers.values()), "a blocker with no message is a silent grey-out"
+
+
+def test_a_fully_configured_install_has_no_blockers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_config(tmp_path, monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        assert _blockers(client) == {}
+
+
+@pytest.mark.parametrize(
+    ("code", "family", "calendar"),
+    [
+        ("disabled", {"travel_blocks": {"enabled": False, "dry_run": False}}, None),
+        ("dry_run", {"travel_blocks": {"enabled": True, "dry_run": True}}, None),
+        ("no_home_address", {"home_address": ""}, None),
+        ("no_write_token", {}, {"write_token_path": "definitely-missing.json"}),
+    ],
+)
+def test_each_gate_is_its_own_named_blocker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    code: str,
+    family: dict[str, Any],
+    calendar: dict[str, Any] | None,
+) -> None:
+    _clear_config(tmp_path, monkeypatch)
+    base_family = {
+        "home_address": "1 Example Street",
+        "travel_blocks": {"enabled": True, "dry_run": False},
+    }
+    base_calendar = {"write_token_path": str(tmp_path / "write_token.json")}
+    _isolated_config(
+        tmp_path,
+        monkeypatch,
+        family={**base_family, **family},
+        calendar={**base_calendar, **(calendar or {})},
+    )
+    with _client(tmp_path / "x.sqlite3") as client:
+        assert list(_blockers(client)) == [code]
+
+
+def test_missing_routes_key_blocks_a_live_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Separate from the parametrized gates: it is env-driven, not file-driven."""
+    _clear_config(tmp_path, monkeypatch)
+    _no_routes_key(monkeypatch)
+    with _client(tmp_path / "x.sqlite3") as client:
+        assert list(_blockers(client)) == ["no_routes_api_key"]
+
+
+def test_blocker_messages_never_carry_household_detail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reasons are static sentences — no calendar id, address or key ever."""
+    _no_routes_key(monkeypatch)
+    _isolated_config(
+        tmp_path,
+        monkeypatch,
+        family={"home_address": "1 Example Street"},
+        calendar={"accounts": _ACCOUNTS},
+    )
+    with _client(tmp_path / "x.sqlite3") as client:
+        messages = " ".join(_blockers(client).values())
+    assert "@" not in messages
+    assert "Example Street" not in messages
+
+
 # ------------------------------------- travel blocks: POST validation (#268)
 
 

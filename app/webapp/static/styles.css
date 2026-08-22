@@ -1173,6 +1173,10 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Run detail: header + funnel (reuses .exec-funnel) + per-chat trace blocks. */
 .audit-traces { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-trace { margin: 0; }
+/* Travel-block sweep group (#276): the wrapper is a single item in
+   `.audit-traces`' flex column, so it restates the same stack for its own
+   fields. Layout only — no colour of its own. */
+.audit-travel { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-trace-body { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-verdict { font-size: var(--font-caption); font-weight: 600; flex: none; }
 .audit-verdict.act { color: var(--on); }
@@ -1363,6 +1367,25 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-style: dashed;
 }
 #familyTravelBlocks .run-btn { margin-top: var(--space-md); }
+
+/* Sweep run controls (#276): the paired rehearse/live buttons sit side by side
+   (the `.exec-traffic-actions` shape), with the run's status line under them.
+   Colour comes from `.run-btn` and the existing status tokens — nothing new. */
+.tb-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }
+.tb-actions .run-btn {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  /* Flex rather than an inline glyph with a magic `vertical-align` nudge: the
+     label wraps to two lines at 390px and still centres against its icon. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+}
+.tb-actions .run-btn .icon { flex: none; }
+.tb-run-status { margin: var(--space-xs) 0 0; }
+.tb-run-status.tb-run-status--error { color: var(--deficit); }
 
 /* ============================================================ ack (#219) */
 /* Follow-ups tab: flat separator rows (fleet list-row canon), each with a

@@ -10,7 +10,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
-import { familyKindCells, fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels } from './format.js';
+import { familyKindCells, fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels, travelStatusLabel } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 
 function auditState() { return state.audit; }
@@ -453,6 +453,83 @@ function traceBlock(t) {
   return det;
 }
 
+// "2026-08-20 06:00–06:25", collapsing the date on a same-day box.
+function timeBox(start, end) {
+  const from = fmtLocalDateTime(start);
+  const to = fmtLocalDateTime(end);
+  return from + '–' + (from.slice(0, 10) === to.slice(0, 10) ? to.slice(11) : to);
+}
+
+function appendTravelList(wrap, title, lines) {
+  if (!lines.length) return;
+  wrap.appendChild(traceField(title + ' (' + lines.length + ')', lines.join('\n')));
+}
+
+/* Travel-block sweep (#276), readable above the raw payload dump.
+ *
+ * Person, leg kind, event title, time box and minutes for each planned block;
+ * every removal and every left-alone block with the reason that put it there;
+ * every unpriced leg with its `reason` discriminator. `protected` gets its own
+ * heading rather than being folded into `keeps` — "we left this alone because
+ * we could not price its leg" is a different fact from "we checked it and it
+ * was already right", and only one of them is a warning.
+ *
+ * No calendar id is printed. Lines are keyed on person and leg, as the Family
+ * tab's capability rows are; `_block_payload` carries no person and no event
+ * title (a block's summary is the configured template, which says nothing), so
+ * a removal line is leg + start + reason and nothing more.
+ *
+ * The `.audit-travel` wrapper carries no styling — it exists so this whole
+ * section is addressable as one unit (tests, and any future collapse). */
+function travelBlockSection(section) {
+  if (!section || typeof section !== 'object') return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'audit-travel';
+
+  const head = [];
+  if (section.status !== 'ok') {
+    head.push('Gated: ' + travelStatusLabel(section.status) + '.');
+    head.push('No plan was computed, so there are no counts — this is not a sweep that '
+      + 'looked and found nothing to do.');
+  } else {
+    const c = section.counts || {};
+    head.push('Mode: ' + (section.dry_run === false
+      ? 'live — blocks were written to and deleted from the calendars'
+      : 'dry run — planned only, nothing written'));
+    head.push('Plan: ' + c.desired + ' leg(s) · ' + c.adds + ' add · ' + c.deletes
+      + ' delete · ' + c.keeps + ' kept · ' + c.protected + ' left alone · '
+      + c.failures + ' unpriced');
+    head.push('Routes calls: ' + section.routes_calls);
+    if (section.horizon_start && section.horizon_end) {
+      head.push('Horizon: ' + timeBox(section.horizon_start, section.horizon_end));
+    }
+    const apply = section.apply;
+    if (apply) {
+      const a = apply.counts || {};
+      head.push('Written [' + apply.status + ']: ' + a.inserted + ' inserted · '
+        + a.deleted + ' deleted · ' + a.kept + ' kept · ' + a.skipped + ' skipped · '
+        + a.backups + ' backup(s)');
+      const failed = apply.failures || [];
+      if (failed.length) head.push('Write failures: ' + failed.length);
+    } else {
+      head.push('Written: not recorded — this run stored no apply result.');
+    }
+  }
+  wrap.appendChild(traceField('Travel blocks', head.join('\n')));
+
+  appendTravelList(wrap, 'Travel blocks — planned blocks', (section.adds || []).map((leg) =>
+    `${leg.person} · ${leg.leg} · "${leg.event}" · ${timeBox(leg.start, leg.end)}`
+    + ` · ${leg.minutes} min`));
+  appendTravelList(wrap, 'Travel blocks — planned removals', (section.deletes || []).map((b) =>
+    `${b.leg} · ${fmtLocalDateTime(b.start)} — ${b.reason}`));
+  appendTravelList(wrap, 'Travel blocks — left alone', (section.protected || []).map((b) =>
+    `${b.leg} · ${fmtLocalDateTime(b.start)} — ${b.reason}`));
+  appendTravelList(wrap, 'Travel blocks — unpriced legs', (section.failures || []).map((f) =>
+    `${f.person} · ${f.leg} · "${f.event}" · ${f.status} (${f.reason})`
+    + (f.detail ? ` — ${f.detail}` : '')));
+  return wrap;
+}
+
 // Family-check drill-down (#163): the run's structured payload IS the trace —
 // show the headline counts as funnel cells and the full payload verbatim.
 function renderFamilyDetail(run) {
@@ -494,6 +571,10 @@ function renderFamilyDetail(run) {
     ? traceField(`Live coverage (${live.length})`, live.join('\n'))
     : null;
   if (liveBlock) els.auditTraces.appendChild(liveBlock);
+  // The commute travel-block sweep (#276) — above the dump, since the dump is
+  // where this record was previously only technically visible.
+  const travel = travelBlockSection(s.travel_blocks);
+  if (travel) els.auditTraces.appendChild(travel);
   const payload = traceField('Run payload', run.summary);
   if (payload) els.auditTraces.appendChild(payload);
   els.auditTracesEmpty.hidden = !!payload;

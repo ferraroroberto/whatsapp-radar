@@ -223,7 +223,13 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     # is a separate, narrower query). Off by default, and dry-run by default even
     # once enabled: a dry run computes and logs the whole add/delete plan and
     # touches no calendar. Never raises — a write failure is a recorded status.
-    travel_block_plan = run_travel_blocks(config, events, now=now)
+    #
+    # `force_dry_run=dry_run` (#276): this verb's own --dry-run must mean "this
+    # invocation changes nothing outside the process", not merely "send no
+    # alert". Without it a `calendar-scan --dry-run` on a live-configured
+    # install still inserted and deleted real calendar events — and the Family
+    # tab's rehearse button would have been a write dressed as a rehearsal.
+    travel_block_plan = run_travel_blocks(config, events, now=now, force_dry_run=dry_run)
 
     # Live phone-position judgment for today's imminent windows (#177) —
     # additive to the calendar-based gaps, never a replacement for them.

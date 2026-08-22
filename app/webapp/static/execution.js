@@ -539,13 +539,17 @@ function renderRuns() {
   list.textContent = '';
   els.execRunsEmpty.hidden = ex.runs.length > 0;
   for (const run of ex.runs) list.appendChild(runsListItem(run));
-  // Cadence self-skips are hidden from the list above (#234) but must stay
-  // visible in count, not just fetchable — see execution.py's include_skipped.
+  // Self-skips are hidden from the list above (#234) but must stay visible in
+  // count, not just fetchable — see execution.py's include_skipped. Two kinds
+  // land here now: traffic-check's cadence window (#170) and calendar-scan's
+  // `family.run_hour` floor (#277), so the wording names neither. Both exist so
+  // the external job can be armed generously, which is exactly what makes the
+  // skips numerous enough to hide.
   const n = ex.skippedCount || 0;
   els.execRunsSkipped.hidden = n === 0;
   if (n > 0) {
     els.execRunsSkipped.textContent =
-      n === 1 ? '1 cadence skip hidden' : `${n} cadence skips hidden`;
+      n === 1 ? '1 self-skipped run hidden' : `${n} self-skipped runs hidden`;
   }
 }
 

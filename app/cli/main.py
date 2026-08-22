@@ -386,6 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run fully but never send an alert (the run row itself is recorded)",
     )
+    p_cal.add_argument(
+        "--force",
+        action="store_true",
+        help="run even before family.run_hour (an explicit, human-requested fire)",
+    )
     p_traffic = sub.add_parser(
         "traffic-check", help="traffic-jam check for upcoming commutes (#160)"
     )
@@ -396,6 +401,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("tray", help="run the system-tray surface that owns the admin webapp")
     return parser
+
+
+def _local_now() -> datetime:
+    """This process's one wall-clock reading, in the machine's local zone.
+
+    Read once per family check and passed everywhere it is needed, so an
+    hour gate and the runner it guards can never disagree about what time it
+    is — and so a test can pin the clock at a single seam instead of patching
+    :mod:`datetime` itself.
+    """
+    return datetime.now().astimezone()
 
 
 def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str | None:
@@ -429,6 +445,47 @@ def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> st
             f"({elapsed_min:.1f}min since last check)"
         )
     return None
+
+
+def _calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | None:
+    """Hour self-skip (#277) — the reason to skip an unforced ``calendar-scan``, or None.
+
+    ``family.run_hour`` was parsed, defaulted, exposed on ``/api/family`` and
+    editable there from #160 until #277 while being read by no scheduling code
+    at all: the app displayed an editable schedule it did not honour, and its
+    own comment named an hour (7) that was not the App Launcher job's (18:05).
+    This is the gate that makes the knob mean what it says — a scan fired
+    before ``run_hour`` local time does nothing and says so.
+
+    Deliberately mirrors :func:`_traffic_cadence_skip_reason`: the external job
+    is armed generously and the *effective* schedule follows the config, so an
+    edit in the Family tab takes effect on the next fire with no App Launcher
+    re-arm. Like that one it returns before ``store.start_run``, so a skip
+    writes **no DB run row** — which is also what keeps it out of the Family
+    tab's "last sweep" lookup, a scan of ``review_runs`` for the newest
+    ``calendar-scan`` payload carrying a ``travel_blocks`` section
+    (``app/webapp/routers/family.py::_last_travel_sweep``). A skip that
+    recorded a row would either be mistaken for a completed sweep or blank out
+    the genuine earlier one. The filesystem run record is still written
+    (:mod:`app.cli.runlog`) and reads as ``skipped``, so the fire is auditable
+    without polluting the history the Family tab reasons over.
+
+    Callers must not invoke this for a **forced** fire: ``--force`` is how an
+    explicit, human-requested run (every button in the webapp, and a hand-typed
+    terminal run) says "I am asking for this now", and the whole point of an
+    hour gate is that it governs the unattended schedule, not the operator.
+
+    The comparison is on the local hour only — no "already ran today" memory.
+    ``run_hour`` answers "not before when", which is all the knob ever claimed;
+    once-a-day is the job's business, and the reconcile is idempotent anyway.
+    """
+    run_hour = config.family.run_hour
+    if now.hour >= run_hour:
+        return None
+    return (
+        f"before family.run_hour={run_hour:02d}:00 "
+        f"(local hour {now.hour:02d}); pass --force to run anyway"
+    )
 
 
 def _progress_travel_blocks(section: dict[str, Any]) -> None:
@@ -523,29 +580,39 @@ def _fmt_block_when(iso: str, *, time_only: bool = False) -> str:
 
 
 def _cmd_family_check(
-    conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool
+    conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool, force: bool = False
 ) -> int:
     """Run one family check, recording it as a run row like any other kind (#163).
 
     The run record is what makes a scheduled (App Launcher) execution visible in
     the Audit tab — the check itself never touches the message store.
+
+    Two self-skips guard the two verbs, both before any run row is opened and
+    both reported as their own ``skipped`` state — never as a success, never as
+    an error: ``traffic-check``'s cadence window (#170) and ``calendar-scan``'s
+    ``family.run_hour`` (#277). ``force`` exempts the latter and is set by every
+    explicitly human-requested fire.
     """
     import json
 
     from src.family.calendar_scan import run_calendar_scan
     from src.family.traffic_check import run_traffic_check
 
+    now = _local_now()
+    skip_reason: str | None = None
     if kind == "traffic-check" and not dry_run:
         skip_reason = _traffic_cadence_skip_reason(conn, config)
-        if skip_reason is not None:
-            _progress(f"⏭ traffic-check skipped — {skip_reason}")
-            _emit_result({"kind": kind, "status": "skipped", "reason": skip_reason})
-            return 0
+    elif kind == "calendar-scan" and not force:
+        skip_reason = _calendar_run_hour_skip_reason(config, now=now)
+    if skip_reason is not None:
+        _progress(f"⏭ {kind} skipped — {skip_reason}")
+        _emit_result({"kind": kind, "status": "skipped", "reason": skip_reason})
+        return 0
 
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
     runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check
     try:
-        payload = runner(config, now=datetime.now().astimezone(), dry_run=dry_run)
+        payload = runner(config, now=now, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError) as exc:
         _progress(f"❌ {kind} failed: {exc}")
         store.finish_run_summary(conn, run_id, "failed", None, error=str(exc))
@@ -627,7 +694,11 @@ def _run_command(args: argparse.Namespace) -> int:
         # Family checks (#160) never touch the message store, but since #163 they
         # record a run row so scheduled executions are visible in the Audit tab.
         if args.command in ("calendar-scan", "traffic-check"):
-            return _cmd_family_check(conn, config, args.command, args.dry_run)
+            # `--force` exists only on `calendar-scan`; traffic-check's own
+            # self-skip is exempted by `--dry-run` instead (#186).
+            return _cmd_family_check(
+                conn, config, args.command, args.dry_run, getattr(args, "force", False)
+            )
         if args.command == "status":
             return _cmd_status(conn, config)
         if args.command == "ingest":

@@ -29,7 +29,7 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 | `notify [--run N]` | Re-deliver a run's digest (retry a failed send without re-analyzing) |
 | `resync` | Force a fresh sync from the connector buffer |
 | `reprocess --confirm` | Full cache rebuild after a reader-logic change (backs up DB, preserves monitor/ignore/alias) |
-| `calendar-scan [--dry-run]` | Family calendar-conflict scan; a live scheduled run always sends one Telegram summary |
+| `calendar-scan [--dry-run] [--force]` | Family calendar-conflict scan (and the travel-block sweep riding inside it); a live scheduled run always sends one Telegram summary. Self-skips (no alert, no run row) when the local hour is before `family.run_hour` (#277); `--force` runs anyway and is what every webapp button sends |
 | `traffic-check [--dry-run]` | Traffic-jam check for the next upcoming commute; self-skips (no alert, no run row) when `traffic.cadence_min` hasn't elapsed since the last check (#170) |
 | `tray` | Launch the tray surface |
 

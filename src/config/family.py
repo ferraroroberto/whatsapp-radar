@@ -88,7 +88,11 @@ class FamilyConfig:
     """
 
     enabled: bool = False
-    run_hour: int = 7  # local hour the daily scan fires at/after
+    # Local hour before which `wr calendar-scan` self-skips (#277). It is a
+    # *floor*, not a fire time: the App Launcher job decides when the verb is
+    # invoked, this decides whether an unforced invocation does anything. An
+    # explicit `--force` (every webapp button) ignores it entirely.
+    run_hour: int = 7
     home_address: str = ""
     kids_home_time: str = "17:30"
     responsible_by_weekday: dict[int, str] = field(default_factory=dict)  # 0..6 -> person

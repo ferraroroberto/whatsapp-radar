@@ -148,14 +148,16 @@ def test_payload_carries_no_raw_coordinates(
 def test_back_to_back_infeasible_is_flagged_and_alerts(
     harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Office ends 09:00; Lunch (different place) starts 09:10 — a 10-min gap, but
-    # the drive takes 25 min in traffic, so the hop is infeasible.
+    # Office ends 09:20; Lunch (different place) starts 09:30 — a 10-min gap, but
+    # the drive takes 25 min in traffic, so the hop is infeasible. Office is still
+    # running at `now`, so the hop's departure anchor (#270) is in the future and
+    # the leg is actually priced.
     harness["events"] = {
         "roberto": [
             _event("Office", location=WORK,
-                   start=NOW - timedelta(hours=1), end=NOW, eid="a"),
+                   start=NOW - timedelta(hours=1), end=NOW + timedelta(minutes=20), eid="a"),
             _event("Lunch", location=LUNCH,
-                   start=NOW + timedelta(minutes=10), end=NOW + timedelta(hours=1), eid="b"),
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=1), eid="b"),
         ]
     }
     harness["route"] = RouteResult(normal_s=1500, traffic_s=1500)  # 25 min, no "delay"
@@ -171,6 +173,10 @@ def test_back_to_back_infeasible_is_flagged_and_alerts(
     entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
     assert entry["location_source"] == "calendar_inference"
     assert entry["origin"] == WORK and entry["gap_min"] == 10
+    # The hop is priced for the moment the person sets off — the end of the
+    # event they are leaving, the same instant `gap_min` is measured from (#270).
+    assert entry["anchor"] == "preceding_event_end"
+    assert harness["route_calls"][0]["departure_time"] == NOW + timedelta(minutes=20)
     assert entry["feasible"] is False
     assert entry["alerted"] is True and payload["alerts"] == 1
     assert "Tight schedule" in harness["sent"][0]
@@ -182,9 +188,9 @@ def test_feasible_leg_does_not_alert(
     harness["events"] = {
         "roberto": [
             _event("Office", location=WORK,
-                   start=NOW - timedelta(hours=1), end=NOW, eid="a"),
+                   start=NOW - timedelta(hours=1), end=NOW + timedelta(minutes=20), eid="a"),
             _event("Lunch", location=LUNCH,
-                   start=NOW + timedelta(minutes=40), end=NOW + timedelta(hours=1), eid="b"),
+                   start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), eid="b"),
         ]
     }
     harness["route"] = RouteResult(normal_s=600, traffic_s=600)  # 10 min drive, 40 min gap
@@ -587,3 +593,194 @@ def test_run_payload_reports_the_window_actually_applied(
     payload = traffic_check.run_traffic_check(degenerate, now=NOW, dry_run=True)
 
     assert payload["dedup_window_min"] == 180  # not the configured 30
+
+
+# ---------------------------------------------------------------- issue #270
+#
+# The wire format the traffic check actually puts on the Routes API, and the
+# departure anchor behind every number it reports.
+#
+# This is not a paraphrase of `compute_route`'s own contract test: the defect
+# #270 fixes lived in the *caller*, which passed `arrival_time` from #160
+# onward. Routes accepts that field for a DRIVE route and ignores it, so a
+# regression here would not raise, it would quietly re-price every future drive
+# as if it started at the sweep moment. Only a test that drives the real
+# `compute_route` from `run_traffic_check` and reads the request body can see it.
+
+
+class _FakeRoutesResponse:
+    status_code = 200
+
+    def json(self) -> dict[str, Any]:
+        return {"routes": [{"duration": "600s", "staticDuration": "600s"}]}
+
+
+class _RecordingSession:
+    """Stands in for the ``requests.Session`` ``run_traffic_check`` opens."""
+
+    def __init__(self, bodies: list[dict[str, Any]]) -> None:
+        self.bodies = bodies
+
+    def __enter__(self) -> _RecordingSession:
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+    def post(
+        self, url: str, *, json: dict[str, Any], headers: dict[str, str], timeout: int
+    ) -> _FakeRoutesResponse:
+        self.bodies.append(json)
+        return _FakeRoutesResponse()
+
+
+def _record_wire(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Let the *real* `compute_route` run against a stub session, and record it."""
+    from src.traffic import compute_route as real_compute_route
+
+    bodies: list[dict[str, Any]] = []
+    monkeypatch.setattr(traffic_check, "compute_route", real_compute_route)
+    monkeypatch.setattr(traffic_check.requests, "Session", lambda: _RecordingSession(bodies))
+    return bodies
+
+
+def _no_live_fix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        traffic_check, "get_location",
+        lambda *a, **kw: PresenceUnavailable("roberto", "disabled"),
+    )
+
+
+def test_home_leg_is_priced_as_a_departure_at_the_event_start(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The #270 fix: `departureTime`, never `arrivalTime`, on the wire."""
+    _single_office_leg(harness)
+    _no_live_fix(monkeypatch)
+    bodies = _record_wire(monkeypatch)
+
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=True
+    )
+
+    assert len(bodies) == 1
+    assert "arrivalTime" not in bodies[0]
+    assert bodies[0]["departureTime"] == (NOW + timedelta(minutes=30)).astimezone().isoformat()
+    # Unchanged on purpose: `staticDuration` (the delay baseline) moves with it.
+    assert bodies[0]["routingPreference"] == "TRAFFIC_AWARE"
+    assert payload["checked"][0]["anchor"] == "event_start"
+
+
+def test_chained_leg_is_priced_as_a_departure_at_the_preceding_event_end(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    office_end = NOW + timedelta(minutes=20)
+    harness["events"] = {
+        "roberto": [
+            _event("Office", location=WORK,
+                   start=NOW - timedelta(hours=1), end=office_end, eid="a"),
+            _event("Lunch", location=LUNCH,
+                   start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=1), eid="b"),
+        ]
+    }
+    _no_live_fix(monkeypatch)
+    bodies = _record_wire(monkeypatch)
+
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=True
+    )
+
+    assert len(bodies) == 1
+    assert "arrivalTime" not in bodies[0]
+    assert bodies[0]["departureTime"] == office_end.astimezone().isoformat()
+    entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
+    assert entry["anchor"] == "preceding_event_end"
+    assert entry["departure_anchor"] == office_end.isoformat()
+
+
+def test_live_presence_leg_sends_no_time_field_at_all(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """"If they leave now, do they make it?" is Routes' no-time-field call.
+
+    The leave-now nudge (#185) asks about a departure at `now`, so the correct
+    anchor is no anchor. The pre-#270 `arrival_time` argument was inert here
+    rather than wrong — but it is now gone, and the absence is pinned.
+    """
+    _single_office_leg(harness)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    bodies = _record_wire(monkeypatch)
+
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=True)
+
+    assert len(bodies) == 1
+    assert "arrivalTime" not in bodies[0] and "departureTime" not in bodies[0]
+    entry = payload["checked"][0]
+    assert entry["anchor"] == "depart_now" and entry["departure_anchor"] is None
+
+
+def test_past_departure_anchor_is_its_own_state_and_costs_no_routes_call(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A departure moment that has passed is a fact, not a transport failure.
+
+    Routes rejects a past `departureTime` outright (`HTTP 400 "Timestamp must be
+    set to a future time."`), so sending it would buy a fabricated `routes_error`
+    with a billable call. The leg reports what is actually true instead.
+    """
+    harness["events"] = {
+        "roberto": [
+            # Office ended 15 min ago, so the hop's departure moment has passed.
+            _event("Office", location=WORK,
+                   start=NOW - timedelta(hours=1), end=NOW - timedelta(minutes=15), eid="a"),
+            _event("Lunch", location=LUNCH,
+                   start=NOW + timedelta(minutes=10), end=NOW + timedelta(hours=1), eid="b"),
+        ]
+    }
+    _no_live_fix(monkeypatch)
+    bodies = _record_wire(monkeypatch)
+
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=False
+    )
+
+    assert bodies == [], "a past departure must never be sent, and never billed"
+    entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
+    assert entry["status"] == "anchor_in_the_past"
+    assert entry["status"] != "error" and "Routes" in entry["detail"]
+    assert entry["anchor"] == "preceding_event_end"
+    assert payload["status"] == "ok" and payload["alerts"] == 0
+    assert harness["sent"] == []
+
+
+def test_delay_alert_names_the_moment_it_was_priced_for(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """"Now ~40 min" about a drive two hours out is the same lie in words."""
+    start = NOW + timedelta(minutes=90)
+    harness["events"] = {
+        "roberto": [
+            _event("Office", location=WORK, start=start, end=start + timedelta(hours=2), eid="a")
+        ]
+    }
+    harness["route"] = RouteResult(normal_s=600, traffic_s=2400)  # +30 min delay
+    _no_live_fix(monkeypatch)
+
+    traffic_check.run_traffic_check(_config(presence_enabled=False), now=NOW, dry_run=False)
+
+    assert f"At {start.strftime('%H:%M')} ~40 min" in harness["sent"][0]
+    assert "Now ~" not in harness["sent"][0]
+
+
+def test_leave_now_delay_alert_still_says_now(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A depart-now leg keeps the present tense — it really is about now."""
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=600, traffic_s=2400)
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+
+    traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    delay = next(t for t in harness["sent"] if "Traffic alert" in t)
+    assert "Now ~40 min" in delay

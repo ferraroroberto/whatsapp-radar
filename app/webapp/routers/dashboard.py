@@ -77,7 +77,16 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
     alerts = int(result.get("alerts") or 0)
-    checked = len(result.get("checked") or [])
+    legs = result.get("checked") or []
+    checked = len(legs)
+    # A leg whose departure moment had already passed was never priced at all
+    # (`src.family.traffic_check.STATUS_ANCHOR_IN_THE_PAST`, #270) — it spends no
+    # Routes call and establishes nothing about the traffic on that road. Folding
+    # it into "no significant delay" would report a check that never happened as
+    # an all-clear, which is exactly what giving it its own state was for.
+    unpriced = sum(
+        1 for leg in legs if isinstance(leg, dict) and leg.get("status") == "anchor_in_the_past"
+    )
     rstatus = result.get("status")
     if rstatus == "disabled":
         summary = "checks disabled"
@@ -85,8 +94,10 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         summary = "quiet hours"
     elif alerts:
         summary = f"{alerts} delay alert" + ("" if alerts == 1 else "s")
-    elif checked:
+    elif checked > unpriced:
         summary = "no significant delay"
+    elif unpriced:
+        summary = f"{unpriced} commute" + ("" if unpriced == 1 else "s") + " not priced"
     else:
         summary = "no commutes to check"
     return {

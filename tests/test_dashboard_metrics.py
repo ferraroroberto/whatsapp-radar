@@ -276,6 +276,32 @@ def test_last_activity_cards_distill_each_kind(tmp_path: Path) -> None:
     assert cards["calendar"]["alerts"] == 0
 
 
+def test_unpriced_traffic_legs_do_not_read_as_an_all_clear(tmp_path: Path) -> None:
+    """#270: a departure moment that had already passed is not "no delay".
+
+    The leg spends no Routes call, so nothing was established about that road —
+    reporting it as an all-clear is the failure mode its own state exists to
+    prevent.
+    """
+    db = tmp_path / "unpriced.sqlite3"
+    conn = store.connect(db)
+    tid = store.start_run(conn, mode="live", kind="traffic-check")
+    store.finish_run_summary(
+        conn, tid, "completed",
+        json.dumps({"kind": "traffic-check", "status": "ok", "alerts": 0,
+                    "checked": [{"status": "anchor_in_the_past"}]}),
+    )
+    conn.close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        cards = {c["source"]: c for c in client.get("/api/dashboard").json()["last_activity"]}
+
+    assert cards["traffic"]["summary"] == "1 commute not priced"
+
+
 def test_last_activity_never_ran_on_empty_db(tmp_path: Path) -> None:
     db = tmp_path / "act-empty.sqlite3"
     store.connect(db).close()

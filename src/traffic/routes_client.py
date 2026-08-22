@@ -89,11 +89,13 @@ def compute_route(
     timestamp with ``HTTP 400 "Timestamp must be set to a future time."``, so
     callers pricing a schedule have to drop past anchors rather than send them.
 
-    ``arrival_time`` is kept for the existing traffic check (#160), which has
-    passed it since day one. Per the probe above Routes silently ignores it for
-    driving routes, so it yields a depart-now estimate; that is a pre-existing
-    behaviour of the alerting path and is deliberately not changed here. New
-    callers should use ``departure_time``.
+    ``arrival_time`` is **refused** (#270). No caller in this repo passes it any
+    more, and the parameter is kept only so that one that still does fails loudly
+    instead of receiving the depart-now baseline dressed up as an arrival-window
+    estimate — the exact silent wrongness that made #270 invisible for months.
+    Deleting the parameter outright would raise ``TypeError`` from somewhere deep
+    in a keyword-argument mismatch; raising :class:`TrafficReadError` here names
+    the field to use instead, and keeps the "both fields" contract testable.
 
     ``origin_latlng`` (a ``(lat, lng)`` pair) routes from an exact position —
     the live phone fix (#169) — instead of the ``origin`` address string, which
@@ -107,6 +109,14 @@ def compute_route(
         # (sending both returns 200 and honours the departure), so refusing here
         # is what stops a caller silently getting the other field's answer.
         raise TrafficReadError("arrival_time and departure_time are mutually exclusive")
+    if arrival_time is not None:
+        # Routes accepts `arrivalTime` for a DRIVE route and then ignores it,
+        # returning the depart-now baseline (probe table in #270). An answer that
+        # is real, plausible and not the question asked is worse than no answer,
+        # so this never reaches the wire.
+        raise TrafficReadError(
+            "arrival_time is ignored by Routes for DRIVE; pass departure_time instead"
+        )
     if origin_latlng is not None:
         origin_waypoint: dict[str, Any] = {
             "location": {"latLng": {"latitude": origin_latlng[0], "longitude": origin_latlng[1]}}
@@ -119,10 +129,8 @@ def compute_route(
         "travelMode": "DRIVE",
         "routingPreference": "TRAFFIC_AWARE",
     }
-    if arrival_time is not None:
-        # Routes requires an RFC-3339 timestamp; a local UTC offset is accepted.
-        body["arrivalTime"] = arrival_time.astimezone().isoformat()
     if departure_time is not None:
+        # Routes requires an RFC-3339 timestamp; a local UTC offset is accepted.
         body["departureTime"] = departure_time.astimezone().isoformat()
     headers = {
         "Content-Type": "application/json",

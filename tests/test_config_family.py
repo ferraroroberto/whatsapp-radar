@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from src.config import calendar as calendar_config
 from src.config import load_config
 
 _ENV_KEYS = (
@@ -245,11 +246,28 @@ def test_travel_blocks_ship_disabled_in_committed_defaults() -> None:
     }
 
 
+
+
 # ---------------------------------------------------------------- issue #273
 
 
+@pytest.fixture
+def _reset_duplicate_warning_dedup():
+    """The once-per-process warning dedup (#273 review finding #1) is
+    module-level state, so it survives across tests in the same session —
+    reset it before and after each test that inspects the warning, otherwise
+    test order decides whether a warning fires.
+    """
+    calendar_config._WARNED_DUPLICATE_CALENDARS.clear()
+    yield
+    calendar_config._WARNED_DUPLICATE_CALENDARS.clear()
+
+
 def test_duplicate_calendar_id_collapses_to_the_first_entry_with_a_warning(
-    tmp_path, _clean_env, caplog: pytest.LogCaptureFixture
+    tmp_path,
+    _clean_env,
+    _reset_duplicate_warning_dedup,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Two accounts sharing one calendar id must never reach the reconcile.
 
@@ -258,8 +276,9 @@ def test_duplicate_calendar_id_collapses_to_the_first_entry_with_a_warning(
     config-parse time — rather than refusing to boot, which would take down a
     live app for a household whose existing `config/local.json` already has
     the mistake — is the chosen fix; this pins that the collapse actually
-    happens, keeps the *first* entry, and logs a warning naming the calendar by
-    label, never by its raw id.
+    happens, keeps the *first* entry, logs a warning naming the calendar by
+    label (never its raw id), and names the coverage-roster consequence for
+    the dropped person.
     """
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
@@ -300,6 +319,91 @@ def test_duplicate_calendar_id_collapses_to_the_first_entry_with_a_warning(
     )
     # Privacy: the raw calendar id never appears in the log line, only labels.
     assert not any("shared@example.test" in message for message in warnings)
+    # #273 review finding #3: the dropped person's coverage-roster exposure
+    # must be named, not just the churn the fix was written for.
+    assert any("coverage" in message.lower() for message in warnings)
+
+
+def test_the_duplicate_warning_fires_once_per_process_not_once_per_poll(
+    tmp_path, _clean_env, _reset_duplicate_warning_dedup, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#273 review finding #1: `load_config()` is uncached and runs on nearly
+    every webapp request. A household carrying the duplicate must see one
+    warning, not one per poll — loud is the goal, flooded is its own kind of
+    unreadable.
+    """
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    (cfg_dir / "default.json").write_text(
+        json.dumps({"db_path": "data/x.sqlite3"}), encoding="utf-8"
+    )
+    (cfg_dir / "local.json").write_text(
+        json.dumps({
+            "calendar": {
+                "accounts": [
+                    {
+                        "calendar_id": "shared@example.test",
+                        "person": "parent-a",
+                        "label": "Parent A",
+                    },
+                    {
+                        "calendar_id": "shared@example.test",
+                        "person": "parent-b",
+                        "label": "Parent B",
+                    },
+                ]
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING", logger="src.config.calendar"):
+        for _ in range(5):
+            load_config(root=tmp_path)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+
+
+def test_duplicate_calendar_ids_collapse_case_insensitively(
+    tmp_path, _clean_env, _reset_duplicate_warning_dedup
+) -> None:
+    """#273 review finding #2: Google treats calendar ids case-insensitively,
+    so `A@x` and `a@x` are the same collision and must collapse too — the
+    surviving account keeps the first entry's *original* spelling, never the
+    casefolded form.
+    """
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    (cfg_dir / "default.json").write_text(
+        json.dumps({"db_path": "data/x.sqlite3"}), encoding="utf-8"
+    )
+    (cfg_dir / "local.json").write_text(
+        json.dumps({
+            "calendar": {
+                "accounts": [
+                    {
+                        "calendar_id": "Shared@Example.test",
+                        "person": "parent-a",
+                        "label": "Parent A",
+                    },
+                    {
+                        "calendar_id": "shared@example.test",
+                        "person": "parent-b",
+                        "label": "Parent B",
+                    },
+                ]
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(root=tmp_path)
+
+    assert len(cfg.calendar.accounts) == 1
+    # The first entry's original casing survives — never the casefolded form.
+    assert cfg.calendar.accounts[0].calendar_id == "Shared@Example.test"
+    assert cfg.calendar.collapsed_duplicate_labels == ("Parent B",)
 
 
 def test_a_config_with_no_duplicates_reports_none_collapsed(tmp_path, _clean_env) -> None:

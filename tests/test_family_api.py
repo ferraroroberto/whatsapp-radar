@@ -335,6 +335,11 @@ def test_duplicate_calendars_are_reported_by_label_never_by_raw_id(
     with _client(tmp_path / "x.sqlite3") as client:
         tb = client.get("/api/family").json()["travel_blocks"]
     assert tb["duplicate_calendars"] == ["Parent A (shared calendar)"]
+    # The name of this test is the point: the raw calendar id must never
+    # appear inside the `duplicate_calendars` entries themselves.
+    assert not any(
+        "shared@example.com" in entry for entry in tb["duplicate_calendars"]
+    )
 
 
 def test_travel_blocks_reports_write_token_presence(

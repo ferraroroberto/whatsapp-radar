@@ -10,6 +10,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Distinct collapsed pairs already warned about this process (#273 review
+# finding #1): `load_config()` is uncached and runs on essentially every
+# webapp request, so without this a household carrying the duplicate would
+# get a WARNING line on every poll instead of once. Keyed on the casefolded
+# calendar id plus both labels, so a config edit that changes which entry
+# collides (or its label) warns again rather than staying silent forever.
+_WARNED_DUPLICATE_CALENDARS: set[tuple[str, str, str]] = set()
+
 
 @dataclass(frozen=True)
 class CalendarAccount:
@@ -95,6 +103,11 @@ def _collapse_duplicate_calendar_ids(
     the duplicate by mistake, so this collapses to the first entry and reports
     the drop loudly instead — never silently, and never by refusing to boot.
 
+    The dedup key is **casefolded** — Google treats calendar ids case-
+    insensitively, so ``A@x`` and ``a@x`` are the same collision and must
+    collapse too — but the surviving :class:`CalendarAccount` keeps the first
+    entry's original spelling; only the lookup key is casefolded.
+
     Do not "fix" the collision downstream by folding ``person`` into
     ``leg_key`` instead — that would legitimise two people owning one calendar
     and push the same ambiguity into the block markers it writes.
@@ -102,20 +115,40 @@ def _collapse_duplicate_calendar_ids(
     kept: dict[str, CalendarAccount] = {}
     collapsed: list[str] = []
     for account in accounts:
-        first = kept.get(account.calendar_id)
+        dedup_key = account.calendar_id.casefold()
+        first = kept.get(dedup_key)
         if first is None:
-            kept[account.calendar_id] = account
+            kept[dedup_key] = account
             continue
         kept_label = first.label or first.person
         dropped_label = account.label or account.person
         collapsed.append(dropped_label)
-        logger.warning(
-            "⚠️ calendar.accounts: %s and %s share one calendar id — keeping %s and "
-            "collapsing %s, to stop the travel-blocks sweep churning that calendar's "
-            "blocks forever (#273)",
-            kept_label,
-            dropped_label,
-            kept_label,
-            dropped_label,
-        )
+        _warn_duplicate_calendar_once(dedup_key, kept_label, dropped_label)
     return tuple(kept.values()), tuple(collapsed)
+
+
+def _warn_duplicate_calendar_once(dedup_key: str, kept_label: str, dropped_label: str) -> None:
+    """Log the collapse once per process for a given (id, kept, dropped) triple.
+
+    ``load_config()`` is uncached and runs on essentially every webapp request
+    (the DB dependency, the family/config/execution routers all call it), so
+    without this a household carrying the duplicate would get a WARNING line
+    on every poll instead of once at the point it matters. Loud is the goal;
+    flooded is its own kind of unreadable.
+    """
+    seen_key = (dedup_key, kept_label, dropped_label)
+    if seen_key in _WARNED_DUPLICATE_CALENDARS:
+        return
+    _WARNED_DUPLICATE_CALENDARS.add(seen_key)
+    logger.warning(
+        "⚠️ calendar.accounts: %s and %s share one calendar id — keeping %s and "
+        "collapsing %s, to stop the travel-blocks sweep churning that calendar's "
+        "blocks forever (#273). If %s has no other calendar configured, they also "
+        "disappear from the coverage-check roster entirely (neither available nor "
+        "away) until the duplicate entry is removed from config",
+        kept_label,
+        dropped_label,
+        kept_label,
+        dropped_label,
+        dropped_label,
+    )

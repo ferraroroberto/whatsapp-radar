@@ -68,6 +68,7 @@ from src.family.travel_blocks import (
     plan_travel_blocks,
     scan_window_days,
     travel_block_horizon,
+    travel_block_listing_end,
 )
 from src.traffic import compute_route
 
@@ -532,7 +533,16 @@ def run_travel_blocks(
 
     horizon_start, horizon_end = travel_block_horizon(config, now)
     _warn_if_horizon_clamped(config)
-    marked = _read_marked(config, time_min=horizon_start, time_max=horizon_end)
+    # The read is padded past the horizon, the plan is not (#272). See
+    # `travel_block_listing_end` for the bound and `reconcile` for why a block
+    # found out there is left alone rather than judged an orphan.
+    marked = _read_marked(
+        config,
+        time_min=horizon_start,
+        time_max=travel_block_listing_end(
+            events_by_person, horizon_start=horizon_start, horizon_end=horizon_end
+        ),
+    )
     plan = plan_travel_blocks(
         config,
         events_by_person,
@@ -574,7 +584,7 @@ def _warn_if_horizon_clamped(config: Config) -> None:
 
 
 def _read_marked(config: Config, *, time_min: datetime, time_max: datetime) -> MarkedEvents:
-    """List our own blocks over the horizon; a total read failure is still a *known* unknown.
+    """List our own blocks over the padded window; a total read failure is still a *known* unknown.
 
     If the read client itself cannot be built, every configured calendar is
     reported unreadable rather than empty — an empty listing would be read as

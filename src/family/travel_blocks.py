@@ -19,7 +19,11 @@ The computation is deliberately split in four:
 4. :func:`reconcile` (#267) — pure again — diffs the desired legs against the
    blocks *already* on the calendar and produces the add/delete decision. It is
    told which leg keys are **protected** — the ones whose desired shape could
-   not be established this sweep — and leaves their blocks strictly alone.
+   not be established this sweep — and leaves their blocks strictly alone. It is
+   also told where the plan *stops* (``plan_end``), because the listing that
+   fetched those blocks deliberately reads further than the plan does (#272,
+   :func:`travel_block_listing_end`); a block out in that padded region is left
+   alone too, for the same reason and reported the same way.
 
 That last word is load-bearing, and the reason it is: a leg that failed to price
 is still *desired*; all that is missing is its duration. Dropping it from the
@@ -475,6 +479,29 @@ DELETE_REASON_REPLACED = "replaced"  # a desired leg exists, but its hash/schema
 DELETE_REASON_ORPHANED = "orphaned"  # no desired leg — source cancelled, moved or out of horizon
 DELETE_REASON_DUPLICATE = "duplicate"  # a second block for a leg already satisfied by another
 
+#: Why a block was left exactly as it is instead of being removed. Reported per
+#: block for the same reason a delete carries a reason: "left alone" without a
+#: why is as unaccountable as "deleted" without one, and the three cases are
+#: genuinely different facts about what this sweep managed to establish.
+PROTECT_REASON_UNPLANNED_LEG = "leg_not_planned"  # its leg could not be planned this sweep
+PROTECT_REASON_BEYOND_HORIZON = "beyond_planning_horizon"  # seen only via the padded read (#272)
+PROTECT_REASON_START_UNKNOWN = "start_not_established"  # cannot tell which side of the plan it is
+
+_PROTECT_DETAIL = {
+    PROTECT_REASON_UNPLANNED_LEG: (
+        "its leg could not be planned this sweep, so nothing is known about whether it is "
+        "still right"
+    ),
+    PROTECT_REASON_BEYOND_HORIZON: (
+        "it starts past the planning horizon, where the sweep computes no desired state, so "
+        "'no desired counterpart' says nothing about it"
+    ),
+    PROTECT_REASON_START_UNKNOWN: (
+        "its start could not be read, so it cannot be placed inside or outside the planning "
+        "horizon"
+    ),
+}
+
 
 @dataclass(frozen=True)
 class ExistingBlock:
@@ -531,6 +558,20 @@ class PlannedDelete:
 
 
 @dataclass(frozen=True)
+class ProtectedBlock:
+    """One existing block left exactly as it is, and the reason it was not judged.
+
+    Deliberately shaped like :class:`PlannedDelete`: both are "a block plus why",
+    and a protection that could not say *which* unestablished fact spared it
+    would be the silent pass ``CLAUDE.md`` forbids. ``reason`` is one of the
+    ``PROTECT_REASON_*`` constants.
+    """
+
+    block: ExistingBlock
+    reason: str
+
+
+@dataclass(frozen=True)
 class Reconciliation:
     """The four-way diff: what to insert, what to remove, and what to leave alone.
 
@@ -538,16 +579,17 @@ class Reconciliation:
     cost **zero** API writes, so an unchanged block is neither re-inserted nor
     touched — it is only counted.
 
-    ``protected`` is the *other* kind of "leave alone": a block whose leg could
-    not be planned this sweep, so nothing is known about whether it is still
-    right. It is reported rather than acted on — never a keep (nothing verified
-    it) and never a delete (nothing said it was stale).
+    ``protected`` is the *other* kind of "leave alone": a block about which this
+    sweep established nothing — either its leg could not be planned, or it sits
+    outside the window the plan was computed for. It is reported rather than
+    acted on — never a keep (nothing verified it) and never a delete (nothing
+    said it was stale).
     """
 
     adds: list[PlannedLeg]
     deletes: list[PlannedDelete]
     keeps: list[ExistingBlock]
-    protected: list[ExistingBlock] = field(default_factory=list)
+    protected: list[ProtectedBlock] = field(default_factory=list)
 
 
 def parse_existing_block(raw: Mapping[str, Any], *, calendar_id: str) -> ExistingBlock | None:
@@ -606,10 +648,49 @@ def carries_marker(raw: Mapping[str, Any]) -> bool:
     return _private_properties(raw).get(MARKER_KEY) == MARKER_VALUE
 
 
+def block_start_moment(block: ExistingBlock) -> datetime | None:
+    """``block``'s start as an aware datetime, or ``None`` when it cannot be established.
+
+    Every block this app writes carries a ``dateTime`` start with an offset, so
+    the ``None`` branches are the can't-happen ones — an all-day ``date`` start,
+    an absent start, an unparseable string. They are still answered as ``None``
+    rather than coerced to a moment, because the one caller uses this to decide
+    whether a block may be *deleted*: a guessed position is exactly the kind of
+    unestablished fact that must not be folded into a decision.
+    """
+    raw = block.start
+    if not raw:
+        return None
+    try:
+        moment = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    # A naive moment (an all-day `date`, or a start without an offset) cannot be
+    # compared with the aware horizon at all — comparing would raise, and
+    # assuming a timezone would invent the very fact that is missing.
+    return moment if moment.tzinfo is not None else None
+
+
+def _protect_reason_beyond_plan(block: ExistingBlock, plan_end: datetime) -> str | None:
+    """Why ``block`` must be spared the orphan sweep, or ``None`` when it is fair game.
+
+    Only ever consulted for a block with **no desired counterpart**. Inside the
+    planning window that means "nothing wants this any more"; at or after
+    ``plan_end`` it means nothing was ever computed about it, because the
+    listing deliberately reads further than the plan does (#272). The two must
+    not produce the same decision.
+    """
+    moment = block_start_moment(block)
+    if moment is None:
+        return PROTECT_REASON_START_UNKNOWN
+    return PROTECT_REASON_BEYOND_HORIZON if moment >= plan_end else None
+
+
 def reconcile(
     desired: Sequence[PlannedLeg],
     existing: Sequence[ExistingBlock],
     *,
+    plan_end: datetime,
     protected: Collection[str] = (),
 ) -> Reconciliation:
     """Diff desired against existing on ``(calendar, source event, leg)`` — pure.
@@ -622,10 +703,26 @@ def reconcile(
       would leave a half-updated block behind if it failed midway;
     * unrecognised :data:`SCHEMA_VERSION` → treated as changed, never as a keep.
       A build that cannot vouch for a block's shape must not certify it;
-    * no desired counterpart → deleted (source cancelled, or out of horizon);
+    * no desired counterpart, and it starts **inside** the planning window →
+      deleted (source cancelled, or out of horizon);
+    * no desired counterpart, but it starts at or after ``plan_end`` → left
+      strictly alone, reported as :data:`PROTECT_REASON_BEYOND_HORIZON`;
     * a duplicate for an already-satisfied leg → deleted. Duplicates should not
       happen, but a run interrupted between insert and its next sweep can leave
       one, and quietly tolerating it would let them accumulate forever.
+
+    ``plan_end`` is where the *desired* state stops being computed — the
+    planning horizon's end — and it is required, with no default, for the same
+    reason ``existing`` is required one layer up. The listing that produced
+    ``existing`` deliberately reads **past** that moment (#272: Calendar's
+    ``timeMax`` is exclusive on an event's *start*, so a return block for an
+    event ending after the horizon is otherwise never returned and gets
+    re-inserted on every sweep). Widening the read must not widen the plan: a
+    block found in that padded region has no desired counterpart simply because
+    nothing was computed out there, and reading that absence as "orphaned"
+    would turn a fix for duplicates into a delete of correct blocks. Defaulting
+    ``plan_end`` to "no window" would default that guard off, which is the one
+    direction this feature may never fail in.
 
     ``protected`` names the leg keys whose desired shape this sweep **failed to
     establish** — every :class:`LegFailure` (see :func:`plan_travel_blocks`).
@@ -645,10 +742,10 @@ def reconcile(
     """
     protected_keys = frozenset(protected)
     by_key: dict[str, list[ExistingBlock]] = {}
-    protected_blocks: list[ExistingBlock] = []
+    protected_blocks: list[ProtectedBlock] = []
     for block in existing:
         if block.key in protected_keys:
-            protected_blocks.append(block)
+            protected_blocks.append(ProtectedBlock(block, PROTECT_REASON_UNPLANNED_LEG))
             continue
         by_key.setdefault(block.key, []).append(block)
 
@@ -682,11 +779,18 @@ def reconcile(
             if block is not match
         )
     for orphans in by_key.values():
-        deletes.extend(PlannedDelete(block, DELETE_REASON_ORPHANED) for block in orphans)
+        for block in orphans:
+            spared = _protect_reason_beyond_plan(block, plan_end)
+            if spared is None:
+                deletes.append(PlannedDelete(block, DELETE_REASON_ORPHANED))
+            else:
+                protected_blocks.append(ProtectedBlock(block, spared))
 
     deletes.sort(key=lambda pending: (pending.block.calendar_id, pending.block.start,
                                       pending.block.event_id))
-    protected_blocks.sort(key=lambda block: (block.calendar_id, block.start, block.event_id))
+    protected_blocks.sort(
+        key=lambda pending: (pending.block.calendar_id, pending.block.start, pending.block.event_id)
+    )
     return Reconciliation(
         adds=adds, deletes=deletes, keeps=keeps, protected=protected_blocks
     )
@@ -937,11 +1041,14 @@ class TravelBlockPlan:
     current contents could not be read is deliberately *not* an add, and appears
     in ``failures`` instead.
 
-    ``protected`` lists the existing blocks left untouched because their leg
-    could not be planned at all this sweep (see :func:`reconcile`). Every one of
-    them has a matching entry in ``failures``: the two together say "this block
-    still exists and we do not know whether it is right", which is neither a
-    keep nor a delete.
+    ``protected`` lists the existing blocks left untouched, each with the reason
+    this sweep established nothing about it (see :func:`reconcile`). A
+    :data:`PROTECT_REASON_UNPLANNED_LEG` entry always has a matching entry in
+    ``failures``: the two together say "this block still exists and we do not
+    know whether it is right", which is neither a keep nor a delete. A
+    :data:`PROTECT_REASON_BEYOND_HORIZON` entry has no failure — nothing failed;
+    the block simply lies past the window the plan covers, and was only seen
+    because the listing reads further than the plan does (#272).
 
     ``event_summaries`` maps ``(calendar_id, event_id)`` to the source event's
     title. It is carried for reporting only, and is deliberately *not* a field of
@@ -957,7 +1064,7 @@ class TravelBlockPlan:
     failures: list[LegFailure]
     routes_calls: int
     keeps: list[ExistingBlock] = field(default_factory=list)
-    protected: list[ExistingBlock] = field(default_factory=list)
+    protected: list[ProtectedBlock] = field(default_factory=list)
     horizon_start: datetime | None = None
     horizon_end: datetime | None = None
     event_summaries: dict[tuple[str, str], str] = field(default_factory=dict)
@@ -990,10 +1097,10 @@ class TravelBlockPlan:
             },
             "adds": [self._leg_payload(leg) for leg in self.adds],
             "deletes": [_delete_payload(pending) for pending in self.deletes],
-            # Reported, not merely absent: "we left this block alone because we
-            # could not plan its leg" has to be readable off the run payload,
-            # or nobody can tell it from "we checked and it was fine".
-            "protected": [_block_payload(block) for block in self.protected],
+            # Reported, not merely absent — and with the reason: "we left this
+            # block alone" has to be readable off the run payload, or nobody can
+            # tell it from "we checked and it was fine".
+            "protected": [_protected_payload(pending) for pending in self.protected],
             "failures": [self._failure_payload(failure) for failure in self.failures],
         }
 
@@ -1032,6 +1139,15 @@ def _delete_payload(pending: PlannedDelete) -> dict[str, Any]:
 
     ``reason`` is what makes the entry reviewable — a delete list without one
     would be exactly the unaccountable output this feature must not produce.
+    """
+    return {"reason": pending.reason, **_block_payload(pending.block)}
+
+
+def _protected_payload(pending: ProtectedBlock) -> dict[str, Any]:
+    """One block left alone, plus which unestablished fact spared it.
+
+    Shaped exactly like :func:`_delete_payload` — an entry that said only "left
+    alone" would be as unreviewable as a delete with no reason.
     """
     return {"reason": pending.reason, **_block_payload(pending.block)}
 
@@ -1096,6 +1212,56 @@ def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datet
     return horizon_start, horizon_start + timedelta(
         days=min(horizon_days, scan_window_days(config))
     )
+
+
+#: How far past the last block it could possibly have written the marker-scoped
+#: listing still reads (#272). Slack on top of the exact bound below, for blocks
+#: written by an *earlier* sweep against a source event that has since moved
+#: earlier — their start is derived from an event end nothing can recompute now.
+#: A day is generous against every real commute and costs only a wider read: a
+#: block seen out there is never planned for and never deleted, only reported.
+LISTING_PAD = timedelta(days=1)
+
+
+def travel_block_listing_end(
+    events_by_person: Mapping[str, Sequence[CalendarEvent]],
+    *,
+    horizon_start: datetime,
+    horizon_end: datetime,
+) -> datetime:
+    """The ``timeMax`` the marker-scoped listing must use to see every block we wrote.
+
+    Calendar's ``timeMax`` is **exclusive on an event's start**, and the listing
+    used to stop exactly at ``horizon_end``. A return block starts at its source
+    event's *end*, so an evening event on the last horizon day that runs past
+    local midnight has a block starting at or after ``horizon_end`` — never
+    returned, never matched, re-inserted on every sweep until the horizon rolled
+    forward (#272).
+
+    The bound is exact rather than a round number. Every block this sweep could
+    have written for an in-horizon event starts either at ``event.start`` minus
+    its drive (an outbound — necessarily *before* ``horizon_end``) or at
+    ``event.end`` (a return). The drive's own length never enters it: the filter
+    is on the block's start, not its end. So the latest possible start is the
+    latest in-horizon source-event end, and :data:`LISTING_PAD` is added on top
+    for the blocks a *previous* sweep wrote from an end that has since changed.
+
+    All-day events and our own blocks are excluded for the same reasons
+    :func:`desired_legs` excludes them: neither is ever a source event, so
+    neither may stretch the window.
+
+    This widens the **read only**. What is *desired* still spans
+    ``[horizon_start, horizon_end)``, and :func:`reconcile` is told where that
+    stops so a block out here is left alone rather than judged an orphan.
+    """
+    latest = horizon_end
+    for events in events_by_person.values():
+        for event in events:
+            if event.all_day or is_travel_block(event):
+                continue
+            if horizon_start <= event.start < horizon_end and event.end > latest:
+                latest = event.end
+    return latest + LISTING_PAD
 
 
 def scan_window_days(config: Config) -> int:
@@ -1187,7 +1353,12 @@ def plan_travel_blocks(
         leg_key(failure.calendar_id, failure.source_event_id, failure.leg)
         for failure in priced.failures
     }
-    diff = reconcile(reconcilable, existing.blocks, protected=protected)
+    # `plan_end` is the horizon's end, *not* the listing's: the read is padded
+    # past it (#272) precisely so the reconcile can see a block it wrote for an
+    # event that runs past midnight — and the padding must not make those extra
+    # blocks look orphaned, which is what telling the diff where the plan stops
+    # prevents.
+    diff = reconcile(reconcilable, existing.blocks, plan_end=horizon_end, protected=protected)
     failures = list(priced.failures)
     failures.extend(
         LegFailure(
@@ -1270,16 +1441,19 @@ def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> Non
             pending.block.source_event_id or "?",
             pending.block.start or "?",
         )
-    for block in plan.protected:
+    for spared in plan.protected:
+        block = spared.block
         out.info(
-            "ℹ️ travel block [protected] %s on %s — %s leg of source event %s (starts %s) left "
-            "exactly as it is: its leg could not be planned this sweep, and a failure to "
-            "establish a fact is never applied as a delete",
+            "ℹ️ travel block [protected: %s] %s on %s — %s leg of source event %s (starts %s) "
+            "left exactly as it is: %s, and a fact this sweep did not establish is never "
+            "applied as a delete",
+            spared.reason,
             block.event_id,
             block.calendar_id,
             block.leg or "?",
             block.source_event_id or "?",
             block.start or "?",
+            _PROTECT_DETAIL.get(spared.reason, "nothing this sweep established says it is stale"),
         )
     for failure in plan.failures:
         out.warning(

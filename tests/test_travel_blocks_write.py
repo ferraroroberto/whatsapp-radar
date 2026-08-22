@@ -62,6 +62,13 @@ CALENDAR_B = "parent-b@example.test"
 DAY = datetime(2026, 7, 20, tzinfo=UTC)
 NOW = DAY.replace(hour=6)
 TITLE = "🚗 Trayecto"
+#: A plan window comfortably containing every fixture leg below, for the *pure*
+#: reconcile tests. The listing deliberately reads past where the plan stops
+#: (#272), so the diff has to be told which of the two moments it is judging
+#: against — a block beyond it is unplanned-for, not orphaned. The sweep tests
+#: derive the real boundary from `_horizon()` instead: the true horizon depends
+#: on the machine's local midnight, which is not `DAY`'s.
+PLAN_END = DAY + timedelta(days=2)
 
 
 def _at(hour: int, minute: int = 0) -> datetime:
@@ -99,6 +106,8 @@ def _leg(
     origin: str = HOME,
     destination: str = OFFICE,
     minutes: int = 20,
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> PlannedLeg:
     return PlannedLeg(
         person=person,
@@ -107,8 +116,8 @@ def _leg(
         source_event_id=source_event_id,
         origin=origin,
         destination=destination,
-        start=_at(8, 40),
-        end=_at(9),
+        start=start or _at(8, 40),
+        end=end or _at(9),
         source_start=_at(9),
         source_end=_at(10),
         minutes=minutes,
@@ -133,6 +142,22 @@ def _block(leg: PlannedLeg, *, event_id: str = "blk-1") -> ExistingBlock:
     )
     assert parsed is not None
     return parsed
+
+
+def _within_window(
+    event: dict[str, Any], *, time_min: datetime, time_max: datetime
+) -> bool:
+    """Google's own `events.list` window semantics, which #272 turns on.
+
+    ``timeMin`` is an exclusive lower bound on an event's **end**; ``timeMax`` an
+    exclusive upper bound on its **start**. The asymmetry is the whole bug: a
+    block starting at or after ``timeMax`` is simply not returned, so the
+    reconcile could not see the block it had written and re-inserted it every
+    sweep. A fake that ignored the window could not reproduce that.
+    """
+    start = datetime.fromisoformat(event["start"]["dateTime"])
+    end = datetime.fromisoformat(event["end"]["dateTime"])
+    return end > time_min and start < time_max
 
 
 class _FakeReadClient:
@@ -169,7 +194,11 @@ class _FakeReadClient:
         })
         if calendar_id in self._list_fails:
             raise RuntimeError("calendar listing exploded")
-        return list(self._marked.get(calendar_id, []))
+        return [
+            event
+            for event in self._marked.get(calendar_id, [])
+            if _within_window(event, time_min=time_min, time_max=time_max)
+        ]
 
     def calendar_access_role(self, calendar_id: str) -> str | None:
         if calendar_id in self._role_fails:
@@ -273,6 +302,15 @@ def _config(
     )
 
 
+def _horizon() -> tuple[datetime, datetime]:
+    """The sweep's real planning window for :data:`NOW`.
+
+    Computed, never hardcoded: it starts at the *machine's* local midnight, so a
+    literal would only be right in one timezone.
+    """
+    return travel_blocks.travel_block_horizon(_config(), NOW)
+
+
 def _run(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -320,7 +358,7 @@ def _run(
 
 def test_a_missing_block_is_an_add() -> None:
     leg = _leg()
-    diff = reconcile([leg], [])
+    diff = reconcile([leg], [], plan_end=PLAN_END)
     assert diff.adds == [leg]
     assert diff.deletes == [] and diff.keeps == []
 
@@ -328,7 +366,7 @@ def test_a_missing_block_is_an_add() -> None:
 def test_an_unchanged_block_is_kept_and_never_rewritten() -> None:
     """The zero-write contract, at its source: same hash, same schema, no ops."""
     leg = _leg()
-    diff = reconcile([leg], [_block(leg)])
+    diff = reconcile([leg], [_block(leg)], plan_end=PLAN_END)
     assert diff.adds == [] and diff.deletes == []
     assert [block.event_id for block in diff.keeps] == ["blk-1"]
 
@@ -337,7 +375,7 @@ def test_a_changed_hash_is_a_delete_and_a_reinsert() -> None:
     """A moved source event, or a new location, invalidates the stored hash."""
     stale = _block(_leg(minutes=20))
     desired = _leg(minutes=35)  # a different drive length => a different hash
-    diff = reconcile([desired], [stale])
+    diff = reconcile([desired], [stale], plan_end=PLAN_END)
     assert diff.adds == [desired]
     assert [(d.block.event_id, d.reason) for d in diff.deletes] == [
         ("blk-1", travel_blocks.DELETE_REASON_REPLACED)
@@ -347,7 +385,7 @@ def test_a_changed_hash_is_a_delete_and_a_reinsert() -> None:
 
 def test_a_vanished_source_event_leaves_an_orphan_to_delete() -> None:
     """Cancelled, or simply out of the horizon: nothing desires this block now."""
-    diff = reconcile([], [_block(_leg())])
+    diff = reconcile([], [_block(_leg())], plan_end=PLAN_END)
     assert diff.adds == [] and diff.keeps == []
     assert [d.reason for d in diff.deletes] == [travel_blocks.DELETE_REASON_ORPHANED]
 
@@ -359,14 +397,16 @@ def test_an_unrecognised_schema_version_is_never_a_keep() -> None:
     raw["extendedProperties"]["private"]["wr_schema_version"] = "99"
     stale = travel_blocks.parse_existing_block(raw, calendar_id=CALENDAR_ID)
     assert stale is not None
-    diff = reconcile([leg], [stale])
+    diff = reconcile([leg], [stale], plan_end=PLAN_END)
     assert diff.adds == [leg]
     assert [d.reason for d in diff.deletes] == [travel_blocks.DELETE_REASON_REPLACED]
 
 
 def test_a_duplicate_block_for_one_leg_is_removed_not_tolerated() -> None:
     leg = _leg()
-    diff = reconcile([leg], [_block(leg, event_id="blk-1"), _block(leg, event_id="blk-2")])
+    diff = reconcile(
+        [leg], [_block(leg, event_id="blk-1"), _block(leg, event_id="blk-2")], plan_end=PLAN_END
+    )
     assert diff.adds == []
     assert [block.event_id for block in diff.keeps] == ["blk-1"]
     assert [(d.block.event_id, d.reason) for d in diff.deletes] == [
@@ -383,10 +423,13 @@ def test_a_protected_leg_is_neither_deleted_nor_re_added() -> None:
     leg = _leg()
     block = _block(leg)
 
-    diff = reconcile([], [block], protected={leg.key})
+    diff = reconcile([], [block], plan_end=PLAN_END, protected={leg.key})
 
     assert diff.deletes == [] and diff.adds == [] and diff.keeps == []
-    assert diff.protected == [block]  # left alone, and said out loud
+    # Left alone, and said out loud — with *which* unestablished fact spared it.
+    assert [(p.block, p.reason) for p in diff.protected] == [
+        (block, travel_blocks.PROTECT_REASON_UNPLANNED_LEG)
+    ]
 
 
 def test_protection_covers_only_the_leg_that_failed() -> None:
@@ -394,13 +437,74 @@ def test_protection_covers_only_the_leg_that_failed() -> None:
     failed = _leg(source_event_id="e1")
     orphan = _block(_leg(source_event_id="e2"), event_id="blk-2")
 
-    diff = reconcile([], [_block(failed), orphan], protected={failed.key})
+    diff = reconcile(
+        [], [_block(failed), orphan], plan_end=PLAN_END, protected={failed.key}
+    )
 
     assert [pending.block for pending in diff.deletes] == [orphan]
     assert [pending.reason for pending in diff.deletes] == [
         travel_blocks.DELETE_REASON_ORPHANED
     ]
-    assert diff.protected == [_block(failed)]
+    assert [pending.block for pending in diff.protected] == [_block(failed)]
+
+
+def test_an_orphan_past_the_plan_window_is_left_alone_not_deleted() -> None:
+    """#272's trap: the padded read must widen what we *see*, never what we judge.
+
+    A block starting past ``plan_end`` was only fetched because the listing now
+    reads further than the plan does. Nothing computed a desired counterpart out
+    there, so "no counterpart" is not evidence of an orphan — and treating it as
+    one would turn a fix for duplicate blocks into a delete of correct ones.
+    """
+    beyond = _block(
+        _leg(source_event_id="e-late", start=PLAN_END + timedelta(hours=1),
+             end=PLAN_END + timedelta(hours=1, minutes=20)),
+        event_id="blk-late",
+    )
+
+    diff = reconcile([], [beyond], plan_end=PLAN_END)
+
+    assert diff.deletes == [] and diff.adds == [] and diff.keeps == []
+    assert [(p.block.event_id, p.reason) for p in diff.protected] == [
+        ("blk-late", travel_blocks.PROTECT_REASON_BEYOND_HORIZON)
+    ]
+
+
+def test_a_block_starting_exactly_at_the_plan_end_is_outside_it() -> None:
+    """``plan_end`` is exclusive: a block starting exactly there is already outside it.
+
+    The same half-open convention `desired_legs` uses for events
+    (``horizon_start <= start < horizon_end``), so the two edges agree.
+    """
+    edge = _block(
+        _leg(source_event_id="e-edge", start=PLAN_END, end=PLAN_END + timedelta(minutes=20)),
+        event_id="blk-edge",
+    )
+    inside = _block(
+        _leg(source_event_id="e-in", start=PLAN_END - timedelta(minutes=1),
+             end=PLAN_END + timedelta(minutes=19)),
+        event_id="blk-in",
+    )
+
+    diff = reconcile([], [edge, inside], plan_end=PLAN_END)
+
+    assert [p.block.event_id for p in diff.protected] == ["blk-edge"]
+    assert [(d.block.event_id, d.reason) for d in diff.deletes] == [
+        ("blk-in", travel_blocks.DELETE_REASON_ORPHANED)
+    ]
+
+
+def test_a_block_whose_start_cannot_be_read_is_never_deleted() -> None:
+    """Not placeable is not "inside" — an unestablished position is its own state."""
+    raw = _raw_block(_leg())
+    raw["start"] = {"date": "2026-07-20"}  # all-day: no moment to compare at all
+    block = travel_blocks.parse_existing_block(raw, calendar_id=CALENDAR_ID)
+    assert block is not None
+
+    diff = reconcile([], [block], plan_end=PLAN_END)
+
+    assert diff.deletes == []
+    assert [p.reason for p in diff.protected] == [travel_blocks.PROTECT_REASON_START_UNKNOWN]
 
 
 def test_parse_refuses_a_resource_without_the_marker() -> None:
@@ -853,6 +957,168 @@ def test_a_second_sweep_after_the_drive_departed_keeps_that_mornings_blocks(
     assert {f["reason"] for f in payload["failures"]} == {
         travel_blocks.FAILURE_ANCHOR_IN_THE_PAST
     }
+
+
+def test_an_event_ending_past_the_horizon_keeps_exactly_one_return_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The #272 regression: three sweeps, unchanged inputs, one block each way.
+
+    An evening event on the last horizon day that runs past local midnight has
+    its return block start at or after the horizon's end. Calendar's ``timeMax``
+    is exclusive on an event's *start*, so the old listing — which stopped
+    exactly at the horizon — never returned that block. The reconcile could not
+    see what it had written, found no counterpart, and inserted a fresh one on
+    every single sweep: one duplicate per run, stacked on the same evening slot.
+    """
+    _, horizon_end = _horizon()
+    # Starts two hours inside the last horizon day, runs three: its return block
+    # therefore starts an hour *past* the horizon's end.
+    late = _raw_event("e1", start=horizon_end - timedelta(hours=2), hours=3)
+    calendar_state: list[dict[str, Any]] = []
+    written = 0
+    inserts: list[int] = []
+    deletes: list[int] = []
+
+    for _ in range(3):
+        _, _, write = _run(
+            monkeypatch,
+            tmp_path,
+            events={PERSON: [late]},
+            read=_FakeReadClient({CALENDAR_ID: list(calendar_state)}),
+        )
+        removed = {event_id for _calendar_id, event_id in write.deleted}
+        calendar_state = [item for item in calendar_state if item["id"] not in removed]
+        for _calendar_id, event in write.inserted:
+            calendar_state.append({"id": f"blk-{written}", **event})
+            written += 1
+        inserts.append(len(write.inserted))
+        deletes.append(len(write.deleted))
+
+    assert inserts == [2, 0, 0], (
+        f"expected one outbound + one return on the first sweep and nothing after it, "
+        f"got {inserts} insert(s) per sweep: the return block of an event ending past the "
+        f"horizon is being re-inserted on every run"
+    )
+    assert deletes == [0, 0, 0]
+    assert len(calendar_state) == 2, (
+        f"three sweeps with byte-identical inputs left {len(calendar_state)} blocks on the "
+        f"calendar instead of 2 — one duplicate per run"
+    )
+
+
+def test_the_block_listing_reads_past_the_horizon_but_the_plan_does_not(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The read widens to the last block we could have written; the plan does not (#272)."""
+    horizon_start, horizon_end = _horizon()
+    late = _raw_event("e1", start=horizon_end - timedelta(hours=2), hours=3)
+    payload, read, _ = _run(monkeypatch, tmp_path, events={PERSON: [late]})
+
+    call = read.list_kwargs[0]
+    assert call["time_min"] == horizon_start
+    # The latest in-horizon source event ends an hour past the horizon, which is
+    # exactly where its return block starts — plus the slack pad.
+    assert call["time_max"] == horizon_end + timedelta(hours=1) + travel_blocks.LISTING_PAD
+    # ...and the *planning* window is untouched: padding the read must never
+    # make a block out there look desired, nor undesired.
+    assert payload["horizon_end"] == horizon_end.isoformat()
+
+
+def test_a_block_past_the_horizon_with_no_source_event_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The far worse failure the padding could have caused, asserted end to end.
+
+    The padded read now surfaces blocks the sweep computes no desired state for.
+    Every one of them must be reported and left exactly where it is — deleting
+    them would be #272's fix causing the very data loss #267 was hardened against.
+    """
+    _, horizon_end = _horizon()
+    beyond = horizon_end + timedelta(hours=6)
+    stray = _raw_block(
+        _leg(source_event_id="e-late", start=beyond, end=beyond + timedelta(minutes=20)),
+        event_id="blk-late",
+    )
+
+    payload, _, write = _run(
+        monkeypatch, tmp_path, read=_FakeReadClient({CALENDAR_ID: [stray]})
+    )
+
+    assert write.deleted == []
+    assert payload["deletes"] == []
+    assert list(tmp_path.rglob("*.json")) == []  # nothing was even backed up
+    assert payload["counts"]["protected"] == 1
+    assert payload["protected"] == [{
+        "reason": travel_blocks.PROTECT_REASON_BEYOND_HORIZON,
+        "calendar_id": CALENDAR_ID,
+        "event_id": "blk-late",
+        "source_event_id": "e-late",
+        "leg": LEG_OUTBOUND,
+        "start": beyond.isoformat(),
+        "hash": stray["extendedProperties"]["private"][travel_blocks.HASH_KEY],
+        "schema_version": travel_blocks.SCHEMA_VERSION,
+    }]
+
+
+def test_the_duplicates_this_bug_already_left_are_cleaned_up(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The migration path: a calendar that already accumulated copies converges.
+
+    The padded read makes those stacked blocks visible again, and they resolve as
+    what they are — duplicates of a leg that *is* desired, one of which matches
+    the hash. That is a different judgement from the orphan sweep's, and the
+    reason the guard spares only blocks with no desired counterpart at all.
+    """
+    _, horizon_end = _horizon()
+    late = _raw_event("e1", start=horizon_end - timedelta(hours=2), hours=3)
+    _, _, first = _run(monkeypatch, tmp_path, events={PERSON: [late]})
+    written = [event for _calendar_id, event in first.inserted]
+    returns = [
+        event
+        for event in written
+        if event["extendedProperties"]["private"][travel_blocks.LEG_KEY] == LEG_RETURN
+    ]
+    assert len(returns) == 1
+    # ...as the calendar looked after three pre-fix sweeps: two extra copies.
+    stacked = [
+        {"id": f"blk-{index}", **event}
+        for index, event in enumerate([*written, *returns, *returns])
+    ]
+
+    payload, _, write = _run(
+        monkeypatch,
+        tmp_path,
+        events={PERSON: [late]},
+        read=_FakeReadClient({CALENDAR_ID: stacked}),
+    )
+
+    assert write.inserted == []
+    assert len(write.deleted) == 2
+    assert {d["reason"] for d in payload["deletes"]} == {travel_blocks.DELETE_REASON_DUPLICATE}
+    assert payload["counts"] == {
+        "desired": 2, "adds": 0, "deletes": 2, "keeps": 2, "protected": 0, "failures": 0
+    }
+    assert payload["apply"]["counts"]["backups"] == 2  # ...and each one was backed up first
+
+
+def test_a_genuine_orphan_inside_the_horizon_is_still_deleted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Sparing the padded region must not switch orphan cleanup off inside it."""
+    stale = _raw_block(_leg(source_event_id="e-gone"), event_id="blk-gone")
+
+    payload, _, write = _run(
+        monkeypatch,
+        tmp_path,
+        events={PERSON: []},
+        read=_FakeReadClient({CALENDAR_ID: [stale]}),
+    )
+
+    assert [event_id for _calendar_id, event_id in write.deleted] == ["blk-gone"]
+    assert [d["reason"] for d in payload["deletes"]] == [travel_blocks.DELETE_REASON_ORPHANED]
+    assert payload["counts"]["protected"] == 0
 
 
 def test_the_horizon_never_outruns_the_events_the_scan_fetched(

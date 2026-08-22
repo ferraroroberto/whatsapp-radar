@@ -21,7 +21,9 @@ choices, not three conventions, keep that from mattering:
    travel_blocks.ExistingBlock` (which carries the whole fetched resource), not
    an event id. An id would leave nothing to verify; the resource is what makes
    refusal possible, and refusal is loud — :class:`MarkerGuardError`, never a
-   quiet skip.
+   quiet skip. The guard also checks that the ids the API call will *address*
+   are the ids of the resource it just verified, so it can never vouch for one
+   event while the delete removes another.
 
 Nothing here raises out to :func:`~src.family.calendar_scan.run_calendar_scan`:
 a missing or revoked write token, a non-writable calendar, a failed insert and a
@@ -212,8 +214,13 @@ class TravelBlockWriter:
         fetched, write the backup, log what is about to go and why, and only
         then call the API. The log line precedes the call deliberately, so a
         crash mid-delete still leaves a record naming the event and its backup.
+
+        The guard is handed the whole ``block``, not just its resource, because
+        the resource is what gets *verified* while ``event_id`` / ``calendar_id``
+        are what get *addressed* — checking one and calling the other would be a
+        guard on a different object from the delete.
         """
-        _require_marker(block.resource)
+        _require_marker(block)
         try:
             path = write_backup(
                 block.resource,
@@ -246,12 +253,43 @@ class TravelBlockWriter:
         self._client.close()
 
 
-def _require_marker(resource: Mapping[str, Any]) -> None:
-    """Raise unless ``resource`` carries our marker. The whole safety story, in five lines."""
+def _require_marker(block: ExistingBlock) -> None:
+    """Raise unless ``block`` is one of ours *and* addresses the resource it verified.
+
+    Two checks, because a guard that validates one object while the caller
+    deletes another guards nothing:
+
+    1. the fetched resource carries our marker — this app created it;
+    2. the ids the delete will actually send (``event_id``, and ``calendar_id``
+       when the resource names one) are the ids *of that same resource*.
+
+    :func:`~src.family.travel_blocks.parse_existing_block` is the only
+    constructor in the feature and takes both from one raw resource, so (2)
+    cannot fail today. It is asserted anyway: the standard this guard is held to
+    is "structurally incapable of deleting an event it did not create", and a
+    hand-built record pairing a marked resource with an unrelated ``event_id``
+    would otherwise delete that unrelated event. Do not relax it back to a bare
+    resource check.
+    """
+    resource = block.resource
     if not carries_marker(resource):
         raise MarkerGuardError(
             f"refusing to delete calendar event {resource.get('id')!r}: it carries no "
             f"{MARKER_KEY}={MARKER_VALUE} marker, so this app did not create it"
+        )
+    resource_id = str(resource.get("id") or "")
+    if resource_id != block.event_id:
+        raise MarkerGuardError(
+            f"refusing to delete calendar event {block.event_id!r}: the marked resource that "
+            f"was verified is event {resource_id!r}, so the guard and the delete address "
+            f"different events"
+        )
+    resource_calendar = str(resource.get("calendarId") or "")
+    if resource_calendar and resource_calendar != block.calendar_id:
+        raise MarkerGuardError(
+            f"refusing to delete calendar event {block.event_id!r} on {block.calendar_id!r}: "
+            f"the marked resource that was verified belongs to calendar "
+            f"{resource_calendar!r}"
         )
 
 

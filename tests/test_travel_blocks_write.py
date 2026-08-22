@@ -47,7 +47,7 @@ from src.family.travel_blocks_write import (
     apply_travel_blocks,
     classify_access_role,
 )
-from src.traffic import RouteResult
+from src.traffic import RouteResult, TrafficReadError
 
 HOME = "1 Example Street, Sample Town"
 OFFICE = "3 Example Road, Sample City"
@@ -217,8 +217,16 @@ class _FakeWriteClient:
 
 
 class _StubRoutes:
-    def __init__(self, minutes: float = 20) -> None:
+    """A `RouteFn` that answers a fixed duration, or raises like the real client.
+
+    ``fails`` reproduces a Routes outage — a transport error, a non-200 (an
+    ``HTTP 429`` rate-limit included) or an empty ``routes`` list all surface as
+    :class:`TrafficReadError`.
+    """
+
+    def __init__(self, minutes: float = 20, *, fails: bool = False) -> None:
         self._minutes = minutes
+        self._fails = fails
         self.calls = 0
 
     def __call__(
@@ -231,6 +239,8 @@ class _StubRoutes:
         session: Any = None,
     ) -> RouteResult:
         self.calls += 1
+        if self._fails:
+            raise TrafficReadError("Routes API returned HTTP 429")
         return RouteResult(normal_s=int(self._minutes * 60), traffic_s=int(self._minutes * 60))
 
 
@@ -270,6 +280,8 @@ def _run(
     read: _FakeReadClient | None = None,
     write: _FakeWriteClient | None = None,
     write_client_error: Exception | None = None,
+    route_fn: _StubRoutes | None = None,
+    now: datetime = NOW,
     **config_kwargs: Any,
 ) -> tuple[dict[str, Any], _FakeReadClient, _FakeWriteClient]:
     """Drive `run_travel_blocks` end to end with both clients faked."""
@@ -295,8 +307,8 @@ def _run(
     payload = travel_blocks_write.run_travel_blocks(
         _config(**config_kwargs),
         normalized,
-        now=NOW,
-        route_fn=_StubRoutes(),
+        now=now,
+        route_fn=route_fn or _StubRoutes(),
         backup_root=tmp_path,
     )
     return payload, read_client, write_client
@@ -361,6 +373,35 @@ def test_a_duplicate_block_for_one_leg_is_removed_not_tolerated() -> None:
     ]
 
 
+def test_a_protected_leg_is_neither_deleted_nor_re_added() -> None:
+    """A leg we could not plan is *unknown*, not *unwanted* — so its block is untouched.
+
+    Without the protected set the leg is simply absent from `desired`, its block
+    matches nothing, and the orphan sweep deletes it.
+    """
+    leg = _leg()
+    block = _block(leg)
+
+    diff = reconcile([], [block], protected={leg.key})
+
+    assert diff.deletes == [] and diff.adds == [] and diff.keeps == []
+    assert diff.protected == [block]  # left alone, and said out loud
+
+
+def test_protection_covers_only_the_leg_that_failed() -> None:
+    """One unplannable leg must not shield a genuinely orphaned block on the same calendar."""
+    failed = _leg(source_event_id="e1")
+    orphan = _block(_leg(source_event_id="e2"), event_id="blk-2")
+
+    diff = reconcile([], [_block(failed), orphan], protected={failed.key})
+
+    assert [pending.block for pending in diff.deletes] == [orphan]
+    assert [pending.reason for pending in diff.deletes] == [
+        travel_blocks.DELETE_REASON_ORPHANED
+    ]
+    assert diff.protected == [_block(failed)]
+
+
 def test_parse_refuses_a_resource_without_the_marker() -> None:
     """The only constructor the delete path accepts is itself marker-checking."""
     assert travel_blocks.parse_existing_block(_raw_event("e1"), calendar_id=CALENDAR_ID) is None
@@ -419,6 +460,60 @@ def test_a_wrong_marker_value_is_refused_too(tmp_path: Path) -> None:
     writer = TravelBlockWriter(_FakeWriteClient(), backup_root=tmp_path, now=NOW)
     with pytest.raises(MarkerGuardError):
         writer.delete_block(block, reason="orphaned")
+
+
+def test_a_block_addressing_a_different_event_than_it_verifies_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The guard must validate the same event the API call addresses, not another one.
+
+    `parse_existing_block` takes both from one raw resource, so this cannot
+    happen today — which is exactly why it is pinned: a hand-built record
+    pairing *our* marked resource with someone else's ``event_id`` would
+    otherwise sail through the marker check and delete that other event.
+    """
+    client = _FakeWriteClient()
+    writer = TravelBlockWriter(client, backup_root=tmp_path, now=NOW)
+    marked = _block(_leg(), event_id="blk-1")
+    mismatched = ExistingBlock(
+        calendar_id=marked.calendar_id,
+        event_id="someone-elses-event",  # not the id of the resource below
+        source_event_id=marked.source_event_id,
+        leg=marked.leg,
+        schema_version=marked.schema_version,
+        stored_hash=marked.stored_hash,
+        resource=marked.resource,
+    )
+
+    with pytest.raises(MarkerGuardError) as caught:
+        writer.delete_block(mismatched, reason=travel_blocks.DELETE_REASON_ORPHANED)
+
+    assert "someone-elses-event" in str(caught.value)
+    assert client.deleted == []
+    assert list(tmp_path.rglob("*.json")) == []  # refused before any backup
+
+
+def test_a_block_addressing_a_different_calendar_than_it_verifies_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Same rule for the calendar id, when the fetched resource names one."""
+    client = _FakeWriteClient()
+    writer = TravelBlockWriter(client, backup_root=tmp_path, now=NOW)
+    marked = _block(_leg())
+    resource = {**marked.resource, "calendarId": CALENDAR_B}
+    mismatched = ExistingBlock(
+        calendar_id=CALENDAR_ID,
+        event_id=marked.event_id,
+        source_event_id=marked.source_event_id,
+        leg=marked.leg,
+        schema_version=marked.schema_version,
+        stored_hash=marked.stored_hash,
+        resource=resource,
+    )
+
+    with pytest.raises(MarkerGuardError):
+        writer.delete_block(mismatched, reason=travel_blocks.DELETE_REASON_ORPHANED)
+    assert client.deleted == []
 
 
 def test_the_backup_is_on_disk_before_the_delete_call(tmp_path: Path) -> None:
@@ -637,7 +732,7 @@ def test_rerunning_an_unchanged_sweep_performs_zero_calendar_writes(
 
     assert write.inserted == [] and write.deleted == []
     assert payload["counts"] == {
-        "desired": 2, "adds": 0, "deletes": 0, "keeps": 2, "failures": 0
+        "desired": 2, "adds": 0, "deletes": 0, "keeps": 2, "protected": 0, "failures": 0
     }
     assert payload["apply"]["counts"]["inserted"] == 0
     assert payload["apply"]["counts"]["deleted"] == 0
@@ -693,6 +788,70 @@ def test_a_cancelled_source_event_removes_its_blocks(
     assert len(write.deleted) == 2
     assert {d["reason"] for d in payload["deletes"]} == {travel_blocks.DELETE_REASON_ORPHANED}
     assert payload["apply"]["counts"]["backups"] == 2
+
+
+def test_a_routes_outage_leaves_the_horizons_blocks_exactly_where_they_are(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A transient `HTTP 429` must not delete a single block. The #267 regression.
+
+    Everything else is unchanged and healthy: the source event still exists, is
+    still in the horizon, the calendar reads fine and is writable. Only the
+    pricing failed — so nothing is known about what these blocks *should* look
+    like, and "unknown" is never applied as a delete. Before the fix this
+    deleted both blocks as orphans and re-inserted nothing.
+    """
+    _, _, first = _run(monkeypatch, tmp_path)
+    written = [
+        {"id": f"blk-{index}", **event} for index, (_c, event) in enumerate(first.inserted)
+    ]
+
+    payload, _, write = _run(
+        monkeypatch,
+        tmp_path,
+        read=_FakeReadClient({CALENDAR_ID: written}),
+        route_fn=_StubRoutes(fails=True),
+    )
+
+    assert write.deleted == [] and write.inserted == []
+    assert list(tmp_path.rglob("*.json")) == []  # nothing was even backed up
+    assert payload["deletes"] == [] and payload["adds"] == []
+    assert payload["apply"]["counts"] == {
+        "inserted": 0, "deleted": 0, "kept": 0, "skipped": 0, "backups": 0
+    }
+    # ...and the outage is *reported*, never folded into a silent all-clear.
+    assert payload["counts"]["protected"] == 2
+    assert {f["reason"] for f in payload["failures"]} == {travel_blocks.FAILURE_ROUTES_ERROR}
+    assert {block["event_id"] for block in payload["protected"]} == {"blk-0", "blk-1"}
+
+
+def test_a_second_sweep_after_the_drive_departed_keeps_that_mornings_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Re-running the scan is safe at any hour — an elapsed block is left alone.
+
+    Routes prices only future departures, so an afternoon sweep can price
+    neither leg of a morning appointment. That is a failure to establish the
+    drive, not a decision that the blocks are stale: deleting them would make
+    the second sweep of the day destroy the first's correct work.
+    """
+    _, _, first = _run(monkeypatch, tmp_path)
+    written = [
+        {"id": f"blk-{index}", **event} for index, (_c, event) in enumerate(first.inserted)
+    ]
+
+    payload, _, write = _run(
+        monkeypatch,
+        tmp_path,
+        read=_FakeReadClient({CALENDAR_ID: written}),
+        now=DAY.replace(hour=20),  # the 09:00 appointment is long over
+    )
+
+    assert write.deleted == [] and write.inserted == []
+    assert payload["counts"]["protected"] == 2
+    assert {f["reason"] for f in payload["failures"]} == {
+        travel_blocks.FAILURE_ANCHOR_IN_THE_PAST
+    }
 
 
 def test_the_horizon_never_outruns_the_events_the_scan_fetched(

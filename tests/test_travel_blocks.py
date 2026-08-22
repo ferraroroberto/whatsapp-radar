@@ -766,7 +766,7 @@ def test_the_payload_carries_the_whole_plan() -> None:
     assert payload["dry_run"] is True
     assert payload["routes_calls"] == 2
     assert payload["counts"] == {
-        "desired": 2, "adds": 2, "deletes": 0, "keeps": 0, "failures": 0
+        "desired": 2, "adds": 2, "deletes": 0, "keeps": 0, "protected": 0, "failures": 0
     }
     assert payload["deletes"] == []
     assert payload["failures"] == []

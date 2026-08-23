@@ -82,7 +82,7 @@ To derive Gmail rules from the configured whitelist without copying personal mai
 
 The command resolves only configured senders/labels, retrieves metadata to print aggregate count/date scope before analysis, then sends one bounded sample to local-llm-hub. Structured output containing configured/sample identifiers, addresses, domains, or URLs is rejected before either asset is replaced. Review `git diff -- src/analysis/prompts` after every survey and never commit personal additions.
 
-The hub call pins `temperature=0` so identical messages classify identically. Use a model that answers with JSON directly (the default `claude_sonnet` does). A reasoning model whose `<think>` trace overruns the output budget (`WR_HUB_MAX_TOKENS`, default 8192) truncates before the JSON — recorded as a distinct `llm_truncated` audit state, not a generic `contract_error`. The delta sent in one prompt is capped at `WR_HUB_MAX_PROMPT_CHARS` (default 24000, oldest messages dropped) so a whole-history scan can't blow the model's context window.
+Use a model that answers with JSON directly (the default `claude_sonnet` does). A reasoning model whose `<think>` trace overruns the output budget (`WR_HUB_MAX_TOKENS`, default 8192) truncates before the JSON — recorded as a distinct `llm_truncated` audit state, not a generic `contract_error`. The delta sent in one prompt is capped at `WR_HUB_MAX_PROMPT_CHARS` (default 24000, oldest messages dropped) so a whole-history scan can't blow the model's context window.
 
 ## Routine operation
 

@@ -348,9 +348,6 @@ class HubClassifier:
             # mid-think, yielding nothing parseable. When that happens the pipeline
             # records a distinct 'llm_truncated' state via ``stop_reason`` below.
             max_tokens=self._hub.max_tokens,
-            # Triage must be stable: identical messages must classify identically,
-            # so pin temperature to 0 rather than leaving the model's default.
-            temperature=0,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )

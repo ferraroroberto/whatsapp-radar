@@ -153,7 +153,6 @@ def _call_hub(config: Config, samples: list[NormalizedEmail]) -> str:
         response = client.messages.create(
             model=config.hub.model,
             max_tokens=config.hub.max_tokens,
-            temperature=0,
             system=_SYSTEM_PROMPT,
             messages=[
                 {

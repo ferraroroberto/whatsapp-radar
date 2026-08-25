@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +28,7 @@ from src.config import (
     TrafficConfig,
     TravelBlocksConfig,
 )
-from src.family import calendar_source, travel_blocks
+from src.family import calendar_source, rules, travel_blocks
 from src.family.travel_blocks import (
     LEG_OUTBOUND,
     LEG_RETURN,
@@ -821,3 +821,106 @@ def test_the_planner_module_still_contains_no_calendar_writes() -> None:
         source = (root / relative).read_text(encoding="utf-8")
         for forbidden in ("insert_event", "delete_event", "calendar_write"):
             assert forbidden not in source, f"{relative} must not write to a calendar"
+
+
+# --------------------------------------------------------------- the window start (#280)
+
+#: Zone offsets spanning the inhabited range. At least three of the four differ
+#: from whatever offset the machine running this suite is set to, which is what
+#: makes these tests independent of it — the pre-#280 expression was only ever
+#: correct while ``now``'s offset happened to equal the machine's, so a fixture
+#: pinned to one zone would have passed on some machines and failed on others.
+_ZONE_OFFSETS = [14, 5, 0, -11]
+
+
+@pytest.mark.parametrize("offset_hours", _ZONE_OFFSETS)
+@pytest.mark.parametrize("hour", [0, 1, 12, 23])
+def test_local_midnight_is_midnight_in_the_zone_it_was_given(
+    offset_hours: int, hour: int
+) -> None:
+    """Whatever zone ``now`` carries, the answer is 00:00 that same day, in it.
+
+    Pre-#280 this was `datetime.combine(now.date(), time.min).astimezone(...)`,
+    which read the naive value as *system local* — so the returned instant was
+    midnight only when `now`'s offset matched the machine's, and was silently
+    some other hour (or the previous day) otherwise.
+    """
+    tz = timezone(timedelta(hours=offset_hours))
+    now = datetime(2026, 7, 20, hour, 37, 11, 500, tzinfo=tz)
+
+    midnight = rules.local_midnight(now)
+
+    assert midnight.tzinfo is tz
+    assert midnight.replace(tzinfo=None) == datetime(2026, 7, 20, 0, 0)
+    assert timedelta(0) <= now - midnight < timedelta(days=1)
+
+
+@pytest.mark.parametrize("offset_hours", _ZONE_OFFSETS)
+@pytest.mark.parametrize("hour", [0, 1, 12, 23])
+def test_the_horizon_starts_at_that_same_midnight_and_never_a_day_early(
+    offset_hours: int, hour: int
+) -> None:
+    """The horizon's start is `local_midnight`, for every ``now`` it accepts.
+
+    The docstring's "local midnight" claim has to hold for the whole input
+    domain, not just for the one caller that happens to pass a local-aware
+    ``now`` today. A start a day early is not cosmetic: it shifts what the
+    reconcile lists and what the planner desires, and those two must agree.
+    """
+    tz = timezone(timedelta(hours=offset_hours))
+    now = datetime(2026, 7, 20, hour, 37, tzinfo=tz)
+
+    start, end = travel_blocks.travel_block_horizon(_config(), now)
+
+    assert start == rules.local_midnight(now)
+    assert start.replace(tzinfo=None) == datetime(2026, 7, 20, 0, 0)
+    assert timedelta(0) <= now - start < timedelta(days=1)
+    assert start < end
+
+
+def test_a_utc_now_in_the_small_hours_no_longer_reaches_back_into_yesterday() -> None:
+    """The issue's own case (#280) — and what the fix does and does not promise.
+
+    23:00 UTC and 01:00 at UTC+02:00 are the *same instant* on different clocks,
+    and they still get **different** windows: each is midnight on the clock its
+    ``now`` declared, because ``now.tzinfo`` is what this subsystem means by the
+    household's zone (as it already is for `find_conflicts`'s ``tz``). What the
+    fix removes is the silent day-early one — pre-fix the UTC form started 25h
+    before its own ``now``, reaching back into the previous day for no stated
+    reason. Post-fix neither form ever starts more than a day before ``now``.
+    """
+    plus_two = timezone(timedelta(hours=2))
+    as_utc = datetime(2026, 7, 20, 23, 0, tzinfo=UTC)
+    as_local = as_utc.astimezone(plus_two)
+    assert as_utc == as_local  # same instant, different clock
+
+    utc_start, _ = travel_blocks.travel_block_horizon(_config(), as_utc)
+    local_start, _ = travel_blocks.travel_block_horizon(_config(), as_local)
+
+    # Each is midnight on its own clock, and neither reaches back into yesterday.
+    assert utc_start.replace(tzinfo=None) == datetime(2026, 7, 20, 0, 0)
+    assert local_start.replace(tzinfo=None) == datetime(2026, 7, 21, 0, 0)
+    for start, now in ((utc_start, as_utc), (local_start, as_local)):
+        assert timedelta(0) <= now - start < timedelta(days=1)
+
+
+def test_a_naive_now_is_refused_rather_than_guessed_at() -> None:
+    """The one input with no knowable zone fails loudly instead of silently."""
+    with pytest.raises(ValueError, match="aware"):
+        rules.local_midnight(datetime(2026, 7, 20, 23, 0))
+    with pytest.raises(ValueError, match="aware"):
+        travel_blocks.travel_block_horizon(_config(), datetime(2026, 7, 20, 23, 0))
+
+
+def test_the_two_window_starts_are_one_shared_expression_not_two_copies() -> None:
+    """Structural, because the guarantee is "there is only one of them" (#280).
+
+    `travel_block_horizon`'s docstring makes its agreement with
+    `run_calendar_scan`'s fetch window load-bearing. Two identical lines agree
+    only until someone edits one, which is how #280 became possible at all.
+    """
+    root = Path(__file__).resolve().parents[1]
+    for relative in ("src/family/travel_blocks.py", "src/family/calendar_scan.py"):
+        source = (root / relative).read_text(encoding="utf-8")
+        assert "rules.local_midnight(now)" in source, relative
+        assert "datetime.combine(now.date()" not in source, relative

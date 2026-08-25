@@ -20,7 +20,7 @@ the CLI persists as the run's ``summary_json`` (#163) and prints.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.config import Config
@@ -190,7 +190,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 "summary": {"status": "skipped", "reason": "disabled"}}
 
     # One fetch over the full missing-location window covers the assessment days.
-    midnight = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
+    midnight = rules.local_midnight(now)
     scan_days = scan_window_days(config)
     window_end = midnight + timedelta(days=scan_days)
     events = fetch_events_by_person(config.calendar, time_min=midnight, time_max=window_end)
@@ -205,8 +205,13 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
 
     conflicts: list[rules.Conflict] = []
     for offset in range(family.assessment_days):
-        day = now.date() + timedelta(days=offset)
-        day_min, day_max = _day_bounds(datetime.combine(day, time.min).astimezone(now.tzinfo))
+        # Walk the days off `midnight` rather than re-deriving each one: aware
+        # datetime arithmetic is wall-clock arithmetic in the same zone, so this
+        # is exactly midnight on each successive local day — and it cannot
+        # drift from the fetch window the events above were read over (#280).
+        day_start = midnight + timedelta(days=offset)
+        day = day_start.date()
+        day_min, day_max = _day_bounds(day_start)
         day_events = {
             person: [e for e in evs if day_min <= e.start < day_max]
             for person, evs in events.items()

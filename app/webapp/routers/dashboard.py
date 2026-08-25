@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
+from src.family.leg_status import count_legs
 
 router = APIRouter()
 
@@ -70,16 +71,6 @@ def _message_activity(runs: list[sqlite3.Row], source: str) -> dict[str, Any]:
     return _never()
 
 
-#: Per-leg statuses in a traffic-check payload that establish *nothing* about the
-#: road: ``anchor_in_the_past`` (the drive is over — never priced, no Routes call
-#: spent, ``src.family.traffic_check.STATUS_ANCHOR_IN_THE_PAST``, #270) and
-#: ``error`` (the Routes call itself failed). Neither may be folded into "no
-#: significant delay": a check that did not happen must never read as an
-#: all-clear. Spelled as literals rather than imported so the webapp does not pull
-#: the Google client libraries in through ``src.family`` at startup.
-_UNPRICED_LEG_STATUSES = frozenset({"anchor_in_the_past", "error"})
-
-
 def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     """Last-activity card for the traffic-jam check."""
     row = next((r for r in runs if r["kind"] == "traffic-check"), None)
@@ -87,11 +78,7 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
     alerts = int(result.get("alerts") or 0)
-    legs = result.get("checked") or []
-    unpriced = sum(
-        1 for leg in legs if isinstance(leg, dict) and leg.get("status") in _UNPRICED_LEG_STATUSES
-    )
-    priced = len(legs) - unpriced
+    priced, unpriced = count_legs(result.get("checked"))
     rstatus = result.get("status")
     if rstatus == "disabled":
         summary = "checks disabled"

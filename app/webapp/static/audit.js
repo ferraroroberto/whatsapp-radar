@@ -10,7 +10,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
-import { familyKindCells, fmtLocalDateTime, kindLabel, renderFunnelCells, renderSourceFunnels, travelStatusLabel } from './format.js';
+import { familyKindCells, fmtLocalDateTime, kindLabel, legPricing, renderFunnelCells, renderSourceFunnels, travelStatusLabel } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 
 function auditState() { return state.audit; }
@@ -60,7 +60,12 @@ function runSummaryLine(run) {
   if (isFamilyKind(run.kind)) {
     const s = run.summary || {};
     if (run.kind === 'traffic-check') {
-      return `${(s.checked || []).length} checked · ${s.alerts || 0} alert(s)`;
+      // Priced first, and the unpriced half named only when there is one, so a
+      // run where nothing was priced cannot read as a healthy count (#283).
+      const pricing = legPricing(s.checked);
+      return `${pricing.priced} priced`
+        + (pricing.unpriced ? ` · ${pricing.unpriced} not priced` : '')
+        + ` · ${s.alerts || 0} alert(s)`;
     }
     return `${(s.conflicts || []).length} conflict(s) · `
       + `${(s.missing_locations || s.unknown_locations || []).length} missing location(s)`;

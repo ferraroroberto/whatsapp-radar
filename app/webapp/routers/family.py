@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from app.webapp.routers._helpers import get_conn
 from src.config import Config, load_config, save_local_overrides
 from src.db import store
+from src.family.leg_status import count_legs
 from src.family.travel_blocks import (
     STATUS_DISABLED,
     STATUS_NO_HOME_ADDRESS,
@@ -156,7 +157,15 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         "result_status": result.get("status"),
     }
     if kind == "traffic-check":
-        summary["checked"] = len(result.get("checked") or [])
+        # `checked` counted every leg, priced or not (#283). It stays, because
+        # older run rows are rendered by clients that read it and a coverage
+        # number vanishing is worse than one that is merely coarse — but it is
+        # now accompanied by the split, so no reader has to infer that some of
+        # those legs established nothing about the road.
+        priced, unpriced = count_legs(result.get("checked"))
+        summary["checked"] = priced + unpriced
+        summary["priced"] = priced
+        summary["unpriced"] = unpriced
         summary["alerts"] = result.get("alerts")
     else:
         summary["conflicts"] = len(result.get("conflicts") or [])

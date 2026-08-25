@@ -61,7 +61,7 @@ from typing import Any
 import requests
 
 from src.config import Config
-from src.family import dedup, rules
+from src.family import dedup, leg_status, rules
 from src.family.calendar_source import fetch_events_by_person
 from src.notify.alert import send_alert
 from src.presence import PresenceLocation, get_location
@@ -98,7 +98,11 @@ ANCHOR_EVENT_START = "event_start"
 #: ``upcoming_commutes`` already makes a boundary case (it admits no leg whose
 #: event has started). It is kept as a hard guarantee that no past timestamp can
 #: reach the wire however a future anchor comes to be derived.
-STATUS_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
+#:
+#: Defined in :mod:`src.family.leg_status` and re-exported here (#283): the
+#: webapp counts legs by this status too, and cannot import this module
+#: without pulling the Google client libraries into its startup.
+STATUS_ANCHOR_IN_THE_PAST = leg_status.STATUS_ANCHOR_IN_THE_PAST
 
 
 def _alert_text(
@@ -299,7 +303,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             except TrafficReadError as exc:
                 checked.append({
                     "person": leg.person, "event": leg.event.summary,
-                    "status": "error", "detail": str(exc), "dedup_key": key,
+                    "status": leg_status.STATUS_ERROR, "detail": str(exc), "dedup_key": key,
                     "location_source": origin["location_source"],
                     "presence_status": origin["presence_status"],
                     "anchor": anchor_kind, "departure_anchor": anchor_iso,

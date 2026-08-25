@@ -1562,3 +1562,79 @@ def test_duplicate_calendar_id_across_accounts_stops_churning(
         "must be collapsed before it ever reaches the travel-blocks reconcile"
     )
     assert second_payload["counts"]["adds"] == 0 and second_payload["counts"]["deletes"] == 0
+
+
+# --------------------------------------------------------------- the start edge (#281)
+
+
+def test_a_block_that_already_ended_is_never_listed_and_so_never_retro_cleaned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The sweep does not look backwards — decided and documented, not accidental (#281).
+
+    The marker-scoped listing starts at ``horizon_start`` (today's local
+    midnight) and Google's ``timeMin`` is an exclusive lower bound on an event's
+    **end**, so a block that ended before that instant is not returned at all.
+    Its source event can be long gone and the orphan sweep still never sees it:
+    past blocks are not retro-cleaned. The cut is *midnight*, not *now* — a
+    block that ended earlier today is still listed and still judged, which is
+    what the sibling test below asserts.
+
+    That is the shipped behaviour and #281 chose to keep it. Widening ``timeMin``
+    backwards would make every historical block this feature ever wrote visible
+    to the orphan sweep on the first run after the change — a mass delete
+    dressed as a cleanup. This test pins the boundary so that widening cannot
+    happen by accident: if someone moves ``time_min`` earlier without reading
+    #281, this fails and says why. README documents the by-hand removal path
+    (the ``wr_travel_block=1`` marker filter, runbook step 7).
+    """
+    horizon_start, _ = _horizon()
+    # A block whose source event is gone, finishing before the window opens.
+    departed = _leg(
+        source_event_id="e-yesterday",
+        start=horizon_start - timedelta(hours=3),
+        end=horizon_start - timedelta(hours=2, minutes=40),
+    )
+    read = _FakeReadClient({CALENDAR_ID: [_raw_block(departed, event_id="blk-past")]})
+
+    payload, read_client, write_client = _run(
+        monkeypatch, tmp_path, events={PERSON: []}, read=read
+    )
+
+    # The harm first, so a future failure names it rather than the mechanism:
+    # nothing historical may be removed, and not `protected` either — that would
+    # wrongly imply the sweep considered this block and spared it.
+    assert payload["deletes"] == [], "a past block was judged; see #281 before widening"
+    assert payload["protected"] == []
+    assert write_client.deleted == []
+    # And the mechanism that guarantees it: the listing opens exactly at the
+    # horizon and never earlier, so the block was not even fetched.
+    assert read_client.list_kwargs, "the sweep must actually have listed"
+    assert all(kw["time_min"] == horizon_start for kw in read_client.list_kwargs)
+
+
+def test_the_same_block_still_inside_the_window_is_deleted_as_an_orphan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The other half of #281's split, asserted so the asymmetry is on the record.
+
+    Identical block, identical departed source event — only the time of day
+    differs. This one still ends after ``horizon_start``, so it *is* listed and
+    *is* orphan-deleted. Two blocks of one departed event getting opposite fates
+    is the behaviour README now states plainly rather than leaving to be
+    discovered.
+    """
+    horizon_start, _ = _horizon()
+    still_visible = _leg(
+        source_event_id="e-yesterday",
+        start=horizon_start + timedelta(hours=1),
+        end=horizon_start + timedelta(hours=1, minutes=20),
+    )
+    read = _FakeReadClient({CALENDAR_ID: [_raw_block(still_visible, event_id="blk-today")]})
+
+    payload, _read_client, write_client = _run(
+        monkeypatch, tmp_path, events={PERSON: []}, read=read
+    )
+
+    assert [d["reason"] for d in payload["deletes"]] == [travel_blocks.DELETE_REASON_ORPHANED]
+    assert [event_id for _cal, event_id in write_client.deleted] == ["blk-today"]

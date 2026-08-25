@@ -10,14 +10,14 @@ producing the text without sending, and the decision trace riding the payload.
 from __future__ import annotations
 
 import dataclasses
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
 from calendar_readonly.core import CalendarEvent, normalize_event
 
 from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TrafficConfig
-from src.family import calendar_scan
+from src.family import calendar_scan, rules, travel_blocks
 
 HOME = "Carrer Example 30, Sant Cugat"
 WORK = "Avenida Diagonal 621, Barcelona"
@@ -449,3 +449,61 @@ def test_the_travel_block_plan_reuses_the_scan_fetch(
     assert fetches == 1
     assert seen == [events] and seen[0] is events
     assert payload["travel_blocks"]["status"] == "ok"
+
+
+# --------------------------------------------------------------- the fetch window (#280)
+
+
+@pytest.mark.parametrize("offset_hours", [14, 5, 0, -11])
+@pytest.mark.parametrize("hour", [0, 1, 12, 23])
+def test_the_fetch_window_starts_at_local_midnight_for_any_zone(
+    monkeypatch: pytest.MonkeyPatch, sent: list[str], offset_hours: int, hour: int
+) -> None:
+    """`time_min` is midnight of the day ``now`` is in, on ``now``'s own clock.
+
+    Parametrized across zones on purpose: pre-#280 the expression read its naive
+    value as *system local*, so it was right only while ``now``'s offset matched
+    the machine's — meaning this suite and a UTC CI runner computed different
+    windows from the same inputs, and neither could tell.
+    """
+    seen: dict[str, datetime] = {}
+
+    def spy(_cal: Any, *, time_min: datetime, time_max: datetime) -> dict[str, list[Any]]:
+        seen["min"], seen["max"] = time_min, time_max
+        return {"roberto": [], "ana": []}
+
+    monkeypatch.setattr(calendar_scan, "fetch_events_by_person", spy)
+    tz = timezone(timedelta(hours=offset_hours))
+    now = datetime(2026, 7, 20, hour, 37, tzinfo=tz)
+
+    calendar_scan.run_calendar_scan(_config(), now=now, dry_run=True)
+
+    assert seen["min"] == rules.local_midnight(now)
+    assert seen["min"].replace(tzinfo=None) == datetime(2026, 7, 20, 0, 0)
+    assert timedelta(0) <= now - seen["min"] < timedelta(days=1)
+    assert seen["max"] > seen["min"]
+
+
+def test_the_scan_window_and_the_travel_block_horizon_still_start_together(
+    monkeypatch: pytest.MonkeyPatch, sent: list[str]
+) -> None:
+    """The sameness `travel_block_horizon`'s docstring calls load-bearing (#280).
+
+    The horizon must never start outside the events the planner was handed. That
+    only holds if both starts come from one expression — asserted here for a
+    ``now`` in a zone that is *not* the machine's, which is precisely where the
+    two used to drift apart.
+    """
+    seen: dict[str, datetime] = {}
+
+    def spy(_cal: Any, *, time_min: datetime, time_max: datetime) -> dict[str, list[Any]]:
+        seen["min"] = time_min
+        return {"roberto": [], "ana": []}
+
+    monkeypatch.setattr(calendar_scan, "fetch_events_by_person", spy)
+    config = _config()
+    for offset_hours in (14, 5, 0, -11):
+        now = datetime(2026, 7, 20, 23, 30, tzinfo=timezone(timedelta(hours=offset_hours)))
+        calendar_scan.run_calendar_scan(config, now=now, dry_run=True)
+        horizon_start, _ = travel_blocks.travel_block_horizon(config, now)
+        assert seen["min"] == horizon_start

@@ -21,6 +21,49 @@ _EN_CASA = "(en casa)"
 _VIDEO_HINTS = ("meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com")
 
 
+# ------------------------------------------------------------------- clocks
+
+
+def local_midnight(now: datetime) -> datetime:
+    """Midnight starting the day ``now`` falls in, in ``now``'s own zone (#280).
+
+    The one expression every window start in this subsystem is built from —
+    :func:`src.family.calendar_scan.run_calendar_scan`'s fetch window, its
+    per-day conflict bounds, and
+    :func:`src.family.travel_blocks.travel_block_horizon`. Their agreement is
+    load-bearing: the travel-block horizon must never start outside the events
+    the planner was handed, and that can only be guaranteed by them sharing one
+    expression rather than keeping three copies of one.
+
+    ``now.tzinfo`` **is** the household's local zone here, exactly as it already
+    is for :func:`find_conflicts`'s ``tz`` argument and for the per-day bounds.
+    So the day is read off ``now`` and midnight is attached in that same zone,
+    and the two can never disagree.
+
+    The expression this replaced —
+    ``datetime.combine(now.date(), time.min).astimezone(now.tzinfo)`` — mixed
+    two zones in one line: ``now.date()`` is the date in ``now``'s zone, while
+    ``.astimezone()`` on a **naive** value does not attach a zone, it reads the
+    value as *system local* and converts. It therefore meant "local midnight"
+    only while ``now``'s offset happened to equal the machine's. Given a ``now``
+    in any other zone it silently returned a window anchored to the wrong
+    instant — for a UTC ``now`` in the small hours, a full day early — with no
+    error and no log line. It also made every caller's result depend on the
+    machine's own timezone, so this suite and a UTC CI runner computed different
+    windows from identical inputs.
+
+    A **naive** ``now`` is refused rather than guessed at: it is the one input
+    for which no zone is knowable, and guessing is the failure mode this
+    function exists to end.
+    """
+    if now.tzinfo is None or now.tzinfo.utcoffset(now) is None:
+        raise ValueError(
+            "local_midnight() needs an aware `now`: a naive one carries no zone "
+            "to take the local day from. Pass datetime.now().astimezone()."
+        )
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 # --------------------------------------------------------------- addresses
 
 

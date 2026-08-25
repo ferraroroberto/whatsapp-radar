@@ -49,7 +49,7 @@ import hashlib
 import logging
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 import requests
@@ -1195,9 +1195,11 @@ def gate_status(config: Config) -> str | None:
 def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datetime]:
     """The window the sweep maintains — the one expression, shared by both callers.
 
-    Starts at local midnight, the same expression ``run_calendar_scan`` uses for
-    its own fetch window, so the horizon can never start outside the events the
-    planner was handed — nor outside the blocks the reconcile listed.
+    Starts at :func:`src.family.rules.local_midnight` — literally the same
+    function ``run_calendar_scan`` builds its own fetch window from since #280,
+    rather than a second copy of the same line — so the horizon can never start
+    outside the events the planner was handed, nor outside the blocks the
+    reconcile listed, for any ``now`` either of them is given.
 
     And it is **clamped** to that fetch window's length for the same reason
     (:func:`scan_window_days`). Once the reconcile can delete, a horizon longer
@@ -1207,7 +1209,7 @@ def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datet
     unchanged contract. Prefer clamping the knob to widening the scan.
     """
     family = config.family
-    horizon_start = datetime.combine(now.date(), time.min).astimezone(now.tzinfo)
+    horizon_start = rules.local_midnight(now)
     horizon_days = family.travel_blocks.horizon_days or family.assessment_days
     return horizon_start, horizon_start + timedelta(
         days=min(horizon_days, scan_window_days(config))

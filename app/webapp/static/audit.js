@@ -12,6 +12,7 @@ import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
 import { familyKindCells, fmtLocalDateTime, kindLabel, legPricing, renderFunnelCells, renderSourceFunnels, travelStatusLabel } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
+import { redactPayload, withheldKeys } from './redact.js';
 
 function auditState() { return state.audit; }
 
@@ -580,8 +581,23 @@ function renderFamilyDetail(run) {
   // where this record was previously only technically visible.
   const travel = travelBlockSection(s.travel_blocks);
   if (travel) els.auditTraces.appendChild(travel);
-  const payload = traceField('Run payload', run.summary);
-  if (payload) els.auditTraces.appendChild(payload);
+  // The dump is redacted by whitelist (#285): it used to serialise the whole
+  // payload verbatim, calendar ids and street addresses included, immediately
+  // beneath the purpose-built blocks that carefully do not show them.
+  const withheld = withheldKeys(run.summary);
+  const payload = traceField('Run payload', redactPayload(run.summary));
+  if (payload) {
+    if (withheld.length) {
+      // Named, not merely marked: an operator has to know the dump is not the
+      // whole record, and which fields it is missing.
+      const note = document.createElement('p');
+      note.className = 'audit-redaction-note';
+      note.textContent = 'Withheld from this dump (privacy): ' + withheld.join(', ')
+        + '. Values show as ⟨withheld⟩.';
+      payload.appendChild(note);
+    }
+    els.auditTraces.appendChild(payload);
+  }
   els.auditTracesEmpty.hidden = !!payload;
   if (!payload) els.auditTracesEmpty.textContent = 'No payload recorded for this run.';
 }

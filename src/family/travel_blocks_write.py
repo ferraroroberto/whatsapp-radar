@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from calendar_readonly.core import CalendarEvent
+from calendar_readonly.core import CalendarEvent, safe_error_detail
 from calendar_write import CalendarWriteClient, build_google_calendar_write_client
 
 from src.config import Config
@@ -394,14 +394,16 @@ def apply_travel_blocks(
             logger.error("❌ travel block delete refused by the marker guard: %s", exc)
             skipped += 1
             blocked_keys.add(block.key)
-            failures.append(_delete_failure(pending, FAILED_MARKER_GUARD, detail=str(exc)))
+            failures.append(
+                _delete_failure(pending, FAILED_MARKER_GUARD, detail=safe_error_detail(exc))
+            )
         except BackupFailedError as exc:
             # An unbacked delete is worse than a stale block, so nothing was
             # deleted. Reported as its own reason: the API was never called.
             logger.warning("⚠️ travel block delete aborted — %s", exc)
             skipped += 1
             blocked_keys.add(block.key)
-            failures.append(_delete_failure(pending, FAILED_BACKUP, detail=str(exc)))
+            failures.append(_delete_failure(pending, FAILED_BACKUP, detail=safe_error_detail(exc)))
         except Exception as exc:  # noqa: BLE001 — one bad delete must not end the sweep
             logger.warning(
                 "⚠️ travel block delete failed for %s on %s: %s",
@@ -411,7 +413,7 @@ def apply_travel_blocks(
             )
             skipped += 1
             blocked_keys.add(block.key)
-            failures.append(_delete_failure(pending, FAILED_DELETE, detail=str(exc)))
+            failures.append(_delete_failure(pending, FAILED_DELETE, detail=safe_error_detail(exc)))
         else:
             deleted += 1
 
@@ -439,7 +441,7 @@ def apply_travel_blocks(
                 exc,
             )
             skipped += 1
-            failures.append(_add_failure(leg, FAILED_INSERT, detail=str(exc)))
+            failures.append(_add_failure(leg, FAILED_INSERT, detail=safe_error_detail(exc)))
         else:
             inserted += 1
             logger.info(
@@ -670,7 +672,7 @@ def _apply(
             kept=len(plan.keeps),
             skipped=planned,
             write_capability=dict(capability),
-            detail=str(exc),
+            detail=safe_error_detail(exc),
         )
     writer = TravelBlockWriter(client, backup_root=backup_root or default_backup_root(), now=now)
     try:

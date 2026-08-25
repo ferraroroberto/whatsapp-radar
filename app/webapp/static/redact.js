@@ -51,7 +51,17 @@ export const WITHHELD = '⟨withheld⟩';
  * travel-block blocks directly above the dump already render titles, so
  * withholding it here would protect nothing and cost the dump its readability.
  * `dedup_key` is `person::event-title`, so it discloses nothing those blocks do
- * not already show, and it is how you answer "why did this not re-alert?". */
+ * not already show, and it is how you answer "why did this not re-alert?".
+ *
+ * `detail` is the one whitelisted key carrying **free-form text from an
+ * exception**, and it is renderable only because #285 also fixed it at source:
+ * `src/family/travel_blocks_write.py` used to build it from raw `str(exc)`,
+ * where `MarkerGuardError` prints two calendar ids verbatim and a propagated
+ * googleapiclient `HttpError` prints the request URI with the URL-encoded id.
+ * Those sites now go through `calendar_readonly.safe_error_detail`, as the read
+ * path already did — and the raw text still reaches the log, so nothing is lost
+ * that a local log cannot hold. Withholding `detail` instead would have cost the
+ * dump its most useful field for exactly the runs you open it to diagnose. */
 const RENDERABLE_KEYS = new Set([
   // envelope
   'kind', 'status', 'run_id', 'error', 'dry_run', 'reason', 'detail', 'text',

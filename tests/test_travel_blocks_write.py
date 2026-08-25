@@ -1638,3 +1638,77 @@ def test_the_same_block_still_inside_the_window_is_deleted_as_an_orphan(
 
     assert [d["reason"] for d in payload["deletes"]] == [travel_blocks.DELETE_REASON_ORPHANED]
     assert [event_id for _cal, event_id in write_client.deleted] == ["blk-today"]
+
+
+# --------------------------------------------------------------- error detail privacy (#285)
+
+#: A calendar id planted where a raw exception string would carry one. Asserted
+#: on as a sentinel, never as an email shape: `@` only rules out email-shaped
+#: values, and the write path's exceptions also carry request URIs and backup
+#: file paths built from the same id.
+LEAKY_ID = "SENTINELLEAKYCALENDAR@leak.invalid"
+
+
+class _LeakyWriteClient(_FakeWriteClient):
+    """A write client whose failures echo the calendar id, as the real ones do.
+
+    Not invented for the test: `MarkerGuardError` formats two calendar ids into
+    its message verbatim, and a propagated ``googleapiclient`` ``HttpError``
+    stringifies to the request URI, which contains the URL-encoded id.
+    """
+
+    def insert_event(self, *, calendar_id: str, event: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError(
+            f"<HttpError 403 when requesting https://www.googleapis.com/calendar/v3/"
+            f"calendars/{LEAKY_ID}/events?alt=json returned \"Forbidden\">"
+        )
+
+    def delete_event(self, *, calendar_id: str, event_id: str) -> None:
+        raise RuntimeError(
+            f"refusing to delete calendar event {event_id!r} on {LEAKY_ID!r}: "
+            f"the marked resource belongs to calendar {LEAKY_ID!r}"
+        )
+
+
+def test_a_write_failure_never_persists_the_calendar_id_in_its_detail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The persisted `detail` is sanitized at source, not at the renderer (#285).
+
+    The Audit tab's payload dump renders `detail` verbatim — it is genuine
+    diagnostic content and withholding it would gut the dump. That is only safe
+    because the raw exception never reaches the payload in the first place, the
+    same contract the *read* path has had since `safe_error_detail` was written
+    (`src/family/calendar_source.py`). This is where that contract is enforced.
+
+    The full exception text is still logged at every one of these sites, so
+    nothing is lost — it simply stays in a local log instead of being painted
+    into a DOM that is reachable over Tailscale.
+    """
+    payload, _read, _write = _run(
+        monkeypatch, tmp_path, write=_LeakyWriteClient(), dry_run=False
+    )
+
+    serialized = json.dumps(payload)
+    assert LEAKY_ID not in serialized, "a raw exception string carried the calendar id"
+    # The failure is still *reported* — sanitizing must not silence it.
+    failures = payload["apply"]["failures"]
+    assert failures, "the write failure must still be recorded"
+    assert all(f["detail"] for f in failures), "a failure with no detail is unactionable"
+    assert all(LEAKY_ID not in (f["detail"] or "") for f in failures)
+
+
+def test_no_write_failure_detail_is_built_from_a_raw_exception(tmp_path: Path) -> None:
+    """Structural, because the guarantee is "there is no such code path" (#285).
+
+    One `detail=str(exc)` reintroduced anywhere on the write path puts calendar
+    ids back into the Audit dump, and no amount of stubbing would notice a site
+    that this suite happens not to drive.
+    """
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "src/family/travel_blocks_write.py").read_text(encoding="utf-8")
+    assert "str(exc)" not in source, (
+        "a persisted `detail` must go through calendar_readonly.safe_error_detail — "
+        "see #285; the raw text still goes to the log"
+    )
+    assert "safe_error_detail" in source

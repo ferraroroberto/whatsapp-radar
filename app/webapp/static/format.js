@@ -20,6 +20,33 @@ const KIND_META = {
   'traffic-check': { label: 'Family: traffic' },
 };
 
+/* Priced vs unpriced commute legs (#283), in one place because two surfaces
+ * count them: the Execution funnel's cells and the Audit list's summary line.
+ *
+ * `anchor_in_the_past` (the drive is over, no Routes call spent) and `error`
+ * (the call failed) establish *nothing* about the road. Counting them as
+ * "checked" makes a run in which nothing was priced report a healthy-looking
+ * coverage number — real, plausible and wrong, which is how you end up trusting
+ * a check that has not been running.
+ *
+ * This is the one JavaScript spelling of a vocabulary `src/family/leg_status.py`
+ * owns on the Python side. It has to be spelled twice because a browser cannot
+ * import a Python module; it does not have to be spelled twice *per language*.
+ *
+ * A leg with no `status` counts as priced: payloads written before #270 carry no
+ * status field and every one of their legs genuinely was priced, so the other
+ * default would invent a coverage gap that never existed. */
+const UNPRICED_LEG_STATUSES = ['anchor_in_the_past', 'error'];
+
+export function legPricing(legs) {
+  const list = Array.isArray(legs) ? legs : [];
+  let unpriced = 0;
+  for (const leg of list) {
+    if (leg && UNPRICED_LEG_STATUSES.indexOf(leg.status) !== -1) unpriced += 1;
+  }
+  return { priced: list.length - unpriced, unpriced: unpriced };
+}
+
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
 // Funnel-cell mapping for the two family-check kinds (calendar-scan ·
@@ -31,8 +58,12 @@ export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).la
 export function familyKindCells(kind, payload) {
   const p = payload || {};
   if (kind === 'traffic-check') {
+    // Two cells, not one: 'Priced' is the coverage number and 'Not priced' is
+    // the gap in it. A single 'Checked' count folded the two together (#283).
+    const pricing = legPricing(p.checked);
     return [
-      { label: 'Checked', value: (p.checked || []).length },
+      { label: 'Priced', value: pricing.priced },
+      { label: 'Not priced', value: pricing.unpriced },
       { label: 'Alerts', value: p.alerts },
       { label: 'Status', value: p.status },
     ];

@@ -36,6 +36,7 @@ from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
+from src.family.leg_status import count_legs
 from src.notify import deliver_digest
 from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
@@ -631,10 +632,17 @@ def _cmd_family_check(
         # would only ever be visible by opening the persisted run payload.
         _progress_travel_blocks(payload.get("travel_blocks") or {})
     else:
+        # "N route(s) checked" used to count every leg, including the ones that
+        # established nothing about the road (#283). A coverage number that
+        # silently counts non-coverage is how you end up trusting a check that
+        # has not been running, so the two are now reported separately and the
+        # unpriced half is named only when there is one.
+        priced, unpriced = count_legs(payload.get("checked"))
         _progress(
             f"🚗 traffic-check: {payload['status']} — "
-            f"{len(payload.get('checked', []))} route(s) checked, "
-            f"{payload.get('alerts', 0)} alert(s)"
+            f"{priced} route(s) priced"
+            + (f", {unpriced} not priced" if unpriced else "")
+            + f", {payload.get('alerts', 0)} alert(s)"
             + (" [dry-run]" if dry_run else "")
         )
     status = "failed" if payload.get("status") == "error" else "completed"

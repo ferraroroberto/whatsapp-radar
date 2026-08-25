@@ -91,6 +91,7 @@ flowchart TB
   subgraph family["src/family/ — deterministic scheduled checks (#160, no LLM)"]
     FRULES["rules.py — pure classification / origin / dedup / conflicts"]
     FTRAFFIC["traffic_check.py — commute -> Routes -> alert"]
+    FLEGSTATUS["leg_status.py — the priced/unpriced leg vocabulary (#283);\nstdlib-only leaf, so the webapp counts legs without pulling\nthe Google clients into startup through calendar_source"]
     FCAL["calendar_scan.py — conflict scan + decision trace + daily summary"]
     FSOURCE["calendar_source.py — events per person (guarded seam)\n+ fetch_marked_events: marker-scoped listing\n+ non-mutating accessRole probe (#267)"]
     FDEDUP["dedup.py — data/family/ alert log"]
@@ -98,6 +99,9 @@ flowchart TB
     FBLOCKW["travel_blocks_write.py — the only write path (#267):\nTravelBlockWriter owns the client privately, so delete_event\nis reachable only via marker guard + pre-delete JSON backup;\ndry-run builds no client at all"]
   end
   CLICMDS --> FTRAFFIC
+  FTRAFFIC -->|writes each leg's status| FLEGSTATUS
+  CLICMDS -->|priced vs unpriced route counts #283| FLEGSTATUS
+  ROUTERS -->|priced vs unpriced leg counts:\ndashboard all-clear + /api/family run summary #283| FLEGSTATUS
   CLICMDS --> FCAL
   FTRAFFIC --> FRULES
   FCAL --> FRULES

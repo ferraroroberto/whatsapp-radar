@@ -44,7 +44,7 @@ export function legPricing(legs) {
   for (const leg of list) {
     if (leg && UNPRICED_LEG_STATUSES.indexOf(leg.status) !== -1) unpriced += 1;
   }
-  return { priced: list.length - unpriced, unpriced: unpriced, total: list.length };
+  return { priced: list.length - unpriced, unpriced: unpriced };
 }
 
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }

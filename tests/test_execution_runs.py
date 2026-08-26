@@ -17,7 +17,7 @@ from app.webapp import runs
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.db.sync import resync
-from src.runresult import RESULT_SENTINEL, format_result, parse_result
+from src.runresult import RESULT_SENTINEL, format_result, parse_result, strip_result_line
 
 # --- result sentinel -------------------------------------------------------
 
@@ -32,6 +32,65 @@ def test_parse_result_absent_and_last_wins() -> None:
     assert parse_result("just some output\nno sentinel here") is None
     text = format_result({"n": 1}) + "\n" + format_result({"n": 2})
     assert parse_result(text) == {"n": 2}
+
+
+def test_strip_result_line_removes_sentinel_and_notes_it() -> None:
+    text = "hello\n" + format_result({"a": 1}) + "\nbye"
+    stripped = strip_result_line(text)
+    assert RESULT_SENTINEL not in stripped
+    assert "hello" in stripped
+    assert "bye" in stripped
+    assert "withheld" in stripped
+
+
+def test_strip_result_line_passthrough_when_no_sentinel() -> None:
+    text = "just output\nno sentinel here"
+    assert strip_result_line(text) == text
+
+
+# --- #292: the Execution tab's output panel must not paint the result -------
+# payload (calendar ids, street addresses) into the DOM verbatim -------------
+
+def test_get_run_output_tail_withholds_the_result_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sentinel line the webapp parses is also the whole result payload —
+    calendar ids and street addresses included, for a calendar-scan run. It
+    must never reach a run's *displayed* output, even though the log file
+    itself still carries it intact for `parse_result` to recover.
+
+    Planted per-field sentinels, not an email-shaped regex: a street address
+    is exactly the kind of value a `"@" not in text` check would miss.
+    """
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    run_dir = runs.new_run_dir("calendar-scan", runs.new_run_id())
+    calendar_id = "SENTINELCALENDARID@leak.invalid"
+    origin = "SENTINELORIGINSTREET 1"
+    destination = "SENTINELDESTINATIONSTREET 2"
+    payload = {
+        "kind": "calendar-scan",
+        "status": "ok",
+        "travel_blocks": {
+            "adds": [
+                {"calendar_id": calendar_id, "origin": origin, "destination": destination},
+            ],
+        },
+    }
+    log_text = "▶ calendar-scan [live] starting\n" + format_result(payload) + "\n"
+    (run_dir / "output.log").write_bytes(log_text.encode("utf-8"))
+    runs.write_run_json(run_dir, kind="calendar-scan", status="completed")
+
+    record = runs.get_run("calendar-scan", run_dir.name)
+
+    assert record is not None
+    for sentinel in (calendar_id, origin, destination):
+        assert sentinel not in record["output_tail"]
+    assert "▶ calendar-scan [live] starting" in record["output_tail"]
+    assert "withheld" in record["output_tail"]
+
+    # The machine-readable side is unaffected: parse_result still recovers the
+    # structured result from the untouched log file.
+    assert parse_result(runs.read_output_tail(run_dir)) == payload
 
 
 # --- run-record helpers ----------------------------------------------------

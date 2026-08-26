@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from src.paths import PROJECT_ROOT
-from src.runresult import parse_result
+from src.runresult import parse_result, strip_result_line
 from src.subprocess_flags import NO_WINDOW_DETACHED
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,15 @@ def _run_dir_for(kind: str, run_id: str) -> Path | None:
 
 
 def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, Any] | None:
-    """One run's record (run.json) plus its live output tail, or None if absent."""
+    """One run's record (run.json) plus its live output tail, or None if absent.
+
+    ``output_tail`` is filtered for display: the result sentinel line the
+    webapp itself parses (:func:`~src.runresult.parse_result`) carries the
+    whole result payload verbatim — calendar ids and street addresses for a
+    family check — and this is the only surface that echoed it raw into the
+    DOM (#292). Stripped here, not in :func:`read_output_tail`, which
+    :func:`finalize_record` still reads unfiltered to recover the result.
+    """
     run_dir = _run_dir_for(kind, run_id)
     if run_dir is None:
         return None
@@ -178,7 +186,7 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
     record.setdefault("kind", kind)
     record.setdefault("run_id", run_id)
     if with_output:
-        record["output_tail"] = read_output_tail(run_dir)
+        record["output_tail"] = strip_result_line(read_output_tail(run_dir))
     return record
 
 

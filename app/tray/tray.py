@@ -43,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
-TS_DEBUG_LOG = PROJECT_ROOT / "webapp" / "tailscale_debug.log"
 
 
 def _build_icon() -> object:

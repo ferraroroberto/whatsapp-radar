@@ -80,11 +80,6 @@ def load_keyword_rules(source: str = "whatsapp") -> tuple[KeywordRule, ...]:
     return tuple(rules)
 
 
-def load_keyword_roots(source: str = "whatsapp") -> tuple[str, ...]:
-    """Return only roots for compatibility with existing config surfaces."""
-    return tuple(rule.root for rule in load_keyword_rules(source))
-
-
 def normalize(text: str) -> str:
     """Lowercase and strip accents so roots match across diacritics (café -> cafe)."""
     decomposed = unicodedata.normalize("NFKD", text.lower())

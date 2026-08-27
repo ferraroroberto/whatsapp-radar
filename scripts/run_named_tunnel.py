@@ -96,6 +96,7 @@ def _spawn_cloudflared(config_path: Path) -> subprocess.Popen[str]:
         encoding="utf-8",
         errors="replace",
         bufsize=1,
+        creationflags=NO_WINDOW_NEW_GROUP,
     )
 
 

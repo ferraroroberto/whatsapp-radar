@@ -203,7 +203,7 @@ export function renderSourceFunnels(box, sources) {
     card.className = 'source-funnel-card';
     const title = document.createElement('p');
     title.className = 'source-funnel-title';
-    title.textContent = source === 'gmail' ? 'Gmail' : 'WhatsApp';
+    title.textContent = SOURCE_LABEL[source] || source;
     const values = document.createElement('p');
     values.className = 'source-funnel-values';
     values.textContent = [

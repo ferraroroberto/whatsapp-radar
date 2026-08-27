@@ -17,7 +17,7 @@ WhatsApp ──▶ Node sidecar (Baileys) ──▶ data/linked_device/*.ndjson 
                                                                               ▼
                                                               Telegram digest (read-only, actionable-only)
 
-           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Chats & Config · Execution · Audit
+           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups
                          access: Tailscale TLS (default) · Cloudflare named tunnel (optional)
 ```
 
@@ -77,7 +77,7 @@ After pairing, the sidecar:
 - writes the ignored buffer `data/linked_device/` (`chats.ndjson`, `messages.ndjson`, `status.json`);
 - reconnects automatically on transient drops; it only needs re-pairing if you log the device out from the phone.
 
-**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 8. You can also re-pair from the phone later via the Execution tab's QR — see [`manual.md`](manual.md).)
+**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 7. You can also re-pair from the phone later via the Execution tab's QR — see [`manual.md`](manual.md).)
 
 ## 3 — Point the core at the live connector
 
@@ -103,14 +103,14 @@ Then ingest and pick what to watch:
 .\wr.bat monitor 3                  # watch chat #3 (baselines its cursor to "now")
 ```
 
-Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start — no backlog dump. You can also do all of this from the PWA's **Chats & Config** tab once the webapp is up (Step 5).
+Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start — no backlog dump. You can also do all of this from the PWA's **Messages & Config** tab once the webapp is up (Step 5).
 
 ## 4 — Create a new Telegram bot
 
 1. In Telegram, message **@BotFather**, send `/newbot`, follow the prompts. Copy the **bot token**.
 2. Decide the destination chat (e.g. a chat shared with your partner). Add the bot to it if it's a group, or start a direct chat with the bot.
 3. Get the **chat id**: send any message to the destination, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and read `chat.id` from the JSON.
-4. Store the secrets. The canonical home is the gitignored `config/webapp_config.json` (`telegram_bot_token` / `telegram_chat_id`) — set them from the PWA's Chats & Config tab, or copy `config/webapp_config.sample.json` and edit. They can also be set as env in `.env` (which overrides the JSON):
+4. Store the secrets. The canonical home is the gitignored `config/webapp_config.json` (`telegram_bot_token` / `telegram_chat_id`) — set them from the PWA's Messages & Config tab, or copy `config/webapp_config.sample.json` and edit. They can also be set as env in `.env` (which overrides the JSON):
 
    ```
    WR_NOTIFIER=telegram

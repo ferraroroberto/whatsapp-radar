@@ -6,15 +6,14 @@ This repository is intentionally public-safe. It must not contain real WhatsApp 
 
 ## Goal
 
-The first milestone is a reusable spike, not a polished product:
+WhatsApp Radar reduces attention load from high-volume WhatsApp chats — and, optionally, a household's Gmail and calendars — by watching only what you choose to monitor, processing only what changed since the last review, and surfacing only what needs action:
 
-- Connect to WhatsApp as a linked device in read-only application behavior.
-- Discover chats and store sanitized metadata locally.
-- Allow selected chats to be marked as monitored.
-- Maintain per-chat cursors so each review processes only new messages.
-- Classify deltas into actionable vs. noise.
-- Emit one consolidated report only when action is required.
-- Deliver reports outside WhatsApp, initially through Telegram.
+- Connects to WhatsApp as a linked device in read-only application behavior; Gmail is an optional second source over the official read-only OAuth API.
+- Discovers chats/senders and stores sanitized metadata locally; either can be marked monitored.
+- Maintains per-chat/per-sender cursors so each review processes only new messages.
+- Classifies deltas into actionable vs. noise with a keyword prefilter gating an LLM stage.
+- Emits one consolidated digest only when action is required, delivered outside WhatsApp through Telegram.
+- Also runs two deterministic, LLM-free family checks — calendar-conflict detection and traffic-jam alerting — plus an opt-in travel-blocks calendar-write feature, through the same run store, notifier, and admin UI.
 
 ## Non-Goals
 
@@ -26,13 +25,13 @@ The first milestone is a reusable spike, not a polished product:
 
 ## Architecture Direction
 
-The expected shape is a small standalone local service, integrated with the existing home automation fleet:
+WhatsApp Radar is a small standalone local service, integrated with the existing home-automation fleet:
 
-- A WhatsApp linked-device connector owns pairing, chat discovery, message ingestion, and reconnect handling.
-- A local SQLite store owns chat metadata, messages, review cursors, analysis results, and notification history.
-- A processing worker analyzes only message deltas and calls the existing local LLM Hub instead of duplicating model/subprocess orchestration.
-- A small admin UI handles connection status, discovered chats, monitor/ignore decisions, frequency, retention, and notification settings.
-- App Launcher should schedule the digest run through its Jobs tab and open the admin UI through its Apps tab.
+- A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling; an optional Gmail OAuth client and the `calendar_readonly`/`calendar_write` clients own the other two Google sources.
+- A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
+- A processing pipeline analyzes only message/mail deltas and calls the existing local LLM Hub instead of duplicating model/subprocess orchestration.
+- The admin PWA (six tabs — Dashboard, Messages & Config, Execution, Audit, Family, Follow-ups) handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-checks rules.
+- App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 ## Compliance And Risk
 
@@ -76,7 +75,7 @@ Adding new messages causes only the delta to be reviewed; the per-chat cursor ad
 
 Live `scan` advances each cursor only after that chat's analysis and trace are persisted (same retry-safe guarantee as `review`). `--dry-run` replays history straight from SQLite — it never touches the connector, never delivers, and never advances a cursor — so it's the safe way to see what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`.
 
-The sync phase is multi-source even though the committed default remains WhatsApp-only. Set `sources` in the ignored `config/local.json`, use the source switches in Chats & Config, or set `WR_SOURCES=whatsapp,gmail`; the legacy `connector` / `WR_CONNECTOR` setting still chooses WhatsApp's fixture or linked-device reader. Each enabled source is preflighted, ingested, tagged, and logged independently, then all successful sources flow through one analysis pass and exactly one consolidated digest. If one source is down, its cached messages are excluded and its cursors stay put while healthy sources finish; the run exits non-zero with a per-source error so App Launcher cannot mistake degraded coverage for green. A full rebuild is stricter: every enabled source must be online before the backup and wipe begin.
+The sync phase is multi-source even though the committed default remains WhatsApp-only. Set `sources` in the ignored `config/local.json`, use the source switches in Messages & Config, or set `WR_SOURCES=whatsapp,gmail`; the legacy `connector` / `WR_CONNECTOR` setting still chooses WhatsApp's fixture or linked-device reader. Each enabled source is preflighted, ingested, tagged, and logged independently, then all successful sources flow through one analysis pass and exactly one consolidated digest. If one source is down, its cached messages are excluded and its cursors stay put while healthy sources finish; the run exits non-zero with a per-source error so App Launcher cannot mistake degraded coverage for green. A full rebuild is stricter: every enabled source must be online before the backup and wipe begin.
 
 A live `scan` / `resync` **preflights the source** before reading it: if the WhatsApp sidecar's heartbeat is stale (the process stopped) it first tries to relaunch the sidecar — when the device is still paired — and re-checks (set `WR_SIDECAR_AUTOSTART=0` to disable the self-heal). If the source still isn't live it **aborts loudly**: exits non-zero, records the run as failed, advances no cursor, and fires an alert to the notification channel. This closes the silent-failure hole where a scheduled job against a dead sidecar would report green while checking nothing.
 
@@ -308,8 +307,8 @@ WhatsApp Radar runs as part of the home stack through [App Launcher](../app-laun
 - `family-radar-calendar-sync` — `wr calendar-scan`, daily at 18:05 (the family calendar-conflict summary, #168, plus the travel-block sweep that rides inside it, #263). Deliberately its own job on its own schedule rather than chained after the scan job — a dead WhatsApp sidecar must never suppress the family calendar summary. **Why 18:05, and what that costs (#277).** The evening slot is chosen for the *summary*: it lands when the household is together and tomorrow is still changeable, and it is late enough that the day's own calendar edits are in. The sweep inherits it. `travel_blocks.horizon_days` defaults to `2` and the window runs from **today's local midnight to midnight + `horizon_days`** (`src/family/travel_blocks.py::travel_block_horizon`), so an 18:05 sweep maintains blocks for the rest of today and all of tomorrow — and *nothing* of the day after, since the window ends at 00:00 on it. Tomorrow morning's school run is written the evening before, which is the point. The honest cost: **an evening sweep prices tomorrow morning's drive some thirteen hours ahead of it**, so the minutes on the block are a traffic-aware forecast for that departure moment, not a live reading — if the real morning differs, nothing re-prices the block until the next sweep. Catching that on the day is the traffic check's job (`family-radar-traffic-check`, every 5 min, which prices each leg for its own departure moment and alerts), not the sweep's. Recorded as a decision, not an inherited accident: the sweep's value is a *maintained calendar* over today and tomorrow, and one nightly reconcile delivers that at roughly two Routes calls per commuting event per day. A second, morning fire is the obvious upgrade if the blocks ever need to reflect same-day changes — add a second Job (or arm the one Job hourly) and set `family.run_hour` to the earliest hour you want it acting, which is exactly what that knob is for. Whatever you arm, keep `family.run_hour` at or below the earliest armed hour: at the shipped default of 7 against an 18:05 job it never gates, but raising it above 18 would skip every day — logged and recorded as a skip each time, but with no summary sent and no sweep run.
 - `family-radar-traffic-check` — `wr traffic-check`, armed every 5 minutes. The CLI self-skips in-process against `traffic.cadence_min` (default 30, edited from the Run tab), so the *effective* check frequency follows the config, not the Task Scheduler entry — no re-arm needed after a cadence edit; a skip logs a line and records no run row.
 
-That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI (or its `POST`/`DELETE /api/jobs` API, which is what re-syncs the underlying Task Scheduler entries — hand-editing `jobs.json` directly does not). The full procedure (the three Jobs rows, the two Apps rows, and the calendar-anchored token rotation schedule) is **Step 7 + Recurring maintenance** in [`docs/bootstrapping.md`](docs/bootstrapping.md).
+That wiring lives in App Launcher's gitignored runtime registries (`config/jobs.json`, `config/apps.json`) — machine-local state, not committed here — so it is recreated per box from App Launcher's UI (or its `POST`/`DELETE /api/jobs` API, which is what re-syncs the underlying Task Scheduler entries — hand-editing `jobs.json` directly does not). The full procedure (the three Jobs rows and the two Apps rows) is **Step 7** in [`docs/bootstrapping.md`](docs/bootstrapping.md); its **Recurring maintenance** table covers the app-level secrets (bearer token/login password, Telegram bot token, sidecar re-pairing) on an on-leak/on-compromise cadence, not a calendar one. None of the three Google OAuth grants (Gmail read, Calendar read, Calendar write) rotate on a calendar schedule either — each keeps working until revoked, left unused for six months, or the account password changes while its scope is present (see [`docs/gmail-bootstrap.md`](docs/gmail-bootstrap.md#token-lifecycle-and-revocation) and [`docs/calendar-bootstrap.md`](docs/calendar-bootstrap.md)); the Tailscale HTTPS leaf is the one credential here that *is* calendar-anchored, and it renews itself automatically (see [HTTPS certificate (Tailscale)](#https-certificate-tailscale) above).
 
 ## Repository Status
 
-Spike complete end-to-end. On top of the fixture foundation (read-only connector, SQLite store, cursor/delta review engine, validated LLM JSON contract, consolidated digest), the repo now has: the real WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader), baseline-to-now on first monitor, a multilingual (ES/EN/CA) cascade classifier that gates LLM calls behind a keyword prefilter, and retryable Telegram delivery. To recreate it from zero see [`docs/bootstrapping.md`](docs/bootstrapping.md); for day-to-day operation see [`docs/manual.md`](docs/manual.md) and for the connector design [`docs/linked-device.md`](docs/linked-device.md). The fixture connector and offline stub classifier remain the default so the whole suite runs with no credentials.
+The app runs day to day against real WhatsApp + Telegram, with Gmail, the two family checks, and travel blocks available as opt-in sources/features — all built on the same fixture foundation used for offline development: a read-only connector, a SQLite store, a cursor/delta review engine, a validated LLM JSON contract, and a consolidated digest. The real WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) baselines each chat to now on first monitor, a multilingual (ES/EN/CA) cascade classifier gates LLM calls behind a keyword prefilter, and Telegram delivery is retryable independently of analysis. To recreate the whole system from zero see [`docs/bootstrapping.md`](docs/bootstrapping.md); for day-to-day operation see [`docs/manual.md`](docs/manual.md) and for the connector design [`docs/linked-device.md`](docs/linked-device.md). The fixture connector and offline stub classifier remain the default so the whole suite still runs with no credentials.

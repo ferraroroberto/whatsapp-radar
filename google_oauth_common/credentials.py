@@ -24,9 +24,10 @@ def load_or_refresh_credentials(
     """Load a persisted OAuth token, refresh it if expired, and validate it.
 
     Returns the (possibly refreshed) ``google.oauth2.credentials.Credentials``
-    instance. Building the API service from it stays with each caller, since
-    that step differs per package (Gmail injects a bounded-timeout transport;
-    Calendar passes credentials straight through).
+    instance. Building the API service from it stays with each caller, since the
+    discovery collection/version differs per package; the transport does not —
+    every caller wraps these credentials in
+    :func:`google_oauth_common.transport.bounded_authorized_http`.
     """
     if not token_path.is_file():
         raise FileNotFoundError(missing_token_message)

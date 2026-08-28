@@ -9,6 +9,10 @@ from typing import Any
 
 from google_oauth_common.credentials import load_or_refresh_credentials
 from google_oauth_common.token_store import write_token_atomically
+from google_oauth_common.transport import (
+    DEFAULT_REQUEST_TIMEOUT_S,
+    bounded_authorized_http,
+)
 
 from calendar_readonly.core import CALENDAR_READONLY_SCOPE
 
@@ -96,6 +100,7 @@ def build_google_calendar_client(
     credential_loader: CredentialLoader | None = None,
     request_factory: RequestFactory | None = None,
     service_builder: ServiceBuilder | None = None,
+    request_timeout_s: int = DEFAULT_REQUEST_TIMEOUT_S,
 ) -> GoogleCalendarReadClient:
     """Load/refresh an OAuth token and build the official read-only client."""
     credentials = load_or_refresh_credentials(
@@ -108,17 +113,31 @@ def build_google_calendar_client(
         request_factory=request_factory,
     )
 
+    injected_builder = service_builder is not None
     if service_builder is None:
         from googleapiclient.discovery import build
 
         service_builder = build
 
-    service = service_builder(
-        "calendar",
-        "v3",
-        credentials=credentials,
-        cache_discovery=False,
-    )
+    if injected_builder:
+        # Test seam: injected builders receive the legacy credentials kwarg and
+        # own their transport entirely.
+        service = service_builder(
+            "calendar",
+            "v3",
+            credentials=credentials,
+            cache_discovery=False,
+        )
+    else:
+        # httplib2's default is no timeout at all — a stalled connection would
+        # hang `wr calendar-scan` forever instead of failing after a bounded
+        # wait (#298, the same defect Gmail fixed in #180).
+        service = service_builder(
+            "calendar",
+            "v3",
+            http=bounded_authorized_http(credentials, request_timeout_s),
+            cache_discovery=False,
+        )
     return GoogleCalendarReadClient(service)
 
 

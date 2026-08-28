@@ -15,7 +15,11 @@ from typing import Any
 
 import pytest
 
-from src.analysis.classifier import ClassificationOutcome, StubClassifier
+from src.analysis.classifier import (
+    ClassificationOutcome,
+    ClassifierUnavailable,
+    StubClassifier,
+)
 from src.analysis.pipeline import scan, scan_outcome_to_dict
 from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TripwireConfig
 from src.connector.base import ConnectorStatus
@@ -737,6 +741,75 @@ def test_truncated_response_is_distinct_from_contract_error(
     # Same safety as a contract error: no analysis item, no cursor advance.
     assert ingested_conn.execute(
         "SELECT COUNT(*) AS n FROM analysis_items WHERE run_id = ?", (bad.run_id,)
+    ).fetchone()["n"] == 0
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
+    ).fetchone() is None
+
+
+# --- Stage-2 classifier unreachable (#298) ---------------------------------
+
+class _UnavailableTraced:
+    """A Stage-2 classifier standing in for a hub that is down or timing out."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def classify_traced(
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
+    ) -> ClassificationOutcome:
+        self.calls += 1
+        raise ClassifierUnavailable("hub unreachable at http://127.0.0.1:8000: boom")
+
+
+def test_live_scan_aborts_when_classifier_is_unreachable(
+    ingested_conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    _monitor(ingested_conn, "chat-school-parents")
+    alerts: list[str] = []
+
+    def fake_alert(_config: Config, text: str) -> tuple[str, None]:
+        alerts.append(text)
+        return "sent", None
+
+    # The abort path is shared with `wr review`, so it alerts through review.py.
+    monkeypatch.setattr("src.analysis.review.send_alert", fake_alert)
+    stage2 = _UnavailableTraced()
+
+    outcome = scan(
+        ingested_conn,
+        _config(tmp_path),
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=stage2,
+    )
+
+    # Stopped once, not once per monitored chat: a dead hub fails identically
+    # for every remaining chat.
+    assert stage2.calls == 1
+    assert outcome.notification_status == "classifier_offline"
+    assert outcome.errors and "unreachable" in outcome.errors[0][1]
+    assert scan_outcome_to_dict(outcome)["ok"] is False
+    assert alerts and "classifier unreachable" in alerts[0].lower()
+
+    # The run row is finalized as failed — never left stranded at 'running'.
+    row = ingested_conn.execute(
+        "SELECT status, notification_status, chats_synced FROM review_runs WHERE id = ?",
+        (outcome.run_id,),
+    ).fetchone()
+    assert row["status"] == "failed"
+    assert row["notification_status"] == "classifier_offline"
+    assert row["chats_synced"] == 3  # the sync that did happen is still recorded
+
+    # Nothing was analysed, so no cursor moved: the delta is retried next run.
+    assert ingested_conn.execute(
+        "SELECT COUNT(*) AS n FROM analysis_items WHERE run_id = ?", (outcome.run_id,)
     ).fetchone()["n"] == 0
     assert ingested_conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)

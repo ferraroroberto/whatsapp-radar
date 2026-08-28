@@ -34,6 +34,7 @@ from calendar_write import CalendarWriteClient
 from src.analysis._common import Progress, _emit
 from src.analysis.classifier import (
     ClassificationOutcome,
+    ClassifierUnavailable,
     TracedClassifier,
     build_stage2_classifier,
 )
@@ -47,6 +48,8 @@ from src.analysis.reminders import (
     is_eligible,
 )
 from src.analysis.review import (
+    CLASSIFIER_OFFLINE_STATUS,
+    abort_classifier_offline,
     advance_family_cursors,
     hold_back_if_transcribing,
     note_delta_funnel,
@@ -277,6 +280,47 @@ def _abort_offline(
     return outcome
 
 
+def _abort_classifier(
+    conn: sqlite3.Connection,
+    config: Config,
+    outcome: ScanOutcome,
+    exc: ClassifierUnavailable,
+    progress: Progress | None,
+) -> ScanOutcome:
+    """Finalize a live/dry run that aborted because Stage 2 could not reach the hub.
+
+    The mirror image of :func:`_abort_offline` at the other end of the pipeline:
+    a source outage already aborts loudly, alerts, and records the run as
+    ``failed``, but a *classifier* outage used to raise straight out of ``scan``
+    and strand the run row at ``status='running'`` (#298). The funnel keeps the
+    counters earned before the failure — the chats analysed up to that point are
+    real work — and every remaining cursor is held.
+    """
+    outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
+    outcome.errors.append((0, str(exc)))
+    abort_classifier_offline(
+        conn,
+        config,
+        outcome.run_id,
+        exc,
+        chats_with_delta=outcome.chats_with_delta,
+        progress=progress,
+    )
+    store.record_run_funnel(
+        conn,
+        outcome.run_id,
+        chats_synced=outcome.chats_synced,
+        messages_synced=outcome.messages_synced,
+        chats_monitored=outcome.chats_monitored,
+        stage1_passed=outcome.stage1_passed,
+        stage2_llm_calls=outcome.stage2_llm_calls,
+        actionable=outcome.actionable,
+        notification_status=CLASSIFIER_OFFLINE_STATUS,
+        source_funnel_json=source_funnels_json(outcome.source_funnels),
+    )
+    return outcome
+
+
 def _run_tripwire(
     conn: sqlite3.Connection,
     config: Config,
@@ -483,9 +527,15 @@ def scan(
         prior = recent_alert_context(
             conn, chat_id, since_days=config.hub.recent_alert_days, exclude_run_id=run_id
         )
-        co = stage2.classify_traced(
-            chat["display_name"], delta, prior, source=source
-        )
+        try:
+            co = stage2.classify_traced(
+                chat["display_name"], delta, prior, source=source
+            )
+        except ClassifierUnavailable as exc:
+            # Whole-run condition, not a per-chat one: every remaining chat would
+            # hit the same dead hub, so stop once instead of looping through a
+            # timeout per chat (#298).
+            return _abort_classifier(conn, config, outcome, exc, progress)
         if co.llm_called:
             outcome.stage2_llm_calls += 1
             source_funnel.llm_calls += 1
@@ -635,7 +685,8 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
     return {
         "kind": "scan",
         "ok": (
-            outcome.notification_status not in ("failed", "offline")
+            outcome.notification_status
+            not in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
             and not outcome.source_errors
         ),
         "run_id": outcome.run_id,

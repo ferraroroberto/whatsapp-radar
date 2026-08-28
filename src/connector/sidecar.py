@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
+from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW_DETACHED
 
 # States, ordered roughly worst → best for the UI to colour.
@@ -55,7 +56,7 @@ Spawner = Callable[..., "subprocess.Popen[bytes]"]
 
 def sidecar_dir() -> Path:
     """The ``sidecar/`` directory holding ``index.js`` and ``node_modules``."""
-    return Path(__file__).resolve().parents[2] / "sidecar"
+    return PROJECT_ROOT / "sidecar"
 
 
 class SidecarLaunchError(RuntimeError):

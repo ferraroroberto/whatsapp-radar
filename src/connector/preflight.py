@@ -16,13 +16,10 @@ caller turns into a loud, non-zero-exit failure (never a silent green run).
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.sidecar import ensure_running, wait_for_settled
-
-Progress = Callable[[str], None]
+from src.progress import Progress, emit
 
 
 class ConnectorOffline(RuntimeError):
@@ -32,11 +29,6 @@ class ConnectorOffline(RuntimeError):
         self.status = status
         detail = status.detail or "connector is offline"
         super().__init__(f"{status.name} offline — {detail}")
-
-
-def _emit(progress: Progress | None, line: str) -> None:
-    if progress is not None:
-        progress(line)
 
 
 def ensure_connected(connector: MessageConnector) -> ConnectorStatus:
@@ -77,14 +69,14 @@ def preflight(
         return status
 
     if source == "whatsapp" and config.connector == "linked_device" and config.sidecar_autostart:
-        _emit(progress, f"⚠ source offline: {status.detail} — relaunching the sidecar…")
+        emit(progress, f"⚠ source offline: {status.detail} — relaunching the sidecar…")
         info = ensure_running(config.linked_device_dir)
         status = connector.connect()
         if status.connected:
-            _emit(progress, "✓ sidecar back online")
+            emit(progress, "✓ sidecar back online")
             _settle(config, source, progress)
             return status
-        _emit(progress, f"✗ sidecar still offline ({info.state}: {info.detail})")
+        emit(progress, f"✗ sidecar still offline ({info.state}: {info.detail})")
 
     raise ConnectorOffline(status)
 
@@ -102,13 +94,13 @@ def _settle(config: Config, source: str, progress: Progress | None) -> None:
         or config.sync_settle_seconds <= 0
     ):
         return
-    _emit(progress, "• waiting for the message buffer to settle…")
+    emit(progress, "• waiting for the message buffer to settle…")
     settled = wait_for_settled(
         config.linked_device_dir,
         settle_seconds=config.sync_settle_seconds,
         timeout_seconds=config.sync_settle_timeout,
     )
     if settled:
-        _emit(progress, "✓ buffer settled — reading")
+        emit(progress, "✓ buffer settled — reading")
     else:
-        _emit(progress, "• buffer still active after settle timeout — reading anyway")
+        emit(progress, "• buffer still active after settle timeout — reading anyway")

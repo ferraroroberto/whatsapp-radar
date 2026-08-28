@@ -22,6 +22,7 @@ import requests
 
 from app.tray import cloudflared_proc
 from app.tray.single_instance import cross_process_lock
+from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,6 @@ logger = logging.getLogger(__name__)
 OWNERSHIP_NONE = "none"
 OWNERSHIP_OURS = "ours"
 OWNERSHIP_EXTERNAL = "external"
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @dataclass(frozen=True)

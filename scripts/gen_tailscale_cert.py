@@ -33,9 +33,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# scripts/ is sys.path[0] when run as a file — put the repo root on it too, so `src` resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.paths import PROJECT_ROOT  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
 
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"

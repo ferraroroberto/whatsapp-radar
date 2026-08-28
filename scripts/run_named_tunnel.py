@@ -24,10 +24,11 @@ from pathlib import Path
 
 logger = logging.getLogger("run_named_tunnel")
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# scripts/ is sys.path[0] when run as a file — put the repo root on it too, so `src` resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.tray import cloudflared_proc  # noqa: E402 — needs PROJECT_ROOT on sys.path
+from app.tray import cloudflared_proc  # noqa: E402 — needs the repo root on sys.path
+from src.paths import PROJECT_ROOT  # noqa: E402
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"

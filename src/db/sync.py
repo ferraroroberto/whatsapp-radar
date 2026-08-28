@@ -25,6 +25,7 @@ from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding
 from src.connector.preflight import ConnectorOffline, ensure_connected
 from src.db import store
+from src.progress import Progress, emit
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,6 @@ class MultiSourceSyncOutcome:
 
 
 PrepareSource = Callable[[str, MessageConnector], ConnectorStatus]
-Progress = Callable[[str], None]
 
 
 def sync_sources(
@@ -184,13 +184,9 @@ def sync_sources(
     outcome = MultiSourceSyncOutcome()
     prepare_source = prepare or (lambda _source, connector: ensure_connected(connector))
 
-    def _emit(line: str) -> None:
-        if progress is not None:
-            progress(line)
-
     for binding in bindings:
         result = SourceSyncOutcome(source=binding.source)
-        _emit(f"• {binding.source}: syncing…")
+        emit(progress, f"• {binding.source}: syncing…")
         try:
             prepare_source(binding.source, binding.connector)
             result.delta = ingest_chats(
@@ -203,13 +199,14 @@ def sync_sources(
         finally:
             binding.connector.stop()
         if result.ok:
-            _emit(
+            emit(
+                progress,
                 f"✓ {binding.source}: {result.delta.chats_seen} chat(s) · "
                 f"+{result.delta.chats_added} new chat(s) · "
                 f"+{result.delta.messages_added} message(s)"
             )
         else:
-            _emit(f"✗ {binding.source}: {result.error}")
+            emit(progress, f"✗ {binding.source}: {result.error}")
         detail = result.error or ""
         if binding.source == "gmail" and result.ok and gmail_retention_days > 0:
             pruned = store.prune_gmail_unmonitored(
@@ -227,7 +224,7 @@ def sync_sources(
                     f"retention pruned {pruned.messages_pruned} msg / "
                     f"{pruned.senders_removed} sender(s)"
                 )
-                _emit(f"• gmail: {detail}")
+                emit(progress, f"• gmail: {detail}")
         outcome.results.append(result)
         store.record_sync(
             conn,

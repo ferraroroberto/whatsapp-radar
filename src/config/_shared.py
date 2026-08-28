@@ -13,10 +13,12 @@ import os
 from pathlib import Path
 from typing import Any
 
+from src.paths import PROJECT_ROOT
+
 
 def project_root() -> Path:
     """Repository root (the directory containing ``config/`` and ``pyproject.toml``)."""
-    return Path(__file__).resolve().parents[2]
+    return PROJECT_ROOT
 
 
 def _load_json(path: Path) -> dict[str, Any]:

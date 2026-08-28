@@ -22,9 +22,10 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# scripts/ is sys.path[0] when run as a file — put the repo root on it too, so `src` resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.paths import PROJECT_ROOT  # noqa: E402
 from src.webapp_config import (  # noqa: E402
     DEFAULT_CONFIG_PATH,
     load_webapp_config,

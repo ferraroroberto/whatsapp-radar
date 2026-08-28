@@ -44,10 +44,10 @@ from pathlib import Path
 
 import requests
 
-from src.analysis._common import Progress, _emit
 from src.config import Config, TranscriptionConfig
 from src.db import store
 from src.models import StoredMessage
+from src.progress import Progress, emit
 from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
@@ -334,7 +334,7 @@ def run_transcription_phase(
         if outcome.swept:
             notes.append(f"swept {outcome.swept} expired audio file(s)")
         if notes:
-            _emit(progress, "• transcription: " + ", ".join(notes))
+            emit(progress, "• transcription: " + ", ".join(notes))
         return outcome
 
     transcribe = transcriber if transcriber is not None else _build_transcriber(cfg)
@@ -360,7 +360,7 @@ def run_transcription_phase(
             remaining = len(pending) - idx
             logger.warning("⚠️ transcription backend unreachable, aborting batch: %s", exc)
             outcome.backend_down = True
-            _emit(
+            emit(
                 progress,
                 f"• transcription: whisper backend unreachable — skipping {remaining} "
                 f"pending note(s), will retry next scan ({exc})",
@@ -380,7 +380,7 @@ def run_transcription_phase(
         outcome.done += 1
 
     if not outcome.backend_down:
-        _emit(
+        emit(
             progress,
             f"• transcription: {outcome.done} done, {outcome.failed} failed"
             + (f", {outcome.skipped_old} skipped (old)" if outcome.skipped_old else "")

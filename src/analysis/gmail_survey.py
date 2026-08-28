@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,8 +24,8 @@ from gmail_readonly import (
 from src.analysis.keywords import load_keyword_rules, normalize, roots_file_path
 from src.config import Config
 from src.connector.gmail import build_gmail_read_client
+from src.progress import Progress
 
-Progress = Callable[[str], None]
 _BUCKET_NAME = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 _EMAIL_ADDRESS = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
 _URL = re.compile(r"https?://", re.IGNORECASE)

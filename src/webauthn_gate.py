@@ -45,11 +45,11 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
+from src.paths import PROJECT_ROOT
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DEVICES_PATH = PROJECT_ROOT / "config" / "webauthn_devices.json"
 
 # Fixed user handle — this app has exactly one logical user.

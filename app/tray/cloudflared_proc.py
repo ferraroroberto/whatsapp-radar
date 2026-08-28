@@ -18,11 +18,11 @@ from typing import Any
 
 import yaml
 
+from src.paths import PROJECT_ROOT
 from src.webapp_config import append_auth_token
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
 
 

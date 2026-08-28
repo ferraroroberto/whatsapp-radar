@@ -14,7 +14,6 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.analysis._common import Progress, _emit
 from src.analysis.classifier import Classifier, ClassifierUnavailable
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import has_actionable_signal
@@ -28,6 +27,7 @@ from src.config import Config
 from src.db import store
 from src.models import StoredMessage
 from src.notify.alert import send_alert
+from src.progress import Progress, emit
 
 # Funnel/notification status recorded when a run stops because Stage 2 could not
 # reach the hub. Distinct from ``"offline"`` (the *source* was unreachable) so the
@@ -70,7 +70,7 @@ def abort_classifier_offline(
     is ``None`` only where no notification channel is configured (tests), in
     which case the run is still finalized and the alert is reported skipped.
     """
-    _emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {exc}")
+    emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {exc}")
     alert_status = "skipped"
     if config is not None:
         alert_status, _ = send_alert(
@@ -79,7 +79,7 @@ def abort_classifier_offline(
             f"({exc}). {chats_with_delta} chat(s) with new messages were left "
             "unanalysed; their cursors are held. Restore the LLM hub and re-run.",
         )
-        _emit(progress, f"• classifier alert: {alert_status}")
+        emit(progress, f"• classifier alert: {alert_status}")
     store.finish_run(conn, run_id, "failed", chats_with_delta)
     return alert_status
 

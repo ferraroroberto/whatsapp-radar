@@ -128,8 +128,25 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
 
     if outcome.notification_status == CLASSIFIER_OFFLINE_STATUS:
         # The run was already finished as failed and its funnel recorded; the
-        # tail below would overwrite it with a green one (#298).
+        # tail below would overwrite it with a green one (#298). The result
+        # sentinel is still emitted — the Execution tab renders it, and a
+        # missing payload would read as "no result" rather than "failed".
         _progress("✗ process aborted — Stage-2 classifier unreachable; cursors held")
+        _emit_result(
+            {
+                "kind": "process",
+                "ok": False,
+                "run_id": outcome.run_id,
+                "funnel": {
+                    "chats_with_delta": outcome.chats_with_delta,
+                    "messages_processed": outcome.messages_processed,
+                    "actionable": outcome.actionable_chats,
+                },
+                "notification_status": CLASSIFIER_OFFLINE_STATUS,
+                "sources": source_funnels_dict(outcome.source_funnels),
+                "telegram_text": None,
+            }
+        )
         return 1
 
     digest = build_digest(conn, outcome.run_id)

@@ -143,6 +143,8 @@ The app never probes this by writing. It reads the calendar's published `accessR
 
 The role is the *read* token's view, so it is a strong proxy rather than a proof: the write token is a second grant on the same account. That is why a failed insert still degrades per block instead of trusting this answer.
 
+This step is step 2 of the travel-blocks rollout sequence; the rest of it — enabling, rehearsing, going live, and both undo paths — is the runbook in [`family-checks.md`](family-checks.md#rollout-runbook).
+
 ## 9. Routes API key (traffic check)
 
 Open **APIs & Services → Credentials → Create credentials → API key**. Restrict the key to the **Routes API** (Application restrictions may stay "None" for a server-side local job). Provide it to the checks via the ignored `config/local.json` (a `traffic` section, added with the main #160 build) or the `GOOGLE_MAPS_API_KEY` environment variable. Validate live:

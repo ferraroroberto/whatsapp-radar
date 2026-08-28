@@ -14,7 +14,8 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.analysis.classifier import Classifier
+from src.analysis._common import Progress, _emit
+from src.analysis.classifier import Classifier, ClassifierUnavailable
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
 from src.analysis.keywords import has_actionable_signal
 from src.analysis.source_funnel import (
@@ -26,6 +27,12 @@ from src.analysis.transcription import hold_back_untranscribed
 from src.config import Config
 from src.db import store
 from src.models import StoredMessage
+from src.notify.alert import send_alert
+
+# Funnel/notification status recorded when a run stops because Stage 2 could not
+# reach the hub. Distinct from ``"offline"`` (the *source* was unreachable) so the
+# audit trail names which end of the pipeline failed.
+CLASSIFIER_OFFLINE_STATUS = "classifier_offline"
 
 
 @dataclass
@@ -36,6 +43,45 @@ class ReviewOutcome:
     actionable_chats: int = 0
     errors: list[tuple[int, str]] = field(default_factory=list)
     source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
+    # Set to ``CLASSIFIER_OFFLINE_STATUS`` when the run was aborted and already
+    # finalized as failed; ``None`` means the caller still owns the funnel.
+    notification_status: str | None = None
+
+
+def abort_classifier_offline(
+    conn: sqlite3.Connection,
+    config: Config | None,
+    run_id: int,
+    exc: ClassifierUnavailable,
+    *,
+    chats_with_delta: int,
+    progress: Progress | None = None,
+) -> str:
+    """Finish a run stranded by an unreachable Stage-2 classifier, and alert.
+
+    Shared by ``scan`` and :func:`review_monitored_chats`: both call the hub
+    inside a loop over monitored chats, and an unreachable hub fails identically
+    for every remaining one. Before this existed the SDK error raised straight
+    out of the command, leaving the ``review_runs`` row at ``status='running'``
+    forever, firing no alert, and leaving every later chat unanalysed (#298).
+    Cursors are untouched, so the held deltas are retried on the next run.
+
+    Returns the alert status for the caller's funnel/progress line. ``config``
+    is ``None`` only where no notification channel is configured (tests), in
+    which case the run is still finalized and the alert is reported skipped.
+    """
+    _emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {exc}")
+    alert_status = "skipped"
+    if config is not None:
+        alert_status, _ = send_alert(
+            config,
+            f"⚠️ WhatsApp Radar: run aborted — Stage-2 classifier unreachable "
+            f"({exc}). {chats_with_delta} chat(s) with new messages were left "
+            "unanalysed; their cursors are held. Restore the LLM hub and re-run.",
+        )
+        _emit(progress, f"• classifier alert: {alert_status}")
+    store.finish_run(conn, run_id, "failed", chats_with_delta)
+    return alert_status
 
 
 _RECENT_ALERT_HEADER = (
@@ -230,6 +276,31 @@ def review_monitored_chats(
                 chat["display_name"], delta, prior, source=source
             )
             result = parse_analysis(raw)
+        except ClassifierUnavailable as exc:
+            outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
+            outcome.errors.append((chat_id, str(exc)))
+            abort_classifier_offline(
+                conn,
+                config,
+                run_id,
+                exc,
+                chats_with_delta=outcome.chats_with_delta,
+            )
+            store.record_run_funnel(
+                conn,
+                run_id,
+                chats_synced=0,
+                messages_synced=0,
+                chats_monitored=len(monitored),
+                stage1_passed=sum(
+                    f.stage1_passed for f in outcome.source_funnels.values()
+                ),
+                stage2_llm_calls=sum(f.llm_calls for f in outcome.source_funnels.values()),
+                actionable=outcome.actionable_chats,
+                notification_status=CLASSIFIER_OFFLINE_STATUS,
+                source_funnel_json=source_funnels_json(outcome.source_funnels),
+            )
+            return outcome
         except ContractError as exc:
             # Do NOT advance the cursor: the same delta is retried next run.
             outcome.errors.append((chat_id, str(exc)))

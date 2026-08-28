@@ -28,7 +28,7 @@ from app.cli import runlog
 from src.analysis.classifier import build_classifier
 from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
-from src.analysis.review import review_monitored_chats
+from src.analysis.review import CLASSIFIER_OFFLINE_STATUS, review_monitored_chats
 from src.analysis.source_funnel import source_funnels_dict, source_funnels_json
 from src.config import Config, load_config
 from src.connector.factory import ConnectorBinding, build_connectors
@@ -122,10 +122,17 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     outcome = review_monitored_chats(
         conn, classifier, since_days=config.hub.recent_alert_days, config=config
     )
-    digest = build_digest(conn, outcome.run_id)
 
     for chat_id, err in outcome.errors:
         print(f"  ! chat {chat_id} skipped (cursor not advanced): {err}", file=sys.stderr)
+
+    if outcome.notification_status == CLASSIFIER_OFFLINE_STATUS:
+        # The run was already finished as failed and its funnel recorded; the
+        # tail below would overwrite it with a green one (#298).
+        _progress("✗ process aborted — Stage-2 classifier unreachable; cursors held")
+        return 1
+
+    digest = build_digest(conn, outcome.run_id)
 
     if not digest.has_actionable_items:
         notif, rc = "none", 0
@@ -196,7 +203,9 @@ def _cmd_scan(
     _emit_result(scan_outcome_to_dict(outcome))
     return (
         1
-        if outcome.notification_status in ("failed", "offline") or outcome.source_errors
+        if outcome.notification_status
+        in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+        or outcome.source_errors
         else 0
     )
 

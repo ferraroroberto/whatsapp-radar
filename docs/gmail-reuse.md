@@ -1,6 +1,6 @@
 # Reusing the read-only Gmail component
 
-The canonical reusable component is the root-level [`gmail_readonly/`](../gmail_readonly/) package, plus its shared OAuth dependency [`google_oauth_common/`](../google_oauth_common/) (the installed-app bootstrap, token load/refresh, and atomic-write helpers also used by `calendar_readonly/` and `calendar_write/`). Neither has imports from `src`, `app`, FastAPI, SQLite, the scan pipeline, or WhatsApp Radar models. Another Python application can copy both unchanged and decide independently how to store, monitor, classify, or display the returned records.
+The canonical reusable component is the root-level [`gmail_readonly/`](../gmail_readonly/) package, plus its shared OAuth dependency [`google_oauth_common/`](../google_oauth_common/) (the installed-app bootstrap, token load/refresh, atomic-write, and bounded-timeout-transport helpers also used by `calendar_readonly/` and `calendar_write/`). Neither has imports from `src`, `app`, FastAPI, SQLite, the scan pipeline, or WhatsApp Radar models. Another Python application can copy both unchanged and decide independently how to store, monitor, classify, or display the returned records.
 
 WhatsApp Radar continuously exercises the same component through the thin adapter in `src/connector/gmail.py`. Do not copy that adapter into another application; it exists only to map portable records into this repository's `ChatRecord`, `MessageRecord`, and `ConnectorStatus` types.
 
@@ -17,6 +17,7 @@ google_oauth_common/__init__.py
 google_oauth_common/bootstrap.py
 google_oauth_common/credentials.py
 google_oauth_common/token_store.py
+google_oauth_common/transport.py
 ```
 
 The portable offline contract is `tests/test_gmail_readonly.py`. Copy it into the consumer's test directory when adopting or upgrading the component.

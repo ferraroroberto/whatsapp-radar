@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from src.analysis.classifier import StubClassifier
+from src.analysis.classifier import ClassifierUnavailable, StubClassifier
 from src.analysis.contract import ContractError
-from src.analysis.review import review_monitored_chats
+from src.analysis.review import CLASSIFIER_OFFLINE_STATUS, review_monitored_chats
 from src.db import store
 from src.models import StoredMessage
 from tests.helpers import append_message, chat_id_by_source
@@ -135,3 +135,47 @@ def test_cursor_not_advanced_on_contract_error(ingested_conn: sqlite3.Connection
         pass
     else:
         raise AssertionError("expected ContractError")
+
+
+def test_review_aborts_and_finalizes_run_when_classifier_is_unreachable(
+    ingested_conn: sqlite3.Connection,
+) -> None:
+    """A dead hub must fail the run loudly, not strand it at 'running' (#298)."""
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+    _monitor(ingested_conn, "chat-school-parents")
+    calls = 0
+
+    class UnreachableClassifier:
+        def classify(
+            self,
+            chat_display_name: str,
+            delta: list[StoredMessage],
+            prior_context: str | None,
+            *,
+            source: str = "whatsapp",
+        ) -> str:
+            nonlocal calls
+            calls += 1
+            raise ClassifierUnavailable("hub unreachable at http://127.0.0.1:8000: boom")
+
+    outcome = review_monitored_chats(ingested_conn, UnreachableClassifier())
+
+    assert calls == 1  # stopped once, not once per monitored chat
+    assert outcome.notification_status == CLASSIFIER_OFFLINE_STATUS
+    assert outcome.errors and outcome.errors[0][0] == chat_id
+    run = store.review_run(ingested_conn, outcome.run_id)
+    assert run is not None
+    assert run["status"] == "failed"
+    assert run["notification_status"] == CLASSIFIER_OFFLINE_STATUS
+
+    # Cursors held: a recovered hub reprocesses the whole backlog next run.
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
+    ).fetchone() is None
+    assert ingested_conn.execute(
+        "SELECT COUNT(*) AS n FROM chat_review_state"
+    ).fetchone()["n"] == 0
+    recovered = review_monitored_chats(ingested_conn, StubClassifier())
+    assert recovered.chats_with_delta == 2
+    assert recovered.messages_processed == 5  # both backlogs, nothing lost
+    assert recovered.notification_status is None

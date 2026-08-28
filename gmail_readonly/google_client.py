@@ -9,6 +9,10 @@ from typing import Any
 
 from google_oauth_common.credentials import load_or_refresh_credentials
 from google_oauth_common.token_store import write_token_atomically as write_token_atomically
+from google_oauth_common.transport import (
+    DEFAULT_REQUEST_TIMEOUT_S,
+    bounded_authorized_http,
+)
 
 from gmail_readonly.core import GMAIL_READONLY_SCOPE, GmailReadClient
 
@@ -26,10 +30,6 @@ _BATCH_SIZE = 50
 _BATCH_PAUSE_S = 1.0
 _RETRY_ATTEMPTS = 3
 _RETRYABLE_STATUSES = frozenset({429, 500, 503})
-
-# httplib2's default is no timeout at all — a dropped connection would block a
-# sync forever (#180). Every request made through this adapter gets this bound.
-DEFAULT_REQUEST_TIMEOUT_S = 60
 
 
 class GoogleGmailReadClient:
@@ -208,13 +208,12 @@ def build_google_read_client(
             cache_discovery=False,
         )
     else:
-        import httplib2  # type: ignore[import-untyped]
-        from google_auth_httplib2 import AuthorizedHttp  # type: ignore[import-untyped]
-
+        # httplib2's default is no timeout at all — a dropped connection would
+        # block a sync forever (#180).
         service = service_builder(
             "gmail",
             "v1",
-            http=AuthorizedHttp(credentials, http=httplib2.Http(timeout=request_timeout_s)),
+            http=bounded_authorized_http(credentials, request_timeout_s),
             cache_discovery=False,
         )
     return GoogleGmailReadClient(service)

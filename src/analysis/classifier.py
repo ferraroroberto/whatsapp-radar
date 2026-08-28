@@ -164,6 +164,19 @@ class ClassificationOutcome:
     stop_reason: str | None = None
 
 
+class ClassifierUnavailable(RuntimeError):
+    """Stage 2 could not reach the LLM hub at all (transport, timeout, API error).
+
+    Deliberately distinct from :class:`~src.analysis.contract.ContractError`,
+    which means the hub *answered* with something the contract rejects — a
+    per-chat failure the run isolates, traces, and retries next time. An
+    unreachable hub is a whole-run condition: every remaining monitored chat
+    would fail identically, so the callers abort the run as ``failed``, alert,
+    and hold every cursor rather than looping through one timeout per chat
+    (#298).
+    """
+
+
 @runtime_checkable
 class Classifier(Protocol):
     """Maps a chat's message delta to raw JSON output for the contract parser."""
@@ -333,24 +346,34 @@ class HubClassifier:
         source: str = "whatsapp",
     ) -> ClassificationOutcome:
         # Lazy import so the stub/default path needs no SDK import at module load.
-        from anthropic import Anthropic
+        from anthropic import Anthropic, AnthropicError
 
         user_prompt = self._build_user_prompt(
             chat_display_name, delta, prior_context, source=source
         )
-        client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
-        response = client.messages.create(
-            model=self._hub.model,
-            # Output budget is configurable per model (hub.max_tokens) rather than
-            # a single hard-coded value: the default model (claude_sonnet) answers
-            # with JSON directly, but a reasoning model that emits a long <think>
-            # trace before the JSON can overrun a small budget and truncate
-            # mid-think, yielding nothing parseable. When that happens the pipeline
-            # records a distinct 'llm_truncated' state via ``stop_reason`` below.
-            max_tokens=self._hub.max_tokens,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+        try:
+            client = Anthropic(api_key="local-dummy", base_url=self._hub.base_url)
+            response = client.messages.create(
+                model=self._hub.model,
+                # Output budget is configurable per model (hub.max_tokens) rather
+                # than a single hard-coded value: the default model (claude_sonnet)
+                # answers with JSON directly, but a reasoning model that emits a
+                # long <think> trace before the JSON can overrun a small budget and
+                # truncate mid-think, yielding nothing parseable. When that happens
+                # the pipeline records a distinct 'llm_truncated' state via
+                # ``stop_reason`` below.
+                max_tokens=self._hub.max_tokens,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+        except AnthropicError as exc:
+            # A down/timing-out/erroring hub used to raise straight out of the
+            # scan, stranding the run row at status='running' with no alert
+            # (#298). Translated here so the callers never import the SDK.
+            raise ClassifierUnavailable(
+                f"hub unreachable at {self._hub.base_url} "
+                f"(model {self._hub.model}): {exc}"
+            ) from exc
         parts = [
             getattr(block, "text", "")
             for block in response.content

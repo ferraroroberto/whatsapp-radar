@@ -12,6 +12,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 
 def test_component_imports_no_application_or_client_modules() -> None:
     component_root = Path(__file__).parents[1] / "google_oauth_common"
@@ -36,3 +38,56 @@ def test_component_imports_no_application_or_client_modules() -> None:
         for module in imported_modules
         for prefix in forbidden_prefixes
     )
+
+
+def test_every_builder_bounds_its_transport_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No builder may leave a service on httplib2's unbounded default (#180, #298).
+
+    ``build(..., credentials=...)`` silently keeps httplib2's default transport,
+    whose default timeout is ``None`` — a stalled connection then hangs a
+    scheduled job forever instead of failing after a bounded wait. Gmail fixed
+    that first; this asserts all three builders carry the same bound.
+    """
+    import googleapiclient.discovery
+    from calendar_readonly.google_client import build_google_calendar_client
+    from calendar_write.google_client import build_google_calendar_write_client
+    from gmail_readonly.google_client import build_google_read_client
+    from google_oauth_common.transport import DEFAULT_REQUEST_TIMEOUT_S
+
+    class _Credentials:
+        expired = False
+        valid = True
+        refresh_token = "present"
+
+        def to_json(self) -> str:
+            return "{}"
+
+    observed: list[dict[str, object]] = []
+
+    def fake_build(serviceName: str, version: str, **kwargs: object) -> object:
+        observed.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(googleapiclient.discovery, "build", fake_build)
+
+    token_path = tmp_path / "token.json"
+    token_path.write_text("{}", encoding="utf-8")
+    loader = lambda _path, _scopes: _Credentials()  # noqa: E731 - one-line test seam
+
+    for builder in (
+        build_google_read_client,
+        build_google_calendar_client,
+        build_google_calendar_write_client,
+    ):
+        builder(
+            token_path,
+            credential_loader=loader,
+            request_factory=lambda: "request",
+        )
+
+    assert len(observed) == 3
+    for kwargs in observed:
+        assert "credentials" not in kwargs, "credentials= leaves the default transport"
+        assert kwargs["http"].http.timeout == DEFAULT_REQUEST_TIMEOUT_S

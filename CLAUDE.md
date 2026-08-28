@@ -24,11 +24,12 @@ whatsapp-radar/
     config/ (package: __init__.py's load_config aggregates one module per subsystem —
              hub/transcription/tts/telegram/tripwire/gmail/calendar/traffic/presence/family)
     models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
-    paths.py  tts_client.py  speech_profile.py  subprocess_flags.py  runresult.py  _loopback_http.py
+    paths.py  progress.py  tts_client.py  speech_profile.py  subprocess_flags.py
+    runresult.py  _loopback_http.py
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
     db/ (store.py facade over the per-table modules, plus sync.py/reprocess.py, schema.sql)
     analysis/ (classifier, contract, keywords, pipeline, reminders, review, source_funnel,
-               summarize, transcription, tripwire, gmail_survey, _common, prompts/)
+               summarize, transcription, tripwire, gmail_survey, prompts/)
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
     family/ (calendar_scan, calendar_source, dedup, rules, traffic_check)
     presence/client.py     traffic/routes_client.py

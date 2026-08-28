@@ -10,7 +10,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
-import { familyKindCells, fmtLocalDateTime, kindLabel, legPricing, renderFunnelCells, renderSourceFunnels, travelStatusLabel } from './format.js';
+import { familyKindCells, fmtLocalDateTime, kindLabel, legPricing, renderFunnelCells, renderSourceFunnels, statusBadge, travelStatusLabel } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 import { redactPayload, withheldKeys } from './redact.js';
 
@@ -37,13 +37,6 @@ const MODE_META = {
 };
 
 function modeMeta(mode) { return MODE_META[mode] || { label: mode || '?', cls: 'review' }; }
-
-function statusBadge(status) {
-  if (status === 'completed') return { text: 'OK', cls: 'ok' };
-  if (status === 'failed') return { text: 'KO', cls: 'ko' };
-  if (status === 'running' || status === 'pending') return { text: '··', cls: 'run' };
-  return { text: '··', cls: 'run' };
-}
 
 // The final per-chat verdict, mapped to a short label + tone for the trace header.
 const ACTION_META = {

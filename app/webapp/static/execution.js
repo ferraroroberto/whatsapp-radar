@@ -11,7 +11,7 @@ import { els, state, EXECUTION_POLL_MS } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
 import {
   familyKindCells, fmtLocalDateTime, fmtNum, kindLabel, renderFunnelCells,
-  renderSourceFunnels, sourceIcon, SOURCE_LABEL,
+  renderSourceFunnels, sourceIcon, SOURCE_LABEL, statusBadge,
 } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { fetchTraffic, patchTraffic } from './family.js';
@@ -490,12 +490,6 @@ function renderControls() {
 
 // One lean line per run: OK/KO badge first (right or wrong at a glance), then
 // the kind, then when. No per-row icons.
-function statusBadge(status) {
-  if (status === 'completed') return { text: 'OK', cls: 'ok' };
-  if (status === 'failed') return { text: 'KO', cls: 'ko' };
-  return { text: '··', cls: 'run' };
-}
-
 function runsListItem(run) {
   const li = document.createElement('li');
   li.className = 'exec-run-li';

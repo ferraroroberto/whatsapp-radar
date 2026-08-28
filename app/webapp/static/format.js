@@ -49,6 +49,16 @@ export function legPricing(legs) {
 
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
+// One lean run-status badge: OK/KO first (right or wrong at a glance), anything
+// else — running, pending, or a status this build has never heard of — is the
+// same neutral "in flight / not concluded" mark. Shared by the Execution and
+// Audit tabs so a run cannot read as OK on one and unknown on the other (#294).
+export function statusBadge(status) {
+  if (status === 'completed') return { text: 'OK', cls: 'ok' };
+  if (status === 'failed') return { text: 'KO', cls: 'ko' };
+  return { text: '··', cls: 'run' };
+}
+
 // Funnel-cell mapping for the two family-check kinds (calendar-scan ·
 // traffic-check), shared by the Run tab's live funnelCells() and the Audit
 // tab's renderFamilyDetail() so a label/field change can't render differently

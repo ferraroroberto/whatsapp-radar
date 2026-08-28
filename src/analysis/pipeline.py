@@ -31,7 +31,6 @@ from typing import Any, Literal
 
 from calendar_write import CalendarWriteClient
 
-from src.analysis._common import Progress, _emit
 from src.analysis.classifier import (
     ClassificationOutcome,
     ClassifierUnavailable,
@@ -73,6 +72,7 @@ from src.db.sync import sync_sources
 from src.models import StoredMessage
 from src.notify.alert import send_alert
 from src.notify.delivery import deliver_digest
+from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
 Mode = Literal["live", "dry_run"]
@@ -232,8 +232,8 @@ def _sync(
         source_funnel.chats_synced = result.delta.chats_seen
         source_funnel.messages_synced = result.delta.messages_added
     for source, error in synced.source_errors:
-        _emit(progress, f"⚠ {source} sync failed — {error}; its cursors are held")
-    _emit(
+        emit(progress, f"⚠ {source} sync failed — {error}; its cursors are held")
+    emit(
         progress,
         f"✓ synced {outcome.chats_synced} chats ({delta.chats_added} new) / "
         f"{outcome.messages_synced} new messages",
@@ -257,13 +257,13 @@ def _abort_offline(
     """
     outcome.notification_status = "offline"
     outcome.errors.append((0, str(exc)))
-    _emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
+    emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
     alert_status, _ = send_alert(
         config,
         f"⚠️ WhatsApp Radar: live scan aborted — all sources offline ({exc}). "
         "No messages were checked. Restore at least one enabled source.",
     )
-    _emit(progress, f"• offline alert: {alert_status}")
+    emit(progress, f"• offline alert: {alert_status}")
     store.finish_run(conn, outcome.run_id, "failed", 0)
     store.record_run_funnel(
         conn,
@@ -332,7 +332,7 @@ def _run_tripwire(
     outcome.tripwire_scanned = result.scanned_messages
     outcome.tripwire_hits = len(result.hits)
     outcome.tripwire_truncated = result.truncated
-    _emit(
+    emit(
         progress,
         f"• tripwire: scanned {result.scanned_messages} recent unmonitored message(s), "
         f"found {len(result.hits)} chat(s)" + (" (bounded)" if result.truncated else ""),
@@ -350,7 +350,7 @@ def _run_tripwire(
             last = datetime.fromisoformat(last_raw)
         except ValueError:
             last = None
-            _emit(progress, "⚠ tripwire nudge state was invalid; treating it as unsent")
+            emit(progress, "⚠ tripwire nudge state was invalid; treating it as unsent")
         if last is not None and last.tzinfo is None:
             last = last.replace(tzinfo=UTC)
         if last is not None and now - last < timedelta(
@@ -370,9 +370,9 @@ def _run_tripwire(
     outcome.tripwire_nudge_status = status
     if status == "sent":
         store.mark_tripwire_nudge_sent(conn, now.isoformat(timespec="seconds"))
-        _emit(progress, "• tripwire weekly nudge: sent")
+        emit(progress, "• tripwire weekly nudge: sent")
     else:
-        _emit(progress, f"⚠ tripwire weekly nudge: {status}" + (f" — {detail}" if detail else ""))
+        emit(progress, f"⚠ tripwire weekly nudge: {status}" + (f" — {detail}" if detail else ""))
     return result
 
 
@@ -402,7 +402,7 @@ def scan(
     creation is live-mode only: dry-run replays the same messages on every call,
     which would otherwise mint a fresh duplicate event each time.
     """
-    _emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
+    emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
     run_id = store.start_run(
         conn, mode=mode, params_json=json.dumps({"days": days}), kind="scan"
     )
@@ -416,7 +416,7 @@ def scan(
         try:
             calendar_client = build_calendar_client(config.calendar)
         except (FileNotFoundError, RuntimeError) as exc:
-            _emit(progress, f"⚠ calendar reminders disabled: {exc}")
+            emit(progress, f"⚠ calendar reminders disabled: {exc}")
 
     if mode == "live":
         live_bindings = connectors
@@ -446,7 +446,7 @@ def scan(
         outcome.transcriptions = tr.done
         _run_tripwire(conn, config, outcome, progress)
     else:
-        _emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
+        emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
 
     monitored = store.monitored_chats(conn)
     outcome.chats_monitored = len(monitored)
@@ -454,7 +454,7 @@ def scan(
         ensure_source_funnel(
             outcome.source_funnels, str(chat["source"])
         ).monitored_channels += 1
-    _emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
+    emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
     for chat in monitored:
         chat_id = int(chat["id"])
@@ -519,7 +519,7 @@ def scan(
 
         outcome.stage1_passed += 1
         source_funnel.stage1_passed += 1
-        _emit(
+        emit(
             progress,
             f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
             f"(keywords: {', '.join(signal.roots) or 'n/a'}) → Stage 2",
@@ -665,7 +665,7 @@ def scan(
         transcriptions=outcome.transcriptions,
         source_funnel_json=source_funnels_json(outcome.source_funnels),
     )
-    _emit(
+    emit(
         progress,
         f"✓ done — transcribed {outcome.transcriptions}, Stage 1 {outcome.stage1_passed}, "
         f"LLM {outcome.stage2_llm_calls}, actionable {outcome.actionable}, "

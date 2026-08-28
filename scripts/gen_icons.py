@@ -1,4 +1,4 @@
-"""Generate PWA/tray/Stream-Deck icons from the shared fleet icon-brand generator.
+r"""Generate PWA/tray/Stream-Deck icons from the shared fleet icon-brand generator.
 
 Thin caller onto ``project-scaffolding``'s ``brand_gen.render_set()`` — the
 master art is whatsapp-radar's vendored Lucide ``radar.svg``, not a bespoke
@@ -31,7 +31,11 @@ sys.path.insert(0, str(SCAFFOLDING_SCRIPTS))
 
 from brand_gen import render_set  # noqa: E402
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# scripts/ is sys.path[0] when run as a file — put the repo root on it too, so `src` resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.paths import PROJECT_ROOT  # noqa: E402
+
 STATIC_DIR = PROJECT_ROOT / "app" / "webapp" / "static"
 
 

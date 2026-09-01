@@ -207,10 +207,13 @@ A **Chats worth monitoring** card appears above the list when a recent message i
 
 The guarded **Rebuild** (full cache rebuild — backs up the DB, preserves monitored/ignored/alias state and family links, resets run history) lives in this tab's **Maintenance** card, since it operates on the local message cache.
 
+**Send to Task-OS** (#307) is a per-message control in the history overlay: tapping it POSTs the message to [task-os](../task-os)'s Inbox (`POST /api/tasks`) as a task titled from the message text, with sender/chat/timestamp folded into the description. Off by default — set `task_os.enabled: true` (or `WR_TASK_OS_ENABLED=1`) and `WR_TASK_OS_TOKEN` in `.env` to turn it on; `WR_TASK_OS_BASE_URL` defaults to `http://127.0.0.1:8448`. The export is idempotent: the first successful send persists to `messages.task_exported_at` and every later tap on the same message reads that back instead of posting again (task-os's own `POST /api/tasks` doesn't yet dedupe on `external_id` — [task-os#98](../task-os) — so this repo is what actually protects a retry). Not-configured and upstream failures surface as a toast, never a silent no-op.
+
 - `GET /api/chats`, `GET /api/chats/tripwire`, `GET /api/chats/{id}/history`, `POST /api/chats/{id}/status`
 - `POST /api/chats/{id}/alias`, `POST /api/chats/{id}/link`, `POST /api/chats/{id}/unlink`
 - `GET /api/messages/{id}/audio` — streams a voice note's retained audio for in-overlay playback
 - `POST /api/messages/{id}/summarize` — on-demand, **read-through** hub summary of a long message; the first call persists it to `messages.summary`, every later call returns the stored text with no further hub call
+- `POST /api/messages/{id}/task-export` — send a message to task-os's Inbox as a task (#307); read-through on `messages.task_exported_at` once sent
 - `GET /api/tts/health`, `POST /api/tts/speak` — reachability probe plus an ephemeral headerless PCM16 stream of a message's stored summary, `{message_id}`-addressed with the voice profile resolved server-side
 - `GET`/`POST /api/config`
 

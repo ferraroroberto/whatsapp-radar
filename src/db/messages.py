@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.db.chats import family_member_ids
 from src.db.connection import _MESSAGE_COLUMNS, _now, _to_stored
-from src.models import MessageRecord, StoredMessage
+from src.models import MessageRecord, StoredMessage, TaskExportContext
 
 
 def message_source_ids(conn: sqlite3.Connection, chat_id: int) -> set[str]:
@@ -422,6 +422,52 @@ def set_message_summary(conn: sqlite3.Connection, message_id: int, summary: str)
     """Persist the on-demand summary for a message (#157, read-through cache)."""
     conn.execute("UPDATE messages SET summary = ? WHERE id = ?", (summary, message_id))
     conn.commit()
+
+
+def message_task_export_context(
+    conn: sqlite3.Connection, message_id: int
+) -> TaskExportContext | None:
+    """Everything the task-export endpoint needs for one message (#307), or
+    ``None`` if the message is missing or has no (non-blank) text (e.g. an
+    untranscribed voice note) — the caller maps that to a clean 404.
+
+    ``chat_name`` prefers the operator alias over the connector-derived name,
+    matching how the chat is labelled everywhere else in the UI.
+    """
+    row = conn.execute(
+        """
+        SELECT m.source_message_id, m.text, m.sender_label, m.message_timestamp,
+               m.task_exported_at, c.display_name, c.alias
+        FROM messages m JOIN chats c ON c.id = m.chat_id
+        WHERE m.id = ?
+        """,
+        (message_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    text = row["text"]
+    if text is None or not str(text).strip():
+        return None
+    return TaskExportContext(
+        source_message_id=row["source_message_id"],
+        text=str(text),
+        sender_label=row["sender_label"],
+        chat_name=row["alias"] or row["display_name"],
+        message_timestamp=row["message_timestamp"],
+        task_exported_at=row["task_exported_at"],
+    )
+
+
+def set_task_exported(conn: sqlite3.Connection, message_id: int) -> str:
+    """Persist the export timestamp for a message just sent to task-os (#307).
+
+    Returns the timestamp so the caller can echo it straight back to the phone
+    without a second read.
+    """
+    ts = _now()
+    conn.execute("UPDATE messages SET task_exported_at = ? WHERE id = ?", (ts, message_id))
+    conn.commit()
+    return ts
 
 
 def _merge_placeholder(raw_json: str | None, placeholder_text: str | None) -> str:

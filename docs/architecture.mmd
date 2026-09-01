@@ -142,6 +142,12 @@ flowchart TB
   FTRAFFIC -->|live origin, fallback to calendar inference| PCLIENT
   PCLIENT -->|GET /api/presence + POST /refresh| HOMEAUTO["home-automation presence API\n127.0.0.1:8447 (loopback bypasses bearer)"]
 
+  subgraph taskos["src/task_os/ — Inbox export (#307, write-only)"]
+    TOSCLIENT["client.py — export_message: POST one message\nas a task-os task; local task_exported_at is what\nprotects a retry (task-os#98 external_id not wired yet)"]
+  end
+  ROUTERS -->|POST /api/messages/{id}/task-export #307| TOSCLIENT
+  TOSCLIENT -->|POST /api/tasks, bearer token| TASKOS["task-os Inbox API\n127.0.0.1:8448"]
+
   subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
   end

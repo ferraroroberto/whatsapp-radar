@@ -339,6 +339,13 @@ function histMsg(m) {
   if (m.text && m.text.length >= SUMMARIZE_MIN_CHARS) {
     item.append(summarizeControl(m.id, m.summary));
   }
+  // Any message with text can be sent to task-os as an Inbox task (#307) — no
+  // length gate, unlike Summarize (which only pays for a hub call past
+  // SUMMARIZE_MIN_CHARS). m.task_exported_at (already-sent state) rides the
+  // same history payload as m.summary does, for the same reopened-overlay reason.
+  if (m.text) {
+    item.append(taskExportControl(m.id, m.task_exported_at));
+  }
   return item;
 }
 
@@ -414,6 +421,46 @@ function summarizeControl(id, existingSummary) {
     }
   });
   wrap.append(btn, out);
+  return wrap;
+}
+
+// A "Send to Task-OS" control for one message (#307). Tapping it POSTs to the
+// task-export endpoint, which persists an export timestamp server-side the
+// first time it succeeds — so an already-exported message (existingExportedAt,
+// from the history payload, or the endpoint's own response) renders as a
+// disabled, done state and a second tap never re-sends it.
+function taskExportControl(id, existingExportedAt) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-task-export-wrap';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  // Distinct class from Summarize's (same visual styling, shared in CSS) so
+  // e2e/UI locators that target one control never pick up the other.
+  btn.className = 'task-export-action';
+  let exported = existingExportedAt || null;
+  let busy = false;
+  function render() {
+    btn.disabled = exported != null;
+    btn.textContent = exported ? 'Sent to Task-OS' : 'Send to Task-OS';
+  }
+  render();
+  btn.addEventListener('click', async function () {
+    if (busy || exported) return;
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      const body = await jsonApi('/api/messages/' + id + '/task-export', { method: 'POST' });
+      exported = (body && body.exported_at) || true;
+      toast('Sent to Task-OS.', 'good');
+    } catch (exc) {
+      toast(String((exc && exc.message) || 'Could not send to Task-OS.'), 'error');
+    } finally {
+      busy = false;
+      render();
+    }
+  });
+  wrap.append(btn);
   return wrap;
 }
 

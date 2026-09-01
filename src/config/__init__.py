@@ -27,6 +27,7 @@ from src.config import family as _family
 from src.config import gmail as _gmail
 from src.config import hub as _hub
 from src.config import presence as _presence
+from src.config import task_os as _task_os
 from src.config import telegram as _telegram
 from src.config import traffic as _traffic
 from src.config import transcription as _transcription
@@ -47,6 +48,7 @@ from src.config.family import ChildcareWindow, ChildProfile, FamilyConfig, Trave
 from src.config.gmail import GmailConfig, GmailLabel, GmailSender
 from src.config.hub import HubConfig
 from src.config.presence import PresenceConfig
+from src.config.task_os import TaskOsConfig
 from src.config.telegram import TelegramConfig
 from src.config.traffic import TrafficConfig
 from src.config.transcription import TranscriptionConfig
@@ -65,6 +67,7 @@ __all__ = [
     "GmailSender",
     "HubConfig",
     "PresenceConfig",
+    "TaskOsConfig",
     "TelegramConfig",
     "TrafficConfig",
     "TranscriptionConfig",
@@ -117,6 +120,9 @@ class Config:
     # Live phone-location lookup (#169). Defaulted (disabled) so library/test
     # callers that build a Config without it get the offline-safe no-op behaviour.
     presence: PresenceConfig = field(default_factory=PresenceConfig)
+    # task-os Inbox export (#307). Defaulted (disabled) so library/test callers
+    # that build a Config without it get the offline-safe no-op behaviour.
+    task_os: TaskOsConfig = field(default_factory=TaskOsConfig)
     # Household child registry (#206/#215). Empty by default — ``default.json``
     # ships an empty placeholder; real entries only ever live in the gitignored
     # ``config/local.json``. Used to resolve which child a Gmail school-source
@@ -168,6 +174,7 @@ def load_config(root: Path | None = None) -> Config:
     traffic = _traffic.parse(merged.get("traffic", {}))
     family = _family.parse(merged.get("family", {}))
     presence = _presence.parse(merged.get("presence", {}))
+    task_os = _task_os.parse(merged.get("task_os", {}))
     children = _family.parse_children(merged.get("children", []))
 
     resolved_db = Path(db_path)
@@ -198,5 +205,6 @@ def load_config(root: Path | None = None) -> Config:
         traffic=traffic,
         family=family,
         presence=presence,
+        task_os=task_os,
         children=children,
     )

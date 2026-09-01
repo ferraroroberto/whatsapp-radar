@@ -19,7 +19,7 @@ from src.models import StoredMessage
 
 _MESSAGE_COLUMNS = (
     "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
-    "message_type, transcription_status, media_path, summary, raw_json"
+    "message_type, transcription_status, media_path, summary, task_exported_at, raw_json"
 )
 
 
@@ -35,6 +35,7 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
         transcription_status=row["transcription_status"],
         media_path=row["media_path"],
         summary=row["summary"],
+        task_exported_at=row["task_exported_at"],
         raw=json.loads(row["raw_json"]) if row["raw_json"] else {},
     )
 
@@ -172,6 +173,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # non-destructive; old rows stay NULL until the operator taps Summarize.
     if "summary" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN summary TEXT")
+    # `messages.task_exported_at` (#307): when a message was sent to task-os's
+    # Inbox. Additive, non-destructive; old rows stay NULL until the operator
+    # taps Send to Task-OS.
+    if "task_exported_at" not in msg_cols:
+        conn.execute("ALTER TABLE messages ADD COLUMN task_exported_at TEXT")
     # Multi-source sync visibility (#58): keep the historical ``source``
     # operation tag (scan/resync/reprocess) and add which connector ran plus its
     # outcome. Defaults make every pre-#58 row a successful WhatsApp sync.

@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS messages (
     -- requested; cleared whenever `text` is replaced (voice-note retranscription)
     -- so a stale summary can never be shown or spoken.
     summary           TEXT,
+    -- When this message was sent to task-os's Inbox (#307), persisted the first
+    -- time the operator taps Send to Task-OS. NULL until then; set once and
+    -- never cleared, so a re-tap reads through instead of posting again.
+    task_exported_at TEXT,
     raw_json          TEXT,
     ingested_at       TEXT NOT NULL,
     UNIQUE (chat_id, source_message_id)

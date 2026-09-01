@@ -91,6 +91,11 @@
     "refresh_timeout_s": 12,
     "person_aliases": {}
   },
+  "task_os": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:8448",
+    "timeout_s": 6
+  },
   "children": [],
   "tts": {
     "profiles": {

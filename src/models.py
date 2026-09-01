@@ -66,6 +66,29 @@ class StoredMessage:
     # Summarize. ``None`` until requested, or after ``text`` is replaced (voice-note
     # retranscription clears it so a stale summary can never be shown or spoken).
     summary: str | None = None
+    # When this message was sent to task-os's Inbox (#307). ``None`` until the
+    # operator taps Send to Task-OS; set once, never cleared — a task, once real,
+    # stays real even if the message is later retranscribed.
+    task_exported_at: str | None = None
     # Connector payload retained locally. The web API exposes only an explicit,
     # source-safe subset (for Gmail: subject + thread id), never this mapping.
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TaskExportContext:
+    """Everything needed to export one message to task-os's Inbox (#307).
+
+    Read once by the export endpoint: ``task_exported_at`` non-``None`` means the
+    message was already sent, so the endpoint returns it read-through instead of
+    posting again — task-os's own ``POST /api/tasks`` does not yet dedupe on
+    ``external_id`` (task-os#98), so this is what actually protects a retry from
+    creating a duplicate Inbox task today.
+    """
+
+    source_message_id: str
+    text: str
+    sender_label: str | None
+    chat_name: str
+    message_timestamp: str
+    task_exported_at: str | None

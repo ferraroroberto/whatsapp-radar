@@ -27,6 +27,7 @@ from app.webapp.routers._helpers import (
     get_conn,
     hub_base_url,
     short_lived_conn,
+    task_os_config,
     tts_profiles,
 )
 from src import speech_profile, tts_client
@@ -35,6 +36,7 @@ from src.analysis.tripwire import scan_tripwire
 from src.config import load_config
 from src.db import store
 from src.subprocess_flags import NO_WINDOW
+from src.task_os import client as task_os_client
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -207,6 +209,9 @@ async def chat_history(
                 # A summary already generated for this message (#157), so a
                 # reopened overlay can render it without re-dialling the hub.
                 "summary": m.summary,
+                # When this message was sent to task-os's Inbox (#307); null
+                # until the operator taps Send to Task-OS.
+                "task_exported_at": m.task_exported_at,
                 # Voice-note transcription state (#36) so the UI can mark a voice
                 # note and label it when it isn't (yet) transcribed.
                 "transcription_status": m.transcription_status,
@@ -379,6 +384,43 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
     with short_lived_conn(request) as conn:
         store.set_message_summary(conn, message_id, summary)
     return {"message_id": message_id, "summary": summary}
+
+
+@router.post("/api/messages/{message_id}/task-export")
+async def export_message_task(request: Request, message_id: int) -> dict[str, Any]:
+    """Send one message to task-os's Inbox as a task (#307, task-os#98).
+
+    Read-through and idempotent client-side: once a message is exported, the
+    timestamp persists on ``messages.task_exported_at`` and a re-tap returns it
+    without posting again — task-os's own ``POST /api/tasks`` doesn't yet dedupe
+    on ``external_id`` (task-os#98), so this repo is what actually protects a
+    retry from creating a duplicate Inbox task today.
+
+    404 when the message is missing or has no text (e.g. an untranscribed voice
+    note); 400 when task-os export isn't configured (disabled, or no bearer
+    token); task-os's own status is surfaced verbatim otherwise.
+    """
+    with short_lived_conn(request) as conn:
+        ctx = store.message_task_export_context(conn, message_id)
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="no text for this message")
+    if ctx.task_exported_at is not None:
+        return {"message_id": message_id, "exported_at": ctx.task_exported_at}
+
+    # Injectable so the offline suite never dials task-os; production uses the
+    # real task-os-backed client bound to the configured :8448 base.
+    exporter = (
+        getattr(request.app.state, "task_os_exporter", None) or task_os_client.export_message
+    )
+    config = task_os_config(request)
+    try:
+        await asyncio.to_thread(exporter, config, ctx)
+    except task_os_client.TaskOsError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+    with short_lived_conn(request) as conn:
+        exported_at = store.set_task_exported(conn, message_id)
+    return {"message_id": message_id, "exported_at": exported_at}
 
 
 @router.get("/api/tts/health")

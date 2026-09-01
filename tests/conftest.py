@@ -15,6 +15,26 @@ from tests.helpers import ingest_all
 
 
 @pytest.fixture(autouse=True)
+def isolated_db_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep every test's ``load_config()`` off the real database.
+
+    Autouse and repo-wide for the same reason as ``isolated_runs_dir`` below:
+    ``create_app()`` calls ``load_config()`` at startup, so any test building the
+    app without pinning a path resolved the developer's actual store. That was
+    quietly true before — it is what left a stray ``src/data/whatsapp-radar.sqlite3``
+    in the checkout — and pointing the default at the shared fleet runtime-data
+    root would put those writes beside every other app's live data.
+
+    ``WR_DB_PATH`` is the highest-precedence layer (see :mod:`src.runtime_data`),
+    so this wins over config; a test passing an explicit path to ``store.connect``
+    bypasses ``load_config`` entirely and is unaffected.
+    """
+    target = tmp_path / "config-default.sqlite3"
+    monkeypatch.setenv("WR_DB_PATH", str(target))
+    return target
+
+
+@pytest.fixture(autouse=True)
 def isolated_runs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Keep every test's run records out of the real ``webapp/runs/``.
 

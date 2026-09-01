@@ -54,6 +54,7 @@ from src.config.traffic import TrafficConfig
 from src.config.transcription import TranscriptionConfig
 from src.config.tripwire import TripwireConfig
 from src.config.tts import TtsConfig, VoiceProfile
+from src.runtime_data import runtime_db_path
 
 __all__ = [
     "CalendarAccount",
@@ -146,7 +147,17 @@ def load_config(root: Path | None = None) -> Config:
     tts_raw = (merged.get("tts") or {}).get("profiles", {})
     tg_raw = merged.get("telegram", {})
 
-    db_path = os.environ.get("WR_DB_PATH", merged.get("db_path", "data/whatsapp-radar.sqlite3"))
+    # Three layers, highest first: WR_DB_PATH (harnesses and the webapp's
+    # per-run child env) -> an explicit `db_path` in config -> the fleet
+    # runtime-data root. The last used to be a repo-relative
+    # "data/whatsapp-radar.sqlite3", which put an always-on service's writes on
+    # whichever drive this repo was cloned onto — a spinning HDD here
+    # (project-scaffolding#243).
+    db_path = (
+        os.environ.get("WR_DB_PATH")
+        or merged.get("db_path")
+        or str(runtime_db_path("whatsapp-radar", "whatsapp-radar.sqlite3"))
+    )
     connector = os.environ.get("WR_CONNECTOR", merged.get("connector", "fixture"))
     sources = _as_sources(os.environ.get("WR_SOURCES") or merged.get("sources"))
     classifier = os.environ.get("WR_CLASSIFIER", merged.get("classifier", "stub"))

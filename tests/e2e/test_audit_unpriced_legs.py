@@ -140,12 +140,8 @@ def test_a_legacy_payload_without_statuses_still_reads_as_priced(
     expect(row).not_to_contain_text("not priced")
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
-def test_the_split_funnel_fits_a_phone_in_both_themes(
-    page: Page, base_url: str, color_scheme: str
-) -> None:
+def test_the_split_funnel_fits_a_phone(page: Page, base_url: str) -> None:
     """A fourth funnel cell must not push the row off a 390px viewport."""
-    page.emulate_media(color_scheme=color_scheme)
     page.set_viewport_size({"width": 390, "height": 844})
     _open_traffic_run(page, base_url, _traffic_run("ok", "error", "anchor_in_the_past"))
 

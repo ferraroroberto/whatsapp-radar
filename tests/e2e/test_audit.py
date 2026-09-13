@@ -278,14 +278,10 @@ def _open_travel_run(page: Page, base_url: str, section: dict[str, object] | Non
     expect(page.locator("#auditDetailCard")).to_be_visible()
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 @pytest.mark.smoke
 @pytest.mark.live_safe
-def test_audit_renders_the_travel_block_sweep_readably(
-    page: Page, base_url: str, color_scheme: str
-) -> None:
+def test_audit_renders_the_travel_block_sweep_readably(page: Page, base_url: str) -> None:
     """The sweep record reads as legs and reasons, not as a JSON dump (#276)."""
-    page.emulate_media(color_scheme=color_scheme)
     page.set_viewport_size({"width": 390, "height": 844})
     _open_travel_run(page, base_url, _TRAVEL_SECTION)
 

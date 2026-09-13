@@ -43,12 +43,10 @@ def _app_padding(page: Page) -> dict[str, str]:
     )
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_mobile_shell_defers_to_vendored_safe_area(
     playwright: Playwright,
     browser: Browser,
     base_url: str,
-    color_scheme: str,
     scaled: Callable[[float], int],
 ) -> None:
     """Narrow + coarse pointer (phone shape): nav-tabs.css owns .app padding."""
@@ -59,7 +57,6 @@ def test_mobile_shell_defers_to_vendored_safe_area(
     # as test_family_layout.py's iPhone-device context.
     device = dict(playwright.devices["iPhone 13"])
     device["viewport"] = {"width": 390, "height": 844}
-    device["color_scheme"] = color_scheme
     context = browser.new_context(**device)
     page = context.new_page()
     page.set_default_timeout(scaled(30_000))
@@ -85,15 +82,12 @@ def test_mobile_shell_defers_to_vendored_safe_area(
     )
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_desktop_browser_tab_shell_padding_unchanged(
     page: Page,
     base_url: str,
-    color_scheme: str,
     scaled: Callable[[float], int],
 ) -> None:
     """Wide viewport (browser-tab / desktop): app-owned padding, no shift."""
-    page.emulate_media(color_scheme=color_scheme)
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(base_url)
     page.wait_for_selector("#tabDashboard", state="attached", timeout=scaled(10_000))

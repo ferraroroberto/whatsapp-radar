@@ -4,7 +4,8 @@ The whole point of the card is that a household member's calendar state is
 readable at a glance instead of out of a log — so `unknown` must render as its
 own thing: not a green tick, not a red cross, not an omitted row. #276 adds the
 two run controls and the reasons a live sweep is unavailable. This drives both
-in a real browser, in light and dark, against a route-mocked /api/family payload
+in a real browser against a route-mocked /api/family payload — the state colours in
+both light and dark, the rest in light only (their assertions are theme-free)
 (no DB seeding, no sweep, nothing mutating — hence `live_safe`).
 
 Every `/api/execution/**` request is aborted by a catch-all route registered
@@ -273,16 +274,12 @@ def _drive_sweep(
     page.wait_for_selector("#paneFamily", state="visible")
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
-def test_live_sweep_control_is_unavailable_with_a_stated_reason(
-    page: Page, base_url: str, color_scheme: str
-) -> None:
+def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base_url: str) -> None:
     """Not a silent grey-out: the button is off *and* the card says why.
 
     The stated reason also says what the button is not — a courtesy, never the
     thing standing between a click and a calendar write.
     """
-    page.emulate_media(color_scheme=color_scheme)
     page.set_viewport_size({"width": 390, "height": 844})
     _open_family(page, base_url)
 
@@ -349,12 +346,8 @@ def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) 
     expect(page.locator("#familyTravelBlocks .tb-actions .run-btn").nth(0)).to_be_enabled()
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
-def test_a_gated_sweep_reads_as_gated_never_as_zeros(
-    page: Page, base_url: str, color_scheme: str
-) -> None:
+def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:
     """`dry_run: null` / `counts: null` must not be painted as a clean sweep."""
-    page.emulate_media(color_scheme=color_scheme)
     page.set_viewport_size({"width": 390, "height": 844})
     _open_family(page, base_url, _payload(last_sweep={
         "run_id": "db-4", "started_at": "2026-08-20T12:00:00+00:00",

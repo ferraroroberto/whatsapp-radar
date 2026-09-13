@@ -7,17 +7,23 @@ tuple: loopback (trusted), tailnet (passkey-allowed), or a public remote
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 
 import pytest
 from starlette.testclient import TestClient
 
+from app.webapp.routers._helpers import STATIC_DIR
 from app.webapp.server import create_app
+from src.static_versioning import compute_asset_hashes
 from src.webapp_config import WebappConfig
 
 LOOPBACK = ("127.0.0.1", 5555)
 TAILNET = ("100.64.0.1", 5555)
 REMOTE = ("203.0.113.5", 5555)
+_INDEX_HREF_RE = re.compile(
+    r"""(?:href|src)=['"]/static/(?P<name>[\w\-./]+\.(?:css|js))\?v=(?P<hash>[a-f0-9]+)['"]"""
+)
 
 
 def _client(
@@ -47,6 +53,9 @@ def test_healthz(loopback: TestClient) -> None:
 def test_version_shape(loopback: TestClient) -> None:
     body = loopback.get("/api/version").json()
     assert {"git_sha", "built_at", "asset_hash"} <= set(body)
+    assert all(isinstance(body[key], str) for key in ("git_sha", "built_at", "asset_hash"))
+    assert body["git_sha"]  # a short SHA, or "unknown" — never empty
+    assert body["built_at"]
     assert body["asset_hash"]  # styles.css exists, so the hash is non-empty
 
 
@@ -55,6 +64,16 @@ def test_index_served_and_stamped(loopback: TestClient) -> None:
     assert r.status_code == 200
     assert "WhatsApp Radar" in r.text
     assert "?v=" in r.text  # asset URLs are version-stamped
+
+
+def test_served_index_hashes_match_disk(loopback: TestClient) -> None:
+    # Every ?v= stamp in the served index must be the hash of the bytes on disk,
+    # so an edited asset can never be served under a stale cache-busting stamp.
+    served = {m["name"]: m["hash"] for m in _INDEX_HREF_RE.finditer(loopback.get("/").text)}
+    assert served, "no hashed /static/*.{css,js} references in the served index"
+    on_disk = compute_asset_hashes(STATIC_DIR)
+    for name, stamp in served.items():
+        assert stamp == on_disk.get(name), f"{name}: served {stamp!r} != disk {on_disk.get(name)!r}"
 
 
 def test_static_served(loopback: TestClient) -> None:

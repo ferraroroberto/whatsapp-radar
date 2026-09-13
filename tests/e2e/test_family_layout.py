@@ -43,13 +43,11 @@ def _open_family_with_two_new_windows(page, base_url: str, scaled: Callable[[flo
     page.wait_for_timeout(scaled(200))
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_childcare_windows_flat_and_fit_390px(
     playwright: Playwright,
     browser: Browser,
     base_url: str,
     browser_name: str,
-    color_scheme: str,
     scaled: Callable[[float], int],
 ) -> None:
     if browser_name != "webkit":
@@ -57,7 +55,6 @@ def test_childcare_windows_flat_and_fit_390px(
 
     device = dict(playwright.devices["iPhone 13"])
     device["viewport"] = {"width": 390, "height": 844}
-    device["color_scheme"] = color_scheme
     context = browser.new_context(**device)
     page = context.new_page()
     page.set_default_timeout(scaled(30_000))

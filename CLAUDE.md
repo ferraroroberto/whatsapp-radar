@@ -1,6 +1,6 @@
 # Project Instructions
 
-`AGENTS.md` points here for non-Claude tools.
+`AGENTS.md` points here, so every coding agent reads this same instruction set.
 
 ## This Repository
 

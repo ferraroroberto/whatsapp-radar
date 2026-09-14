@@ -128,8 +128,10 @@ def test_cli_calendar_scan_records_a_run_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     payload = {"kind": "calendar-scan", "status": "ok", "conflicts": [], "unknown_locations": []}
+    # --force: an unforced calendar-scan self-skips before family.run_hour (#277)
+    # and writes no row, so without it this test failed overnight (#317).
     rc, db = _run_family_cli(
-        tmp_path, monkeypatch, ["calendar-scan", "--dry-run"], payload
+        tmp_path, monkeypatch, ["calendar-scan", "--dry-run", "--force"], payload
     )
     assert rc == 0
     conn = store.connect(db)

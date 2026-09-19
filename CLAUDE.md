@@ -6,7 +6,7 @@
 
 WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionable items through a separate notification channel. **Treat it as a sensitive-data project even though the repository is public.**
 
-Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. **Not** an installable package — runs from a checkout.
+Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. Runs from a checkout, never installed.
 
 ```
 whatsapp-radar/
@@ -51,11 +51,11 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 ### Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of internal structure; update it in the same PR as any material structural change (connector added, pipeline stage moved, router split). Not auto-generated, not covered by `scripts/verify-before-ship.ps1`.
+[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of internal structure. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`: update it in the same PR as any material structural change (connector added, pipeline stage moved, router split).
 
 ### Admin webapp & tray
 
-- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Six tabs live (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups); endpoint lists in `README.md` §"Admin Webapp".
+- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Six tabs live (named under **UX surface** below); endpoint lists in `README.md` §"Admin Webapp".
 - Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, dormant Cloudflare scaffolding.
 - Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`.
 - **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`.
@@ -64,15 +64,15 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` are portable Google API packages deliberately outside `src/` (liftable into another repo unchanged), imported as `from calendar_readonly…` / `from calendar_write…` / `from gmail_readonly…` — the intentional exception to the absolute-`from src.…` rule. `google_oauth_common/` is a fourth portable sibling (the installed-app OAuth bootstrap, token load/refresh and atomic-write steps all three share), imported as `from google_oauth_common…`. All four carry the same "no imports from `src`/`app`/`scripts`" contract; lifting a client means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
+- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` and their shared `google_oauth_common/` bootstrap (installed-app OAuth, plus the token load/refresh and atomic-write steps all three wrap) are portable packages deliberately outside `src/` (liftable into another repo unchanged), each imported as `from <package>…` — the intentional exception to the absolute-`from src.…` rule. All four carry the same "no imports from `src`/`app`/`scripts`" contract; lifting a client means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
-- Out-of-tree script importing `src.*`/`app.*` → the global PYTHONPATH gotcha applies; prefer `-m <module>` from the repo root.
+- Out-of-tree script importing `src.*`/`app.*` → the global PYTHONPATH gotcha; prefer `-m <module>` from the repo root.
 
 ## Hard Privacy Rules
 
 - Never commit real WhatsApp auth state, session credentials, QR codes, message databases, message exports, chat names, phone numbers, school names, screenshots, or notification tokens.
-- Use sanitized fixtures only. Example chat names should be generic, such as `School Parents Group` or `Class 4A Group`.
+- Use sanitized fixtures only; example chat names stay generic, such as `School Parents Group` or `Class 4A Group`.
 - Keep all runtime data under ignored paths such as `auth/`, `sessions/`, `data/`, or local config files.
 - Do not add telemetry or external logging for message content.
 - Do not use WhatsApp data to train, fine-tune, or improve shared AI models.
@@ -109,7 +109,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 ## Verification
 
-Run the gate from the repo root with the project venv:
+Gate, from the repo root, with the project venv:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
@@ -117,11 +117,11 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m mypy src app
 ```
 
-Runs entirely offline against sanitized fixtures (no WhatsApp credentials, no network, no Telegram).
+Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram.
 
 ## CI expectations
 
 - Workflow `.github/workflows/e2e.yml`, job `verify-before-ship`, on every PR. **Advisory, not required** (no branch protection) — the local gate (`pytest` / `ruff` / `mypy`) is the contract.
 - Typical green: **~2 min**. Investigate at **>5 min**; treat as wedged at **>8 min**.
 - Flaky leg: the Playwright **WebKit/iPhone** e2e projection can wedge the browser on the hosted runner; `timeout-minutes: 30` caps it. A wedge is a flake, not the diff.
-- CI's only signal beyond the local gate is the **e2e suite** (skipped locally — `pytest` shows ~13 skipped). e2e surface = `app/webapp/`, `app/tray/`, `tests/e2e/`, static assets under `app/webapp/static/`. A diff touching **none** of these (e.g. `src/db/`, `src/analysis/`, `src/notify/`, docs) gains nothing from CI.
+- CI's only signal beyond the local gate is the **e2e suite** (skipped locally — `pytest` shows ~13 skipped). e2e surface = `app/webapp/`, `app/tray/`, `tests/e2e/`, static assets under `app/webapp/static/`; a diff touching **none** of these (e.g. `src/db/`, `src/analysis/`, `src/notify/`, docs) gains nothing from CI.

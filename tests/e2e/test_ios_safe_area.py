@@ -67,12 +67,14 @@ def test_mobile_shell_defers_to_vendored_safe_area(
         padding = _app_padding(page)
     finally:
         context.close()
-    # env(safe-area-inset-top, 0) resolves to 0 in every headless/CI browser
-    # (no real notch), so a non-zero top means the vendored `+ var(--gap)`
-    # term survived — proof nav-tabs.css's rule won, not the app-owned one.
-    assert padding["top"] == "12px", (
-        f"expected the vendored top-safe-area formula (env(0) + --gap=12px) to win "
-        f"on a narrow coarse-pointer viewport, got padding-top={padding['top']!r}"
+    # Since the nav re-vendor (project-scaffolding#288) the phone top padding is
+    # `env(safe-area-inset-top)` alone — the first card starts directly under the
+    # status bar — and env() resolves to 0 in every headless/CI browser (no real
+    # notch). The top edge therefore no longer discriminates the cascade winner;
+    # the bottom-clearance assertion below still does.
+    assert padding["top"] == "0px", (
+        f"expected the vendored top-safe-area formula (env(0) alone) on a "
+        f"narrow coarse-pointer viewport, got padding-top={padding['top']!r}"
     )
     # 115px = env(bottom, 0) + --bottom-tabs-margin(21) + --bottom-tabs-height(61)
     # + --bottom-tabs-margin(21) + --gap(12) — the full floating-pill clearance.
@@ -87,17 +89,19 @@ def test_desktop_browser_tab_shell_padding_unchanged(
     base_url: str,
     scaled: Callable[[float], int],
 ) -> None:
-    """Wide viewport (browser-tab / desktop): app-owned padding, no shift."""
+    """Wide viewport (browser-tab / desktop): the vendored wide-layout rail owns the top gap."""
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(base_url)
     page.wait_for_selector("#tabDashboard", state="attached", timeout=scaled(10_000))
 
     padding = _app_padding(page)
-    # Byte-identical to pre-fix: env(safe-area-inset-*, 0) resolves to 0 in
-    # CI, so top is exactly 0 and bottom is exactly --space-lg (24px) — the
-    # app-owned desktop formula, completely untouched by the #188 change.
-    assert padding["top"] == "0px", (
-        f"desktop/browser-tab top padding shifted: {padding['top']!r} (expected 0px)"
+    # env(safe-area-inset-*, 0) resolves to 0 in CI. At 1280px + fine pointer
+    # nav-tabs.css's wide-layout rail (design.md Layout "Wide layout") replaces
+    # the sticky top control, so it supplies the top gap itself:
+    # env(0) + --gap(12px) + --space-xs(4px) = 16px. The bottom is still the
+    # app-owned desktop formula, exactly --space-lg (24px), untouched by #188.
+    assert padding["top"] == "16px", (
+        f"desktop/browser-tab top padding shifted: {padding['top']!r} (expected 16px)"
     )
     assert padding["bottom"] == "24px", (
         f"desktop/browser-tab bottom padding shifted: {padding['bottom']!r} (expected 24px)"

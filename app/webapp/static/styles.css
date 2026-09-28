@@ -19,8 +19,11 @@
   /* colors — accent + status (status colors signal state only, never decoration) */
   --accent: #0969da;
   --accent-fg: #ffffff;     /* text/icon on an accent fill */
+  --accent-fill: #0969da;   /* solid primary fill (button-primary) — equals accent here */
+  --accent-text: #0550ae;   /* accent-coloured text on an accent-soft tint (nav-tab-active) */
   --on: #1a7f37;            /* success */
   --deficit: #cf222e;       /* danger */
+  --danger-text: #a40e26;   /* danger text on its own tint (button-tint.danger) */
   --attention: #9a6700;     /* attention */
   /* colors — the five saturated icon-tile fills (only saturated surfaces) */
   --tile-green: #1f883d;
@@ -30,7 +33,7 @@
   --tile-yellow: #bf8700;
   /* derived surface roles (mapped onto the neutral tokens above) */
   --input-bg: var(--card-off);
-  --toggle-track: var(--line);
+  --control-border: #818b98; /* input/select boundary + switch off-track (WCAG 1.4.11) */
   --toggle-knob: #ffffff;
   --close-bg: var(--card-off);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -57,6 +60,9 @@
   --gap: 12px;
   /* shared height for inline controls (select / input) so they line up */
   --control-h: 36px;
+  /* row-height scale (rows.sm/lg — the nav's 44px hit floor and 60px rail tab) */
+  --row-sm: 44px;
+  --row-lg: 60px;
   /* typography roles — system stack, weight (not case) for hierarchy */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-heading-xl: 2rem;
@@ -94,16 +100,19 @@
   --line-muted: #21262d;    /* border-muted */
   --accent: #2f81f7;
   --accent-fg: #ffffff;
+  --accent-fill: #1f6feb;   /* one step below accent so white text holds AA */
+  --accent-text: #58a6ff;
   --on: #3fb950;            /* success */
   --deficit: #f85149;       /* danger */
+  --danger-text: #ff7b72;
   --attention: #d29922;     /* attention */
-  --tile-green: #2ea043;
-  --tile-blue: #2f81f7;
-  --tile-purple: #a371f7;
-  --tile-orange: #db6d28;
-  --tile-yellow: #d29922;
+  --tile-green: #238636;
+  --tile-blue: #1f6feb;
+  --tile-purple: #8957e5;
+  --tile-orange: #bd561d;
+  --tile-yellow: #9e6a03;
   --input-bg: var(--bg);
-  --toggle-track: var(--line);
+  --control-border: #6e7681;
   --toggle-knob: var(--ink);
   --close-bg: var(--line);
   /* Depth on a near-black canvas comes from surface lightness, not shadow. */
@@ -118,6 +127,7 @@
 @media (color-gamut: p3) {
   :root {
     --accent: oklch(0.52 0.18 256);
+    --accent-fill: oklch(0.52 0.18 256);
     --on: oklch(0.55 0.14 150);
     --deficit: oklch(0.55 0.20 25);
     --attention: oklch(0.55 0.11 80);
@@ -132,11 +142,12 @@
     --on: oklch(0.72 0.18 150);
     --deficit: oklch(0.68 0.20 25);
     --attention: oklch(0.77 0.13 85);
-    --tile-green: oklch(0.66 0.16 150);
-    --tile-blue: oklch(0.64 0.18 256);
-    --tile-purple: oklch(0.67 0.18 295);
-    --tile-orange: oklch(0.67 0.15 50);
-    --tile-yellow: oklch(0.77 0.13 85);
+    --accent-fill: oklch(0.57 0.21 260);
+    --tile-green: oklch(0.55 0.17 146);
+    --tile-blue: oklch(0.57 0.21 260);
+    --tile-purple: oklch(0.58 0.23 296);
+    --tile-orange: oklch(0.57 0.17 45);
+    --tile-yellow: oklch(0.57 0.13 75);
   }
 }
 
@@ -325,8 +336,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .ghost-btn:active { color: var(--ink); }
 
 /* ============================================================ inputs */
-/* Heights/colors come from the vendored modal.css `control` rules
-   (.input-native/.select-native); the app only stretches them for stacked
+/* Heights/colors come from the vendored select-native.css `control` rules
+   (.input-native/.select-native, vendored select-native.css); the app only stretches them for stacked
    forms and search fields. */
 .input-native, .select-native { width: 100%; }
 .stacked { display: flex; flex-direction: column; gap: var(--space-xs); margin: 10px 0; }

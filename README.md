@@ -108,7 +108,7 @@ The fixture path above needs no credentials. To run against real chats and deliv
 2. Set `WR_CONNECTOR=linked_device` and leave `WR_SOURCES=whatsapp`. `wr ingest` / `chats` / `monitor` / `review` / `scan` / `resync` / `reprocess --confirm` then run unchanged against real data. `scan`, `resync`, and `reprocess` are also launchable as plain processes from App Launcher's Jobs tab, and appear live in the webapp's Execution tab.
 3. For delivery, create a Telegram bot, set `WR_NOTIFIER=telegram` plus `WR_TELEGRAM_BOT_TOKEN` / `WR_TELEGRAM_CHAT_ID`, and `wr review` delivers one consolidated digest. `wr notify` re-delivers a run if a send failed.
 
-The connection is **read-only by construction** — no send, react, or read-receipt surface exists. The buffer contract, the message-normalization set, and the connector design answers are in [`docs/linked-device.md`](docs/linked-device.md). Credentials and session state live only under the ignored `auth/`; Telegram secrets live in the gitignored `config/webapp_config.json`, or the ignored `.env` via `WR_TELEGRAM_*`.
+The connection is **read-only by construction** — no send, react, or read-receipt surface exists. The buffer contract, the message-normalization set, and the connector design answers are in [`docs/linked-device.md`](docs/linked-device.md). Credentials and session state live only under the ignored `auth/`; Telegram secrets live in the gitignored `config/webapp_config.json`, or the ignored `.env` via `WR_TELEGRAM_*`. The Telegram bot and chat avatars (PNG for upload, editable SVG source) live in `assets/telegram/`.
 
 ### Gmail source
 

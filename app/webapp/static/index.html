@@ -3,6 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <!-- No-FOUC boot (vendored text-size boot): stamps html[data-theme] and
+       html[data-textsize] before first paint; `app` is this app's localStorage prefix. -->
+  <script>
+    (function () {
+      var app = 'wa-radar';
+      var root = document.documentElement;
+      var theme = null;
+      var size = null;
+      try {
+        theme = localStorage.getItem(app + '.theme');
+        size = localStorage.getItem(app + '.textsize');
+      } catch (e) {}
+      var dark = theme ? theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.dataset.theme = dark ? 'dark' : 'light';
+      root.dataset.textsize = size === 'small' || size === 'large' ? size : 'default';
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WA Radar">
@@ -22,17 +40,9 @@
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
+  <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>WhatsApp Radar</title>
-  <script>
-    // No-FOUC theme boot: resolve the stored choice (or the OS preference)
-    // before first paint so the page never flashes the wrong theme.
-    (function () {
-      var t = localStorage.getItem('wa-radar.theme');
-      var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    })();
-  </script>
 </head>
 <body>
   <!-- Lucide icon sprite — the single source for every app icon. Vendored from
@@ -174,6 +184,11 @@
     <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
       <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
       <circle cx="12" cy="12" r="3" />
+    </symbol>
+    <symbol id="i-type" viewBox="0 0 24 24" fill="none">
+      <path d="M12 4v16" />
+      <path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" />
+      <path d="M9 20h6" />
     </symbol>
     <symbol id="i-check" viewBox="0 0 24 24" fill="none">
       <path d="M20 6 9 17l-5-5" />
@@ -674,6 +689,19 @@
         <button id="settingsClose" type="button" class="detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
+      <section id="textSizeCard" class="card">
+        <div class="card-head">
+          <h3 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-type"></use></svg>
+            Text size
+          </h3>
+        </div>
+        <nav class="range-tabs" id="textSizeControl" aria-label="Text size">
+          <button type="button" class="range-tab" data-textsize="small">Small</button>
+          <button type="button" class="range-tab" data-textsize="default">Default</button>
+          <button type="button" class="range-tab" data-textsize="large">Large</button>
+        </nav>
+      </section>
       <details id="configCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">

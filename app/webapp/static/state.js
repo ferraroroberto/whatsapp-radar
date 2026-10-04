@@ -8,8 +8,9 @@
  * Step 3; Steps 4–7 fill their bodies + state slices.
  */
 
-export const TOKEN_KEY = 'wa-radar.token';
-export const THEME_KEY = 'wa-radar.theme';
+export const APP_PREFIX = 'wa-radar'; // localStorage namespace (token, theme, text size)
+export const TOKEN_KEY = APP_PREFIX + '.token';
+export const THEME_KEY = APP_PREFIX + '.theme';
 
 export const WEBAUTHN_POLL_MS = 15000;
 export const DASHBOARD_POLL_MS = 15000;
@@ -85,6 +86,7 @@ export const els = {
   settingsButtons: Array.from(document.querySelectorAll('.home-settings')),
   settingsDialog: document.getElementById('settingsDialog'),
   settingsClose: document.getElementById('settingsClose'),
+  textSizeControl: document.getElementById('textSizeControl'),
   dashActivity: document.getElementById('dashActivity'),
   dashChannelsBody: document.getElementById('dashChannelsBody'),
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),

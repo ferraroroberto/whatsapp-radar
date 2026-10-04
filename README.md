@@ -28,7 +28,7 @@ WhatsApp Radar is a standalone local service, integrated with the home-automatio
 - A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling. An optional Gmail OAuth client and the `calendar_readonly` / `calendar_write` clients own the other two Google sources.
 - A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
 - A processing pipeline analyzes only message/mail deltas and calls the local LLM Hub rather than duplicating model/subprocess orchestration.
-- The admin PWA (five tabs — Dashboard, Messages, Execution, Audit, Family; Follow-ups sit on the Dashboard) with a header gear opening Settings (classifier config, maintenance), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
+- The admin PWA (five tabs — Dashboard, Messages, Execution, Audit, Family; Follow-ups sit on the Dashboard) with a header gear opening Settings (text size, classifier config, maintenance), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
 - App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 The internal module map is [`docs/architecture.mmd`](docs/architecture.mmd).

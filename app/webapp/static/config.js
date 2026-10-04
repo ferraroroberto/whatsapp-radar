@@ -7,9 +7,10 @@
  * webapp_config.json. The bot token is masked — a blank field on save leaves the
  * stored token untouched. */
 
-import { els, state } from './state.js';
+import { APP_PREFIX, els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
 import { setSwitch } from './_vendored/switch/switch.js';
+import { bindTextSize } from './_vendored/text-size/text-size.js';
 
 // Save is gated on an actual change: the rendered values are snapshotted and
 // the button stays disabled until the form diverges from that snapshot.
@@ -150,6 +151,7 @@ function openSettings() {
 
 export function wireSettings() {
   els.settingsButtons.forEach(function (btn) { btn.addEventListener('click', openSettings); });
+  bindTextSize(els.textSizeControl, APP_PREFIX);
   els.settingsClose.addEventListener('click', function () { els.settingsDialog.close(); });
   els.settingsDialog.addEventListener('click', function (ev) {
     if (ev.target === els.settingsDialog) els.settingsDialog.close();

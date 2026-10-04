@@ -120,7 +120,7 @@ async function submit(ev) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    toast('Settings saved.', 'good');
+    toast('Settings saved.');
     await fetchConfig(); // refresh the masked token hint
   } catch (exc) {
     toast('Save failed: ' + (exc.message || exc), 'error');

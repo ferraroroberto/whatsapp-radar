@@ -827,25 +827,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .webauthn-devices li span { flex: 1; word-break: break-word; }
 
-/* ============================================================ toast */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0) + var(--bottom-tabs-height) + var(--bottom-tabs-margin) + var(--gap));
-  transform: translateX(-50%);
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-label);
-  max-width: calc(100vw - 32px);
-  box-shadow: var(--shadow);
-  z-index: 130;
-}
-.toast.good { border-color: var(--on); }
-.toast.error { border-color: var(--deficit); }
-
 /* ============================================================ login */
 .login-overlay {
   position: fixed;

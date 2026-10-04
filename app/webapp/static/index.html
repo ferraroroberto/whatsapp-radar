@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
+  <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>WhatsApp Radar</title>
   <script>
@@ -690,7 +691,7 @@
       <p id="buildReadout" class="muted small"></p>
     </footer>
 
-    <div id="toast" class="toast" hidden></div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </main>
 
   <dialog id="historyOverlay" class="detail-dialog">

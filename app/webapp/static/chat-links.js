@@ -126,7 +126,7 @@ export function resetLinkPanel() {
 async function unlinkChat(chat, deps) {
   try {
     await jsonApi('/api/chats/' + chat.id + '/unlink', { method: 'POST' });
-    toast('Unlinked.', 'good');
+    toast('Unlinked.');
     await deps.onLinked();
   } catch (exc) {
     toast('Unlink failed: ' + (exc.message || exc), 'error');
@@ -206,7 +206,7 @@ async function doLink(child, parent) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parent_id: parent.id }),
     });
-    toast('Linked to ' + deps.chatLabel(parent) + '.', 'good');
+    toast('Linked to ' + deps.chatLabel(parent) + '.');
     closePicker();
     await deps.onLinked();
   } catch (exc) {
@@ -231,7 +231,7 @@ async function renameChat(chat, deps) {
     });
     chat.alias = res.alias;
     deps.onRenamed(chat);
-    toast(res.alias ? 'Alias saved.' : 'Alias cleared.', 'good');
+    toast(res.alias ? 'Alias saved.' : 'Alias cleared.');
   } catch (exc) {
     toast('Rename failed: ' + (exc.message || exc), 'error');
   }

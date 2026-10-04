@@ -117,7 +117,7 @@ async function removeDevice(d) {
   if (!confirm('Remove passkey "' + d.label + '"?')) return;
   try {
     await jsonApi('/api/webauthn/devices/' + encodeURIComponent(d.id), { method: 'DELETE' });
-    toast('Removed ' + d.label, 'good');
+    toast('Removed ' + d.label);
     fetchWebauthnStatus();
   } catch (exc) {
     toast('Remove failed: ' + (exc.message || exc), 'error');
@@ -143,7 +143,7 @@ async function enrollDevice() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(serializeReg(cred)),
     });
-    toast('Device enrolled.', 'good');
+    toast('Device enrolled.');
     fetchWebauthnStatus();
   } catch (exc) {
     toast('Enrollment failed: ' + (exc.message || exc), 'error');

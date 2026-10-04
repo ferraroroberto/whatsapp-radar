@@ -376,7 +376,7 @@ async function postForm(name, payload, okText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    toast(okText, 'good');
+    toast(okText);
     adopt(data);
   } catch (exc) {
     const message = exc.message || String(exc);
@@ -676,7 +676,7 @@ async function startSweep(mode) {
     if (exc.status === 409) {
       setSweep({ running: false, tone: '',
         message: 'A run is already in progress — try again when it finishes.' });
-      toast('A run is already in progress', '');
+      toast('A run is already in progress');
     } else {
       const message = String(exc.message || exc);
       setSweep({ running: false, tone: 'error', message: 'Could not start: ' + message });

@@ -108,7 +108,7 @@ async function runSelection() {
     return;
   }
   execState().queue = chain;
-  toast(chain.length > 1 ? `Running ${chain.length} steps…` : 'Running…', '');
+  toast(chain.length > 1 ? `Running ${chain.length} steps…` : 'Running…');
   await pumpQueue();
   fetchExecution().catch(function () {});
 }
@@ -131,7 +131,7 @@ async function killSelected() {
   if (!sel) return;
   try {
     await jsonApi(`/api/execution/runs/${sel.kind}/${sel.run_id}/kill`, { method: 'POST' });
-    toast('Stopping run…', '');
+    toast('Stopping run…');
   } catch (exc) {
     toast(String(exc.message || exc), 'error');
   }
@@ -346,7 +346,7 @@ function runTraffic(mode) {
     return;
   }
   ex.queue = [{ action: 'traffic-check', mode: mode }];
-  toast('Running…', '');
+  toast('Running…');
   pumpQueue().then(function () { fetchExecution().catch(function () {}); });
 }
 
@@ -381,7 +381,7 @@ async function reconnectSidecar() {
   els.execReconnectBtn.disabled = true;
   try {
     const res = await jsonApi('/api/sidecar/start', { method: 'POST' });
-    toast(res.launched ? 'Starting WhatsApp sidecar…' : 'Sidecar already running', '');
+    toast(res.launched ? 'Starting WhatsApp sidecar…' : 'Sidecar already running');
   } catch (exc) {
     if (exc.status === 503) toast(String(exc.message || 'Cannot start sidecar'), 'error');
     else toast(String(exc.message || exc), 'error');
@@ -718,7 +718,7 @@ export function wireExecution() {
     if (!text || text === '(no output)') return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
-        function () { toast('Output copied', ''); },
+        function () { toast('Output copied'); },
         function () { toast('Copy failed', 'error'); }
       );
     }

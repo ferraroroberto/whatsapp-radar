@@ -105,7 +105,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
   - app/webapp/static/**/*.css
   - app/webapp/static/**/*.{js,html}
 - key views:                      # single tabbed SPA served at `/`
-  - /          (Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups tabs)
+  - /          (Dashboard · Messages & Config · Execution · Audit · Family tabs)
 
 ## Verification
 

@@ -1,4 +1,4 @@
-/* Four-tab switcher: Dashboard | Chats | Run | Audit.
+/* Five-tab switcher: Home | Inbox | Run | Audit | Family.
  *
  * Thin adapter over the vendored _vendored/nav/nav-tabs.js — that file owns
  * tab/pane discovery, ARIA + roving tabindex, localStorage persistence, the

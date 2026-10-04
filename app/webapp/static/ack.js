@@ -1,4 +1,4 @@
-/* Follow-ups tab (#219): pending non-routine prep items needing a manual
+/* Follow-ups card on Home (#219, #336): pending non-routine prep items needing a manual
  * acknowledge. A minimal queue view — list pending items, tap Acknowledge,
  * it's gone. Mirrors chats.js's watch-toggle pattern: mutate state in place
  * and re-render, no full re-fetch needed on success.

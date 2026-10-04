@@ -63,6 +63,12 @@ function toggleTheme() {
 els.themeToggle.addEventListener('click', toggleTheme);
 
 // --------------------------------------------------------- boot
+// Home hosts the dashboard and the pending follow-ups (#336).
+function refreshHome() {
+  fetchDashboard().catch(function () {});
+  fetchAck().catch(function () {});
+}
+
 async function boot() {
   const fromUrl = tokenFromUrl();
   if (fromUrl) writeToken(fromUrl);
@@ -76,13 +82,13 @@ async function boot() {
     return;
   }
   await fetchWebauthnStatus();
-  await fetchDashboard();
+  await Promise.all([fetchDashboard(), fetchAck().catch(function () {})]);
 
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});
   }, WEBAUTHN_POLL_MS);
   setInterval(function () {
-    if (state.tab === 'dashboard') fetchDashboard().catch(function () {});
+    if (state.tab === 'dashboard') refreshHome();
   }, DASHBOARD_POLL_MS);
   // While the Execution tab is open, poll runs so a live run streams; also keep
   // polling whenever a run is in flight, so leaving the tab doesn't strand it.
@@ -96,7 +102,7 @@ async function boot() {
 // --------------------------------------------------------- wire + go
 wireLoginForm(boot);
 wireTabs(function (tab) {
-  if (tab === 'dashboard') fetchDashboard().catch(function () {});
+  if (tab === 'dashboard') refreshHome();
   if (tab === 'chats') {
     fetchChats().catch(function () {});
     if (!state.config) fetchConfig().catch(function () {});
@@ -104,7 +110,6 @@ wireTabs(function (tab) {
   if (tab === 'execution') fetchExecution().catch(function () {});
   if (tab === 'audit') fetchAudit().catch(function () {});
   if (tab === 'family') fetchFamily().catch(function () {});
-  if (tab === 'ack') fetchAck().catch(function () {});
 });
 wireWebauthn();
 wireChats();

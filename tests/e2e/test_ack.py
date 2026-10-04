@@ -1,5 +1,5 @@
-"""Browser e2e: the Follow-ups tab lists a pending non-routine item and
-acknowledges it (Step 5/5 of #206, #219).
+"""Browser e2e: the Follow-ups card on Home lists a pending non-routine item and
+acknowledges it (Step 5/5 of #206, #219; folded into Home, #336).
 
 Route-mocked (no real pipeline run needed) — mirrors test_audit.py's
 list + per-item action pattern. Drives only the sanitized e2e fixture app.
@@ -41,8 +41,7 @@ def test_ack_list_and_acknowledge(page: Page, base_url: str) -> None:
     page.route("**/api/ack/42/acknowledge", handle_ack)
 
     page.goto(base_url)
-    page.locator("#tabAck").click()
-    expect(page.locator("#paneAck")).to_be_visible()
+    expect(page.locator("#paneDashboard")).to_be_visible()
 
     row = page.locator("#ackItems .ack-item")
     expect(row).to_have_count(1)
@@ -65,8 +64,17 @@ def test_ack_empty_state(page: Page, base_url: str) -> None:
     page.route("**/api/ack/items", lambda route: route.fulfill(json={"items": []}))
 
     page.goto(base_url)
-    page.locator("#tabAck").click()
 
     expect(page.locator("#ackEmpty")).to_be_visible()
     expect(page.locator("#ackEmpty")).to_contain_text("No pending follow-ups")
     expect(page.locator("#ackItems .ack-item")).to_have_count(0)
+
+
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_nav_has_five_tabs_and_no_follow_ups_tab(page: Page, base_url: str) -> None:
+    """The fleet nav allows at most five tabs (#336): Follow-ups lives on Home."""
+    page.goto(base_url)
+    expect(page.locator("nav.tabs [role=tab]")).to_have_count(5)
+    expect(page.locator("#tabAck")).to_have_count(0)
+    expect(page.locator("#paneDashboard #ackItems")).to_have_count(1)

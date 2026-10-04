@@ -17,7 +17,7 @@ WhatsApp ──▶ Node sidecar (Baileys) ──▶ data/linked_device/*.ndjson 
                                                                               ▼
                                                               Telegram digest (read-only, actionable-only)
 
-           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Messages & Config · Execution · Audit · Family · Follow-ups
+           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Messages & Config · Execution · Audit · Family
                          access: Tailscale TLS (default) · Cloudflare named tunnel (optional)
 ```
 

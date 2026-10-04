@@ -208,11 +208,6 @@
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-radar"></use></svg>
       <span class="tab-label">Family</span>
     </button>
-    <button id="tabAck" type="button" class="tab" data-tab="ack"
-            role="tab" aria-selected="false" aria-controls="paneAck" tabindex="-1">
-      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-check"></use></svg>
-      <span class="tab-label">To-do</span>
-    </button>
   </nav>
 
   <main class="app">
@@ -232,6 +227,21 @@
            detail on the Run tab. Cards are built by dashboard.js from the
            unified run store so CLI/Jobs-launched runs show here too. -->
       <div id="dashActivity" class="activity-grid" aria-label="Last activity by kind"></div>
+
+      <!-- Follow-ups (#219, folded into Home for the five-tab nav, #336):
+           non-routine prep items that need a manual Acknowledge. -->
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+            Follow-ups
+          </h2>
+        </div>
+        <p class="muted small">Non-routine prep items need a manual confirmation, alongside the
+          Telegram alert — tap Acknowledge once it's handled.</p>
+        <ul id="ackItems" class="card-list ack-items" aria-label="Pending follow-ups"></ul>
+        <div id="ackEmpty" class="empty-state" hidden></div>
+      </section>
 
       <details id="dashSourcesCard" class="card card--collapsible" open>
         <summary class="collapse-summary">
@@ -668,21 +678,6 @@
           <div id="familyTravelBlocks"></div>
         </div>
       </details>
-    </section>
-
-    <section id="paneAck" class="pane" role="tabpanel" aria-labelledby="tabAck" hidden>
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
-            Follow-ups
-          </h2>
-        </div>
-        <p class="muted small">Non-routine prep items need a manual confirmation, alongside the
-          Telegram alert — tap Acknowledge once it's handled.</p>
-        <ul id="ackItems" class="card-list ack-items" aria-label="Pending follow-ups"></ul>
-        <div id="ackEmpty" class="empty-state" hidden></div>
-      </section>
     </section>
 
     <!-- Build identity: which build the PWA is running. Filled by main.js;

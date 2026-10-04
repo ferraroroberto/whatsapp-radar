@@ -28,7 +28,7 @@ WhatsApp Radar is a standalone local service, integrated with the home-automatio
 - A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling. An optional Gmail OAuth client and the `calendar_readonly` / `calendar_write` clients own the other two Google sources.
 - A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
 - A processing pipeline analyzes only message/mail deltas and calls the local LLM Hub rather than duplicating model/subprocess orchestration.
-- The admin PWA (six tabs — Dashboard, Messages & Config, Execution, Audit, Family, Follow-ups) handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
+- The admin PWA (five tabs — Dashboard, Messages & Config, Execution, Audit, Family; Follow-ups sit on the Dashboard) handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
 - App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 The internal module map is [`docs/architecture.mmd`](docs/architecture.mmd).
@@ -128,7 +128,7 @@ OAuth credentials and the refresh token live under the ignored `auth/gmail/`. [`
 
 It is opt-in: set `family.reminder_calendar_id` (the target calendar id) in `config/local.json`. An empty value (the default) keeps the pipeline exactly as before, and a not-yet-minted write token (`auth/calendar/write_token.json`) degrades the same way — no event, no error, Telegram unaffected. `family.reminder_time` (default `07:30`) is the local `HH:MM` slot each event is created at. Creation is live-mode only (a dry run never mints one) and idempotent per item: the same underlying evidence messages, even reclassified in a later run, reuse the first run's event id rather than duplicating it. The created event id is visible on the item's row (`analysis_items.calendar_event_id`).
 
-**Non-routine acknowledgment surface.** A non-routine item (`prep_complexity: "non_routine"`) instead gets a distinct, acknowledgeable follow-up — always on, no config — so it does not blend into routine reminders and get forgotten. It queues a row in `ack_items` (child, task category, summary) alongside the Telegram alert, whose text says a webapp confirmation is needed, and the **Follow-ups** tab lists every pending item with a one-tap **Acknowledge** action. Live-mode only, same as the calendar reminder.
+**Non-routine acknowledgment surface.** A non-routine item (`prep_complexity: "non_routine"`) instead gets a distinct, acknowledgeable follow-up — always on, no config — so it does not blend into routine reminders and get forgotten. It queues a row in `ack_items` (child, task category, summary) alongside the Telegram alert, whose text says a webapp confirmation is needed, and the **Follow-ups** card on the Dashboard lists every pending item with a one-tap **Acknowledge** action. Live-mode only, same as the calendar reminder.
 
 ### Voice-note transcription
 
@@ -183,7 +183,7 @@ A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's
 
 The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog with its `select-native` and `button` companions, icons, empty-state). Do not edit vendored files per-app — re-vendor from the scaffold. There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves HTTPS directly once a Tailscale cert is provisioned — no per-device CA install, no trust profile — and falls back to plain HTTP on a fresh clone with no cert yet.
 
-The bottom pill gives every tab an equal slice of the phone's width and ellipsizes anything longer, so its labels are kept to ≤6 characters and read shorter than the section names used below: **Home** = Dashboard, **Inbox** = Messages & Config, **To-do** = Follow-ups. `Run`, `Audit` and `Family` are the same in both places. Keep new labels short — the nav component is vendored and must not be edited to make a longer one fit.
+The bottom pill gives every tab an equal slice of the phone's width and ellipsizes anything longer, so its labels are kept to ≤6 characters and read shorter than the section names used below: **Home** = Dashboard, **Inbox** = Messages & Config. `Run`, `Audit` and `Family` are the same in both places. Keep new labels short — the nav component is vendored and must not be edited to make a longer one fit.
 
 ### Dashboard
 

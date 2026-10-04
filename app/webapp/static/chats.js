@@ -282,7 +282,7 @@ async function setStatus(chat, status) {
     }
     toast(status === 'monitored'
       ? (res.baselined ? 'Now monitoring — baselined to new messages.' : 'Now monitoring.')
-      : 'No longer monitoring.', 'good');
+      : 'No longer monitoring.');
     render();
   } catch (exc) {
     toast('Update failed: ' + (exc.message || exc), 'error');
@@ -452,7 +452,7 @@ function taskExportControl(id, existingExportedAt) {
     try {
       const body = await jsonApi('/api/messages/' + id + '/task-export', { method: 'POST' });
       exported = (body && body.exported_at) || true;
-      toast('Sent to Task-OS.', 'good');
+      toast('Sent to Task-OS.');
     } catch (exc) {
       toast(String((exc && exc.message) || 'Could not send to Task-OS.'), 'error');
     } finally {

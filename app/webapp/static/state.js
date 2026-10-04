@@ -230,8 +230,6 @@ export const els = {
   enrollDeviceBtn: document.getElementById('enrollDeviceBtn'),
   buildReadout: document.getElementById('buildReadout'),
 
-  toast: document.getElementById('toast'),
-
   loginOverlay: document.getElementById('loginOverlay'),
   loginForm: document.getElementById('loginForm'),
   loginPassword: document.getElementById('loginPassword'),

@@ -54,7 +54,7 @@ async function acknowledge(item, btn) {
   try {
     await jsonApi('/api/ack/' + item.id + '/acknowledge', { method: 'POST' });
     state.ack.items = state.ack.items.filter(function (i) { return i.id !== item.id; });
-    toast('Acknowledged.', 'good');
+    toast('Acknowledged.');
     render();
   } catch (exc) {
     btn.disabled = false;

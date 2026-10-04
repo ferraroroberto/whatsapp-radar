@@ -114,13 +114,5 @@ export function wireLoginForm(onLoginSuccess) {
 }
 
 // --------------------------------------------------------------- toast
-let toastTimer = null;
-export function toast(msg, kind) {
-  els.toast.textContent = msg;
-  els.toast.className = 'toast ' + (kind || '');
-  els.toast.hidden = false;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () {
-    els.toast.hidden = true;
-  }, kind === 'error' ? 4500 : 2200);
-}
+// The fleet's one neutral frosted toast (vendored); only 'error' tints.
+export { showToast as toast } from './_vendored/toast/toast.js';

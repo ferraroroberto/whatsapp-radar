@@ -58,6 +58,7 @@
   --space-xl: 32px;
   /* uniform gutter between cards/tiles and from the page edges */
   --gap: 12px;
+  --row-md: 52px;           /* disclosure closed-summary row; the home-head peer height */
   /* shared height for inline controls (select / input) so they line up */
   --control-h: 36px;
   /* row-height scale (rows.sm/lg — the nav's 44px hit floor and 60px rail tab) */
@@ -251,24 +252,6 @@ html, body {
 .small { font-size: var(--font-caption); }
 a { color: var(--accent); }
 hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
-
-/* ============================================================ app head */
-/* Dashboard identity card: radar icon + app name left, theme toggle right —
-   a standard card row at the disclosure closed-height (52px), so it aligns
-   with every other card (home-automation weather-tile pattern). */
-.app-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  /* Same horizontal padding as a regular card so the radar icon lines up
-     with the title icons of the cards below. 54px = the 52px title row plus
-     the card's own 2px of border (border-box) — keeps the title at exactly
-     the same y as .card-head titles and disclosure summaries. */
-  padding: 0 var(--space-md);
-  min-height: 54px;
-}
-.app-head-title { font-size: var(--font-body); }
 
 /* ============================================================ buttons */
 /* Ghost accent action (home-automation .big-btn recipe): accent tint + text +
@@ -707,6 +690,11 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   display: flex;
   flex-direction: column;
 }
+/* Settings dialog (#337): wider than the default 440px modal so the prompt
+   and settings editors have room; the dialog itself scrolls (modal.css). */
+.detail-dialog:has(.settings-card) { width: min(640px, 92vw); }
+.settings-card .card { margin-bottom: var(--gap); }
+.settings-card .card:last-child { margin-bottom: 0; }
 .detail-header .detail-close { margin-left: var(--space-sm); }
 .detail-header h2 {
   flex: 1;

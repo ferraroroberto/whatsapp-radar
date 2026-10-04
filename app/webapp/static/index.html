@@ -14,6 +14,7 @@
   <link rel="icon" type="image/png" href="/static/icon-512.png">
   <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
   <link rel="stylesheet" href="/static/_vendored/card/card.css">
+  <link rel="stylesheet" href="/static/_vendored/home-head/home-head.css">
   <link rel="stylesheet" href="/static/_vendored/disclosure/disclosure.css">
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
   <link rel="stylesheet" href="/static/_vendored/select-native/select-native.css">
@@ -170,6 +171,10 @@
     <symbol id="i-moon" viewBox="0 0 24 24" fill="none">
       <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
     </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
+      <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+      <circle cx="12" cy="12" r="3" />
+    </symbol>
     <symbol id="i-check" viewBox="0 0 24 24" fill="none">
       <path d="M20 6 9 17l-5-5" />
     </symbol>
@@ -212,16 +217,18 @@
 
   <main class="app">
     <section id="paneDashboard" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
-      <!-- App identity card (home-automation weather-tile pattern): icon + name
-           left, theme toggle right — same height/typography as every other card. -->
-      <section class="card app-head" aria-label="App">
-        <h1 class="card-title app-head-title">
+      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+      <div class="card home-head">
+        <span class="home-title">
           <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
           Family Radar
-        </h1>
-        <button id="themeToggle" type="button" class="icon-btn" title="Toggle theme"
+        </span>
+        <button type="button" class="home-toggle theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-      </section>
+        <button type="button" class="button-surface home-toggle home-settings" aria-label="Settings" title="Settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
       <!-- Last-activity grid (#165): one card per kind of work — when did each
            last run and what did it find. Tapping a card jumps to that run's
            detail on the Run tab. Cards are built by dashboard.js from the
@@ -289,6 +296,18 @@
     </section>
 
     <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
+      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+      <div class="card home-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+          Inbox
+        </span>
+        <button type="button" class="home-toggle theme-toggle" title="Toggle theme"
+                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+        <button type="button" class="button-surface home-toggle home-settings" aria-label="Settings" title="Settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">
@@ -334,89 +353,21 @@
           <ul id="tripwireList" class="card-list" aria-label="Chats worth monitoring"></ul>
         </div>
       </details>
-
-      <details id="configCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
-            <h3 class="collapse-title">Classifier &amp; settings</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div class="opt-group">
-            <h3 class="opt-group-title">Shared Stage 2 system prompt <span class="opt-tag">src/analysis/prompts/classification_system.md</span></h3>
-            <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
-            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Audit shows the exact system and user prompt for every LLM call.</p>
-            <h3 class="opt-group-title">WhatsApp Stage 1 roots <span class="opt-tag">src/analysis/prompts/keyword_roots.txt</span></h3>
-            <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
-            <h3 class="opt-group-title">Gmail Stage 1 rules <span class="opt-tag">src/analysis/prompts/gmail_keyword_roots.txt</span></h3>
-            <pre id="cfgGmailRoots" class="codebox" aria-label="Gmail keyword rules"></pre>
-            <h3 class="opt-group-title">Gmail survey taxonomy <span class="opt-tag">reference for generating Stage-1 rules; not sent to Stage 2 · src/analysis/prompts/gmail_classification_taxonomy.md</span></h3>
-            <pre id="cfgGmailTaxonomy" class="codebox" aria-label="Gmail classification taxonomy"></pre>
-            <p id="cfgGmailSummary" class="source-config-summary"></p>
-          </div>
-
-          <div class="opt-group">
-            <h3 class="opt-group-title">Safe settings</h3>
-            <form id="configForm" autocomplete="off">
-              <div class="cfg-fields">
-                <fieldset class="cfg-source-list cfg-span" aria-label="Enabled message sources">
-                  <legend>Enabled sources</legend>
-                  <div class="cfg-source-row">
-                    <span><strong>WhatsApp</strong><small>fixture or linked device</small></span>
-                    <button type="button" id="cfgSourceWhatsapp" class="toggle on" role="switch"
-                            aria-checked="true" aria-label="WhatsApp source"><span class="knob"></span><span class="toggle-label">ON</span></button>
-                  </div>
-                  <div class="cfg-source-row">
-                    <span><strong>Gmail</strong><small>read-only whitelisted mail</small></span>
-                    <button type="button" id="cfgSourceGmail" class="toggle" role="switch"
-                            aria-checked="false" aria-label="Gmail source"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-                  </div>
-                </fieldset>
-                <label class="stacked"><span>WhatsApp connector</span>
-                  <select id="cfgConnector" class="select-native"></select></label>
-                <label class="stacked"><span>Classifier</span>
-                  <select id="cfgClassifier" class="select-native"></select></label>
-                <label class="stacked"><span>Notifier</span>
-                  <select id="cfgNotifier" class="select-native"></select></label>
-                <label class="stacked"><span>Hub model</span>
-                  <input id="cfgHubModel" type="text" class="input-native"></label>
-                <label class="stacked cfg-span"><span>Hub base URL</span>
-                  <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
-                <label class="stacked cfg-span"><span>Telegram bot token</span>
-                  <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
-                <label class="stacked"><span>Telegram chat ID</span>
-                  <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
-              </div>
-              <p id="cfgNote" class="opt-hint"></p>
-              <button id="cfgSave" type="submit" class="big-btn" disabled>Save settings</button>
-            </form>
-          </div>
-        </div>
-      </details>
-
-      <details id="execMaintenanceCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
-            <h3 class="collapse-title">Maintenance</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">
-            Rebuild the local store from the connector buffer. The <strong>Sync messages</strong>
-            step on the Run tab is incremental and safe to run often. <strong>Rebuild</strong> is a
-            full rebuild for when the reader logic changed — it backs up the DB and preserves your
-            monitored/ignored/alias choices, but <strong>run history resets</strong>.
-          </p>
-          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
-        </div>
-      </details>
     </section>
 
     <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
+      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+      <div class="card home-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
+          Run
+        </span>
+        <button type="button" class="home-toggle theme-toggle" title="Toggle theme"
+                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+        <button type="button" class="button-surface home-toggle home-settings" aria-label="Settings" title="Settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">
@@ -582,6 +533,18 @@
     </section>
 
     <section id="paneAudit" class="pane" role="tabpanel" aria-labelledby="tabAudit" hidden>
+      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+      <div class="card home-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+          Audit
+        </span>
+        <button type="button" class="home-toggle theme-toggle" title="Toggle theme"
+                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+        <button type="button" class="button-surface home-toggle home-settings" aria-label="Settings" title="Settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">
@@ -646,6 +609,18 @@
     </section>
 
     <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
+      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+      <div class="card home-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+          Family
+        </span>
+        <button type="button" class="home-toggle theme-toggle" title="Toggle theme"
+                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+        <button type="button" class="button-surface home-toggle home-settings" aria-label="Settings" title="Settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
       <details id="familyRulesCard" class="card card--collapsible" open>
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -688,6 +663,98 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </main>
+
+  <!-- Settings (#337): opened by the home-head gear on every pane. Settings is
+       never a tab (fleet nav contract). The cards keep their ids, so
+       config.js / execution.js wire them unchanged. -->
+  <dialog id="settingsDialog" class="detail-dialog">
+    <div class="detail-card settings-card" aria-labelledby="settingsTitle">
+      <div class="detail-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button id="settingsClose" type="button" class="detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <details id="configCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
+            <h3 class="collapse-title">Classifier &amp; settings</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <div class="opt-group">
+            <h3 class="opt-group-title">Shared Stage 2 system prompt <span class="opt-tag">src/analysis/prompts/classification_system.md</span></h3>
+            <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
+            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Audit shows the exact system and user prompt for every LLM call.</p>
+            <h3 class="opt-group-title">WhatsApp Stage 1 roots <span class="opt-tag">src/analysis/prompts/keyword_roots.txt</span></h3>
+            <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
+            <h3 class="opt-group-title">Gmail Stage 1 rules <span class="opt-tag">src/analysis/prompts/gmail_keyword_roots.txt</span></h3>
+            <pre id="cfgGmailRoots" class="codebox" aria-label="Gmail keyword rules"></pre>
+            <h3 class="opt-group-title">Gmail survey taxonomy <span class="opt-tag">reference for generating Stage-1 rules; not sent to Stage 2 · src/analysis/prompts/gmail_classification_taxonomy.md</span></h3>
+            <pre id="cfgGmailTaxonomy" class="codebox" aria-label="Gmail classification taxonomy"></pre>
+            <p id="cfgGmailSummary" class="source-config-summary"></p>
+          </div>
+
+          <div class="opt-group">
+            <h3 class="opt-group-title">Safe settings</h3>
+            <form id="configForm" autocomplete="off">
+              <div class="cfg-fields">
+                <fieldset class="cfg-source-list cfg-span" aria-label="Enabled message sources">
+                  <legend>Enabled sources</legend>
+                  <div class="cfg-source-row">
+                    <span><strong>WhatsApp</strong><small>fixture or linked device</small></span>
+                    <button type="button" id="cfgSourceWhatsapp" class="toggle on" role="switch"
+                            aria-checked="true" aria-label="WhatsApp source"><span class="knob"></span><span class="toggle-label">ON</span></button>
+                  </div>
+                  <div class="cfg-source-row">
+                    <span><strong>Gmail</strong><small>read-only whitelisted mail</small></span>
+                    <button type="button" id="cfgSourceGmail" class="toggle" role="switch"
+                            aria-checked="false" aria-label="Gmail source"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+                  </div>
+                </fieldset>
+                <label class="stacked"><span>WhatsApp connector</span>
+                  <select id="cfgConnector" class="select-native"></select></label>
+                <label class="stacked"><span>Classifier</span>
+                  <select id="cfgClassifier" class="select-native"></select></label>
+                <label class="stacked"><span>Notifier</span>
+                  <select id="cfgNotifier" class="select-native"></select></label>
+                <label class="stacked"><span>Hub model</span>
+                  <input id="cfgHubModel" type="text" class="input-native"></label>
+                <label class="stacked cfg-span"><span>Hub base URL</span>
+                  <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
+                <label class="stacked cfg-span"><span>Telegram bot token</span>
+                  <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
+                <label class="stacked"><span>Telegram chat ID</span>
+                  <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+              </div>
+              <p id="cfgNote" class="opt-hint"></p>
+              <button id="cfgSave" type="submit" class="big-btn" disabled>Save settings</button>
+            </form>
+          </div>
+        </div>
+      </details>
+
+      <details id="execMaintenanceCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
+            <h3 class="collapse-title">Maintenance</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p class="muted small">
+            Rebuild the local store from the connector buffer. The <strong>Sync messages</strong>
+            step on the Run tab is incremental and safe to run often. <strong>Rebuild</strong> is a
+            full rebuild for when the reader logic changed — it backs up the DB and preserves your
+            monitored/ignored/alias choices, but <strong>run history resets</strong>.
+          </p>
+          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
+        </div>
+      </details>
+    </div>
+  </dialog>
 
   <dialog id="historyOverlay" class="detail-dialog">
     <div class="detail-card history-card" aria-labelledby="historyTitle">

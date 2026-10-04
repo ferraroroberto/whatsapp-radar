@@ -87,6 +87,8 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     page.locator("#historyClose").click()
 
     # The classifier config renders the read-only system prompt.
+    page.locator("#paneChats .home-settings").click()
+    expect(page.locator("#settingsDialog")).to_be_visible()
     page.locator("#configCard summary").click()
     expect(page.locator("#cfgPrompt")).to_contain_text(
         "triage new messages from a named communication channel"

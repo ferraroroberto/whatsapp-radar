@@ -1,4 +1,5 @@
-/* Config section (#10): read-only classifier view + editable safe settings.
+/* Config section (#10) + Settings dialog (#337): read-only classifier view +
+ * editable safe settings (Settings is the home-head gear dialog, never a tab).
  *
  * The system prompt and keyword roots are shown read-only (edited in their
  * files, by design). The settings form writes the safe subset back: connector/
@@ -137,4 +138,20 @@ export function wireConfig() {
   els.configForm.addEventListener('submit', submit);
   els.configForm.addEventListener('input', refreshDirty);
   els.configForm.addEventListener('change', refreshDirty);
+}
+
+// ------------------------------------------------------------ settings view
+// Settings is the home-head gear on every pane, never a tab (#337): the gear
+// opens this dialog, which hosts the config + maintenance cards.
+function openSettings() {
+  if (!els.settingsDialog.open) els.settingsDialog.showModal();
+  if (!state.config) fetchConfig().catch(function () {});
+}
+
+export function wireSettings() {
+  els.settingsButtons.forEach(function (btn) { btn.addEventListener('click', openSettings); });
+  els.settingsClose.addEventListener('click', function () { els.settingsDialog.close(); });
+  els.settingsDialog.addEventListener('click', function (ev) {
+    if (ev.target === els.settingsDialog) els.settingsDialog.close();
+  });
 }

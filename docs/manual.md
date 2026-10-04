@@ -58,7 +58,7 @@ A live `scan` then waits for the **buffer to settle** before it reads: a freshly
 
 ## Choosing the classifier
 
-Set `WR_CLASSIFIER` (in `.env` or via the PWA's Messages & Config settings):
+Set `WR_CLASSIFIER` (in `.env` or via the PWA's Settings, the header gear):
 
 - **`stub` (default, offline):** keyword-based, deterministic, no network. Good for a first run.
 - **`hub`:** routes the whole delta through [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`.
@@ -71,7 +71,7 @@ The classifier assets are plain text, so **read and tune them freely** without t
 - `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail survey/reference bucket definitions used to generate Stage-1 rules; this file is not sent to Stage 2.
 - `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
 
-The PWA's **Messages → Classifier & settings** disclosure renders all four assets read-only with their paths, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
+The PWA's **Settings (header gear) → Classifier & settings** disclosure renders all four assets read-only with their paths, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
 
 To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
 

@@ -80,8 +80,11 @@ export const CHATS_RENDER_CAP = 150;
 // ES modules are deferred — they execute after DOMContentLoaded, so
 // document.getElementById is safe at module top level.
 export const els = {
-  // Dashboard (#9, #165) header + last-activity grid
-  themeToggle: document.getElementById('themeToggle'),
+  // Page header (home-head on every pane), Settings dialog, Dashboard grid (#9, #165, #337)
+  themeToggles: Array.from(document.querySelectorAll('.theme-toggle')),
+  settingsButtons: Array.from(document.querySelectorAll('.home-settings')),
+  settingsDialog: document.getElementById('settingsDialog'),
+  settingsClose: document.getElementById('settingsClose'),
   dashActivity: document.getElementById('dashActivity'),
   dashChannelsBody: document.getElementById('dashChannelsBody'),
   dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),

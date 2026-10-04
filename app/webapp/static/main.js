@@ -10,7 +10,7 @@ import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
 import { fetchDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
-import { fetchConfig, wireConfig } from './config.js';
+import { wireConfig, wireSettings } from './config.js';
 import { fetchExecution, wireExecution } from './execution.js';
 import { fetchAudit, wireAudit } from './audit.js';
 import { fetchFamily, wireFamily } from './family.js';
@@ -46,7 +46,7 @@ async function fetchVersion() {
 function applyTheme(dark) {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   // Show the glyph for the action: sun to switch to light, moon to switch to dark.
-  if (els.themeToggle) els.themeToggle.innerHTML = icon(dark ? 'sun' : 'moon');
+  els.themeToggles.forEach(function (btn) { btn.innerHTML = icon(dark ? 'sun' : 'moon'); });
   localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
 }
 
@@ -60,7 +60,7 @@ function toggleTheme() {
   applyTheme(stored ? stored === 'dark' : prefersDark);
 })();
 
-els.themeToggle.addEventListener('click', toggleTheme);
+els.themeToggles.forEach(function (btn) { btn.addEventListener('click', toggleTheme); });
 
 // --------------------------------------------------------- boot
 // Home hosts the dashboard and the pending follow-ups (#336).
@@ -103,10 +103,7 @@ async function boot() {
 wireLoginForm(boot);
 wireTabs(function (tab) {
   if (tab === 'dashboard') refreshHome();
-  if (tab === 'chats') {
-    fetchChats().catch(function () {});
-    if (!state.config) fetchConfig().catch(function () {});
-  }
+  if (tab === 'chats') fetchChats().catch(function () {});
   if (tab === 'execution') fetchExecution().catch(function () {});
   if (tab === 'audit') fetchAudit().catch(function () {});
   if (tab === 'family') fetchFamily().catch(function () {});
@@ -114,6 +111,7 @@ wireTabs(function (tab) {
 wireWebauthn();
 wireChats();
 wireConfig();
+wireSettings();
 wireExecution();
 wireAudit();
 wireFamily();

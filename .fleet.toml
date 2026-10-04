@@ -14,6 +14,7 @@ classify_e2e = { src = "scripts/classify_e2e.py", sha = "bede95f00aee0b17d500724
 nav = { src = "app/webapp/static/_vendored/nav", sha = "56e76aa373c6cb689b100f1ce14aa8171d872085", dest = "app/webapp/static/_vendored/nav" }
 select-native = { src = "app/webapp/static/_vendored/select-native", sha = "91bf2dc77e2845d072d34944eb61bd461bf08041", dest = "app/webapp/static/_vendored/select-native" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "f23a32ea8d24cf5291df482f988dee334617409c", dest = "app/webapp/static/_vendored/switch" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "f23a32ea8d24cf5291df482f988dee334617409c", dest = "app/webapp/static/_vendored/home-head" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "7d918a5d9a41f03d239dea1245dedbe42f2659b9", dest = "app/webapp/static/_vendored/toast" }
 
 # Diff-proportionate e2e routing (project-scaffolding#180, schema:

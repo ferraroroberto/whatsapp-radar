@@ -172,6 +172,12 @@ html, body {
   touch-action: manipulation;
 }
 
+/* Form controls do not inherit the page font from the user-agent sheet (they
+   get Arial / system-ui), so every app-local control style that forgot
+   `font-family` rendered in the wrong face (#343). A type selector is the
+   lowest specificity, so any class rule, vendored or local, still wins. */
+button, input, select, textarea { font-family: inherit; }
+
 /* Content column: phone-first, centered at 772px on wider viewports. The
    coarse-pointer padding (nav clearance) lives in the vendored nav-tabs.css. */
 .app {

@@ -14,11 +14,12 @@ classify_e2e = { src = "scripts/classify_e2e.py", sha = "bede95f00aee0b17d500724
 nav = { src = "app/webapp/static/_vendored/nav", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/nav" }
 select-native = { src = "app/webapp/static/_vendored/select-native", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/select-native" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/switch" }
-home-head = { src = "app/webapp/static/_vendored/home-head", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/home-head" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "28c3e2c09a6bdc224a2188dfd2abcea2d99744f7", dest = "app/webapp/static/_vendored/home-head" }
 text-size = { src = "app/webapp/static/_vendored/text-size", sha = "ad963f3010f7fb012959527fdf893a7041004ced", dest = "app/webapp/static/_vendored/text-size" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "7d918a5d9a41f03d239dea1245dedbe42f2659b9", dest = "app/webapp/static/_vendored/toast" }
 button = { src = "app/webapp/static/_vendored/button", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/button" }
-modal = { src = "app/webapp/static/_vendored/modal", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/modal" }
+modal = { src = "app/webapp/static/_vendored/modal", sha = "28c3e2c09a6bdc224a2188dfd2abcea2d99744f7", dest = "app/webapp/static/_vendored/modal" }
+icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "28c3e2c09a6bdc224a2188dfd2abcea2d99744f7", dest = "app/webapp/static/_vendored/icon-button" }
 
 # Diff-proportionate e2e routing (project-scaffolding#180, schema:
 # project-scaffolding/docs/e2e-routing.md). Rules are evaluated top-to-bottom;

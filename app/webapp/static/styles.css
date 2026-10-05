@@ -35,7 +35,7 @@
   --input-bg: var(--card-off);
   --control-border: #818b98; /* input/select boundary + switch off-track (WCAG 1.4.11) */
   --toggle-knob: #ffffff;
-  --close-bg: var(--card-off);
+  --close-bg: transparent; /* glyph-only controls draw nothing at rest (fleet-config#1259) */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
   --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
@@ -115,7 +115,7 @@
   --input-bg: var(--bg);
   --control-border: #6e7681;
   --toggle-knob: var(--ink);
-  --close-bg: var(--line);
+  --close-bg: transparent;
   /* Depth on a near-black canvas comes from surface lightness, not shadow. */
   --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
   --tabbar-bg: rgba(22, 27, 34, 0.86);
@@ -284,8 +284,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   cursor: default;
   transform: none;
 }
-/* Quiet square icon button (search, theme toggle, close): a subtle contrast
-   background instead of the card's own bg (home-automation weather-icon-btn). */
+/* Quiet square icon button (search, theme toggle, close): a glyph on nothing,
+   --close-bg is transparent (fleet-config#1259); ::before keeps the 44px target. */
 .icon-btn {
   position: relative;
   appearance: none;

@@ -37,6 +37,7 @@
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
   <link rel="stylesheet" href="/static/_vendored/select-native/select-native.css">
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
+  <link rel="stylesheet" href="/static/_vendored/icon-button/icon-button.css">
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
@@ -330,8 +331,8 @@
             Messages
           </h2>
           <span class="card-actions">
-            <button id="chatsSearchToggle" type="button" class="icon-btn" title="Search by name"
-                    aria-label="Search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></button>
+            <button id="chatsSearchToggle" type="button" class="icon-button" title="Search by name"
+                    aria-label="Search" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></button>
           </span>
         </div>
         <div class="chats-toolbar">
@@ -611,7 +612,7 @@
             <span id="auditDetailTitle"></span>
           </h3>
           <span class="card-actions">
-            <button id="auditDetailClose" type="button" class="icon-btn" aria-label="Close"
+            <button id="auditDetailClose" type="button" class="icon-button" aria-label="Close"
                     title="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
           </span>
         </div>
@@ -789,9 +790,9 @@
       <div class="detail-header">
         <h2 id="historyTitle"></h2>
         <span id="historySource" class="source-badge"></span>
-        <button id="historyRename" type="button" class="detail-close" aria-label="Rename channel"
+        <button id="historyRename" type="button" class="icon-button" aria-label="Rename channel"
                 title="Rename — set an alias"><svg class="icon" aria-hidden="true"><use href="#i-pencil"></use></svg></button>
-        <button id="historyLink" type="button" class="detail-close" aria-label="Manage links"
+        <button id="historyLink" type="button" class="icon-button" aria-label="Manage links"
                 title="Link — merge another chat onto this person"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg></button>
         <button id="historyClose" type="button" class="detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>

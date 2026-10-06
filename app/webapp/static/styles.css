@@ -284,32 +284,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   cursor: default;
   transform: none;
 }
-/* Quiet square icon button (search, theme toggle, close): a glyph on nothing,
-   --close-bg is transparent (fleet-config#1259); ::before keeps the 44px target. */
-.icon-btn {
-  position: relative;
-  appearance: none;
-  border: none;
-  background: var(--close-bg);
-  color: var(--muted);
-  border-radius: var(--radius-md);
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex: none;
-}
-/* 34px is below the 44px tap floor (design.md "Touch targets"); expand the
-   hit area invisibly rather than inflating the visual button, same trick as
-   .detail-close/.detail-save-btn's ::before (34 + 2*5 = 44). */
-.icon-btn::before { content: ""; position: absolute; inset: -5px; }
-.icon-btn .icon { width: var(--icon-title); height: var(--icon-title); }
-.icon-btn:active { transform: scale(0.92); }
-.icon-btn.danger { color: var(--deficit); }
-.icon-btn.active { color: var(--accent); background: var(--accent-soft); }
 /* Small text action inside a disclosure summary (Stop). */
 .ghost-btn {
   background: transparent;
@@ -658,7 +632,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ============================================================ disclosure (app) */
 /* Structure comes from the vendored disclosure.css; app-side extras only. */
-.collapse-main .icon-btn, .collapse-main .ghost-btn { align-self: center; margin-left: var(--space-sm); }
+.collapse-main .icon-button, .collapse-main .ghost-btn { align-self: center; margin-left: var(--space-sm); }
 .opt-group { padding: 0; }
 .opt-group + .opt-group { border-top: 1px solid var(--line-muted); margin-top: 12px; padding-top: 4px; }
 .opt-group-title {
@@ -701,7 +675,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .detail-dialog:has(.settings-card) { width: min(640px, 92vw); }
 .settings-card .card { margin-bottom: var(--gap); }
 .settings-card .card:last-child { margin-bottom: 0; }
-.detail-header .detail-close { margin-left: var(--space-sm); }
+.detail-header .detail-close, .detail-header .icon-button { margin-left: var(--space-sm); }
 .detail-header h2 {
   flex: 1;
   min-width: 0;

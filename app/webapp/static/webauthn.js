@@ -102,7 +102,7 @@ function renderWebauthn() {
     li.appendChild(label);
     const rm = document.createElement('button');
     rm.type = 'button';
-    rm.className = 'icon-btn danger';
+    rm.className = 'icon-button danger';
     rm.innerHTML = icon('trash-2');
     rm.setAttribute('aria-label', 'Remove passkey');
     rm.title = 'Remove passkey';

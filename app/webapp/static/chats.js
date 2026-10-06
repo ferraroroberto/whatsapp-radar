@@ -650,7 +650,7 @@ export function wireChats() {
   els.chatsSearchToggle.addEventListener('click', function () {
     const show = els.chatsSearch.hidden;
     els.chatsSearch.hidden = !show;
-    els.chatsSearchToggle.classList.toggle('active', show);
+    els.chatsSearchToggle.setAttribute('aria-pressed', String(show));
     if (show) {
       els.chatsSearch.focus();
     } else if (state.chatsSearch) {

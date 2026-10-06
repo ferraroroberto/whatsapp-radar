@@ -288,7 +288,7 @@ function windowRow(w, onRemove) {
   head.append(textField('Label (e.g. swim practice)', w.label, function (v) { w.label = v; }));
   const rm = document.createElement('button');
   rm.type = 'button';
-  rm.className = 'icon-btn danger';
+  rm.className = 'icon-button danger';
   rm.innerHTML = icon('trash-2');
   rm.setAttribute('aria-label', 'Remove childcare window');
   rm.title = 'Remove';

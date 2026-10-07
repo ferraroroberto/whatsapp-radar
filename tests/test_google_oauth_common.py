@@ -91,3 +91,18 @@ def test_every_builder_bounds_its_transport_timeout(
     for kwargs in observed:
         assert "credentials" not in kwargs, "credentials= leaves the default transport"
         assert kwargs["http"].http.timeout == DEFAULT_REQUEST_TIMEOUT_S
+
+
+def test_build_service_injected_builder_gets_credentials_and_owns_transport() -> None:
+    """The legacy test seam: an injected builder receives ``credentials=``, no ``http=``."""
+    from google_oauth_common.transport import build_service
+
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def builder(api: str, version: str, **kwargs: object) -> str:
+        calls.append((api, version, kwargs))
+        return "service"
+
+    creds = object()
+    assert build_service("gmail", "v1", creds, service_builder=builder) == "service"
+    assert calls == [("gmail", "v1", {"credentials": creds, "cache_discovery": False})]

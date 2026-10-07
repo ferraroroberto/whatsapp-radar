@@ -11,7 +11,7 @@ from google_oauth_common.credentials import load_or_refresh_credentials
 from google_oauth_common.token_store import write_token_atomically as write_token_atomically
 from google_oauth_common.transport import (
     DEFAULT_REQUEST_TIMEOUT_S,
-    bounded_authorized_http,
+    build_service,
 )
 
 from gmail_readonly.core import GMAIL_READONLY_SCOPE, GmailReadClient
@@ -192,30 +192,13 @@ def build_google_read_client(
         request_factory=request_factory,
     )
 
-    injected_builder = service_builder is not None
-    if service_builder is None:
-        from googleapiclient.discovery import build
-
-        service_builder = build
-
-    if injected_builder:
-        # Test seam: injected builders receive the legacy credentials kwarg and
-        # own their transport entirely.
-        service = service_builder(
-            "gmail",
-            "v1",
-            credentials=credentials,
-            cache_discovery=False,
-        )
-    else:
-        # httplib2's default is no timeout at all — a dropped connection would
-        # block a sync forever (#180).
-        service = service_builder(
-            "gmail",
-            "v1",
-            http=bounded_authorized_http(credentials, request_timeout_s),
-            cache_discovery=False,
-        )
+    service = build_service(
+        "gmail",
+        "v1",
+        credentials,
+        service_builder=service_builder,
+        request_timeout_s=request_timeout_s,
+    )
     return GoogleGmailReadClient(service)
 
 

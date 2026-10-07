@@ -426,3 +426,17 @@ def test_a_config_with_no_duplicates_reports_none_collapsed(tmp_path, _clean_env
     cfg = load_config(root=tmp_path)
     assert len(cfg.calendar.accounts) == 2
     assert cfg.calendar.collapsed_duplicate_labels == ()
+
+
+def test_empty_sections_parse_to_the_dataclass_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`parse()` takes its fallbacks from the dataclass: an empty block is the defaults (#349)."""
+    from src.config import family as family_config
+    from src.config import traffic as traffic_config
+
+    for key in _ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+    assert traffic_config.parse({}) == traffic_config.TrafficConfig()
+    assert family_config.parse({}) == family_config.FamilyConfig()

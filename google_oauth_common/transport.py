@@ -10,6 +10,7 @@ three builders share one definition instead of three drifting copies.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 # Every request made through a client built by these packages gets this bound.
@@ -27,3 +28,33 @@ def bounded_authorized_http(credentials: Any, request_timeout_s: int) -> Any:
     from google_auth_httplib2 import AuthorizedHttp  # type: ignore[import-untyped]
 
     return AuthorizedHttp(credentials, http=httplib2.Http(timeout=request_timeout_s))
+
+
+def build_service(
+    api: str,
+    version: str,
+    credentials: Any,
+    *,
+    service_builder: Callable[..., Any] | None = None,
+    request_timeout_s: int = DEFAULT_REQUEST_TIMEOUT_S,
+) -> Any:
+    """Build one Google discovery service, bounded unless a test seam owns the transport.
+
+    The single definition of the construction the three clients share. With no
+    ``service_builder`` the real ``googleapiclient.discovery.build`` runs over
+    :func:`bounded_authorized_http` (httplib2's default is *no* timeout, so a
+    stalled connection would otherwise hang a scheduled job forever — #180,
+    #298). An injected builder is the legacy test seam: it receives
+    ``credentials=`` and owns its transport entirely.
+    """
+    if service_builder is not None:
+        return service_builder(api, version, credentials=credentials, cache_discovery=False)
+
+    from googleapiclient.discovery import build
+
+    return build(
+        api,
+        version,
+        http=bounded_authorized_http(credentials, request_timeout_s),
+        cache_discovery=False,
+    )

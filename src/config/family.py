@@ -207,6 +207,7 @@ def parse_travel_blocks(raw: dict[str, Any]) -> TravelBlocksConfig:
 
 
 def parse(raw: dict[str, Any]) -> FamilyConfig:
+    defaults = FamilyConfig()
     responsible: dict[int, str] = {}
     for key, person in (raw.get("responsible_by_weekday") or {}).items():
         idx = _weekday_index(key)
@@ -227,20 +228,22 @@ def parse(raw: dict[str, Any]) -> FamilyConfig:
         if isinstance(item, dict) and str(item.get("label", "")).strip()
     )
     return FamilyConfig(
-        enabled=_as_bool(os.environ.get("WR_FAMILY_ENABLED"), raw.get("enabled", False)),
-        run_hour=_parse_run_hour(raw.get("run_hour", 7)),
-        home_address=str(raw.get("home_address", "")).strip(),
-        kids_home_time=str(raw.get("kids_home_time", "17:30")).strip(),
+        enabled=_as_bool(os.environ.get("WR_FAMILY_ENABLED"), raw.get("enabled", defaults.enabled)),
+        run_hour=_parse_run_hour(raw.get("run_hour", defaults.run_hour)),
+        home_address=str(raw.get("home_address", defaults.home_address)).strip(),
+        kids_home_time=str(raw.get("kids_home_time", defaults.kids_home_time)).strip(),
         responsible_by_weekday=responsible,
         childcare_windows=windows,
-        unknown_scan_days=int(raw.get("unknown_scan_days", 7)),
-        assessment_days=int(raw.get("assessment_days", 2)),
+        unknown_scan_days=int(raw.get("unknown_scan_days", defaults.unknown_scan_days)),
+        assessment_days=int(raw.get("assessment_days", defaults.assessment_days)),
         ask_missing_locations=_as_bool(
             os.environ.get("WR_FAMILY_ASK_MISSING_LOCATIONS"),
-            raw.get("ask_missing_locations", True),
+            raw.get("ask_missing_locations", defaults.ask_missing_locations),
         ),
-        reminder_calendar_id=str(raw.get("reminder_calendar_id", "")).strip(),
-        reminder_time=str(raw.get("reminder_time", "07:30")).strip(),
+        reminder_calendar_id=str(
+            raw.get("reminder_calendar_id", defaults.reminder_calendar_id)
+        ).strip(),
+        reminder_time=str(raw.get("reminder_time", defaults.reminder_time)).strip(),
         travel_blocks=parse_travel_blocks(raw.get("travel_blocks") or {}),
     )
 

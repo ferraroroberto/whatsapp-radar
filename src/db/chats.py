@@ -76,17 +76,6 @@ def child_count(conn: sqlite3.Connection, parent_id: int) -> int:
     )
 
 
-def child_chats(conn: sqlite3.Connection, parent_id: int) -> list[sqlite3.Row]:
-    """The child chats linked under ``parent_id``, ordered by id (empty if none)."""
-    return list(
-        conn.execute(
-            "SELECT id, source_chat_id, display_name, alias, chat_type, status, "
-            "last_message_at, parent_chat_id FROM chats WHERE parent_chat_id = ? ORDER BY id",
-            (parent_id,),
-        ).fetchall()
-    )
-
-
 def family_member_ids(conn: sqlite3.Connection, head_id: int) -> list[int]:
     """Chat ids that make up a family: the head first, then its children by id.
 

@@ -25,7 +25,7 @@ REMOTE = ("203.0.113.5", 5555)
 
 def _seed(conn: sqlite3.Connection) -> int:
     """One live run over two monitored chats: one actionable (LLM called), one
-    filtered at Stage 1. Returns the run id. Plus a resync sync_log marker."""
+    filtered at Stage 1. Returns the run id."""
     a = store.upsert_chat(
         conn,
         ChatRecord(
@@ -132,14 +132,6 @@ def _seed(conn: sqlite3.Connection) -> int:
         telegram_text=None,
         error=None,
     )
-
-    store.record_sync(
-        conn,
-        source="resync",
-        chats_added=1,
-        chats_updated=0,
-        messages_added=3,
-    )
     return run_id
 
 
@@ -190,10 +182,8 @@ def test_audit_runs_list_shape(tmp_path: Path) -> None:
     assert run["notification_status"] == "sent"
     assert run["sources"]["gmail"]["llm_calls"] == 1
 
-    # The resync maintenance marker is surfaced; scan-sourced syncs would not be.
-    assert len(body["syncs"]) == 1
-    assert body["syncs"][0]["source"] == "resync"
-    assert body["syncs"][0]["messages_added"] == 3
+    # Maintenance (resync/reprocess) markers are not part of the Audit payload.
+    assert "syncs" not in body
 
 
 def test_audit_groups_contiguous_offline_scans_into_coverage_gap(tmp_path: Path) -> None:

@@ -43,7 +43,6 @@ def test_audit_collapses_offline_window_into_one_gap_marker(
     ]
     payload = {
         "runs": [run(4, "2026-06-26T18:00:00+00:00", offline=False), *offline_runs],
-        "syncs": [],
         "coverage_gaps": [
             {
                 "started_at": "2026-06-20T18:00:00+00:00",
@@ -73,7 +72,6 @@ def test_audit_collapses_offline_window_into_one_gap_marker(
 def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> None:
     run_payload = {
         "runs": [],
-        "syncs": [],
         "coverage_gaps": [],
     }
     filtered_payload = {
@@ -262,7 +260,7 @@ def _open_travel_run(page: Page, base_url: str, section: dict[str, object] | Non
     run = _calendar_run(section)
     page.route(
         "**/api/audit/runs",
-        lambda route: route.fulfill(json={"runs": [run], "syncs": [], "coverage_gaps": []}),
+        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
         "**/api/audit/filtered?*",

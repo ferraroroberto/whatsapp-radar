@@ -141,7 +141,7 @@ def _open(page: Page, base_url: str) -> None:
     run = _run()
     page.route(
         "**/api/audit/runs",
-        lambda route: route.fulfill(json={"runs": [run], "syncs": [], "coverage_gaps": []}),
+        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
         "**/api/audit/filtered?*",
@@ -243,7 +243,7 @@ def test_an_unknown_future_field_is_withheld_by_default(page: Page, base_url: st
     run["summary"]["some_field_invented_later"] = "SENTINELFUTUREFIELD"
     page.route(
         "**/api/audit/runs",
-        lambda route: route.fulfill(json={"runs": [run], "syncs": [], "coverage_gaps": []}),
+        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
         "**/api/audit/filtered?*",

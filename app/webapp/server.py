@@ -1,22 +1,28 @@
 """FastAPI webapp — phone-first admin hub for WhatsApp Radar.
 
-Routes (split across ``app/webapp/routers/``):
+Routes (split across ``app/webapp/routers/``, one module per area):
 
-    GET  /                       → static/index.html              (misc)
-    GET  /static/{file}          → CSS / JS / icons               (static mount)
-    GET  /healthz                → liveness probe                 (misc)
-    GET  /api/version            → git sha + asset hash           (misc)
-    POST /api/login              → swap password for token        (auth)
-    /api/webauthn/*              → passkey ceremonies             (webauthn)
-    GET  /api/dashboard          → read-only metrics              (dashboard)
-    /api/chats[...]             → list / history / status toggle (chats)
-    GET/POST /api/config         → prompt + safe settings         (config)
-    /api/execution/*            → run pipeline pieces + run log   (execution)
-    /api/sidecar/*              → WhatsApp connection state/QR    (sidecar)
-    /api/ack/*                  → non-routine follow-ups (#219)   (ack)
+    GET  /                          → static/index.html              (misc)
+    GET  /static/{file}             → CSS / JS / icons               (static mount)
+    GET  /healthz                   → liveness probe                 (misc)
+    GET  /api/version               → git sha + asset hash           (misc)
+    POST /api/login                 → swap password for token        (auth)
+    /api/webauthn/*                 → passkey ceremonies             (webauthn)
+    GET  /api/dashboard             → read-only metrics              (dashboard)
+    /api/chats[...]                 → list / history / status / alias / link (chats)
+    /api/messages/{id}/...          → audio, summarize, task-export  (chats)
+    /api/tts/*                      → TTS health + speak             (chats)
+    GET/POST /api/config            → prompt + safe settings         (config)
+    /api/execution/*                → run pipeline pieces + run log  (execution)
+    GET/POST /api/family            → family-check rules + traffic   (family)
+    /api/audit/*                    → per-run trace drill-down       (audit)
+    /api/sidecar/*                  → WhatsApp connection state/QR   (sidecar)
+    /api/ack/*                      → non-routine follow-ups (#219)  (ack)
 
-All four tabs are live. Routers under ``app/webapp/routers/``. The sidecar
-routes back the Execution health pill's relaunch / re-pair affordances.
+The app is a single tabbed SPA with five tabs — Dashboard (which also hosts the
+pending follow-ups), Messages, Execution, Audit, Family; Settings is a modal,
+not a tab. The sidecar routes back the Execution health pill's relaunch /
+re-pair affordances.
 """
 
 from __future__ import annotations

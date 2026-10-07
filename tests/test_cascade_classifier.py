@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from src.analysis.classifier import CascadeClassifier
 from src.analysis.contract import parse_analysis
-from src.analysis.keywords import has_actionable_signal, message_has_signal
+from src.analysis.keywords import has_actionable_signal, matched_rules
 from src.models import StoredMessage
 
 
@@ -40,16 +40,16 @@ class _FakeInner:
 
 
 def test_prefilter_matches_spanish_english_catalan() -> None:
-    assert message_has_signal("Hay que pagar la cuota antes del viernes")  # ES
-    assert message_has_signal("Please confirm the homework deadline")  # EN
-    assert message_has_signal("Cal portar el justificant divendres")  # CA
-    assert message_has_signal("Recordatorio: reunión de tutoría")  # accents stripped
+    assert matched_rules("Hay que pagar la cuota antes del viernes")  # ES
+    assert matched_rules("Please confirm the homework deadline")  # EN
+    assert matched_rules("Cal portar el justificant divendres")  # CA
+    assert matched_rules("Recordatorio: reunión de tutoría")  # accents stripped
 
 
 def test_prefilter_ignores_noise() -> None:
-    assert not message_has_signal("jajaja qué bueno 😂")
-    assert not message_has_signal("Good morning everyone!")
-    assert not message_has_signal(None)
+    assert not matched_rules("jajaja qué bueno 😂")
+    assert not matched_rules("Good morning everyone!")
+    assert not matched_rules(None)
 
 
 def test_cascade_short_circuits_on_noise() -> None:

@@ -56,7 +56,6 @@ def test_link_and_unlink_roundtrip(ingested_conn: sqlite3.Connection) -> None:
     assert store.get_chat(ingested_conn, child)["parent_chat_id"] == parent
     assert store.family_member_ids(ingested_conn, parent) == sorted([parent, child])
     assert store.child_count(ingested_conn, parent) == 1
-    assert [r["id"] for r in store.child_chats(ingested_conn, parent)] == [child]
 
     assert store.unlink_chat(ingested_conn, child) is True
     assert store.get_chat(ingested_conn, child)["parent_chat_id"] is None

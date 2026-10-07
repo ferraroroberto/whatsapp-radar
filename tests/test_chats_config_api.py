@@ -100,7 +100,7 @@ def test_recent_messages_limit_and_order(conn: sqlite3.Connection) -> None:
                 sender_label="X",
             ),
         )
-    recent, has_more = store.recent_messages(conn, chat, limit=3)
+    recent, has_more = store.recent_messages_family(conn, [chat], limit=3)
     # Newest 3, returned oldest→newest; two older remain.
     assert [m.text for m in recent] == ["msg 2", "msg 3", "msg 4"]
     assert has_more is True
@@ -121,18 +121,18 @@ def test_recent_messages_keyset_pagination(conn: sqlite3.Connection) -> None:
                 sender_label="X",
             ),
         )
-    page1, more1 = store.recent_messages(conn, chat, limit=2)
+    page1, more1 = store.recent_messages_family(conn, [chat], limit=2)
     assert [m.text for m in page1] == ["msg 3", "msg 4"] and more1 is True
 
     oldest = page1[0]
-    page2, more2 = store.recent_messages(
-        conn, chat, limit=2, before_ts=oldest.message_timestamp, before_id=oldest.id
+    page2, more2 = store.recent_messages_family(
+        conn, [chat], limit=2, before_ts=oldest.message_timestamp, before_id=oldest.id
     )
     assert [m.text for m in page2] == ["msg 1", "msg 2"] and more2 is True
 
     oldest = page2[0]
-    page3, more3 = store.recent_messages(
-        conn, chat, limit=2, before_ts=oldest.message_timestamp, before_id=oldest.id
+    page3, more3 = store.recent_messages_family(
+        conn, [chat], limit=2, before_ts=oldest.message_timestamp, before_id=oldest.id
     )
     assert [m.text for m in page3] == ["msg 0"] and more3 is False
 

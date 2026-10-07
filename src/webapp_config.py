@@ -25,7 +25,6 @@ from src.paths import PROJECT_ROOT
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.json"
-SAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.sample.json"
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8455

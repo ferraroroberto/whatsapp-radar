@@ -379,15 +379,13 @@ def run_supervisor(
     node_bin: str | None = None,
     spawner: Spawner | None = None,
     on_tick: Callable[[dict[str, Any]], None] | None = None,
-    sleep: Callable[[float], None] = time.sleep,
 ) -> None:
     """Loop :func:`supervise_once` every ``interval`` seconds until ``stop_event``.
 
     Checks immediately on entry, then waits ``interval`` (interruptibly, via
     ``stop_event.wait``) between ticks so a quit returns promptly. ``on_tick``
     receives each tick's result dict — the tray uses it to surface a one-time
-    ``needs_qr`` toast. ``sleep`` is unused by default (the wait is the event's)
-    but kept injectable for tests that prefer to drive it directly.
+    ``needs_qr`` toast.
 
     Designed to run in a daemon thread; it owns no resources and never raises.
     """

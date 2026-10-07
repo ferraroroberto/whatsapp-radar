@@ -126,28 +126,6 @@ function runListItem(run) {
   return li;
 }
 
-// A resync/reprocess maintenance marker, visually distinct from review runs.
-function syncListItem(sync) {
-  const li = document.createElement('li');
-  li.className = 'audit-sync-li';
-
-  const tag = document.createElement('span');
-  tag.className = 'audit-sync-tag';
-  tag.textContent = sync.source === 'reprocess' ? 'Rebuild' : 'Resync';
-
-  const when = document.createElement('span');
-  when.className = 'audit-run-when muted small';
-  when.textContent = fmtLocalDateTime(sync.ran_at);
-
-  const delta = document.createElement('span');
-  delta.className = 'audit-sync-delta muted small';
-  const chatBit = sync.chats_added ? ` · +${sync.chats_added} chat${sync.chats_added > 1 ? 's' : ''}` : '';
-  delta.textContent = `+${sync.messages_added} msg${sync.messages_added === 1 ? '' : 's'}${chatBit}`;
-
-  li.append(tag, when, delta);
-  return li;
-}
-
 function coverageGapItem(gap) {
   const li = document.createElement('li');
   li.className = 'audit-gap-li';
@@ -669,7 +647,6 @@ export async function fetchAudit() {
   await fetchQuiet('/api/audit/runs', function (data) {
     const ax = auditState();
     ax.runs = data.runs || [];
-    ax.syncs = data.syncs || [];
     ax.coverageGaps = data.coverage_gaps || [];
     renderRuns();
 

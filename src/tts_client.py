@@ -30,8 +30,6 @@ VOICES_BY_MODEL: dict[str, tuple[str, ...]] = {
     DEFAULT_MODEL: ("tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"),
     "kokoro-tts": ("ef_dora", "em_alex"),
 }
-# Backwards-compatible alias for the default model's voice set.
-VALID_VOICES = VOICES_BY_MODEL[DEFAULT_MODEL]
 
 _HEALTH_TIMEOUT = 5.0
 

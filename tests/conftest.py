@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -12,6 +13,11 @@ from app.webapp import runs as webapp_runs
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from tests.helpers import ingest_all
+
+# Set at conftest import time — before any test module imports `app.webapp.server`
+# (whose module-level `create_app()` attaches the file logger) — so the suite never
+# writes into the real `webapp/` log directory (#351). Empty string disables it.
+os.environ.setdefault("WR_LOG_DIR", "")
 
 
 @pytest.fixture(autouse=True)

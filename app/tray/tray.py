@@ -36,6 +36,7 @@ from app.tray.single_instance import SingleInstance
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
 from src.config import load_config
 from src.connector import sidecar
+from src.logging_setup import configure_file_logging
 from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.webapp_config import append_auth_token, load_webapp_config
@@ -147,6 +148,8 @@ def _notify(title: str, message: str) -> None:
 
 def run_tray() -> int:
     """Run the tray icon. Returns when the user picks Quit."""
+    # pythonw has no console, so without this every tray breadcrumb is lost (#351).
+    configure_file_logging("tray")
     try:
         import pystray
         from pystray import Menu, MenuItem

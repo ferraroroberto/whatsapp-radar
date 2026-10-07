@@ -37,6 +37,7 @@ from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.family.leg_status import count_legs
+from src.logging_setup import configure_file_logging
 from src.notify import deliver_digest
 from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
@@ -697,6 +698,8 @@ def main(argv: list[str] | None = None) -> int:
         from app.tray.tray import run_tray
 
         return run_tray()
+
+    configure_file_logging("cli")
 
     # Everything below is wrapped so a run launched here — a terminal, or an App
     # Launcher Job — writes the same output-bearing run record the webapp writes

@@ -283,6 +283,8 @@ Restart matrix:
 
 Secrets — bearer token, login password, passkey state, **and the Telegram token/chat id** — live in the gitignored `config/webapp_config.json` (`config/webapp_config.sample.json` is the template). `WR_TELEGRAM_*` env still overrides it. The same file holds the summary-speech sender-gender preferences (`sender_voice_genders`, `default_voice_gender`); edit the JSON directly, as with `tailnet_allowlist` — there is no UI form for either. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`.
 
+**Logs.** The tray, the webapp and the CLI each write a rotating file under the ignored `webapp/` directory — `tray.log`, `webapp.log`, `cli.log` (1 MB × 3 backups; plus `auth.log` for sign-in events). The tray runs under `pythonw` with no console, so these files are where its warnings and errors land. They carry ids, counts and exception text, never chat names or message bodies, and only this repo's own loggers are written (not third-party HTTP clients). `WR_LOG_DIR` relocates the directory; set it empty to turn file logging off.
+
 ## HTTPS certificate (Tailscale)
 
 Fleet standard: `ferraroroberto/project-scaffolding#89`. Provision a **real Let's Encrypt cert** via `tailscale cert` — no self-signed CA, no per-device trust dance:

@@ -85,27 +85,32 @@ class TrafficConfig:
 
 
 def parse(raw: dict[str, Any]) -> TrafficConfig:
+    defaults = TrafficConfig()
     api_key = (
         os.environ.get("WR_TRAFFIC_API_KEY")
         or os.environ.get("GOOGLE_MAPS_API_KEY")
-        or str(raw.get("api_key", ""))
+        or str(raw.get("api_key", defaults.api_key))
     )
     raw_keywords = raw.get("train_keywords")
     if isinstance(raw_keywords, (list, tuple)):
         keywords = tuple(str(k).strip().lower() for k in raw_keywords if str(k).strip())
     else:
-        keywords = TrafficConfig.train_keywords
+        keywords = defaults.train_keywords
     return TrafficConfig(
-        enabled=_as_bool(os.environ.get("WR_TRAFFIC_ENABLED"), raw.get("enabled", False)),
+        enabled=_as_bool(
+            os.environ.get("WR_TRAFFIC_ENABLED"), raw.get("enabled", defaults.enabled)
+        ),
         api_key=api_key,
-        skip_leave_now_for_train=bool(raw.get("skip_leave_now_for_train", True)),
+        skip_leave_now_for_train=bool(
+            raw.get("skip_leave_now_for_train", defaults.skip_leave_now_for_train)
+        ),
         train_keywords=keywords,
-        significant_delay_min=int(raw.get("significant_delay_min", 15)),
-        quiet_start_hour=int(raw.get("quiet_start_hour", 20)),
-        quiet_end_hour=int(raw.get("quiet_end_hour", 5)),
-        dedup_window_min=int(raw.get("dedup_window_min", 180)),
-        origin_lookback_min=int(raw.get("origin_lookback_min", 60)),
-        lookahead_hours=int(raw.get("lookahead_hours", 3)),
-        cadence_min=int(raw.get("cadence_min", 30)),
-        leave_margin_min=int(raw.get("leave_margin_min", 5)),
+        significant_delay_min=int(raw.get("significant_delay_min", defaults.significant_delay_min)),
+        quiet_start_hour=int(raw.get("quiet_start_hour", defaults.quiet_start_hour)),
+        quiet_end_hour=int(raw.get("quiet_end_hour", defaults.quiet_end_hour)),
+        dedup_window_min=int(raw.get("dedup_window_min", defaults.dedup_window_min)),
+        origin_lookback_min=int(raw.get("origin_lookback_min", defaults.origin_lookback_min)),
+        lookahead_hours=int(raw.get("lookahead_hours", defaults.lookahead_hours)),
+        cadence_min=int(raw.get("cadence_min", defaults.cadence_min)),
+        leave_margin_min=int(raw.get("leave_margin_min", defaults.leave_margin_min)),
     )

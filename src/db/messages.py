@@ -546,28 +546,6 @@ def message_count_total(conn: sqlite3.Connection) -> int:
     return int(conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"])
 
 
-def recent_messages(
-    conn: sqlite3.Connection,
-    chat_id: int,
-    *,
-    limit: int = 100,
-    before_ts: str | None = None,
-    before_id: int | None = None,
-) -> tuple[list[StoredMessage], bool]:
-    """A page of the chat's messages (oldest→newest) plus whether older remain.
-
-    No cursor → the newest ``limit`` messages. With a ``(before_ts, before_id)``
-    cursor → the newest ``limit`` messages strictly *older* than it, which is how
-    the history overlay lazily loads more as you scroll up. Ordering and the
-    cursor both use the lexicographic ``(message_timestamp, id)`` key. One extra
-    row is fetched so ``has_more`` is known without a second query. Bounded so a
-    chat with tens of thousands of messages never floods the request path.
-    """
-    return recent_messages_family(
-        conn, [chat_id], limit=limit, before_ts=before_ts, before_id=before_id
-    )
-
-
 def recent_messages_family(
     conn: sqlite3.Connection,
     chat_ids: list[int],
@@ -576,14 +554,19 @@ def recent_messages_family(
     before_ts: str | None = None,
     before_id: int | None = None,
 ) -> tuple[list[StoredMessage], bool]:
-    """A page of messages across one or more chats — the merged family history.
+    """A page of messages (oldest→newest) plus whether older ones remain.
 
-    Same paging contract as :func:`recent_messages` (newest→oldest internally,
-    returned oldest→newest, ``has_more`` flag), but over a *set* of chat ids so a
-    parent's overlay shows a time-ordered merge of itself and its linked children.
-    The ``(message_timestamp, id)`` key is a global total order across chats, so a
-    single cursor pages the whole family correctly. Each :class:`StoredMessage`
-    keeps its ``chat_id`` so callers can attribute every message to its origin.
+    Spans one or more chats so a parent's overlay shows a time-ordered merge of
+    itself and its linked children; pass ``[chat_id]`` for a single chat. No
+    cursor → the newest ``limit`` messages. With a ``(before_ts, before_id)``
+    cursor → the newest ``limit`` messages strictly *older* than it, which is how
+    the history overlay lazily loads more as you scroll up. The
+    ``(message_timestamp, id)`` key is a global total order across chats, so a
+    single cursor pages the whole family correctly. One extra row is fetched so
+    ``has_more`` is known without a second query; bounded so a chat with tens of
+    thousands of messages never floods the request path. Each
+    :class:`StoredMessage` keeps its ``chat_id`` so callers can attribute every
+    message to its origin.
     """
     if not chat_ids:
         return [], False

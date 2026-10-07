@@ -28,12 +28,6 @@ from src.db import store
 
 router = APIRouter()
 
-# sync_log sources that represent data-maintenance runs (not review/scan runs).
-# Surfaced in the audit timeline so resync/reprocess are visible alongside runs;
-# 'scan'-sourced syncs are omitted because scans already appear as review_runs.
-_MAINTENANCE_SOURCES = {"resync", "reprocess"}
-
-
 def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
     """Shape a run row for the run list: identity + parsed params + funnel.
 
@@ -152,12 +146,10 @@ async def list_runs(
     kind: str | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Recent runs of every kind (with funnel/summary) plus maintenance markers.
+    """Recent runs of every kind (with funnel/summary) plus connector coverage gaps.
 
     ``runs`` are the inspectable runs, newest first — message scans, process
     runs, and the family checks alike (#163); ``kind`` filters to one kind.
-    ``syncs`` are the resync/reprocess data-maintenance events so they're
-    visible in the same audit timeline (read-only, no schema beyond sync_log).
     """
     limit = max(1, min(limit, 200))
     runs = [
@@ -165,19 +157,8 @@ async def list_runs(
         for r in (_run_list_row(row) for row in store.list_review_runs(conn, limit))
         if kind is None or r["kind"] == kind
     ]
-    syncs = [
-        {
-            "ran_at": s["ran_at"],
-            "source": s["source"],
-            "chats_added": int(s["chats_added"]),
-            "chats_updated": int(s["chats_updated"]),
-            "messages_added": int(s["messages_added"]),
-        }
-        for s in store.recent_syncs(conn, limit)
-        if s["source"] in _MAINTENANCE_SOURCES
-    ]
     coverage_gaps = _coverage_gaps(store.list_live_scan_runs(conn))
-    return {"runs": runs, "syncs": syncs, "coverage_gaps": coverage_gaps}
+    return {"runs": runs, "coverage_gaps": coverage_gaps}
 
 
 @router.get("/api/audit/filtered")

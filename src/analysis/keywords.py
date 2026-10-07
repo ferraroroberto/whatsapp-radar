@@ -94,15 +94,6 @@ def matched_rules(text: str | None, source: str = "whatsapp") -> list[KeywordRul
     return [rule for rule in load_keyword_rules(source) if rule.root in normalized]
 
 
-def matched_roots(text: str | None, source: str = "whatsapp") -> list[str]:
-    """Return every actionable root found in ``text`` (normalized), in roots order."""
-    return [rule.root for rule in matched_rules(text, source)]
-
-
-def message_has_signal(text: str | None, source: str = "whatsapp") -> bool:
-    return bool(matched_rules(text, source))
-
-
 def has_actionable_signal(
     delta: Iterable[StoredMessage], source: str = "whatsapp"
 ) -> KeywordSignal:

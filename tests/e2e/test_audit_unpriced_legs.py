@@ -59,7 +59,7 @@ def _traffic_run(*statuses: str, alerts: int = 0) -> dict[str, Any]:
 def _open_traffic_run(page: Page, base_url: str, run: dict[str, Any]) -> None:
     page.route(
         "**/api/audit/runs",
-        lambda route: route.fulfill(json={"runs": [run], "syncs": [], "coverage_gaps": []}),
+        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
         "**/api/audit/filtered?*",

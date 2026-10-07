@@ -4,8 +4,8 @@
  * ?token=… on first load and strips it from the URL. On 401, the login overlay
  * shows; password → /api/login → bearer token.
  *
- * The four tabs (Dashboard · Chats · Execution · Audit) are empty shells in
- * Step 3; Steps 4–7 fill their bodies + state slices.
+ * The five tabs (Dashboard · Messages · Execution · Audit · Family) each own a
+ * state slice below; Settings is a modal, not a tab.
  */
 
 export const APP_PREFIX = 'wa-radar'; // localStorage namespace (token, theme, text size)
@@ -53,7 +53,6 @@ export const state = {
   // Audit (#12): per-run trace drill-down (read-only).
   audit: {
     runs: [],              // recent runs of every kind (funnel or summary, #163)
-    syncs: [],             // resync/reprocess maintenance markers
     coverageGaps: [],      // contiguous multi-run connector outages (#195)
     filtered: [],          // recent cross-run decisions that did not alert (#194)
     filteredDays: 30,

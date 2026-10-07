@@ -1,4 +1,4 @@
-"""Follow-ups tab (#219): the non-routine acknowledgment surface.
+"""Follow-ups (#219): the non-routine acknowledgment surface, shown on the Dashboard tab (#336).
 
 A non-routine prep item (Step 5/5 of #206) gets a distinct, acknowledgeable
 follow-up here, alongside — never instead of — the existing Telegram alert, so

@@ -242,7 +242,7 @@ A check that self-skips records too, reading as *skipped* with its reason, so a 
 
 ### Audit
 
-A read-only trust surface over the persisted per-run trace: every recorded run of every kind — message scans, process runs, and the family checks — live vs dry-run, filterable by kind, most recent first, with resync/reprocess maintenance events interleaved.
+A read-only trust surface over the persisted per-run trace: every recorded run of every kind — message scans, process runs, and the family checks — live vs dry-run, filterable by kind, most recent first.
 
 Drilling into a message run shows, per channel, the source, complete decision record, per-message Stage-1 buckets/roots, whether the LLM flagged it, the exact LLM prompts sent, the raw model response, the parsed verdict, the final action, and the Telegram text it contributed. When a run synced messages but none landed in a monitored channel, the drill-down says so explicitly. Family-check runs drill into their structured payload — every route checked, every conflict — instead of a per-chat trace.
 

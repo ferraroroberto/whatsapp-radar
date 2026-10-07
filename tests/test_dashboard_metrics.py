@@ -368,3 +368,30 @@ def test_dashboard_requires_token_from_remote(tmp_path: Path) -> None:
         assert client.get("/api/dashboard").status_code == 401
         ok = client.get("/api/dashboard", headers={"Authorization": "Bearer secret"})
         assert ok.status_code == 200
+
+
+def test_last_activity_survives_a_flood_of_a_chattier_kind(tmp_path: Path) -> None:
+    """Per-kind window (#352): 250 later traffic-checks must not hide the calendar card."""
+    db = tmp_path / "flood.sqlite3"
+    conn = store.connect(db)
+    cid = store.start_run(conn, mode="live", kind="calendar-scan")
+    store.finish_run_summary(
+        conn, cid, "completed",
+        json.dumps({"kind": "calendar-scan", "status": "ok", "conflicts": []}),
+    )
+    for _ in range(250):
+        tid = store.start_run(conn, mode="live", kind="traffic-check")
+        store.finish_run_summary(
+            conn, tid, "completed",
+            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
+        )
+    conn.close()
+
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = db
+    with TestClient(app, client=LOOPBACK) as client:
+        cards = {c["source"]: c for c in client.get("/api/dashboard").json()["last_activity"]}
+
+    assert cards["calendar"]["db_run_id"] == cid
+    assert cards["calendar"]["summary"] == "no conflicts"

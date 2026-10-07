@@ -426,9 +426,10 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         }
         for window in family.childcare_windows
     ]
-    # One newest-first pass over the unified run store (#163) feeds both the
-    # recent-runs list and the Run-tab traffic card's status line (#164).
-    recent_runs = store.list_review_runs(conn, 200)
+    # One newest-first, per-kind-bounded read of the unified run store (#163) feeds
+    # the recent-runs list, the Run-tab traffic card's status line (#164) and the
+    # last travel sweep — a chatty traffic-check can't crowd out calendar-scan.
+    recent_runs = store.list_runs_by_kind(conn, tuple(_FAMILY_KINDS))
     family_runs = [
         _run_summary(row) for row in recent_runs if row["kind"] in _FAMILY_KINDS
     ][:15]

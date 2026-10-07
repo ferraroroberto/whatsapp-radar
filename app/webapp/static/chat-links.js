@@ -24,7 +24,7 @@ import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum } from './format.js';
 
-function childrenOf(parentId) {
+export function childrenOf(parentId) {
   return state.chats.filter(function (c) { return c.parent_chat_id === parentId; });
 }
 

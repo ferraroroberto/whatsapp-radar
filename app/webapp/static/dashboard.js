@@ -16,9 +16,6 @@ import { showRun } from './execution.js';
 function fmtTs(ts) {
   return fmtLocalDateTime(ts, { withYear: false });
 }
-function fmtTsFull(ts) {
-  return fmtLocalDateTime(ts);
-}
 
 export async function fetchDashboard() {
   await fetchQuiet('/api/dashboard', function (data) {
@@ -123,7 +120,7 @@ function render(d) {
   for (const source of sources) {
     els.dashSources.appendChild(sourceRow(source.source,
       fmtNum(source.messages) + ' stored · ' + fmtNum(source.monitored) +
-      ' monitored · latest ' + fmtTsFull(source.latest_message_at)));
+      ' monitored · latest ' + fmtLocalDateTime(source.latest_message_at)));
   }
   // Calendar is a read-only, non-ingesting source (#164/#165): no stored/
   // monitored counts, so its row shows provenance + freshness of the last scan.

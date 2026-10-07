@@ -623,6 +623,7 @@ def scan(
                     deadline_date=result.deadline_date,
                     confidence=result.confidence,
                     evidence_message_ids=result.evidence_message_ids,
+                    prep_complexity=result.prep_complexity,
                 )
             )
 

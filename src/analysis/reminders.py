@@ -99,8 +99,11 @@ def create_reminder_event(
         store.set_calendar_event_id(conn, item_id, existing)
         return existing
 
-    event = build_reminder_event(family, result, chat_display_name)
     try:
+        # Built inside the guard: ``deadline_date`` is a model-supplied string that
+        # ``contract.py`` validates for type only, so a non-ISO date (or a malformed
+        # configured ``reminder_time``) must degrade here, not crash the scan (#348).
+        event = build_reminder_event(family, result, chat_display_name)
         created = client.insert_event(calendar_id=calendar_id, event=event)
     except Exception as exc:  # noqa: BLE001 — a calendar failure must never break the scan
         logger.warning("⚠️ calendar reminder creation failed for chat %s: %s", chat_id, exc)

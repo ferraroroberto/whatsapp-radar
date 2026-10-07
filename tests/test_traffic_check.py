@@ -66,8 +66,16 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Stub the four seams; capture the compute_route calls and sent alerts."""
     state: dict[str, Any] = {"route_calls": [], "sent": [], "events": {}, "route": None}
 
-    def fake_fetch(*a: Any, **kw: Any) -> dict[str, list[CalendarEvent]]:
-        return state["events"]
+    def fake_fetch(
+        calendar: Any, *, time_min: datetime, time_max: datetime
+    ) -> dict[str, list[CalendarEvent]]:
+        # Honour Google's real window semantics: an event is returned only when it
+        # *ends after* `timeMin` and *starts before* `timeMax` (#348) — a fake that
+        # returns everything hides a fetch window that is too narrow.
+        return {
+            person: [e for e in events if e.end > time_min and e.start < time_max]
+            for person, events in state["events"].items()
+        }
 
     def fake_route(origin: str, destination: str, **kw: Any) -> RouteResult:
         state["route_calls"].append({"origin": origin, "destination": destination, **kw})

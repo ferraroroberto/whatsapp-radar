@@ -814,3 +814,21 @@ def test_live_scan_aborts_when_classifier_is_unreachable(
     assert ingested_conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
     ).fetchone() is None
+
+
+def test_audit_trace_text_matches_delivered_digest_for_non_routine_item(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """The Audit tab's `telegram_text` must carry the same ack line the digest does (#348)."""
+    chat_id = _monitor(ingested_conn, "chat-class-4a")
+
+    outcome = scan(
+        ingested_conn, _config(tmp_path), mode="live",
+        connector=FixtureConnector(),
+        classifier=_FakeTraced(_routine_json(prep_complexity="non_routine")),
+    )
+
+    row = _trace(ingested_conn, outcome.run_id, chat_id)
+    assert outcome.digest is not None
+    assert "Needs acknowledgment" in outcome.digest.to_telegram_text()
+    assert "Needs acknowledgment" in row["telegram_text"]

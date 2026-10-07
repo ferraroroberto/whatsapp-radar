@@ -37,7 +37,7 @@ def _open_family_with_two_new_windows(page, base_url: str, scaled: Callable[[flo
         page.locator("#familyRulesCard summary").click()
     page.wait_for_timeout(scaled(200))
 
-    add_btn = page.locator("#familyEditable .ghost-btn", has_text="Add childcare window")
+    add_btn = page.locator("#familyEditable .button-ghost", has_text="Add childcare window")
     add_btn.click()
     add_btn.click()
     page.wait_for_timeout(scaled(200))
@@ -117,7 +117,7 @@ def test_childcare_windows_flat_and_fit_390px(
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         page.wait_for_timeout(scaled(200))
         add_box = page.locator(
-            "#familyEditable .ghost-btn", has_text="Add childcare window"
+            "#familyEditable .button-ghost", has_text="Add childcare window"
         ).bounding_box()
         nav_box = page.locator(".tabs").bounding_box()
         assert add_box is not None and nav_box is not None

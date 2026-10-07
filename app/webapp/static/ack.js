@@ -29,7 +29,7 @@ function itemLi(item) {
 
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'ack-btn';
+  btn.className = 'button-tint';
   btn.textContent = 'Acknowledge';
   btn.addEventListener('click', function () { acknowledge(item, btn); });
   li.appendChild(btn);

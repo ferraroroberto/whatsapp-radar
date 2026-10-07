@@ -262,43 +262,12 @@ a { color: var(--accent); }
 hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ============================================================ buttons */
-/* Ghost accent action (home-automation .big-btn recipe): accent tint + text +
-   soft border — never a solid fill. Disabled = the flat card-off/muted/line
-   trio so it reads identically greyed-out in both themes. */
-.big-btn {
-  width: 100%;
-  padding: 13px 18px;
-  font-size: var(--font-body);
-  font-weight: 700;
-  font-family: inherit;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  min-height: 48px;
-}
-.big-btn:active { transform: scale(0.98); }
-.big-btn:disabled {
-  background: var(--card-off);
-  border-color: var(--line);
-  color: var(--muted);
-  cursor: default;
-  transform: none;
-}
-/* Small text action inside a disclosure summary (Stop). */
-.ghost-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  padding: 6px 10px;
-  font-size: var(--font-caption);
-  font-weight: 600;
-  font-family: inherit;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.ghost-btn:active { color: var(--ink); }
+/* Look comes from the vendored button.css (button-tint / button-ghost / .danger);
+   only layout lives here. `.btn-block` stretches a button to its container,
+   `.btn-touch` lifts the ghost tier (no min-height of its own) to the 44px
+   touch-target floor. */
+.btn-block { width: 100%; }
+.btn-touch { min-height: 44px; }
 
 /* ============================================================ inputs */
 /* Heights/colors come from the vendored select-native.css `control` rules
@@ -318,7 +287,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 @media (max-width: 420px) {
   .cfg-fields { grid-template-columns: 1fr; }
 }
-#configForm .big-btn { margin-top: 12px; }
+#configForm .button-tint { margin-top: 12px; }
 
 /* ============================================================ range tabs */
 /* Canonical ghost segmented control (home-automation .range-tab): one height
@@ -634,7 +603,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ============================================================ disclosure (app) */
 /* Structure comes from the vendored disclosure.css; app-side extras only. */
-.collapse-main .icon-button, .collapse-main .ghost-btn { align-self: center; margin-left: var(--space-sm); }
+.collapse-main .icon-button, .collapse-main .button-ghost { align-self: center; margin-left: var(--space-sm); }
 .opt-group { padding: 0; }
 .opt-group + .opt-group { border-top: 1px solid var(--line-muted); margin-top: 12px; padding-top: 4px; }
 .opt-group-title {
@@ -830,37 +799,9 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 
 /* ============================================================ execution (#11) */
-/* Full-width action, same ghost accent recipe as .big-btn (home-automation Net
-   tab). The danger variant swaps the tint to --deficit at the same recipe. */
-.run-btn {
-  width: 100%;
-  padding: 12px 16px;
-  font-size: var(--font-body);
-  font-weight: 700;
-  font-family: inherit;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  min-height: 44px;
-}
-.run-btn:active { transform: scale(0.98); }
-.run-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
-.run-btn.danger {
-  background: var(--deficit-soft);
-  color: var(--deficit);
-  border-color: var(--deficit-border-soft);
-}
-/* Secondary (dry-run) action: same shape, quieter neutral fill (#164). */
-.run-btn.secondary {
-  background: transparent;
-  color: var(--muted);
-  border-color: var(--line);
-}
 /* Traffic card's paired Run-now buttons sit side by side (#164). */
 .exec-traffic-actions { display: flex; gap: var(--space-sm); margin-top: 12px; }
-.exec-traffic-actions .run-btn { flex: 1; }
+.exec-traffic-actions > button { flex: 1; }
 
 .exec-mode-seg .range-tab { white-space: nowrap; }
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }
@@ -989,7 +930,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   background: var(--card);
 }
 .exec-reconnect p { margin: 0; text-align: center; }
-.exec-reconnect .run-btn { width: 100%; }
 .exec-qr {
   width: 232px;
   height: 232px;
@@ -1183,7 +1123,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ----------------------------------------------------------- Family (#160)
    Layout only — colours/typography come from the shared tokens + .toggle /
-   .run-btn / .muted classes, so this stays theme-aware with no new tokens. */
+   button-tint / .muted classes, so this stays theme-aware with no new tokens. */
 .family-control-row {
   display: flex;
   align-items: center;
@@ -1260,7 +1200,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--accent);
   border-color: var(--accent-border-strong);
 }
-#familyEditable .run-btn { margin-top: var(--space-md); }
+#familyEditable .button-tint { margin-top: var(--space-md); }
 
 /* ------------------------------------------------- travel blocks (#268)
    Layout + the three status roles only — every colour is an existing token
@@ -1324,13 +1264,13 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-color: var(--attention);
   border-style: dashed;
 }
-#familyTravelBlocks .run-btn { margin-top: var(--space-md); }
+#familyTravelBlocks .button-tint { margin-top: var(--space-md); }
 
 /* Sweep run controls (#276): the paired rehearse/live buttons sit side by side
    (the `.exec-traffic-actions` shape), with the run's status line under them.
-   Colour comes from `.run-btn` and the existing status tokens — nothing new. */
+   Colour comes from the vendored button tiers and the existing status tokens — nothing new. */
 .tb-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }
-.tb-actions .run-btn {
+.tb-actions > button {
   flex: 1;
   min-width: 0;
   margin-top: 0;
@@ -1341,7 +1281,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   justify-content: center;
   gap: var(--space-xs);
 }
-.tb-actions .run-btn .icon { flex: none; }
+.tb-actions > button .icon { flex: none; }
 .tb-run-status { margin: var(--space-xs) 0 0; }
 .tb-run-status.tb-run-status--error { color: var(--deficit); }
 
@@ -1360,21 +1300,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .ack-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ack-item-title { font-size: var(--font-label); color: var(--ink); font-weight: 600; }
 .ack-item-meta { font-size: var(--font-caption); color: var(--muted); }
-/* Inline button-tint recipe (design.md `button-tint`): accent-soft fill,
-   accent text, accent-border-soft hairline — secondary emphasis, not the
-   view's one primary action. Sized to the 44px touch-target floor. */
-.ack-btn {
-  flex: none;
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: var(--font-label);
-  font-weight: 700;
-  font-family: inherit;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.ack-btn:active { transform: scale(0.98); }
-.ack-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+/* The Acknowledge action is a vendored button-tint; it only needs to keep
+   its natural width beside the text block. */
+.ack-item .button-tint { flex: none; }

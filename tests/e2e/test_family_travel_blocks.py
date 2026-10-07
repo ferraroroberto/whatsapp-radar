@@ -283,7 +283,7 @@ def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base
     page.set_viewport_size({"width": 390, "height": 844})
     _open_family(page, base_url)
 
-    buttons = page.locator("#familyTravelBlocks .tb-actions .run-btn")
+    buttons = page.locator("#familyTravelBlocks .tb-actions > button")
     expect(buttons).to_have_count(2)
     expect(buttons.nth(0)).to_contain_text("Rehearse")
     expect(buttons.nth(1)).to_contain_text("Run sweep")
@@ -303,7 +303,7 @@ def test_live_sweep_control_is_available_once_every_gate_clears(
     page: Page, base_url: str
 ) -> None:
     _open_family(page, base_url, _payload(dry_run=False, live_sweep_blockers=[]))
-    buttons = page.locator("#familyTravelBlocks .tb-actions .run-btn")
+    buttons = page.locator("#familyTravelBlocks .tb-actions > button")
     expect(buttons.nth(1)).to_be_enabled()
     expect(page.locator("#familyTravelCard")).not_to_contain_text("A live sweep is unavailable")
 
@@ -321,7 +321,7 @@ def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
 
     blocks = page.locator("#familyTravelBlocks")
     expect(blocks).to_contain_text("4 leg(s) · 2 add")
-    blocks.locator(".tb-actions .run-btn").nth(0).click()
+    blocks.locator(".tb-actions > button").nth(0).click()
 
     status = blocks.locator(".tb-run-status")
     expect(status).to_contain_text("Sweep finished", timeout=15_000)
@@ -337,13 +337,13 @@ def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) 
     posted: list[dict[str, Any]] = []
     _drive_sweep(page, base_url, posted=posted, run_status=409)
 
-    page.locator("#familyTravelBlocks .tb-actions .run-btn").nth(0).click()
+    page.locator("#familyTravelBlocks .tb-actions > button").nth(0).click()
     status = page.locator("#familyTravelBlocks .tb-run-status")
     expect(status).to_contain_text("already in progress", timeout=15_000)
     expect(status).not_to_contain_text("Could not start")
     expect(status).not_to_have_class(re.compile("tb-run-status--error"))
     # The control comes back — a busy queue is temporary, not terminal.
-    expect(page.locator("#familyTravelBlocks .tb-actions .run-btn").nth(0)).to_be_enabled()
+    expect(page.locator("#familyTravelBlocks .tb-actions > button").nth(0)).to_be_enabled()
 
 
 def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:

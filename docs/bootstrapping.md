@@ -4,7 +4,7 @@
 
 This is the complete cold-start runbook: take a fresh clone (or a brand-new machine) and bring the whole system online — a new WhatsApp linked device, a new Telegram bot, the admin PWA with phone access, and the App Launcher wiring. Follow it top to bottom and you end with a running radar delivering actionable digests to Telegram.
 
-> **Privacy first.** Everything you pair, ingest, and store stays on this machine under ignored paths (`auth/`, `data/`, `config/webapp_config.json`). Never commit credentials, session state, chat names, phone numbers, or message exports. Run `git status --ignored` before any commit. The full rules live in [`CLAUDE.md`](../CLAUDE.md).
+> **Privacy first.** Everything you pair, ingest, and store stays on this machine: git-ignored paths (`auth/`, `data/`, `config/webapp_config.json`) plus the message database itself, which resolves outside the checkout to the fleet runtime-data root (`C:\sqlite\whatsapp-radar\` by default — see [README.md](../README.md#running-offline-no-personal-data)), and so is invisible to `git status` entirely. Never commit credentials, session state, chat names, phone numbers, or message exports. Run `git status --ignored` before any commit. The full rules live in [`CLAUDE.md`](../CLAUDE.md).
 
 For day-to-day operation once this is done, see [`manual.md`](manual.md). For the connector's design and unofficial-library risk, see [`linked-device.md`](linked-device.md).
 
@@ -142,7 +142,7 @@ The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a 
 
 ### Enrol a WebAuthn passkey (Tailscale-only)
 
-From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). After enrolling, that device can unlock the PWA with the passkey instead of the token/password.
+From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). Enrollment itself works end to end, but nothing in the UI currently calls the matching *unlock* (assertion) ceremony and the server mints no token from it — so as of this writing an enrolled passkey does not yet unlock the PWA; treat enrollment as provisioning state for a future unlock flow, not a working token/password substitute.
 
 ## 6 — (Optional) Public access via a Cloudflare named tunnel
 

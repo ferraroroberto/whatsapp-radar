@@ -52,7 +52,7 @@ The connector path for personal and group chats is a WhatsApp Web linked-device 
 
 ## Running offline (no personal data)
 
-The app runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. All runtime state lives under the ignored `data/` path.
+The app runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. Session/auth state lives under the ignored `data/` and `auth/` paths; the message database itself resolves to the fleet runtime-data root (`C:\sqlite\whatsapp-radar\` by default on this machine, overridable via `WR_DB_PATH`, `WHATSAPP_RADAR_DATA_DIR`, or `FLEET_DATA_ROOT` — see `src/runtime_data.py`), which also holds the `reprocess` backups and sits outside this git checkout, so it needs its own backup source rather than git-derived backup.
 
 It runs from a checkout with no install step — `wr.bat <cmd>` is the ergonomic wrapper for `python launcher.py <cmd>`.
 
@@ -179,9 +179,9 @@ A resolved voice's own backend being unavailable (e.g. `kokoro-tts` not loaded o
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), a real Tailscale-issued HTTPS cert (see [HTTPS certificate (Tailscale)](#https-certificate-tailscale)), and dormant Cloudflare named-tunnel scaffolding. All six tabs are live.
+A FastAPI + vanilla-JS admin PWA runs on port **8455**, mirroring App Launcher's auth/tunnel model: a bearer token (loopback bypasses it), an optional login password, WebAuthn passkeys (enrolled from the tray, ceremonies Tailscale-only), a real Tailscale-issued HTTPS cert (see [HTTPS certificate (Tailscale)](#https-certificate-tailscale)), and dormant Cloudflare named-tunnel scaffolding. All five tabs are live.
 
-The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the Dashboard's *Family Radar* identity card (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (nav, card, disclosure, switch, editor dialog with its `select-native` and `button` companions, icons, empty-state). Do not edit vendored files per-app — re-vendor from the scaffold. There is no Settings panel: the build-identity line lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves HTTPS directly once a Tailscale cert is provisioned — no per-device CA install, no trust profile — and falls back to plain HTTP on a fresh clone with no cert yet.
+The UI follows the fleet design system (`design.md` v2): **light + dark themes** with a toggle in the `home-head` header row rendered at the top of every pane (stored per device, defaulting to the OS preference), the floating bottom-tab navigation pill on the phone, Lucide icons (no emojis), home-automation's control recipes (ghost `range-tab` segmented selectors, accent-tinted ghost buttons, a red-tinted danger variant), and the shared component shells vendored verbatim from `project-scaffolding` under `app/webapp/static/_vendored/` (`home-head`, nav, card, disclosure, switch, modal with its `select-native` and `button` companions, icon-button, icons, empty-state, text-size, toast). Do not edit vendored files per-app — re-vendor from the scaffold. **Settings is never a tab** (#337): the same `home-head` row carries a Settings gear beside the theme toggle on every pane, opening the `#settingsDialog` modal (text size, classifier & settings, maintenance); the build-identity line still lives in a footer visible under every tab, and the passkey-enrollment card appears on the Dashboard only while the tray's enrollment window is open. The webapp serves HTTPS directly once a Tailscale cert is provisioned — no per-device CA install, no trust profile — and falls back to plain HTTP on a fresh clone with no cert yet.
 
 The bottom pill gives every tab an equal slice of the phone's width and ellipsizes anything longer, so its labels are kept to ≤6 characters and read shorter than the section names used below: **Home** = Dashboard, **Inbox** = Messages. `Run`, `Audit` and `Family` are the same in both places. Keep new labels short — the nav component is vendored and must not be edited to make a longer one fit.
 
@@ -189,9 +189,12 @@ The bottom pill gives every tab an equal slice of the phone's width and ellipsiz
 
 Leads with a **last-activity grid**: one card per kind of work — **WhatsApp · Gmail · Traffic · Calendar** — each showing a source icon, the relative last-run time, an outcome badge (`OK` / `N alerts` / `KO` / `never ran`), and a distilled "what we found" line (e.g. *12 new · 1 actionable*, *no significant delay*, *2 conflicts · 1 missing location*). The data comes from the unified run store, so CLI- and App-Launcher-launched runs appear here too; tapping a card jumps to that run's detail on the Execution tab.
 
-Below the grid, a collapsible **Sources** card (WhatsApp, Gmail, and a read-only Calendar row, each with its icon) and a folded-by-default **Monitored channels** table give the provenance detail. A linked family folds into its parent as one row whose count and last-activity span the whole family.
+Below the grid, a **Follow-ups** card (#219, folded into Home for the five-tab nav — #336) lists every pending non-routine prep item that needs a manual confirmation, alongside its Telegram alert, with a one-tap **Acknowledge** action.
+
+Below that, a collapsible **Sources** card (WhatsApp, Gmail, and a read-only Calendar row, each with its icon) and a folded-by-default **Monitored channels** table give the provenance detail. A linked family folds into its parent as one row whose count and last-activity span the whole family.
 
 - `GET /api/dashboard`
+- `GET /api/ack/items`, `POST /api/ack/{id}/acknowledge`
 
 ### Messages
 
@@ -255,12 +258,6 @@ Full behaviour and every knob: [`docs/family-checks.md`](docs/family-checks.md).
 
 - `GET /api/family` — rules, recent runs, the travel-block knobs, per-calendar write capability, last-sweep summary, and `live_sweep_blockers` (the reasons a live sweep would write nothing, reported for the run control and enforced independently by the sweep itself)
 - `POST /api/family` — the full editable schedule, toggles, and threshold, plus `travel_blocks_enabled` / `travel_blocks_dry_run` / `min_home_dwell_min` / `title_template`; all validated, and a rejection names the field
-
-### Follow-ups
-
-The non-routine acknowledgment surface: pending items with a one-tap Acknowledge action.
-
-- `GET /api/ack/items`, `POST /api/ack/{id}/acknowledge`
 
 ### Running the webapp
 

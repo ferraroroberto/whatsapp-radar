@@ -22,17 +22,19 @@ whatsapp-radar/
   google_oauth_common/   # installed-app OAuth bootstrap the three clients above wrap
   src/                   # logic, imported as `from src.…`
     config/ (package: __init__.py's load_config aggregates one module per subsystem —
-             hub/transcription/tts/telegram/tripwire/gmail/calendar/traffic/presence/family)
+             hub/transcription/tts/telegram/tripwire/gmail/calendar/traffic/presence/family/task_os)
     models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
     paths.py  progress.py  tts_client.py  speech_profile.py  subprocess_flags.py
-    runresult.py  _loopback_http.py
+    runresult.py  _loopback_http.py  runtime_data.py
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
     db/ (store.py facade over the per-table modules, plus sync.py/reprocess.py, schema.sql)
     analysis/ (classifier, contract, keywords, pipeline, reminders, review, source_funnel,
                summarize, transcription, tripwire, gmail_survey, prompts/)
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
-    family/ (calendar_scan, calendar_source, dedup, rules, traffic_check)
-    presence/client.py     traffic/routes_client.py
+    family/ (calendar_scan, calendar_source, dedup, leg_status, rules, traffic_check,
+             travel_blocks, travel_blocks_write — the only path that writes to and
+             deletes from calendars)
+    presence/client.py     traffic/routes_client.py     task_os/client.py
     fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env gitignored
@@ -55,7 +57,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 ### Admin webapp & tray
 
-- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Six tabs live (named under **UX surface** below); endpoint lists in `README.md` §"Admin Webapp".
+- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Five tabs live (named under **UX surface** below; Follow-ups folded into the Dashboard tab, #336); endpoint lists in `README.md` §"Admin Webapp".
 - Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkeys (Tailscale-only ceremonies), Tailscale TLS, dormant Cloudflare scaffolding.
 - Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`.
 - **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`.

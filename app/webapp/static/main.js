@@ -35,8 +35,11 @@ async function fetchVersion() {
     const sha = body.git_sha || 'unknown';
     const ts = fmtBuildTime(body.built_at || '');
     els.buildReadout.textContent = ts ? ('Build: ' + sha + ' · ' + ts) : ('Build: ' + sha);
-  } catch (_) {
+  } catch (exc) {
     els.buildReadout.textContent = '';
+    // An auth failure must reach boot(): it stops there, before any poll timer is
+    // armed that would keep 401-ing and re-clearing the password field (#348).
+    if (String(exc.message) === 'auth required') throw exc;
   }
 }
 
@@ -69,6 +72,10 @@ function refreshHome() {
   fetchAck().catch(function () {});
 }
 
+// boot() re-runs after a successful password login (wireLoginForm); the poll
+// timers must be registered exactly once across both runs (#348).
+let pollsArmed = false;
+
 async function boot() {
   const fromUrl = tokenFromUrl();
   if (fromUrl) writeToken(fromUrl);
@@ -84,6 +91,8 @@ async function boot() {
   await fetchWebauthnStatus();
   await Promise.all([fetchDashboard(), fetchAck().catch(function () {})]);
 
+  if (pollsArmed) return;
+  pollsArmed = true;
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});
   }, WEBAUTHN_POLL_MS);

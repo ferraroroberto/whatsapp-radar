@@ -54,6 +54,17 @@ def prune_gmail_unmonitored(
     if retention_days < 1:
         raise ValueError("retention_days must be at least 1")
     cutoff = ((now or datetime.now(UTC)) - timedelta(days=retention_days)).isoformat()
+    # A sender that was monitored and later demoted still holds a review cursor whose
+    # ``last_processed_message_id`` REFERENCES messages(id) with no ON DELETE clause, so
+    # deleting that message would raise an FK error (#348). Drop only the cursors that
+    # point at a message about to be pruned: the sender is unmonitored, and re-monitoring
+    # it re-baselines past the backlog (``baseline_cursor``) like any first-monitored chat.
+    conn.execute(
+        "DELETE FROM chat_review_state WHERE last_processed_message_id IN ("
+        "    SELECT id FROM messages WHERE message_timestamp < ? AND chat_id IN ("
+        "        SELECT id FROM chats WHERE source = 'gmail' AND status != 'monitored'))",
+        (cutoff,),
+    )
     messages_pruned = conn.execute(
         "DELETE FROM messages WHERE message_timestamp < ? AND chat_id IN ("
         "    SELECT id FROM chats WHERE source = 'gmail' AND status != 'monitored')",

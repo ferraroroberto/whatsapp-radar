@@ -208,3 +208,34 @@ def test_create_reminder_event_never_raises_on_insert_failure(tmp_path: Path) ->
         assert row["calendar_event_id"] is None
     finally:
         conn.close()
+
+
+def test_create_reminder_event_never_raises_on_unparseable_date_or_time(tmp_path: Path) -> None:
+    """The model-supplied date and the configured time are untrusted strings (#348)."""
+    conn = _conn(tmp_path)
+    try:
+        chat_id = _chat(conn)
+        client = _FakeWriteClient()
+        cases = [
+            (_result(deadline_date="next Friday"), "07:30"),
+            (_result(deadline_date="2026-13-45"), "07:30"),
+            (_result(), "7.30"),
+        ]
+        for result, reminder_time in cases:
+            item_id = _seed_item(conn, chat_id=chat_id, result=result)
+            event_id = create_reminder_event(
+                conn,
+                client,
+                calendar_id="family@example.test",
+                family=FamilyConfig(
+                    reminder_calendar_id="family@example.test", reminder_time=reminder_time
+                ),
+                chat_id=chat_id,
+                item_id=item_id,
+                chat_display_name="School Updates",
+                result=result,
+            )
+            assert event_id is None
+        assert client.insert_calls == []
+    finally:
+        conn.close()

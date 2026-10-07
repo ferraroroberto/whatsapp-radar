@@ -238,8 +238,14 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 "checked": [], "alerts": 0}
 
     lookahead = timedelta(hours=traffic.lookahead_hours)
+    # Google's ``timeMin`` is an exclusive lower bound on an event's *end*, so an
+    # origin event that finished a few minutes ago is only returned when the window
+    # reaches back past it (#348). `upcoming_commutes` drops every leg whose own
+    # event has already started, so widening the fetch adds origins, not legs.
     events = fetch_events_by_person(
-        config.calendar, time_min=now, time_max=now + lookahead
+        config.calendar,
+        time_min=now - timedelta(minutes=traffic.origin_lookback_min),
+        time_max=now + lookahead,
     )
     legs = rules.upcoming_commutes(
         events,

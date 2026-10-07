@@ -216,3 +216,21 @@ def test_empty_discovered_sender_row_is_removed_monitored_kept(conn: sqlite3.Con
     assert _count(conn, monitored_empty_old) == 1
     # The discovered sender's row is gone.
     assert store.get_chat(conn, discovered_stale) is None
+
+
+def test_prune_clears_cursor_of_monitored_then_demoted_sender(conn: sqlite3.Connection) -> None:
+    """A demoted sender's cursor must not block the prune with an FK violation (#348)."""
+    sender = _add_chat(conn, "gmail", "sender:was-monitored@example.com", "monitored")
+    _add_msg(conn, sender, "old-1", 90)
+    _add_msg(conn, sender, "old-2", 80)
+    assert store.baseline_cursor(conn, sender)  # cursor now points at the newest stored message
+    store.set_chat_status(conn, sender, "discovered")  # demoted: no longer monitored
+
+    outcome = store.prune_gmail_unmonitored(conn, retention_days=30, now=NOW)
+
+    assert outcome.messages_pruned == 2
+    assert outcome.senders_removed == 1
+    assert store.get_chat(conn, sender) is None
+    assert (
+        conn.execute("SELECT COUNT(*) AS n FROM chat_review_state").fetchone()["n"] == 0
+    )

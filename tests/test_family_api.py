@@ -489,16 +489,38 @@ def test_family_tab_renders_from_one_store_read(
     _isolated_config(tmp_path, monkeypatch, calendar={"accounts": _ACCOUNTS})
     db = tmp_path / "x.sqlite3"
     _seed_calendar_scan(db, _ok_sweep())
-    calls: list[int] = []
-    real = store.list_review_runs
+    calls: list[object] = []
+    real = store.list_runs_by_kind
     monkeypatch.setattr(
         store,
-        "list_review_runs",
-        lambda conn, limit: calls.append(limit) or real(conn, limit),
+        "list_runs_by_kind",
+        lambda conn, kinds, **kw: calls.append(kinds) or real(conn, kinds, **kw),
     )
     with _client(db) as client:
         assert client.get("/api/family").status_code == 200
     assert len(calls) == 1
+
+
+def test_a_chatty_traffic_check_cannot_push_the_last_sweep_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window is per kind: 250 later traffic-checks must not hide the calendar-scan (#352)."""
+    _isolated_config(tmp_path, monkeypatch, calendar={"accounts": _ACCOUNTS})
+    db = tmp_path / "x.sqlite3"
+    _seed_calendar_scan(db, _ok_sweep())
+    conn = store.connect(db)
+    try:
+        for _ in range(250):
+            rid = store.start_run(conn, mode="live", kind="traffic-check")
+            store.finish_run_summary(
+                conn, rid, "completed", json.dumps({"kind": "traffic-check", "status": "ok"})
+            )
+    finally:
+        conn.close()
+
+    with _client(db) as client:
+        sweep = client.get("/api/family").json()["travel_blocks"]["last_sweep"]
+    assert sweep is not None
 
 
 # --------------------------------- travel blocks: live-sweep blockers (#276)

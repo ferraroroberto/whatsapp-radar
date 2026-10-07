@@ -137,7 +137,7 @@ def test_prune_runs_caps_each_kind_to_the_retention_limit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 3)
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 3)
     for i in range(5):
         run_id = f"2026010{i + 1}T000000"
         started = f"2026-01-0{i + 1}T00:00:00+00:00"
@@ -153,7 +153,7 @@ def test_prune_runs_never_deletes_the_active_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 1)
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 1)
     monkeypatch.setattr(runs, "active_run", lambda: {"kind": "scan", "run_id": "20260101T000000"})
     _seed_completed("scan", "20260101T000000", "2026-01-01T00:00:00+00:00")
     _seed_completed("scan", "20260102T000000", "2026-01-02T00:00:00+00:00")
@@ -169,7 +169,7 @@ def test_prune_runs_keeps_a_recent_running_record_past_the_cap(
 ) -> None:
     """A genuinely in-flight CLI/Jobs run (no webapp handle) must survive."""
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 0)
     monkeypatch.setattr(runs, "active_run", lambda: None)
     run_dir = runs.new_run_dir("traffic-check", "20260101T000000")
     runs.write_run_json(
@@ -186,7 +186,7 @@ def test_prune_runs_removes_a_stale_running_record(
 ) -> None:
     """A crashed CLI run must not stay 'running' — and immune to pruning — forever."""
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 0)
     monkeypatch.setattr(runs, "active_run", lambda: None)
     run_dir = runs.new_run_dir("traffic-check", "20260101T000000")
     runs.write_run_json(
@@ -204,7 +204,7 @@ def test_prune_runs_tolerates_a_locked_directory(
 ) -> None:
     """An open output.log (Windows can't unlink it) must not crash the sweep."""
     monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(runs, "_RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 0)
     monkeypatch.setattr(runs, "active_run", lambda: None)
     _seed_completed("scan", "20260101T000000", "2026-01-01T00:00:00+00:00")
     log_path = tmp_path / "runs" / "scan" / "20260101T000000" / "output.log"

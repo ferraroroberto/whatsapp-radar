@@ -601,3 +601,19 @@ def test_family_post_persists_cadence(
         assert client.post("/api/family", json={"cadence_min": 0}).status_code == 400
 
     assert saved["traffic"] == {"cadence_min": 45}
+
+
+def test_list_runs_by_kind_bounds_each_kind_not_the_whole_table(tmp_path: Path) -> None:
+    """A chatty kind never crowds a rare one out; each kind keeps its newest ``per_kind`` (#352)."""
+    conn = store.connect(tmp_path / "kinds.sqlite3")
+    try:
+        rare = store.start_run(conn, mode="live", kind="calendar-scan")
+        chatty = [store.start_run(conn, mode="live", kind="traffic-check") for _ in range(5)]
+        store.start_run(conn, mode="live", kind="scan")  # a kind nobody asked for
+
+        rows = store.list_runs_by_kind(conn, ("calendar-scan", "traffic-check"), per_kind=3)
+
+        assert [int(r["id"]) for r in rows] == [*reversed(chatty[-3:]), rare]  # newest first
+        assert store.list_runs_by_kind(conn, ()) == []
+    finally:
+        conn.close()

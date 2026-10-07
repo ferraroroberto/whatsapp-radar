@@ -246,7 +246,8 @@ async def execution_health(request: Request) -> dict[str, Any]:
         detail = "; ".join(
             f"{item['source']}: {item['detail']}" for item in statuses
         )
-        sources = [*statuses, _calendar_source(cfg, store.list_review_runs(conn, 200))]
+        calendar_runs = store.list_runs_by_kind(conn, ("calendar-scan",))
+        sources = [*statuses, _calendar_source(cfg, calendar_runs)]
         return {
             "name": statuses[0]["name"] if len(statuses) == 1 else "multi-source",
             "connected": connected,
@@ -348,10 +349,10 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
 #: — reading only the caller's requested `limit`
 #: from :func:`app.webapp.runs.list_runs` before filtering them out could
 #: starve the result of real runs entirely. Widen the read to the retention
-#: cap (:data:`app.webapp.runs._RETENTION_PER_KIND`) when filtering, which is
+#: cap (:data:`app.webapp.runs.RETENTION_PER_KIND`) when filtering, which is
 #: still bounded — it can never scan more than what retention guarantees is on
 #: disk for that kind.
-_SKIP_FILTER_READ_LIMIT = 200
+_SKIP_FILTER_READ_LIMIT = runs.RETENTION_PER_KIND
 
 
 @router.get("/api/execution/runs")

@@ -44,7 +44,7 @@ _LAUNCHER = PROJECT_ROOT / "launcher.py"
 #: Retention cap (#234): each kind directory keeps at most this many run
 #: records, newest first. A hard count bound, not an age cap — it directly
 #: guarantees "cannot grow without bound" regardless of fire rate.
-_RETENTION_PER_KIND = 200
+RETENTION_PER_KIND = 200
 
 #: A "running" record older than this is presumed dead, not in-flight (#234).
 #: Only a CLI/Jobs-launched run can be stuck here — the webapp's own runs are
@@ -251,7 +251,7 @@ def _is_stale_running(run_dir: Path, record: dict[str, Any]) -> bool:
 
 
 def prune_runs() -> None:
-    """Cap each kind directory at the newest :data:`_RETENTION_PER_KIND` records (#234).
+    """Cap each kind directory at the newest :data:`RETENTION_PER_KIND` records (#234).
 
     Called after every run finishes (webapp- and CLI-launched alike) and once at
     webapp startup to sweep any backlog. Names are timestamp-sortable, so this is
@@ -277,7 +277,7 @@ def prune_runs() -> None:
         names = sorted(
             (entry.name for entry in kind_dir.iterdir() if entry.is_dir()), reverse=True
         )
-        stale_names = names[_RETENTION_PER_KIND:]
+        stale_names = names[RETENTION_PER_KIND:]
         if not stale_names:
             continue
         pruned = 0
@@ -298,7 +298,7 @@ def prune_runs() -> None:
         if pruned:
             logger.info(
                 f"🧹 pruned {pruned} run(s) for kind {kind_dir.name} "
-                f"(kept newest {_RETENTION_PER_KIND})"
+                f"(kept newest {RETENTION_PER_KIND})"
             )
         if locked:
             logger.info(f"⏭ left {locked} locked run(s) for kind {kind_dir.name}; will retry")

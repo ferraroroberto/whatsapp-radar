@@ -3,7 +3,7 @@
 Also owns the read-only run/analysis/notification counters that originated
 under the old "dashboard aggregates" and "chats & config tab" banners
 (:func:`count_runs`, :func:`last_run`, :func:`list_review_runs`,
-:func:`review_run`, :func:`count_actionable_items`,
+:func:`list_runs_by_kind`, :func:`review_run`, :func:`count_actionable_items`,
 :func:`count_notifications_sent`) — grouped here because they all read the
 tables this module writes.
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 
 from src.db.connection import _now, _rowid
 
@@ -363,6 +364,23 @@ def last_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
     return row
 
 
+#: Newest runs of *each kind* the "last run of kind X" surfaces read — the
+#: Dashboard activity cards, the Family tab's last check / sweep, the Sources
+#: health calendar row. The bound is per kind, never global: a kind that runs
+#: every few minutes (``traffic-check``) must not push a once-a-day kind
+#: (``calendar-scan``) out of the window. It equals the filesystem record cap
+#: (:data:`app.webapp.runs.RETENTION_PER_KIND`), so the DB read never looks
+#: further back than retention keeps run output.
+RUNS_PER_KIND = 200
+
+_RUN_LIST_COLUMNS = (
+    "id, kind, started_at, completed_at, status, mode, params_json, "
+    "summary_json, chats_synced, messages_synced, chats_monitored, chats_reviewed, "
+    "stage1_passed, stage2_llm_calls, transcriptions, actionable, "
+    "notification_status, source_funnel_json, error"
+)
+
+
 def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
     """Review/scan runs newest-first, with the funnel columns the Audit list needs.
 
@@ -372,12 +390,35 @@ def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.
     """
     return list(
         conn.execute(
-            "SELECT id, kind, started_at, completed_at, status, mode, params_json, "
-            "summary_json, chats_synced, messages_synced, chats_monitored, chats_reviewed, "
-            "stage1_passed, stage2_llm_calls, transcriptions, actionable, "
-            "notification_status, source_funnel_json, error "
-            "FROM review_runs ORDER BY id DESC LIMIT ?",
+            f"SELECT {_RUN_LIST_COLUMNS} FROM review_runs ORDER BY id DESC LIMIT ?",
             (max(1, limit),),
+        ).fetchall()
+    )
+
+
+def list_runs_by_kind(
+    conn: sqlite3.Connection,
+    kinds: Sequence[str],
+    *,
+    per_kind: int = RUNS_PER_KIND,
+) -> list[sqlite3.Row]:
+    """The newest ``per_kind`` runs of each of ``kinds``, newest-first overall.
+
+    Same columns as :func:`list_review_runs`. Unlike a global ``LIMIT`` followed
+    by a Python filter, the window is applied *per kind* in SQL, so a chatty kind
+    cannot crowd a rare one out of the result (see :data:`RUNS_PER_KIND`). Read-only.
+    """
+    if not kinds:
+        return []
+    placeholders = ",".join("?" for _ in kinds)
+    return list(
+        conn.execute(
+            f"SELECT {_RUN_LIST_COLUMNS} FROM ("
+            f"  SELECT {_RUN_LIST_COLUMNS}, "
+            "         ROW_NUMBER() OVER (PARTITION BY kind ORDER BY id DESC) AS rn "
+            f"  FROM review_runs WHERE kind IN ({placeholders})"
+            ") WHERE rn <= ? ORDER BY id DESC",
+            (*kinds, max(1, per_kind)),
         ).fetchall()
     )
 

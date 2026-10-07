@@ -141,7 +141,7 @@ def _last_activity(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     run store (#163), so a CLI- or Jobs-launched run is as visible here as a
     webapp one. ``db_run_id`` lets the Dashboard deep-link to the Run tab detail.
     """
-    runs = store.list_review_runs(conn, 200)
+    runs = store.list_runs_by_kind(conn, (*_MESSAGE_KINDS, "traffic-check", "calendar-scan"))
     return [
         {"source": "whatsapp", **_message_activity(runs, "whatsapp")},
         {"source": "gmail", **_message_activity(runs, "gmail")},

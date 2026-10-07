@@ -142,7 +142,7 @@ The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a 
 
 ### Enrol a WebAuthn passkey (Tailscale-only)
 
-From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). Enrollment itself works end to end, but nothing in the UI currently calls the matching *unlock* (assertion) ceremony and the server mints no token from it — so as of this writing an enrolled passkey does not yet unlock the PWA; treat enrollment as provisioning state for a future unlock flow, not a working token/password substitute.
+From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). Enrollment records the device as provisioning state only: the webapp has no passkey sign-in (assertion) ceremony and mints no token from a passkey (removed in #353), so an enrolled passkey does not unlock the PWA — use the bearer token or login password for that.
 
 ## 6 — (Optional) Public access via a Cloudflare named tunnel
 

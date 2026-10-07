@@ -102,6 +102,14 @@ def test_webauthn_status_default(loopback: TestClient) -> None:
     assert body["devices"] == []
 
 
+def test_passkey_sign_in_routes_are_gone(loopback: TestClient) -> None:
+    # Enrollment is provisioning state only (#353): the assertion ceremony was
+    # removed because nothing called it and it granted nothing.
+    assert loopback.post("/api/webauthn/auth/begin").status_code == 404
+    assert loopback.post("/api/webauthn/auth/finish", json={}).status_code == 404
+    assert loopback.get("/api/webauthn/status").status_code == 200  # enrollment surface stays
+
+
 # --- bearer-token gate ------------------------------------------------------
 
 def test_bearer_blocks_remote_without_token() -> None:

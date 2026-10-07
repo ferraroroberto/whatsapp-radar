@@ -1,8 +1,8 @@
-/* Passkey enrollment + unlock ceremony for the admin webapp.
+/* Passkey enrollment for the admin webapp (no sign-in ceremony, #353).
  *
- * auth/finish reports success only — no unlock token is minted or cached.
- * Route access is gated by the bearer-token middleware; loopback callers
- * bypass that gate entirely on the server side. */
+ * Enrollment is provisioning state only. Route access is gated by the
+ * bearer-token middleware; loopback callers bypass that gate entirely on the
+ * server side. */
 
 import { els, state } from './state.js';
 import { jsonApi, toast } from './api.js';
@@ -32,12 +32,6 @@ function prepCreate(o) {
   return o;
 }
 
-function prepGet(o) {
-  o.challenge = b64urlToBuf(o.challenge);
-  (o.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
-  return o;
-}
-
 function serializeReg(c) {
   return {
     id: c.id,
@@ -46,22 +40,6 @@ function serializeReg(c) {
     response: {
       attestationObject: bufToB64url(c.response.attestationObject),
       clientDataJSON: bufToB64url(c.response.clientDataJSON),
-    },
-    clientExtensionResults: c.getClientExtensionResults ? c.getClientExtensionResults() : {},
-    authenticatorAttachment: c.authenticatorAttachment || undefined,
-  };
-}
-
-function serializeAuth(c) {
-  return {
-    id: c.id,
-    rawId: bufToB64url(c.rawId),
-    type: c.type,
-    response: {
-      authenticatorData: bufToB64url(c.response.authenticatorData),
-      clientDataJSON: bufToB64url(c.response.clientDataJSON),
-      signature: bufToB64url(c.response.signature),
-      userHandle: c.response.userHandle ? bufToB64url(c.response.userHandle) : null,
     },
     clientExtensionResults: c.getClientExtensionResults ? c.getClientExtensionResults() : {},
     authenticatorAttachment: c.authenticatorAttachment || undefined,
@@ -97,8 +75,7 @@ function renderWebauthn() {
   (w.devices || []).forEach(function (d) {
     const li = document.createElement('li');
     const label = document.createElement('span');
-    label.textContent = d.label + ' · ' +
-      (d.last_used ? 'last used ' + d.last_used : 'added ' + d.added_at);
+    label.textContent = d.label + ' · added ' + d.added_at;
     li.appendChild(label);
     const rm = document.createElement('button');
     rm.type = 'button';
@@ -148,22 +125,6 @@ async function enrollDevice() {
   } catch (exc) {
     toast('Enrollment failed: ' + (exc.message || exc), 'error');
   }
-}
-
-// Run the assertion ceremony. Exported for a future privileged-action
-// surface to call; nothing does yet, and loopback callers never need it.
-export async function unlock() {
-  if (!window.PublicKeyCredential) {
-    throw new Error('this browser has no passkey support');
-  }
-  const opts = await jsonApi('/api/webauthn/auth/begin', { method: 'POST' });
-  const cred = await navigator.credentials.get({ publicKey: prepGet(opts) });
-  await jsonApi('/api/webauthn/auth/finish', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(serializeAuth(cred)),
-  });
-  return true;
 }
 
 export function wireWebauthn() {

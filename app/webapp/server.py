@@ -56,6 +56,7 @@ from app.webapp.routers import (
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
+from src.logging_setup import configure_file_logging
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
 from src.webapp_config import load_webapp_config
 from src.webauthn_gate import WebAuthnGate
@@ -135,6 +136,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     webapp_cfg = load_webapp_config()
 
+    configure_file_logging("webapp")
     auth.ensure_log_handler()
 
     app = FastAPI(title="WhatsApp Radar", version="0.1.0", lifespan=_lifespan)

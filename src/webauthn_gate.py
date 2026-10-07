@@ -1,16 +1,16 @@
-"""WebAuthn passkey ceremonies for the admin webapp.
+"""WebAuthn passkey enrollment for the admin webapp.
 
 Actual route access is gated by the bearer-token middleware
 (``app/webapp/middleware.py``) plus the Tailscale-only check on the passkey
 endpoints themselves — **not** by anything in this module. This module owns:
 
 - the enrolled-credential store (``config/webauthn_devices.json``),
-- the registration / authentication ceremonies (py_webauthn),
+- the registration ceremony (py_webauthn),
 - a one-time enrollment window (opened from the tray) so a new device can only
   be added deliberately.
 
-A successful passkey assertion simply reports success to the caller — no
-unlock token is minted or tracked.
+Enrollment is provisioning state only: there is no passkey sign-in (assertion)
+ceremony, and no unlock token is minted or tracked (#353).
 
 Single-user by design: one logical user, a small whitelist of devices.
 """
@@ -30,10 +30,8 @@ from typing import Any
 
 from webauthn import (
     base64url_to_bytes,
-    generate_authentication_options,
     generate_registration_options,
     options_to_json,
-    verify_authentication_response,
     verify_registration_response,
 )
 from webauthn.helpers import bytes_to_base64url
@@ -74,7 +72,6 @@ class WebAuthnGate:
         self._devices_path = devices_path or DEFAULT_DEVICES_PATH
         self._lock = threading.Lock()
         self._reg_challenge: _Challenge | None = None
-        self._auth_challenge: _Challenge | None = None
         self._enroll_until = 0.0
 
     # ----------------------------------------------------------- config
@@ -126,7 +123,6 @@ class WebAuthnGate:
                 "id": d.get("id"),
                 "label": d.get("label"),
                 "added_at": d.get("added_at"),
-                "last_used": d.get("last_used"),
             }
             for d in self.load_devices()
         ]
@@ -200,7 +196,6 @@ class WebAuthnGate:
             "public_key": bytes_to_base64url(verification.credential_public_key),
             "sign_count": verification.sign_count,
             "added_at": datetime.now().isoformat(timespec="seconds"),
-            "last_used": None,
         }
         with self._lock:
             devices = self.load_devices()
@@ -209,68 +204,3 @@ class WebAuthnGate:
             self._enroll_until = 0.0  # one device per opened window
         logger.info(f"✅ Enrolled passkey '{device['label']}' ({device['id']})")
         return {"id": device["id"], "label": device["label"]}
-
-    # --------------------------------------------------- authentication
-    def begin_authentication(self, cfg: WebappConfig) -> dict[str, Any]:
-        """Build an assertion challenge restricted to enrolled passkeys."""
-        devices = self.load_devices()
-        if not devices:
-            raise PermissionError("no passkey enrolled — open the tray window")
-        allow = [
-            PublicKeyCredentialDescriptor(id=base64url_to_bytes(d["credential_id"]))
-            for d in devices
-            if d.get("credential_id")
-        ]
-        options = generate_authentication_options(
-            rp_id=cfg.webauthn_rp_id,
-            allow_credentials=allow,
-            user_verification=UserVerificationRequirement.REQUIRED,
-        )
-        with self._lock:
-            self._auth_challenge = _Challenge(
-                value=options.challenge, label="", created_at=time.time()
-            )
-        result: dict[str, Any] = json.loads(options_to_json(options))
-        return result
-
-    def finish_authentication(self, cfg: WebappConfig, credential: Any) -> None:
-        """Verify an assertion against the whitelist."""
-        with self._lock:
-            challenge = self._auth_challenge
-            self._auth_challenge = None
-        if challenge is None or time.time() - challenge.created_at > _CHALLENGE_TTL:
-            raise PermissionError("authentication challenge expired — retry")
-
-        raw_id = _credential_id_of(credential)
-        with self._lock:
-            devices = self.load_devices()
-            match = next(
-                (d for d in devices if d.get("credential_id") == raw_id), None
-            )
-            if match is None:
-                raise PermissionError("passkey is not on the whitelist")
-            verification = verify_authentication_response(
-                credential=credential,
-                expected_challenge=challenge.value,
-                expected_rp_id=cfg.webauthn_rp_id,
-                expected_origin=cfg.webauthn_origin,
-                credential_public_key=base64url_to_bytes(match["public_key"]),
-                credential_current_sign_count=int(match.get("sign_count") or 0),
-                require_user_verification=True,
-            )
-            match["sign_count"] = verification.new_sign_count
-            match["last_used"] = datetime.now().isoformat(timespec="seconds")
-            self._save_devices(devices)
-        logger.info(f"🔓 Passkey unlock by '{match.get('label')}'")
-
-
-def _credential_id_of(credential: Any) -> str:
-    """Pull the base64url credential id out of a browser assertion payload."""
-    if isinstance(credential, str):
-        try:
-            credential = json.loads(credential)
-        except (ValueError, TypeError):
-            return ""
-    if isinstance(credential, dict):
-        return str(credential.get("id") or credential.get("rawId") or "")
-    return ""

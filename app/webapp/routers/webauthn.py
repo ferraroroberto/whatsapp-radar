@@ -1,8 +1,8 @@
-"""Passkey enrollment + authentication for the admin webapp gate.
+"""Passkey enrollment for the admin webapp gate (no sign-in ceremony, #353).
 
 The enrollment window can only be opened from the PC (loopback) — opening it
 deliberately from the tray menu is what makes adding a new device a conscious
-act. Begin/finish ceremonies are Tailscale-gated by the middleware.
+act. Begin/finish enrollment is Tailscale-gated by the middleware.
 """
 
 from __future__ import annotations
@@ -77,34 +77,6 @@ async def webauthn_enroll_finish(request: Request) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — verification failure
         logger.warning(f"🚨 passkey enroll failed from {client_ip(request)}: {exc}")
         raise HTTPException(status_code=400, detail=f"registration failed: {exc}") from exc
-
-
-@router.post("/api/webauthn/auth/begin")
-async def webauthn_auth_begin(request: Request) -> dict[str, Any]:
-    cfg: WebappConfig = request.app.state.webapp_config
-    gate: WebAuthnGate = request.app.state.webauthn_gate
-    if not WebAuthnGate.configured(cfg):
-        raise HTTPException(status_code=503, detail="webauthn not configured")
-    try:
-        return gate.begin_authentication(cfg)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-
-@router.post("/api/webauthn/auth/finish")
-async def webauthn_auth_finish(request: Request) -> dict[str, Any]:
-    cfg: WebappConfig = request.app.state.webapp_config
-    gate: WebAuthnGate = request.app.state.webauthn_gate
-    credential = await maybe_json(request)
-    try:
-        gate.finish_authentication(cfg, credential)
-    except PermissionError as exc:
-        logger.warning(f"🚨 passkey auth refused from {client_ip(request)}: {exc}")
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 — verification failure
-        logger.warning(f"🚨 passkey auth failed from {client_ip(request)}: {exc}")
-        raise HTTPException(status_code=400, detail=f"authentication failed: {exc}") from exc
-    return {"ok": True}
 
 
 @router.delete("/api/webauthn/devices/{device_id}")

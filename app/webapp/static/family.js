@@ -331,7 +331,7 @@ function renderWindows(box) {
   });
   box.append(list);
 
-  const add = el('button', 'ghost-btn', '+ Add childcare window');
+  const add = el('button', 'button-ghost btn-touch', '+ Add childcare window');
   add.type = 'button';
   add.addEventListener('click', function () {
     draft.windows.push({ label: '', days: new Set(), time: '', end_time: '' });
@@ -438,7 +438,7 @@ function renderEditable(box) {
     target.append(el('p', 'opt-hint', 'Matches event titles containing: ' + trainWords));
   }
 
-  const save = el('button', 'run-btn', 'Save schedule');
+  const save = el('button', 'button-tint btn-block', 'Save schedule');
   save.type = 'button';
   save.addEventListener('click', saveDraft);
   target.append(save);
@@ -622,8 +622,8 @@ function syncSweepControls() {
   sweepEls.status.classList.toggle('tb-run-status--error', sweep.tone === 'error');
 }
 
-function sweepButton(text, glyph, extraClass, mode) {
-  const btn = el('button', 'run-btn' + (extraClass ? ' ' + extraClass : ''));
+function sweepButton(text, glyph, tier, mode) {
+  const btn = el('button', 'btn-block ' + tier);
   btn.type = 'button';
   // Static sprite markup only — never user content — so innerHTML is safe here.
   btn.innerHTML = icon(glyph);
@@ -635,8 +635,8 @@ function sweepButton(text, glyph, extraClass, mode) {
 function renderSweepControls(box, tb) {
   box.append(fieldLabel('Run a sweep'));
   const actions = el('div', 'tb-actions');
-  const rehearse = sweepButton('Rehearse (dry run)', 'eye', 'secondary', 'dry_run');
-  const live = sweepButton('Run sweep', 'car', '', 'live');
+  const rehearse = sweepButton('Rehearse (dry run)', 'eye', 'button-ghost btn-touch', 'dry_run');
+  const live = sweepButton('Run sweep', 'car', 'button-tint', 'live');
   actions.append(rehearse, live);
   box.append(actions);
 
@@ -823,7 +823,7 @@ function renderTravel(box) {
   defRow(dl, 'Write token', tb.write_token_present ? 'present' : 'missing');
   target.append(dl);
 
-  const save = el('button', 'run-btn', 'Save travel blocks');
+  const save = el('button', 'button-tint btn-block', 'Save travel blocks');
   save.type = 'button';
   save.addEventListener('click', saveTravel);
   target.append(save);

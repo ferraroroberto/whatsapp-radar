@@ -307,7 +307,7 @@
         </div>
         <p id="webauthnStatus" class="card-meta"></p>
         <ul id="webauthnDevices" class="webauthn-devices"></ul>
-        <button id="enrollDeviceBtn" type="button" class="big-btn" hidden>Enroll this device</button>
+        <button id="enrollDeviceBtn" type="button" class="button-tint btn-block" hidden>Enroll this device</button>
       </section>
     </section>
 
@@ -438,7 +438,7 @@
           </div>
         </fieldset>
 
-        <button id="execRunScan" type="button" class="run-btn">Run</button>
+        <button id="execRunScan" type="button" class="button-tint btn-block">Run</button>
         <p id="execBusy" class="muted small" hidden></p>
       </section>
 
@@ -465,8 +465,8 @@
             <input id="execTrafficCadence" type="number" class="input-native" min="5" max="240"
                    value="30" inputmode="numeric"></label>
           <div class="exec-traffic-actions">
-            <button id="execTrafficRunLive" type="button" class="run-btn">Run now (live)</button>
-            <button id="execTrafficRunDry" type="button" class="run-btn secondary">Run now (dry)</button>
+            <button id="execTrafficRunLive" type="button" class="button-tint btn-block">Run now (live)</button>
+            <button id="execTrafficRunDry" type="button" class="button-ghost btn-block btn-touch">Run now (dry)</button>
           </div>
           <p id="execTrafficStatus" class="muted small"></p>
         </div>
@@ -492,7 +492,7 @@
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
             <h3 class="collapse-title">Selected run detail</h3>
-            <button id="execKill" type="button" class="ghost-btn" title="Stop this run" hidden>Stop</button>
+            <button id="execKill" type="button" class="button-ghost btn-touch" title="Stop this run" hidden>Stop</button>
           </span>
           <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
         </summary>
@@ -542,7 +542,7 @@
           <div id="execReconnect" class="exec-reconnect" hidden>
             <p id="execReconnectMsg" class="muted small"></p>
             <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-            <button id="execReconnectBtn" type="button" class="run-btn">Reconnect WhatsApp</button>
+            <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
           </div>
         </div>
       </details>
@@ -601,7 +601,7 @@
             <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-search"></use></svg>
             <p class="empty-state-message">Nothing was filtered out in this period.</p>
           </div>
-          <button id="auditFilteredMore" type="button" class="run-btn secondary" hidden>Load more</button>
+          <button id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
         </div>
       </details>
 
@@ -758,7 +758,7 @@
                   <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
               </div>
               <p id="cfgNote" class="opt-hint"></p>
-              <button id="cfgSave" type="submit" class="big-btn" disabled>Save settings</button>
+              <button id="cfgSave" type="submit" class="button-tint btn-block" disabled>Save settings</button>
             </form>
           </div>
         </div>
@@ -779,7 +779,7 @@
             full rebuild for when the reader logic changed — it backs up the DB and preserves your
             monitored/ignored/alias choices, but <strong>run history resets</strong>.
           </p>
-          <button id="execReprocess" type="button" class="run-btn danger">Rebuild full cache</button>
+          <button id="execReprocess" type="button" class="button-tint danger btn-block">Rebuild full cache</button>
         </div>
       </details>
     </div>
@@ -823,7 +823,7 @@
       <h2>Sign in</h2>
       <p class="muted small">Enter the password to use WhatsApp Radar.</p>
       <input id="loginPassword" type="password" class="input-native" autocomplete="current-password" placeholder="Password" required>
-      <button type="submit" class="big-btn">Unlock</button>
+      <button type="submit" class="button-tint btn-block">Unlock</button>
       <div id="loginError" class="login-error" hidden></div>
     </form>
   </div>

@@ -51,7 +51,7 @@ def test_ack_list_and_acknowledge(page: Page, base_url: str) -> None:
     expect(row).to_contain_text("Bring the signed form by Friday")
     expect(page.locator("#ackEmpty")).to_be_hidden()
 
-    row.locator(".ack-btn").click()
+    row.locator(".button-tint").click()
 
     expect(page.locator("#ackItems .ack-item")).to_have_count(0)
     expect(page.locator("#ackEmpty")).to_be_visible()

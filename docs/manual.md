@@ -2,7 +2,7 @@
 
 The day-to-day reference once the system is set up: the CLI surface, the classifier choice, routine operation, and troubleshooting. To stand the system up from zero (install, pair WhatsApp, create the Telegram bot, certs/tunnels/passkeys, App Launcher wiring), follow [`bootstrapping.md`](bootstrapping.md) first. For the connector design and unofficial-library risk, see [`linked-device.md`](linked-device.md).
 
-> **Privacy first.** Everything you pair, ingest, and store stays on this machine under ignored paths (`auth/`, `data/`, `config/webapp_config.json`). Never commit credentials, session state, chat names, phone numbers, or message exports. Run `git status --ignored` before any commit. See [`CLAUDE.md`](../CLAUDE.md) for the full rules.
+> **Privacy first.** Everything you pair, ingest, and store stays on this machine: git-ignored paths (`auth/`, `data/`, `config/webapp_config.json`) plus the message database itself, which resolves outside the checkout to the fleet runtime-data root (`C:\sqlite\whatsapp-radar\` by default — see [README.md](../README.md#running-offline-no-personal-data)), and so is invisible to `git status` entirely. Never commit credentials, session state, chat names, phone numbers, or message exports. Run `git status --ignored` before any commit. See [`CLAUDE.md`](../CLAUDE.md) for the full rules.
 
 ## What the system does
 

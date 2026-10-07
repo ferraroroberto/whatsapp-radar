@@ -360,7 +360,7 @@ function renderReconnect(s) {
   els.execSourcesCard.open = true;
   if (s.state === 'needs_qr') {
     els.execReconnectMsg.textContent =
-      'Open WhatsApp → Linked devices → Link a device, then scan this code.';
+      'In WhatsApp, open Linked devices and choose Link a device, then scan this code.';
     els.execReconnectBtn.textContent = s.has_qr ? 'Refresh QR' : 'Start & show QR';
     if (s.has_qr) {
       const next = qrSrc();

@@ -13,7 +13,7 @@ import { jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
-import { resetLinkPanel, syncLinkPanel, wireChatLinks } from './chat-links.js';
+import { childrenOf, resetLinkPanel, syncLinkPanel, wireChatLinks } from './chat-links.js';
 
 // A sprite glyph wrapped for insertion next to textContent-only user data.
 // Static markup only — never user content — so innerHTML is safe here.
@@ -22,13 +22,6 @@ function iconMark(name) {
   s.className = 'msg-icon';
   s.innerHTML = icon(name);
   return s;
-}
-
-// Full LOCAL timestamp incl. year: "2026-06-06T12:47:19Z" → "2026-06-06 14:47"
-// in the operator's time zone. The chat list keeps the year (old chats from
-// 2022/2023 should be obvious); the Dashboard's monitored table drops it.
-function fmtTsFull(ts) {
-  return fmtLocalDateTime(ts);
 }
 
 const HISTORY_PAGE = 30;
@@ -50,9 +43,6 @@ function chatLabel(c) {
 // a PARENT when other chats point at it, else STANDALONE. Depth is capped at 1,
 // so a chat is never both. Children are hidden from the list and folded into the
 // parent's family review (#25).
-function childrenOf(parentId) {
-  return state.chats.filter(function (c) { return c.parent_chat_id === parentId; });
-}
 function isChild(c) {
   return c.parent_chat_id != null;
 }
@@ -214,7 +204,7 @@ function row(c) {
 
   const meta = document.createElement('span');
   meta.className = 'chat-meta';
-  meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtTsFull(c.last_message_at);
+  meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at);
 
   const sub = document.createElement('span');
   sub.className = 'chat-sub';
@@ -302,7 +292,7 @@ function histMsg(m) {
   // On a merged family view each message carries its origin chat so the operator
   // can tell which number it came from; absent on a single-chat view.
   const who = m.sender || '—';
-  meta.textContent = (m.origin ? m.origin + ' · ' : '') + who + ' · ' + fmtTsFull(m.ts);
+  meta.textContent = (m.origin ? m.origin + ' · ' : '') + who + ' · ' + fmtLocalDateTime(m.ts);
   if (m.source === 'gmail') {
     const subject = document.createElement('div');
     subject.className = 'hist-subject';

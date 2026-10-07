@@ -138,7 +138,7 @@ function coverageGapItem(gap) {
 
   const range = document.createElement('span');
   range.className = 'audit-gap-range';
-  range.textContent = `${fmtLocalDateTime(gap.started_at)} → ${fmtLocalDateTime(gap.ended_at)}`;
+  range.textContent = `${fmtLocalDateTime(gap.started_at)} to ${fmtLocalDateTime(gap.ended_at)}`;
 
   const detail = document.createElement('span');
   detail.className = 'muted small';
@@ -525,7 +525,7 @@ function renderFamilyDetail(run) {
     const flags = [];
     if (d.assumed) flags.push('missing location — assumed home');
     if (d.commute) flags.push('commute');
-    return `${d.person} · ${when} · "${d.event}" → ${d.kind}`
+    return `${d.person} · ${when} · "${d.event}": ${d.kind}`
       + ` (${d.source})${flags.length ? ' [' + flags.join(', ') + ']' : ''}`;
   });
   const decisionsBlock = decisions.length
@@ -540,7 +540,7 @@ function renderFamilyDetail(run) {
         + `calendar inference stands for ${(c.windows || []).join(', ')}`;
     }
     const whereabouts = c.at_home ? 'at home' : `~${c.eta_min} min from home`;
-    return `${c.person} ${whereabouts} → '${c.window}' `
+    return `${c.person} ${whereabouts}, '${c.window}': `
       + `${c.feasible ? 'reachable' : 'AT RISK'}`
       + ` (margin ${c.margin_min} min, fix ${c.presence_age_min} min old)`;
   });

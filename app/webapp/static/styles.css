@@ -46,6 +46,7 @@
   --scrim: rgba(0, 0, 0, 0.5);
   --qr-matte: #ffffff;
   /* radii (rounded scale) */
+  --radius-sm: 8px;         /* rounded.sm — read by the vendored icon-button */
   --radius-md: 12px;
   --radius: 16px;           /* rounded.lg — cards */
   --radius-pill: 9999px;
@@ -63,13 +64,14 @@
   --control-h: 36px;
   /* row-height scale (rows.sm/lg — the nav's 44px hit floor and 60px rail tab) */
   --row-sm: 44px;
+  --hit-min: 44px;          /* minimum touch target — read by the vendored icon-button */
   --row-lg: 60px;
   /* typography roles — system stack, weight (not case) for hierarchy */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-heading-xl: 2rem;
   --font-heading-lg: 1.5rem;
   --font-body: 1rem;
-  --font-label: 0.92rem;
+  --font-label: 0.875rem;
   --font-caption: 0.75rem;
   /* icon-size steps (icons.size — never hand-pick a one-off) */
   --icon-inline: 16px;
@@ -637,16 +639,15 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .opt-group + .opt-group { border-top: 1px solid var(--line-muted); margin-top: 12px; padding-top: 4px; }
 .opt-group-title {
   font-size: var(--font-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 600;
   color: var(--muted);
   margin: 12px 0 8px;
 }
-.opt-group-title .opt-tag { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.opt-group-title .opt-tag { font-weight: 400; }
 .opt-hint { font-size: var(--font-caption); color: var(--muted); margin: 8px 2px; line-height: 1.45; }
 .codebox {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.6875rem;
+  font-size: var(--font-caption);
   color: var(--ink);
   background: var(--card-off);
   border: 1px solid var(--line);
@@ -724,7 +725,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .hist-msg:last-child { border-bottom: none; }
 .hist-meta { margin-bottom: 2px; font-size: var(--font-caption); color: var(--muted); }
 .hist-subject { margin-bottom: 3px; font-size: var(--font-label); font-weight: 700; }
-.hist-thread { margin-top: 4px; word-break: break-all; }
+.hist-thread { margin-top: 4px; overflow-wrap: anywhere; }
 .hist-text { white-space: pre-wrap; word-break: break-word; font-size: var(--font-label); }
 .msg-icon .icon { width: var(--icon-inline); height: var(--icon-inline); color: var(--muted); }
 /* Voice-note play/stop control (#86): a tappable inline pill. */
@@ -927,8 +928,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
 }
-.exec-funnel-val { font-size: 1.0625rem; font-weight: 700; color: var(--ink); }
-.exec-funnel-label { font-size: 0.625rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.exec-funnel-val { font-size: var(--font-body); font-weight: 700; color: var(--ink); }
+.exec-funnel-label { font-size: var(--font-caption); color: var(--muted); }
 .exec-preview { margin: 0 0 4px; }
 .exec-output { max-height: 280px; cursor: pointer; }
 .exec-viewer-kind { font-size: var(--font-label); font-weight: 600; color: var(--ink); margin: 0 0 2px; }
@@ -1040,7 +1041,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-sync-li:last-child { border-bottom: 0; }
 .exec-sync-when { flex: none; }
 .exec-sync-delta { flex: 1; min-width: 0; font-size: var(--font-label); color: var(--ink); }
-.exec-sync-src { flex: none; text-transform: uppercase; letter-spacing: 0.04em; }
+.exec-sync-src { flex: none; }
 
 /* ============================================================ audit (#12) */
 .audit-runs { gap: 0; padding: 0; margin: 0; max-height: 310px; overflow-y: auto; }
@@ -1138,8 +1139,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   font-size: var(--font-caption);
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 .audit-pre { max-height: 240px; margin: 0; white-space: pre-wrap; word-break: break-word; }
 /* Why the dump is not the whole record (#285). Existing tokens only — this is

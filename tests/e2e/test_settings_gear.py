@@ -15,6 +15,12 @@ from playwright.sync_api import Page, expect
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _TABS = ["Dashboard", "Chats", "Execution", "Audit", "Family"]
+# .icon-button's (project-scaffolding#339): a glyph on nothing at rest.
+_UNPAINTED = """els => els.map(el => {
+    const s = getComputedStyle(el);
+    return [s.backgroundColor, s.borderTopWidth];
+})"""
+_CLEAR = ["rgba(0, 0, 0, 0)", "0px"]
 
 
 def test_every_pane_has_theme_toggle_and_settings_gear(
@@ -28,6 +34,7 @@ def test_every_pane_has_theme_toggle_and_settings_gear(
         expect(head).to_be_visible()
         expect(head.locator(".theme-toggle")).to_have_count(1)
         expect(head.locator(".home-settings")).to_have_count(1)
+        assert head.locator(".home-toggle").evaluate_all(_UNPAINTED) == [_CLEAR, _CLEAR]
     # Settings is a gear, never a tab.
     expect(page.locator("nav.tabs [data-tab=settings]")).to_have_count(0)
 
@@ -44,5 +51,6 @@ def test_gear_opens_settings_with_config_and_maintenance(
     expect(dialog.locator("#settingsTitle")).to_be_visible()
     expect(dialog.locator("#configCard")).to_be_visible()
     expect(dialog.locator("#execMaintenanceCard")).to_be_visible()
+    assert dialog.locator("#settingsClose").evaluate_all(_UNPAINTED) == [_CLEAR]
     page.locator("#settingsClose").click()
     expect(dialog).not_to_be_visible()

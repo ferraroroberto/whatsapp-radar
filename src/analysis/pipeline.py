@@ -260,7 +260,7 @@ def _abort_offline(
     emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
     alert_status, _ = send_alert(
         config,
-        f"⚠️ WhatsApp Radar: live scan aborted — all sources offline ({exc}). "
+        f"⚠️ Family Radar: live scan aborted — all sources offline ({exc}). "
         "No messages were checked. Restore at least one enabled source.",
     )
     emit(progress, f"• offline alert: {alert_status}")
@@ -363,7 +363,7 @@ def _run_tripwire(
     suffix = f" (+{len(result.hits) - len(names)} more)" if len(result.hits) > len(names) else ""
     status, detail = send_alert(
         config,
-        f"WhatsApp Radar: {len(result.hits)} unmonitored chat(s) matched actionable "
+        f"Family Radar: {len(result.hits)} unmonitored chat(s) matched actionable "
         f"keywords recently: {', '.join(names)}{suffix}. Open Messages → "
         "Chats worth monitoring to review and promote them.",
     )

@@ -50,7 +50,7 @@ class WebappConfig:
     # (e.g. "pc.tailnet.ts.net"); origin is the full https origin the phone
     # connects to. Empty disables the passkey gate.
     webauthn_rp_id: str = ""
-    webauthn_rp_name: str = "WhatsApp Radar"
+    webauthn_rp_name: str = "Family Radar"
     webauthn_origin: str = ""
     # Telegram delivery secrets, migrated here from .env in Step 3.
     telegram_bot_token: str = ""
@@ -87,7 +87,7 @@ def load_webapp_config(path: Path | None = None) -> WebappConfig:
         auth_password=str(raw.get("auth_password", "")),
         tailnet_allowlist=[str(p) for p in (raw.get("tailnet_allowlist") or [])],
         webauthn_rp_id=str(raw.get("webauthn_rp_id", "")),
-        webauthn_rp_name=str(raw.get("webauthn_rp_name", "WhatsApp Radar")),
+        webauthn_rp_name=str(raw.get("webauthn_rp_name", "Family Radar")),
         webauthn_origin=str(raw.get("webauthn_origin", "")),
         telegram_bot_token=str(raw.get("telegram_bot_token", "")),
         telegram_chat_id=str(raw.get("telegram_chat_id", "")),

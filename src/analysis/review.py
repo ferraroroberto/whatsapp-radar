@@ -75,7 +75,7 @@ def abort_classifier_offline(
     if config is not None:
         alert_status, _ = send_alert(
             config,
-            f"⚠️ WhatsApp Radar: run aborted — Stage-2 classifier unreachable "
+            f"⚠️ Family Radar: run aborted — Stage-2 classifier unreachable "
             f"({exc}). {chats_with_delta} chat(s) with new messages were left "
             "unanalysed; their cursors are held. Restore the LLM hub and re-run.",
         )

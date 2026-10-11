@@ -1,6 +1,6 @@
 {
-  "name": "WhatsApp Radar",
-  "short_name": "WA Radar",
+  "name": "Family Radar",
+  "short_name": "Family Radar",
   "description": "Local-first admin for classifying new WhatsApp messages.",
   "start_url": "/",
   "scope": "/",

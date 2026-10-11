@@ -249,7 +249,7 @@ def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
         )
     except ConnectorOffline as exc:
         _progress(f"✗ resync aborted — all enabled sources offline: {exc}")
-        send_alert(config, f"⚠️ WhatsApp Radar: resync aborted — source offline ({exc}).")
+        send_alert(config, f"⚠️ Family Radar: resync aborted — source offline ({exc}).")
         _emit_result({"kind": "resync", "ok": False, "error": f"connector offline: {exc}"})
         return 1
     _progress(
@@ -341,7 +341,7 @@ def _cmd_notify(conn: sqlite3.Connection, config: Config, run_id: int | None) ->
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="wr", description="WhatsApp Radar (read-only spike).")
+    parser = argparse.ArgumentParser(prog="wr", description="Family Radar (read-only).")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("status", help="show connector and DB status")

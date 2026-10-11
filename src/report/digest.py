@@ -59,8 +59,8 @@ class Digest:
         can never break Telegram's entity parsing or be misread as markup.
         """
         if not self.items:
-            return "WhatsApp Radar: no actionable items."
-        header = f"WhatsApp Radar — {len(self.items)} item(s) need attention:"
+            return "Family Radar: no actionable items."
+        header = f"Family Radar — {len(self.items)} item(s) need attention:"
         return "\n\n".join([header, *(render_item(i) for i in self.items)])
 
 

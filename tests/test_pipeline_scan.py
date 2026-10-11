@@ -525,57 +525,6 @@ def test_calendar_reminders_never_fire_in_dry_run(
     assert write_client.insert_calls == []
 
 
-def test_non_routine_item_creates_one_ack_item(
-    ingested_conn: sqlite3.Connection, tmp_path: Path
-) -> None:
-    """A non-routine item queues a distinct, acknowledgeable follow-up (#219)."""
-    chat_id = _monitor(ingested_conn, "chat-class-4a")
-
-    outcome = scan(
-        ingested_conn, _config(tmp_path), mode="live",
-        connector=FixtureConnector(),
-        classifier=_FakeTraced(_routine_json(prep_complexity="non_routine")),
-    )
-
-    pending = store.pending_ack_items(ingested_conn)
-    assert len(pending) == 1
-    assert pending[0]["run_id"] == outcome.run_id
-    assert pending[0]["chat_id"] == chat_id
-    assert pending[0]["child"] == "Sam"
-    assert pending[0]["task_category"] == "permission_slip"
-    assert pending[0]["calendar_event_id"] is None
-    # Additive only — the item still reaches the Telegram digest too.
-    assert outcome.digest is not None
-    assert any(i.chat == "Class 4A Group" for i in outcome.digest.items)
-
-
-def test_routine_item_creates_no_ack_item(
-    ingested_conn: sqlite3.Connection, tmp_path: Path
-) -> None:
-    _monitor(ingested_conn, "chat-class-4a")
-
-    scan(
-        ingested_conn, _config(tmp_path), mode="live",
-        connector=FixtureConnector(), classifier=_FakeTraced(_routine_json()),
-    )
-
-    assert store.pending_ack_items(ingested_conn) == []
-
-
-def test_ack_items_never_created_in_dry_run(
-    ingested_conn: sqlite3.Connection, tmp_path: Path
-) -> None:
-    """Dry-run replays the same messages every call — must never queue duplicates."""
-    _monitor(ingested_conn, "chat-class-4a")
-
-    scan(
-        ingested_conn, _config(tmp_path), mode="dry_run",
-        classifier=_FakeTraced(_routine_json(prep_complexity="non_routine")),
-    )
-
-    assert store.pending_ack_items(ingested_conn) == []
-
-
 def test_stage1_noise_skips_the_llm(
     ingested_conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
@@ -819,7 +768,7 @@ def test_live_scan_aborts_when_classifier_is_unreachable(
 def test_audit_trace_text_matches_delivered_digest_for_non_routine_item(
     ingested_conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """The Audit tab's `telegram_text` must carry the same ack line the digest does (#348)."""
+    """The run trace's `telegram_text` must carry the same follow-up line the digest does (#348)."""
     chat_id = _monitor(ingested_conn, "chat-class-4a")
 
     outcome = scan(
@@ -830,5 +779,5 @@ def test_audit_trace_text_matches_delivered_digest_for_non_routine_item(
 
     row = _trace(ingested_conn, outcome.run_id, chat_id)
     assert outcome.digest is not None
-    assert "Needs acknowledgment" in outcome.digest.to_telegram_text()
-    assert "Needs acknowledgment" in row["telegram_text"]
+    assert "Needs your own follow-up" in outcome.digest.to_telegram_text()
+    assert "Needs your own follow-up" in row["telegram_text"]

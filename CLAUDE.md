@@ -13,7 +13,7 @@ whatsapp-radar/
   app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|gmail-survey|
                          #   notify|resync|reprocess|calendar-scan|traffic-check|tray)
   app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py, runs.py,
-                         #   routers/ (ack, audit, auth, chats, config, dashboard, execution,
+                         #   routers/ (audit, auth, chats, config, dashboard, execution,
                          #   family, misc, sidecar, webauthn, _helpers), static/ (vanilla-JS shell)
   app/tray/tray.py       # pystray surface that owns the webapp lifecycle
   calendar_readonly/     # portable Google Calendar read client (mirrors gmail_readonly/)

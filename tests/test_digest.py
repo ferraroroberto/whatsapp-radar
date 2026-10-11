@@ -106,17 +106,20 @@ def test_render_keeps_unparseable_resolved_date() -> None:
     assert "⏰ next Friday" in out
 
 
-# --- non-routine acknowledgment note (#219) ---------------------------------
+# --- non-routine follow-up note (#219; Telegram-only since #374) ------------
 
 def test_render_notes_acknowledgment_needed_for_non_routine() -> None:
     out = render_item(_item(prep_complexity="non_routine"), today=date(2026, 6, 9))
-    assert "Needs acknowledgment" in out
+    assert "Needs your own follow-up" in out
+    # The in-app Acknowledge is retired (#374): the line must not send the
+    # reader to the webapp.
+    assert "webapp" not in out
 
 
 def test_render_omits_acknowledgment_note_for_routine_or_unset() -> None:
-    assert "Needs acknowledgment" not in render_item(
+    assert "Needs your own follow-up" not in render_item(
         _item(prep_complexity="routine"), today=date(2026, 6, 9)
     )
-    assert "Needs acknowledgment" not in render_item(
+    assert "Needs your own follow-up" not in render_item(
         _item(prep_complexity=None), today=date(2026, 6, 9)
     )

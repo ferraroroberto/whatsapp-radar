@@ -175,6 +175,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- routine (#218, calendar reminder) and non_routine (this table) are mutually
 -- exclusive prep_complexity states today, so it stays null under current
 -- wiring, but an ack item never requires a calendar event to exist.
+-- Retired from the app in #374 (follow-ups are Telegram-only): nothing writes
+-- or reads this table any more. It is kept, rows and all, so no destructive
+-- migration runs on a live DB.
 CREATE TABLE IF NOT EXISTS ack_items (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id            INTEGER NOT NULL REFERENCES review_runs(id) ON DELETE CASCADE,

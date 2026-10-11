@@ -114,7 +114,9 @@ def render_item(item: DigestItem, *, today: date | None = None) -> str:
     if deadline_line:
         lines.append(deadline_line)
     if item.prep_complexity == "non_routine":
-        lines.append("  📋 Needs acknowledgment — open the WhatsApp Radar webapp to confirm")
+        # Follow-ups are Telegram-only since #374: the line flags the item, it
+        # no longer sends the reader to an in-app Acknowledge.
+        lines.append("  📋 Needs your own follow-up — not a routine reminder")
     return "\n".join(lines)
 
 

@@ -14,7 +14,6 @@ import { wireConfig, wireSettings } from './config.js';
 import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
 import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
-import { fetchAck } from './ack.js';
 
 // --------------------------------------------------------- build identity
 // Identical text + format to home-automation's footer readout.
@@ -66,10 +65,8 @@ function toggleTheme() {
 els.themeToggles.forEach(function (btn) { btn.addEventListener('click', toggleTheme); });
 
 // --------------------------------------------------------- boot
-// Home hosts the dashboard and the pending follow-ups (#336).
 function refreshHome() {
   fetchDashboard().catch(function () {});
-  fetchAck().catch(function () {});
 }
 
 // boot() re-runs after a successful password login (wireLoginForm); the poll
@@ -89,7 +86,7 @@ async function boot() {
     return;
   }
   await fetchWebauthnStatus();
-  await Promise.all([fetchDashboard(), fetchAck().catch(function () {})]);
+  await fetchDashboard();
 
   if (pollsArmed) return;
   pollsArmed = true;

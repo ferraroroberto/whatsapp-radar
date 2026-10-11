@@ -28,7 +28,7 @@ WhatsApp Radar is a standalone local service, integrated with the home-automatio
 - A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling. An optional Gmail OAuth client and the `calendar_readonly` / `calendar_write` clients own the other two Google sources.
 - A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
 - A processing pipeline analyzes only message/mail deltas and calls the local LLM Hub rather than duplicating model/subprocess orchestration.
-- The admin PWA (four tabs — Dashboard, Activity, Messages, Family; Follow-ups sit on the Dashboard) with a header gear opening Settings (text size, classifier config, maintenance), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
+- The admin PWA (four tabs — Dashboard, Activity, Messages, Family) with a header gear opening Settings (text size, classifier config, maintenance), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
 - App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 The internal module map is [`docs/architecture.mmd`](docs/architecture.mmd).
@@ -128,7 +128,7 @@ OAuth credentials and the refresh token live under the ignored `auth/gmail/`. [`
 
 It is opt-in: set `family.reminder_calendar_id` (the target calendar id) in `config/local.json`. An empty value (the default) keeps the pipeline exactly as before, and a not-yet-minted write token (`auth/calendar/write_token.json`) degrades the same way — no event, no error, Telegram unaffected. `family.reminder_time` (default `07:30`) is the local `HH:MM` slot each event is created at. Creation is live-mode only (a dry run never mints one) and idempotent per item: the same underlying evidence messages, even reclassified in a later run, reuse the first run's event id rather than duplicating it. The created event id is visible on the item's row (`analysis_items.calendar_event_id`).
 
-**Non-routine acknowledgment surface.** A non-routine item (`prep_complexity: "non_routine"`) instead gets a distinct, acknowledgeable follow-up — always on, no config — so it does not blend into routine reminders and get forgotten. It queues a row in `ack_items` (child, task category, summary) alongside the Telegram alert, whose text says a webapp confirmation is needed, and the **Follow-ups** card on the Dashboard lists every pending item with a one-tap **Acknowledge** action. Live-mode only, same as the calendar reminder.
+**Non-routine follow-ups (Telegram only).** A non-routine item (`prep_complexity: "non_routine"`) gets no calendar reminder; its line in the Telegram alert says it *needs your own follow-up, not a routine reminder*, so it does not blend into routine reminders and get forgotten. There is no in-app queue or Acknowledge since #374 (the `ack_items` table is kept, unused, so no destructive migration runs).
 
 ### Voice-note transcription
 
@@ -189,12 +189,9 @@ The bottom pill gives every tab an equal slice of the phone's width and ellipsiz
 
 Leads with a **last-activity grid**: one card per kind of work — **WhatsApp · Gmail · Traffic · Calendar** — each showing a source icon, the relative last-run time, an outcome badge (`OK` / `N alerts` / `KO` / `never ran`), and a distilled "what we found" line (e.g. *12 new · 1 actionable*, *no significant delay*, *2 conflicts · 1 missing location*). The data comes from the unified run store, so CLI- and App-Launcher-launched runs appear here too; tapping a card opens that run in Activity.
 
-Below the grid, a **Follow-ups** card (#219, folded into Home for the five-tab nav — #336) lists every pending non-routine prep item that needs a manual confirmation, alongside its Telegram alert, with a one-tap **Acknowledge** action.
-
 Below that, a collapsible **Sources** card (WhatsApp, Gmail, and a read-only Calendar row, each with its icon) and a folded-by-default **Monitored channels** table give the provenance detail. A linked family folds into its parent as one row whose count and last-activity span the whole family.
 
 - `GET /api/dashboard`
-- `GET /api/ack/items`, `POST /api/ack/{id}/acknowledge`
 
 ### Activity
 

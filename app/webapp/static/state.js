@@ -69,10 +69,6 @@ export const state = {
   },
   // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
   family: null,
-  // Follow-ups (#219): pending non-routine acknowledgment items.
-  ack: {
-    items: [],
-  },
 };
 
 export const EXECUTION_POLL_MS = 1500;
@@ -226,10 +222,6 @@ export const els = {
   familyEditable: document.getElementById('familyEditable'),
   // Commute travel blocks (#268): knobs + per-calendar write capability.
   familyTravelBlocks: document.getElementById('familyTravelBlocks'),
-
-  // Follow-ups (#219)
-  ackItems: document.getElementById('ackItems'),
-  ackEmpty: document.getElementById('ackEmpty'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

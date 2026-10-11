@@ -1313,21 +1313,3 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .tb-run-status { margin: var(--space-xs) 0 0; }
 .tb-run-status.tb-run-status--error { color: var(--deficit); }
 
-/* ============================================================ ack (#219) */
-/* Follow-ups tab: flat separator rows (fleet list-row canon), each with a
-   text block + an inline tint action button — mirrors .chat-row's hairline
-   pattern, no per-row nested card. */
-.ack-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.ack-item:last-child { border-bottom: 0; }
-.ack-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ack-item-title { font-size: var(--font-label); color: var(--ink); font-weight: 600; }
-.ack-item-meta { font-size: var(--font-caption); color: var(--muted); }
-/* The Acknowledge action is a vendored button-tint; it only needs to keep
-   its natural width beside the text block. */
-.ack-item .button-tint { flex: none; }

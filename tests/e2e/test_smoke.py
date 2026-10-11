@@ -21,13 +21,14 @@ def test_shell_loads(page: Page, base_url: str) -> None:
 @pytest.mark.live_safe
 def test_tab_switching(page: Page, base_url: str) -> None:
     # Four tabs, Activity second (#373: Run and Audit merged); the fleet nav
-    # allows at most five, and Follow-ups lives on Home, never as a tab (#336).
+    # allows at most five.
     page.goto(base_url)
     tabs = page.locator("nav.tabs [role=tab]")
     expect(tabs).to_have_count(4)
     expect(tabs.nth(1)).to_have_attribute("data-tab", "activity")
     expect(page.locator("#tabExecution, #tabAudit, #tabAck")).to_have_count(0)
-    expect(page.locator("#paneDashboard #ackItems")).to_have_count(1)
+    # Follow-ups are Telegram-only since #374: no in-app card either.
+    expect(page.locator("#ackItems")).to_have_count(0)
     page.locator("#tabActivity").click()
     expect(page.locator("#paneActivity")).to_be_visible()
     expect(page.locator("#paneDashboard")).to_be_hidden()

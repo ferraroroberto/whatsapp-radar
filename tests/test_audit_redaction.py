@@ -172,11 +172,11 @@ def test_the_capability_map_is_redacted_in_key_position() -> None:
 def test_the_dump_is_the_only_generic_payload_serialiser_left_unredacted() -> None:
     """The criterion's "any other generic payload dump" clause, made checkable.
 
-    `renderFamilyDetail` is the one place a whole family payload is serialised.
+    `renderFamilyTrace` is the one place a whole family payload is serialised.
     If a second `traceField(..., run.summary)`-shaped call appears, it needs the
     same treatment and this test is where that gets noticed.
     """
-    audit = (ROOT / "app/webapp/static/audit.js").read_text(encoding="utf-8")
+    audit = (ROOT / "app/webapp/static/run-trace.js").read_text(encoding="utf-8")
     raw_dumps = re.findall(r"traceField\([^,]+,\s*(run\.summary|s)\)", audit)
     assert raw_dumps == [], f"un-redacted payload dump(s): {raw_dumps}"
     assert "redactPayload(run.summary)" in audit

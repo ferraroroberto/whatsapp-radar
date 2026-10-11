@@ -296,23 +296,6 @@
           <button id="dashAllActivity" type="button" class="dash-all-activity">All activity</button>
         </div>
       </section>
-
-
-
-
-      <!-- Passkey enrollment: appears only while the tray's enrollment window is
-           open (renderWebauthn) — the everyday UI carries no settings clutter. -->
-      <section id="enrollCard" class="card" hidden>
-        <div class="card-head">
-          <h3 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg>
-            Passkey enrollment
-          </h3>
-        </div>
-        <p id="webauthnStatus" class="card-meta"></p>
-        <ul id="webauthnDevices" class="webauthn-devices"></ul>
-        <button id="enrollDeviceBtn" type="button" class="button-tint btn-block" hidden>Enroll this device</button>
-      </section>
     </section>
 
     <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
@@ -434,28 +417,28 @@
            row that edits something opens a sheet (#familySheet, or the travel
            sheet) holding the real control; the sheet commits on Done. The two
            switch rows and Traffic checks' switch apply on tap. -->
-      <section class="run-group family-group" aria-labelledby="familyHouseholdTitle">
+      <section class="run-group inset-group" aria-labelledby="familyHouseholdTitle">
         <h3 id="familyHouseholdTitle" class="run-group-title">Household</h3>
         <div class="card action-list">
           <ul class="action-rows">
-            <li class="action-row family-row">
-              <div class="action-row-main family-static">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-house"></use></svg>
+            <li class="action-row inset-row">
+              <div class="action-row-main inset-static">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-house"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Home</span>
                   <span class="action-row-meta" data-value="home">&nbsp;</span></span>
               </div>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="calendars" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Calendars</span>
                   <span class="action-row-meta" data-value="calendars">&nbsp;</span></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
-              <div class="action-row-main family-static">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
+            <li class="action-row inset-row">
+              <div class="action-row-main inset-static">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Scan window</span>
                   <span class="action-row-meta" data-value="scan">&nbsp;</span></span>
               </div>
@@ -464,53 +447,53 @@
         </div>
       </section>
 
-      <section class="run-group family-group" aria-labelledby="familyScheduleTitle">
+      <section class="run-group inset-group" aria-labelledby="familyScheduleTitle">
         <h3 id="familyScheduleTitle" class="run-group-title">Schedule</h3>
         <div class="card action-list">
           <ul class="action-rows">
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="duty" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-users"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-users"></use></svg>
                 <span class="action-row-title">Who's on duty</span>
-                <span class="family-row-value" data-value="duty"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="duty"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="kids" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-clock"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-clock"></use></svg>
                 <span class="action-row-title">Kids home by</span>
-                <span class="family-row-value" data-value="kids"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="kids"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="windows" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
                 <span class="action-row-title">Childcare windows</span>
-                <span class="family-row-value" data-value="windows"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="windows"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="quiet" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-moon"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-moon"></use></svg>
                 <span class="action-row-title">Quiet hours</span>
-                <span class="family-row-value" data-value="quiet"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="quiet"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
           </ul>
         </div>
       </section>
 
-      <section class="run-group family-group" aria-labelledby="familyScanTitle">
+      <section class="run-group inset-group" aria-labelledby="familyScanTitle">
         <h3 id="familyScanTitle" class="run-group-title">Calendar scan</h3>
         <div class="card action-list">
           <ul class="action-rows">
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="sync" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
                 <span class="action-row-title">Calendar sync</span>
               </button>
               <span class="action-row-trail">
@@ -518,9 +501,9 @@
                         aria-checked="false" aria-label="Calendar sync"><span class="knob"></span><span class="toggle-label">OFF</span></button>
               </span>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="ask" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-map-pin"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-map-pin"></use></svg>
                 <span class="action-row-title">Ask for missing locations</span>
               </button>
               <span class="action-row-trail">
@@ -535,13 +518,13 @@
       <!-- Traffic checks (#164; moved here from Run in #373, a group in #376).
            The switch and the two check rows keep their execTraffic* ids, which
            execution.js wires to its run queue. -->
-      <section id="execTrafficCard" class="run-group family-group" aria-labelledby="familyTrafficTitle">
+      <section id="execTrafficCard" class="run-group inset-group" aria-labelledby="familyTrafficTitle">
         <h3 id="familyTrafficTitle" class="run-group-title">Traffic checks</h3>
         <div class="card action-list">
           <ul class="action-rows">
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="traffic" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Traffic checks</span>
                   <span id="execTrafficStatus" class="action-row-meta">&nbsp;</span></span>
               </button>
@@ -550,40 +533,40 @@
                         aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
               </span>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="cadence" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
                 <span class="action-row-title">Check every</span>
-                <span class="family-row-value" data-value="cadence"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="cadence"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="delay" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-gauge"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-gauge"></use></svg>
                 <span class="action-row-title">Significant delay</span>
-                <span class="family-row-value" data-value="delay"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="delay"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" class="action-row-main" data-sheet="train" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-train-front"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-train-front"></use></svg>
                 <span class="action-row-title">Skip train commutes</span>
-                <span class="family-row-value" data-value="train"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="train"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" id="execTrafficRunLive" class="action-row-main">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-play"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-play"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Check now</span>
                   <span class="action-row-meta" data-value="checkLive">Live — sends an alert if a jam is found</span></span>
               </button>
             </li>
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" id="execTrafficRunDry" class="action-row-main">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-eye"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-eye"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Check now (dry run)</span>
                   <span class="action-row-meta">Nothing is sent</span></span>
               </button>
@@ -592,16 +575,16 @@
         </div>
       </section>
 
-      <section class="run-group family-group" aria-labelledby="familyTravelGroupTitle">
+      <section class="run-group inset-group" aria-labelledby="familyTravelGroupTitle">
         <h3 id="familyTravelGroupTitle" class="run-group-title">Travel blocks</h3>
         <div class="card action-list">
           <ul class="action-rows">
-            <li class="action-row family-row">
+            <li class="action-row inset-row">
               <button type="button" id="familyTravelRow" class="action-row-main" aria-haspopup="dialog">
-                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
                 <span class="action-row-title">Travel blocks</span>
-                <span class="family-row-value" data-value="travel"></span>
-                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+                <span class="inset-row-value" data-value="travel"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
               </button>
             </li>
           </ul>
@@ -629,142 +612,226 @@
         <button id="settingsClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
-      <section id="textSizeCard" class="card">
-        <div class="card-head">
-          <h3 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-type"></use></svg>
-            Text size
-          </h3>
-        </div>
-        <div class="segmented" id="textSizeControl" role="group" aria-label="Text size">
-          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
-          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
-          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+      <!-- Settings (#377): inset groups, as Family. Each row shows its current
+           value (filled by config.js / execution.js / webauthn.js) and opens a
+           sheet — #settingsSheet, or #sourceSheet for a source — that commits
+           on Done; Text size applies inline. -->
+      <section class="run-group inset-group" aria-labelledby="settingsDisplayTitle">
+        <h3 id="settingsDisplayTitle" class="run-group-title">Display</h3>
+        <div id="textSizeCard" class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row">
+              <div class="action-row-main inset-static">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-type"></use></svg>
+                <span class="action-row-title">Text size</span>
+              </div>
+              <span class="action-row-trail">
+                <span class="segmented" id="textSizeControl" role="group" aria-label="Text size">
+                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
+                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+                </span>
+              </span>
+            </li>
+          </ul>
         </div>
       </section>
-      <details id="configCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
-            <h3 class="collapse-title">Classifier &amp; settings</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div class="opt-group">
-            <h3 class="opt-group-title">Shared Stage 2 system prompt <span class="opt-tag">src/analysis/prompts/classification_system.md</span></h3>
-            <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
-            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Activity shows the exact system and user prompt for every LLM call.</p>
-            <h3 class="opt-group-title">WhatsApp Stage 1 roots <span class="opt-tag">src/analysis/prompts/keyword_roots.txt</span></h3>
-            <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
-            <h3 class="opt-group-title">Gmail Stage 1 rules <span class="opt-tag">src/analysis/prompts/gmail_keyword_roots.txt</span></h3>
-            <pre id="cfgGmailRoots" class="codebox" aria-label="Gmail keyword rules"></pre>
-            <h3 class="opt-group-title">Gmail survey taxonomy <span class="opt-tag">reference for generating Stage-1 rules; not sent to Stage 2 · src/analysis/prompts/gmail_classification_taxonomy.md</span></h3>
-            <pre id="cfgGmailTaxonomy" class="codebox" aria-label="Gmail classification taxonomy"></pre>
-            <p id="cfgGmailSummary" class="source-config-summary"></p>
-          </div>
 
-          <div class="opt-group">
-            <h3 class="opt-group-title">Safe settings</h3>
-            <form id="configForm" autocomplete="off">
-              <div class="cfg-fields">
-                <fieldset class="cfg-source-list cfg-span" aria-label="Enabled message sources">
-                  <legend>Enabled sources</legend>
-                  <div class="cfg-source-row">
-                    <span><strong>WhatsApp</strong><small>fixture or linked device</small></span>
-                    <button type="button" id="cfgSourceWhatsapp" class="toggle on" role="switch"
-                            aria-checked="true" aria-label="WhatsApp source"><span class="knob"></span><span class="toggle-label">ON</span></button>
-                  </div>
-                  <div class="cfg-source-row">
-                    <span><strong>Gmail</strong><small>read-only whitelisted mail</small></span>
-                    <button type="button" id="cfgSourceGmail" class="toggle" role="switch"
-                            aria-checked="false" aria-label="Gmail source"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-                  </div>
-                </fieldset>
-                <label class="stacked"><span>WhatsApp connector</span>
-                  <select id="cfgConnector" class="select-native"></select></label>
-                <label class="stacked"><span>Classifier</span>
-                  <select id="cfgClassifier" class="select-native"></select></label>
-                <label class="stacked"><span>Notifier</span>
-                  <select id="cfgNotifier" class="select-native"></select></label>
-                <label class="stacked"><span>Hub model</span>
-                  <input id="cfgHubModel" type="text" class="input-native"></label>
-                <label class="stacked cfg-span"><span>Hub base URL</span>
-                  <input id="cfgHubBaseUrl" type="text" class="input-native" inputmode="url"></label>
-                <label class="stacked cfg-span"><span>Telegram bot token</span>
-                  <input id="cfgTgToken" type="password" class="input-native" autocomplete="off" placeholder="unchanged"></label>
-                <label class="stacked"><span>Telegram chat ID</span>
-                  <input id="cfgTgChatId" type="text" class="input-native" inputmode="numeric"></label>
+      <section class="run-group inset-group" aria-labelledby="settingsSourcesTitle">
+        <h3 id="settingsSourcesTitle" class="run-group-title">Sources</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="source-whatsapp" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+                <span class="action-row-title">WhatsApp</span>
+                <span class="inset-row-value" data-value="src-whatsapp"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="source-gmail" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-mail"></use></svg>
+                <span class="action-row-title">Gmail</span>
+                <span class="inset-row-value" data-value="src-gmail"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="source-calendar" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+                <span class="action-row-title">Calendar</span>
+                <span class="inset-row-value" data-value="src-calendar"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="run-group inset-group" aria-labelledby="settingsJudgedTitle">
+        <h3 id="settingsJudgedTitle" class="run-group-title">How messages are judged</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="classifier" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-radar"></use></svg>
+                <span class="action-row-title">Classifier</span>
+                <span class="inset-row-value" data-value="classifier"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="rules-whatsapp" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
+                <span class="action-row-title">Keyword rules · WhatsApp</span>
+                <span class="inset-row-value"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="rules-gmail" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
+                <span class="action-row-title">Keyword rules · Gmail</span>
+                <span class="inset-row-value"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="taxonomy" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+                <span class="action-row-title">Gmail survey taxonomy</span>
+                <span class="inset-row-value"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="instructions" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+                <span class="action-row-title">Instructions to the model</span>
+                <span class="inset-row-value"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="run-group inset-group" aria-labelledby="settingsAlertsTitle">
+        <h3 id="settingsAlertsTitle" class="run-group-title">Alerts</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="delivery" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
+                <span class="action-row-title">Delivery</span>
+                <span class="inset-row-value" data-value="delivery"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="hub" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-link"></use></svg>
+                <span class="action-row-title">Model hub</span>
+                <span class="inset-row-value" data-value="hub"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="run-group inset-group" aria-labelledby="settingsMaintenanceTitle">
+        <h3 id="settingsMaintenanceTitle" class="run-group-title">Maintenance</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row inset-row--danger">
+              <button type="button" id="execReprocess" class="action-row-main" data-settings-sheet="rebuild" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+                <span class="action-row-title">Rebuild message cache</span>
+                <span class="inset-row-value"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="run-group inset-group" aria-labelledby="settingsInstallTitle">
+        <h3 id="settingsInstallTitle" class="run-group-title">This install</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row inset-row">
+              <button type="button" class="action-row-main" data-settings-sheet="passkeys" aria-haspopup="dialog">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-lock"></use></svg>
+                <span class="action-row-title">Passkeys</span>
+                <span class="inset-row-value" data-value="passkeys"></span>
+                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row inset-row">
+              <div class="action-row-main inset-static">
+                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
+                <span class="action-row-title">Build</span>
+                <span class="inset-row-value" data-value="build"></span>
               </div>
-              <p id="cfgNote" class="opt-hint"></p>
-              <button id="cfgSave" type="submit" class="button-tint btn-block" disabled>Save settings</button>
-            </form>
-          </div>
+            </li>
+          </ul>
         </div>
-      </details>
+      </section>
+    </div>
+  </dialog>
 
-      <details id="execSyncsCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
-            <h3 class="collapse-title">Recent syncs</h3>
-            <span id="execSyncTotals" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
-          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
-        </div>
-      </details>
-      <details id="dashSourcesCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
-            <h3 class="collapse-title">Source counts</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div id="dashSources" class="source-summary-list"></div>
-        </div>
-      </details>
-      <details id="execSourcesCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
-            <h3 class="collapse-title">Sources health</h3>
-            <span id="execSourcesCount" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
-          <div id="execReconnect" class="exec-reconnect" hidden>
-            <p id="execReconnectMsg" class="muted small"></p>
-            <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-            <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
-          </div>
-        </div>
-      </details>
-      <details id="execMaintenanceCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>
-            <h3 class="collapse-title">Maintenance</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">
-            Rebuild the local store from the connector buffer. The <strong>Sync messages</strong>
-            step under Activity's Run now is incremental and safe to run often. <strong>Rebuild</strong> is a
-            full rebuild for when the reader logic changed — it backs up the DB and preserves your
-            monitored/ignored/alias choices, but <strong>run history resets</strong>.
-          </p>
-          <button id="execReprocess" type="button" class="button-tint danger btn-block">Rebuild full cache</button>
-        </div>
-      </details>
+  <!-- Settings sheets (#377): one shell filled per row by config.js. Done
+       commits a partial POST /api/config; the close button, the backdrop and
+       Esc discard the sheet's edits. -->
+  <dialog id="settingsSheet" class="detail-dialog edit-sheet">
+    <div class="detail-card" aria-labelledby="settingsSheetTitle">
+      <div class="detail-header">
+        <h2 id="settingsSheetTitle"></h2>
+        <button id="settingsSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div id="settingsSheetBody"></div>
+      <p id="settingsSheetError" class="sheet-error" role="alert" hidden></p>
+      <div id="settingsSheetFoot" class="detail-actions">
+        <button id="settingsSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <p class="sheet-rule">Done saves. Close discards your changes.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- A source's sheet (#377): its switch and connector (the draft), then the
+       counts, health, Reconnect + pairing QR and recent syncs that
+       execution.js and dashboard.js keep writing in place (ids from #373 and
+       #374). `data-source` picks whose entries show. -->
+  <dialog id="sourceSheet" class="detail-dialog edit-sheet" data-source="whatsapp">
+    <div class="detail-card" aria-labelledby="sourceSheetTitle">
+      <div class="detail-header">
+        <h2 id="sourceSheetTitle"></h2>
+        <button id="sourceSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div id="sourceSheetBody"></div>
+      <p id="sourceSheetError" class="sheet-error" role="alert" hidden></p>
+      <p class="field-label">Stored</p>
+      <div id="dashSources" class="source-summary-list"></div>
+      <p class="field-label">Health</p>
+      <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
+      <div id="execReconnect" class="exec-reconnect" data-source="whatsapp" hidden>
+        <p id="execReconnectMsg" class="muted small"></p>
+        <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
+        <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
+      </div>
+      <div class="source-syncs">
+        <p class="field-label">Recent syncs</p>
+        <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
+        <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+      </div>
+      <div id="sourceSheetFoot" class="detail-actions">
+        <button id="sourceSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <p class="sheet-rule">Done saves. Close discards your changes.</p>
+      </div>
     </div>
   </dialog>
 
@@ -869,7 +936,7 @@
        travel-block sheet (its sweep controls poll in place, so it keeps its
        own nodes). Done commits through POST /api/family; the close button,
        the backdrop and Esc discard the sheet's edits. -->
-  <dialog id="familySheet" class="detail-dialog family-sheet">
+  <dialog id="familySheet" class="detail-dialog edit-sheet">
     <div class="detail-card" aria-labelledby="familySheetTitle">
       <div class="detail-header">
         <h2 id="familySheetTitle"></h2>
@@ -877,15 +944,15 @@
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="familySheetBody"></div>
-      <p id="familySheetError" class="family-sheet-error" role="alert" hidden></p>
+      <p id="familySheetError" class="sheet-error" role="alert" hidden></p>
       <div id="familySheetFoot" class="detail-actions">
         <button id="familySheetDone" type="button" class="button-primary detail-save-btn">Done</button>
-        <p class="family-sheet-rule">Done saves. Close discards your changes.</p>
+        <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
   </dialog>
 
-  <dialog id="familyTravelSheet" class="detail-dialog family-sheet">
+  <dialog id="familyTravelSheet" class="detail-dialog edit-sheet">
     <div id="familyTravelCard" class="detail-card" aria-labelledby="familyTravelTitle">
       <div class="detail-header">
         <h2 id="familyTravelTitle">Travel blocks</h2>
@@ -893,11 +960,11 @@
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="familyTravelBlocks"></div>
-      <p id="familyTravelError" class="family-sheet-error" role="alert" hidden></p>
+      <p id="familyTravelError" class="sheet-error" role="alert" hidden></p>
       <div id="familyTravelSweep"></div>
       <div class="detail-actions">
         <button id="familyTravelDone" type="button" class="button-primary detail-save-btn">Done</button>
-        <p class="family-sheet-rule">Done saves. Close discards your changes.</p>
+        <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
   </dialog>

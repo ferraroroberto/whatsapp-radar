@@ -87,5 +87,11 @@ def test_every_control_inherits_the_page_font(
 
     page.locator(".pane:not([hidden]) .home-settings").click()
     offenders += [f"settings: {o}" for o in _offenders(page, "#settingsDialog")]
+    # Settings' sheets host its 44px fields (#377).
+    for key, root in (("delivery", "#settingsSheet"), ("source-whatsapp", "#sourceSheet")):
+        page.locator(f'#settingsDialog [data-settings-sheet="{key}"]').click()
+        page.wait_for_selector(root, state="visible", timeout=scaled(10_000))
+        offenders += [f"{root}: {o}" for o in _offenders(page, root)]
+        page.keyboard.press("Escape")
 
     assert not offenders, "controls not in the page font:\n" + "\n".join(sorted(set(offenders)))

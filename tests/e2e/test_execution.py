@@ -30,7 +30,7 @@ def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     expect(page.locator("#paneActivity")).to_be_visible()
     # The traffic card moved to Family, Maintenance to Settings (#164, #337, #373).
     expect(page.locator("#paneActivity #execTrafficCard")).to_have_count(0)
-    expect(page.locator("#settingsDialog #execMaintenanceCard")).to_have_count(1)
+    expect(page.locator("#settingsDialog #execReprocess")).to_have_count(1)
 
     # 1. Run now is one tap from the header; Dry run is a switch that reveals
     #    the replay window.
@@ -129,10 +129,16 @@ def test_settings_sources_card_offers_reconnect_when_offline(
     page.locator("#tabActivity").click()
     page.locator("#paneActivity .home-settings").click()
     expect(page.locator("#settingsDialog")).to_be_visible()
+    # The row names the outage before the sheet is open (#377).
+    row_value = page.locator('#settingsDialog [data-value="src-whatsapp"]')
+    expect(row_value).to_contain_text("Not connected", timeout=scaled(10_000))
+    expect(row_value).to_have_attribute("data-tone", "danger")
+    page.locator('#settingsDialog [data-settings-sheet="source-whatsapp"]').click()
+    expect(page.locator("#sourceSheet")).to_be_visible()
 
     # The throwaway buffer (conftest) has no status.json → 'stopped' → a red
-    # "Not connected" status word and a visible Reconnect button; the card
-    # opens itself when the source is down.
+    # "Not connected" status word and a visible Reconnect button in the
+    # WhatsApp sheet.
     expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
     expect(page.locator("#execReconnectBtn")).to_be_visible()
     whatsapp = page.locator(".source-status-card", has_text="WhatsApp")

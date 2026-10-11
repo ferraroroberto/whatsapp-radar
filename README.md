@@ -28,7 +28,7 @@ WhatsApp Radar is a standalone local service, integrated with the home-automatio
 - A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling. An optional Gmail OAuth client and the `calendar_readonly` / `calendar_write` clients own the other two Google sources.
 - A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
 - A processing pipeline analyzes only message/mail deltas and calls the local LLM Hub rather than duplicating model/subprocess orchestration.
-- The admin PWA (four tabs — Home, Activity, Messages, Family) with a header gear opening Settings (text size, classifier config, maintenance), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
+- The admin PWA (four tabs — Home, Activity, Messages, Family) with a header gear opening Settings (display, sources, how messages are judged, alerts, maintenance, this install), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
 - App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 The internal module map is [`docs/architecture.mmd`](docs/architecture.mmd).
@@ -86,7 +86,7 @@ Adding new messages causes only the delta to be reviewed. The per-chat cursor ad
 
 Live `scan` advances each cursor only after that chat's analysis and trace are persisted — the same retry-safe guarantee as `review`. `--dry-run` replays history straight from SQLite: it never touches the connector, never delivers, and never advances a cursor, so it is the safe way to see what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_traces`.
 
-**Multi-source sync.** The committed default is WhatsApp-only. Set `sources` in the ignored `config/local.json`, use the source switches in Settings (the header gear), or set `WR_SOURCES=whatsapp,gmail`. The `connector` / `WR_CONNECTOR` setting still chooses WhatsApp's fixture or linked-device reader. Each enabled source is preflighted, ingested, tagged, and logged independently.
+**Multi-source sync.** The committed default is WhatsApp-only. Set `sources` in the ignored `config/local.json`, use the source switches in Settings → Sources (the header gear), or set `WR_SOURCES=whatsapp,gmail`. The `connector` / `WR_CONNECTOR` setting still chooses WhatsApp's fixture or linked-device reader. Each enabled source is preflighted, ingested, tagged, and logged independently.
 
 **Preflight — a run that cannot check anything fails loudly.** A live `scan` / `resync` preflights each source before reading it. If the WhatsApp sidecar's heartbeat is stale (the process stopped) it first tries to relaunch the sidecar — when the device is still paired — and re-checks; set `WR_SIDECAR_AUTOSTART=0` to disable that self-heal. If the source still is not live it **aborts loudly**: exits non-zero, records the run as failed, advances no cursor, and fires an alert to the notification channel, rather than reporting green while checking nothing. The **classifier** end of the pipeline aborts the same way: if the LLM hub is unreachable — down, timing out, or erroring — the run stops at the first chat rather than timing out once per monitored chat, is recorded as failed with `notification_status=classifier_offline` (distinct from a source `offline`), fires the alert, exits non-zero, and holds every cursor so the unanalysed deltas are retried next run.
 
@@ -187,13 +187,13 @@ The bottom pill gives every tab an equal slice of the phone's width and ellipsiz
 
 ### Home
 
-Answers one question: is the radar working, and does anything need me? Every tab's header carries a context line that names only the most severe exception, else one muted fact (Home: an offline source or a failed run, else *Scanned 18:00*; Activity: a failed scan or the actionable count today; Inbox: chats worth a look, else how many are monitored; Family: a missing calendar token, a missing Routes API key, or missing locations, else *Rules in force*; Settings: an offline source, else the build).
+Answers one question: is the radar working, and does anything need me? Every tab's header carries a context line that names only the most severe exception, else one muted fact (Home: an offline source or a failed run, else *Scanned 18:00*; Activity: a failed scan or the actionable count today; Inbox: chats worth a look, else how many are monitored; Family: a missing calendar token, a missing Routes API key, or missing locations, else *Rules in force*; Settings: an offline source, else an open passkey enrollment window, else the build; Home also names an open enrollment window after its exceptions).
 
 - **Glance card** — one row per source (**WhatsApp · Gmail · Calendar · Traffic**): its glyph with a liveness badge (connected, or should be and is not), the last run as a relative time with a distilled line (e.g. *12 new · 1 actionable*, *no significant delay*), and chips **only for exceptions** (Offline, Failed, *N actionable*, a traffic alert, calendar items to check) — no OK badge. Rows are drawn at once with a dash while loading, so nothing shifts when the poll answers.
 - **Links into Activity** — every glance row, and Home's header line when it names an exception, opens that run's sheet in Activity at the right scope.
 - **Latest runs** — the last three runs of any kind, as Activity's own row, plus *All activity*.
 
-The data comes from the unified run store, so CLI- and App-Launcher-launched runs appear here too. The per-source counts (stored, monitored, latest) moved to Settings → *Source counts*; the monitored channels list is Inbox's Monitored scope.
+The data comes from the unified run store, so CLI- and App-Launcher-launched runs appear here too. The per-source counts (stored, monitored, latest) moved to each source's sheet in Settings → *Sources*; the monitored channels list is Inbox's Monitored scope.
 
 - `GET /api/dashboard`, `GET /api/execution/health` (liveness), `GET /api/audit/runs?limit=3`
 
@@ -228,15 +228,6 @@ A **Worth a look** section appears above the list only when a recent message in 
 
 **Per-source behaviour.** The tab has independent monitoring-state and source selectors, a source mark on every channel's avatar (source identity comes from the glyph, not colour), and source-appropriate history. Gmail shows timestamp, sender, subject, body, and thread id, and the chat sheet's subtitle carries the **sender address**; WhatsApp retains linking, aliases, voice playback, and merged history. The Monitored/Ignored vocabulary and watch-toggle wording are shared across sources: with the Gmail filter active the list is of **senders (email addresses)** from the last `discovery_days` rather than WhatsApp "channels" — the one wording difference — but the not-monitored bucket still reads **Ignored** and the toggle still reads "tap to ignore" / "tap to monitor". Internally a Gmail demote still lands on the `discovered` status, preserving the discovery window and retention exemptions.
 
-**Classifier configuration** is deliberately visible in Settings (the header gear, never a tab). The shared Stage-2 system prompt, WhatsApp Stage-1 roots, Gmail Stage-1 buckets/rules, the Gmail survey taxonomy (a rule-generation reference, not an LLM prompt), the effective whitelist, and the actual Gmail history scope are all shown read-only and labelled with their source files — they are edited in `src/analysis/prompts/` by design. The safe settings subset is editable: connector, classifier, notifier, and hub model persist to `config/local.json`; the Telegram token and chat id are masked and stored in `config/webapp_config.json`. Scan frequency stays in App Launcher's Jobs tab. Activity's run sheet shows the exact rendered prompts actually sent, so configured intent and runtime behavior can be compared directly.
-
-The guarded **Rebuild** (full cache rebuild — backs up the DB, preserves monitored/ignored/alias state and family links, resets run history) lives in the **Maintenance** card in Settings, since it operates on the local message cache.
-
-Settings also holds **Recent syncs** (each ingest: *timestamp · source · chats/messages added*) and **Sources health** — WhatsApp, Gmail, and a read-only **Calendar** row (token, calendar count, last successful fetch). Each source distinguishes configured, enabled, authorized/connected, whitelisted, stored, monitored, and last-checked state; Gmail displays only a masked connected account and never returns token, secret, client, OAuth-payload, or credential-path values. When WhatsApp is down its card offers one-tap **Reconnect** and, when re-linking is required, shows the **pairing QR right in the phone UI**.
-
-- `GET /api/execution/health`, `GET /api/execution/syncs`
-- `GET /api/sidecar/status`, `POST /api/sidecar/start`, `GET /api/sidecar/qr`
-
 **Send to Task-OS** (#307) is a per-message control in the history overlay: tapping it POSTs the message to [task-os](../task-os)'s Inbox (`POST /api/tasks`) as a task titled from the message text, with sender/chat/timestamp folded into the description. Off by default — set `task_os.enabled: true` (or `WR_TASK_OS_ENABLED=1`) and `WR_TASK_OS_TOKEN` in `.env` to turn it on; `WR_TASK_OS_BASE_URL` defaults to `http://127.0.0.1:8448`. The export is idempotent: the first successful send persists to `messages.task_exported_at` and every later tap on the same message reads that back instead of posting again (task-os's own `POST /api/tasks` doesn't yet dedupe on `external_id` — [task-os#98](../task-os) — so this repo is what actually protects a retry). Not-configured and upstream failures surface as a toast, never a silent no-op.
 
 - `GET /api/chats`, `GET /api/chats/tripwire`, `GET /api/chats/{id}/history`, `POST /api/chats/{id}/status`
@@ -257,6 +248,22 @@ Full behaviour and every knob: [`docs/family-checks.md`](docs/family-checks.md).
 
 - `GET /api/family` — rules, recent runs, the travel-block knobs, per-calendar write capability, last-sweep summary, and `live_sweep_blockers` (the reasons a live sweep would write nothing, reported for the run control and enforced independently by the sweep itself)
 - `POST /api/family` — the full editable schedule, toggles, and threshold, plus `travel_blocks_enabled` / `travel_blocks_dry_run` / `min_home_dwell_min` / `title_template`; all validated, and a rejection names the field
+
+### Settings
+
+Settings is the header gear on every pane, never a tab: a dialog laid out as the same inset groups as Family, each row showing its current value and opening a sheet with its control at 44px. A sheet commits on **Done** with a partial `POST /api/config` holding only its own fields, then a toast. A rejected value (the server names it) keeps the sheet open. The sheet's close button, the backdrop and Esc discard its edits.
+
+- **Display** — Text size (Small, Default, Large), inline.
+- **Sources** — a row each for WhatsApp, Gmail and Calendar with the connection state and last sync. Each opens that source's sheet: the enable switch (WhatsApp, Gmail) and for WhatsApp the connector, then its stored and monitored counts and latest message, its health, its **Recent syncs** (*timestamp · source · chats/messages added*), and for WhatsApp one-tap **Reconnect** with the **pairing QR right in the phone UI** when re-linking is required. Each source distinguishes configured, enabled, authorized/connected, whitelisted, stored, monitored, and last-checked state; Gmail displays only a masked connected account and never returns token, secret, client, OAuth-payload, or credential-path values. Calendar is read-only here (its daily scan is switched on in Family).
+- **How messages are judged** — the Classifier (a sheet with its select), and read-only sheets for the keyword rules (WhatsApp; Gmail, with the effective whitelist and history scope), the Gmail survey taxonomy (a rule-generation reference, never sent to the model) and the instructions to the model (the shared system prompt; each message adds which source it came from). They are edited in `src/analysis/prompts/` by design, and each sheet names its file on one *Where this lives* line. Activity's run sheet shows the exact rendered prompts actually sent, so configured intent and runtime behavior can be compared directly.
+- **Alerts** — Delivery (the notifier, the Telegram chat id and the bot token; the token is write-only — the sheet says set or not set, never echoes it, and sends one only when typed) and Model hub (base URL and model). Connector, classifier, notifier and hub persist to `config/local.json`; the Telegram chat id and token to `config/webapp_config.json`. Scan frequency stays in App Launcher's Jobs tab.
+- **Maintenance** — *Rebuild message cache* (a full rebuild: backs up the DB, preserves monitored/ignored/alias state and family links, resets run history) opens a confirm sheet stating what it preserves and what resets; it operates on the local message cache.
+- **This install** — Passkeys (the enrolled devices, each removed behind an in-sheet confirm, and, only while the tray's enrollment window is open, a device name and *Enroll this device*) and the build. While the window is open, Home's and Settings' header lines read *Passkey enrollment open* (Home's opens the Passkeys sheet).
+
+- `GET /api/config`, `POST /api/config` (partial)
+- `GET /api/execution/health`, `GET /api/execution/syncs`
+- `GET /api/sidecar/status`, `POST /api/sidecar/start`, `GET /api/sidecar/qr`
+- `GET /api/webauthn/status`, `DELETE /api/webauthn/devices/{id}`, `POST /api/webauthn/enroll/{begin,finish}`
 
 ### Running the webapp
 

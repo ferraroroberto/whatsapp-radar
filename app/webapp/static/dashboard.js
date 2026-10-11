@@ -7,10 +7,12 @@
  * (the owner's first stop when an alert looks odd). Below it, Latest runs: the
  * last three runs of any kind as Activity's own row, plus "All activity".
  *
- * Liveness comes from the source-health poll (execution.js, also feeding the
- * Settings cards) and runs from /api/dashboard; each lands on its own, so
- * neither delays the first paint. The per-source counts card lives in Settings
- * since #374 and is still rendered here from the same answer. Chat names go in
+ * Liveness comes from the source-health poll (execution.js, also feeding
+ * Settings' source sheets) and runs from /api/dashboard; each lands on its
+ * own, so neither delays the first paint. The per-source counts live in each
+ * Settings source sheet since #374/#377 and are still rendered here from the
+ * same answer. While the tray's passkey enrollment window is open the header
+ * says so and opens the Passkeys sheet (#377: the card left Home). Chat names go in
  * via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
@@ -22,6 +24,8 @@ import {
 import { setTab } from './tabs.js';
 import { openRunInActivity, runRowFor } from './activity.js';
 import { fetchHealth, isRunning } from './execution.js';
+import { openPasskeys } from './config.js';
+import { onWebauthnChange } from './webauthn.js';
 import { icon } from './_vendored/icons/icons.js';
 
 const GLANCE = ['whatsapp', 'gmail', 'calendar', 'traffic'];
@@ -119,7 +123,9 @@ function renderHeader() {
   const offline = GLANCE.find(function (s) { return liveness(s) === 'down'; });
   const failed = GLANCE.find(function (s) { const c = card(s); return c && c.status === 'failed'; });
   const btn = els.dashStatus;
+  const w = state.webauthn || {};
   let target = null;
+  let open = null;
   if (offline) {
     setHeaderStatus(btn, SOURCE_LABEL[offline] + ' offline', 'danger');
     target = card(offline);
@@ -127,6 +133,9 @@ function renderHeader() {
     setHeaderStatus(btn, SOURCE_LABEL[failed] + (failed === 'traffic' ? ' check failed'
       : failed === 'calendar' ? ' sync failed' : ' scan failed'), 'danger');
     target = card(failed);
+  } else if (w.configured && w.enrollment_open) {
+    setHeaderStatus(btn, 'Passkey enrollment open', 'accent');
+    open = openPasskeys;
   } else {
     const last = state.dashboard && state.dashboard.scans && state.dashboard.scans.last;
     setHeaderStatus(btn, state.dashboard
@@ -135,8 +144,9 @@ function renderHeader() {
   }
   // The exception line is a link into that run in Activity; a plain fact is not.
   const ref = target && target.kind && target.started_at ? { kind: target.kind, dbId: target.db_run_id } : null;
-  btn.disabled = !ref;
-  btn.onclick = ref ? function () { openRunInActivity(ref); } : null;
+  if (ref) open = function () { openRunInActivity(ref); };
+  btn.disabled = !open;
+  btn.onclick = open;
 }
 
 function renderGlance() {
@@ -160,7 +170,7 @@ async function fetchLatest() {
   }
 }
 
-// ----------------------------------------------------------- source counts (Settings)
+// ------------------------------------------- source counts (Settings' source sheets)
 
 function renderSourceCounts(d) {
   els.dashSources.textContent = '';
@@ -190,6 +200,7 @@ function renderSourceCounts(d) {
 function sourceRow(sourceKey, detailText) {
   const row = document.createElement('div');
   row.className = 'source-summary-row';
+  row.dataset.source = sourceKey;
   const name = document.createElement('span');
   name.className = 'source-badge source-' + sourceKey;
   name.append(sourceIcon(sourceKey));
@@ -204,5 +215,6 @@ function sourceRow(sourceKey, detailText) {
 export function wireDashboard() {
   // Draw the rows at once, a dash for every value still loading (#374).
   renderGlance();
+  onWebauthnChange(renderHeader);
   els.dashAllActivity.addEventListener('click', function () { setTab('activity'); });
 }

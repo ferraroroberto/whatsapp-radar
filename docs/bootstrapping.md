@@ -77,7 +77,7 @@ After pairing, the sidecar:
 - writes the ignored buffer `data/linked_device/` (`chats.ndjson`, `messages.ndjson`, `status.json`);
 - reconnects automatically on transient drops; it only needs re-pairing if you log the device out from the phone.
 
-**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 7. You can also re-pair from the phone later via the Sources health card's QR in Settings — see [`manual.md`](manual.md).)
+**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 7. You can also re-pair from the phone later via the QR in Settings → Sources → WhatsApp — see [`manual.md`](manual.md).)
 
 ## 3 — Point the core at the live connector
 
@@ -110,7 +110,7 @@ Marking a chat **monitored** baselines its cursor to the latest message, so the 
 1. In Telegram, message **@BotFather**, send `/newbot`, follow the prompts. Copy the **bot token**.
 2. Decide the destination chat (e.g. a chat shared with your partner). Add the bot to it if it's a group, or start a direct chat with the bot.
 3. Get the **chat id**: send any message to the destination, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and read `chat.id` from the JSON.
-4. Store the secrets. The canonical home is the gitignored `config/webapp_config.json` (`telegram_bot_token` / `telegram_chat_id`) — set them from the PWA's Settings (the header gear), or copy `config/webapp_config.sample.json` and edit. They can also be set as env in `.env` (which overrides the JSON):
+4. Store the secrets. The canonical home is the gitignored `config/webapp_config.json` (`telegram_bot_token` / `telegram_chat_id`) — set them from the PWA's Settings → Alerts → Delivery (the header gear), or copy `config/webapp_config.sample.json` and edit. They can also be set as env in `.env` (which overrides the JSON):
 
    ```
    WR_NOTIFIER=telegram
@@ -203,7 +203,7 @@ Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}`
 | --- | --- | --- |
 | Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `scripts\set_password.py` |
 | Telegram bot token | On leak only | Re-issue via BotFather, update `config\webapp_config.json` (or `WR_TELEGRAM_*`) |
-| Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from Settings → Sources health) |
+| Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from Settings → Sources → WhatsApp) |
 | Baileys (sidecar) updates | Occasionally — it tracks an unofficial protocol | `cd sidecar && npm update`; the buffer contract isolates churn to `sidecar/index.js` |
 
 See [`manual.md`](manual.md) for routine operation and troubleshooting, and [`linked-device.md`](linked-device.md) for the connector design and unofficial-library risk.

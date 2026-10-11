@@ -18,19 +18,15 @@ import { fetchQuiet, jsonApi, toast } from './api.js';
 import { fmtLocalDateTime, setHeaderStatus, travelStatusLabel } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
+import {
+  buildSelect, el, fieldRow, setRowValue, sheetHost, switchRow, textInput, valueRow,
+} from './edit-sheet.js';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // The "Where this lives" line every rule sheet ends on (J-07: paths and config
 // keys never sit in a label).
 const LOCAL_CONFIG = 'config/local.json. The next run picks a change up, no restart.';
-
-function el(tag, cls, text) {
-  const node = document.createElement(tag);
-  if (cls) node.className = cls;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
 
 function defRow(dl, term, value) {
   dl.append(el('dt', 'muted small', term));
@@ -40,11 +36,6 @@ function defRow(dl, term, value) {
 // --------------------------------------------------------------- state
 
 let lastData = null;   // last /api/family payload: the page's values, every sheet's start
-
-/* The open sheet: its spec, its shell, its draft, and the payload it opened
- * with (Done with nothing changed closes without a POST). One at a time — the
- * sheets are modal. */
-let open = null;
 
 const RULE_SHELL = {
   dialog: els.familySheet,
@@ -66,6 +57,10 @@ const TRAVEL_SHELL = {
   foot: null,
   done: els.familyTravelDone,
 };
+
+// Both sheets commit through the one POST and adopt its answer.
+const ruleSheet = sheetHost(RULE_SHELL, postFamily, adopt);
+const travelSheet = sheetHost(TRAVEL_SHELL, postFamily, adopt);
 
 export async function fetchFamily() {
   await fetchQuiet('/api/family', adopt);
@@ -103,10 +98,7 @@ function renderHeader(d) {
 // ----------------------------------------------------------- page values
 
 function setValue(key, text, tone) {
-  for (const node of els.paneFamily.querySelectorAll('[data-value="' + key + '"]')) {
-    node.textContent = text;
-    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
-  }
+  setRowValue(els.paneFamily, key, text, tone);
 }
 
 function personLabel(person) {
@@ -196,57 +188,6 @@ async function postFamily(payload) {
   });
 }
 
-function showError(shell, message) {
-  shell.error.textContent = message;
-  shell.error.hidden = !message;
-  if (message) shell.error.scrollIntoView({ block: 'nearest' });
-}
-
-function openSheet(spec) {
-  if (!lastData || !spec) return;
-  const shell = spec.shell || RULE_SHELL;
-  const draft = spec.draft();
-  open = { spec: spec, shell: shell, draft: draft, baseline: JSON.stringify(spec.payload(draft)) };
-  if (shell.title) shell.title.textContent = spec.title;
-  if (shell.foot) shell.foot.hidden = !!spec.readOnly;
-  showError(shell, '');
-  renderSheet();
-  if (!shell.dialog.open) shell.dialog.showModal();
-}
-
-function renderSheet() {
-  const spec = open.spec;
-  const body = open.shell.body;
-  body.textContent = '';
-  if (spec.help) body.append(el('p', 'family-sheet-help', spec.help));
-  spec.render(body, open.draft);
-  if (spec.where) body.append(el('p', 'family-sheet-where', 'Where this lives: ' + spec.where));
-  if (spec.after) spec.after();
-}
-
-async function commitSheet() {
-  if (!open) return;
-  const current = open;
-  const payload = current.spec.payload(current.draft);
-  if (JSON.stringify(payload) === current.baseline) {
-    current.shell.dialog.close();
-    return;
-  }
-  current.shell.done.disabled = true;
-  try {
-    const data = await postFamily(payload);
-    toast(current.spec.title + ' saved.');
-    open = null;
-    current.shell.dialog.close();
-    adopt(data);
-  } catch (exc) {
-    // The server names the field it rejected; the sheet stays open on it.
-    showError(current.shell, exc.message || String(exc));
-  } finally {
-    current.shell.done.disabled = false;
-  }
-}
-
 // A switch on the page applies on tap (#376 keeps the immediate patch).
 export async function patchFamily(body) {
   try {
@@ -259,64 +200,12 @@ export async function patchFamily(body) {
 
 // ------------------------------------------------------- sheet controls
 
-function switchControl(labelText, on, onToggle) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'toggle';
-  btn.setAttribute('role', 'switch');
-  btn.setAttribute('aria-label', labelText);
-  btn.innerHTML = '<span class="knob"></span><span class="toggle-label"></span>';
-  setSwitch(btn, on);
-  btn.addEventListener('click', function () {
-    const next = btn.getAttribute('aria-checked') !== 'true';
-    setSwitch(btn, next);
-    onToggle(next);
-  });
-  return btn;
-}
-
-function switchRow(labelText, on, onToggle) {
-  const row = el('div', 'row');
-  row.append(el('span', undefined, labelText), switchControl(labelText, on, onToggle));
-  return row;
-}
-
-// Label left, control right (the modal's .row contract).
-function fieldRow(labelText, control) {
-  const row = el('label', 'row');
-  row.append(el('span', undefined, labelText), control);
-  return row;
-}
-
 function fieldLabel(text) { return el('p', 'field-label', text); }
 
 function personOptions() {
   const opts = [{ value: '', label: 'Nobody' }];
   for (const c of lastData.calendars) opts.push({ value: c.person, label: c.label || c.person });
   return opts;
-}
-
-function buildSelect(options, current, labelText, onChange) {
-  const sel = document.createElement('select');
-  sel.className = 'select-native';
-  sel.setAttribute('aria-label', labelText);
-  let matched = false;
-  for (const opt of options) {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    if (opt.value === current) { o.selected = true; matched = true; }
-    sel.append(o);
-  }
-  if (!matched && current) {
-    const extra = document.createElement('option');
-    extra.value = current;
-    extra.textContent = current + ' (unrecognized)';
-    extra.selected = true;
-    sel.append(extra);
-  }
-  sel.addEventListener('change', function () { onChange(sel.value); });
-  return sel;
 }
 
 function timeInput(value, onChange) {
@@ -348,17 +237,6 @@ function numberInput(value, min, max, onChange) {
     const v = clamp();
     if (v !== null) input.value = String(v);
   });
-  return input;
-}
-
-function textInput(value, placeholder, maxLength, onChange) {
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'input-native';
-  input.value = value;
-  if (placeholder) input.placeholder = placeholder;
-  if (maxLength) input.maxLength = maxLength;
-  input.addEventListener('input', function () { onChange(input.value); });
   return input;
 }
 
@@ -447,7 +325,7 @@ function renderWindows(body, draft) {
   draft.forEach(function (w) {
     list.append(windowRow(w, function () {
       draft.splice(draft.indexOf(w), 1);
-      renderSheet();
+      ruleSheet.render();
     }));
   });
   body.append(list);
@@ -456,7 +334,7 @@ function renderWindows(body, draft) {
   add.type = 'button';
   add.addEventListener('click', function () {
     draft.push({ label: '', days: [], time: '', end_time: '' });
-    renderSheet();
+    ruleSheet.render();
   });
   body.append(add);
 }
@@ -497,10 +375,7 @@ const SHEETS = {
         body.append(row);
       }
       if (!lastData.calendars.length) body.append(el('p', 'muted small', 'No household calendars configured yet.'));
-      const token = el('div', 'row');
-      token.append(el('span', undefined, 'Calendar token'),
-        el('span', 'family-sheet-value', lastData.token_present ? 'present' : 'missing'));
-      body.append(token);
+      body.append(valueRow('Calendar token', lastData.token_present ? 'present' : 'missing'));
       if (!lastData.token_present) body.append(warnNote('No Calendar token — nothing can be checked.'));
     },
   },
@@ -622,9 +497,7 @@ const SHEETS = {
     render: function (body, d) {
       body.append(switchRow('Skip train commutes', d.on, function (v) { d.on = v; }));
       const words = (lastData.traffic.train_keywords || []).join(', ');
-      const row = el('div', 'row');
-      row.append(el('span', undefined, 'Matches titles with'), el('span', 'family-sheet-value', words || '—'));
-      body.append(row);
+      body.append(valueRow('Matches titles with', words || '—'));
     },
   },
 };
@@ -794,7 +667,6 @@ function renderTravel(body, draft) {
 }
 
 const TRAVEL = {
-  shell: TRAVEL_SHELL,
   title: 'Travel blocks',
   help: 'Commute blocks the daily calendar sync keeps on each calendar: one before a trip '
     + 'out, one for the drive home.',
@@ -1012,7 +884,7 @@ async function finishSweep(record) {
 async function refreshAfterSweep() {
   await fetchQuiet('/api/family', function (data) {
     adopt(data);
-    if (open && open.spec === TRAVEL) renderSheet();
+    if (travelSheet.isOpen(TRAVEL)) travelSheet.render();
   });
 }
 
@@ -1036,20 +908,6 @@ function renderTraffic() {
 
 // ---------------------------------------------------------------- boot
 
-function wireShell(shell) {
-  shell.close.addEventListener('click', function () { shell.dialog.close(); });
-  // Native <dialog>: a click on the element itself is the ::backdrop.
-  shell.dialog.addEventListener('click', function (ev) {
-    if (ev.target === shell.dialog) shell.dialog.close();
-  });
-  // Close, backdrop and Esc all end here, and all discard the draft. The event
-  // is queued, so only drop the sheet that is actually gone.
-  shell.dialog.addEventListener('close', function () {
-    if (open && open.shell === shell && !shell.dialog.open) open = null;
-  });
-  shell.done.addEventListener('click', commitSheet);
-}
-
 function wireSwitch(btn, key) {
   btn.addEventListener('click', function () {
     const next = btn.getAttribute('aria-checked') !== 'true';
@@ -1063,11 +921,11 @@ function wireSwitch(btn, key) {
 export function wireFamily() {
   els.paneFamily.addEventListener('click', function (ev) {
     const row = ev.target.closest('[data-sheet]');
-    if (row) openSheet(SHEETS[row.dataset.sheet]);
+    if (row && lastData) ruleSheet.open(SHEETS[row.dataset.sheet]);
   });
-  els.familyTravelRow.addEventListener('click', function () { openSheet(TRAVEL); });
+  els.familyTravelRow.addEventListener('click', function () {
+    if (lastData) travelSheet.open(TRAVEL);
+  });
   wireSwitch(els.familySyncSwitch, 'family_enabled');
   wireSwitch(els.familyAskSwitch, 'ask_missing_locations');
-  wireShell(RULE_SHELL);
-  wireShell(TRAVEL_SHELL);
 }

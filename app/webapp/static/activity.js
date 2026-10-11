@@ -536,7 +536,7 @@ function renderSheet() {
       t.funnel.textContent = '';
       const p = document.createElement('p');
       p.className = 'muted small';
-      p.textContent = isRunning(status) ? 'Running… the output below streams live.' : 'No funnel for this run.';
+      p.textContent = isRunning(status) ? 'Running… open Raw output to follow it live.' : 'No funnel for this run.';
       t.funnel.appendChild(p);
     }
     renderSourceFunnels(t.sources, res.sources || {});

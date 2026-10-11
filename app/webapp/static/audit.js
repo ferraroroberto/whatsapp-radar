@@ -672,11 +672,11 @@ export function wireAudit() {
     renderRuns();
   });
   els.auditFilteredDays.addEventListener('click', function (ev) {
-    const btn = ev.target.closest('.range-tab');
+    const btn = ev.target.closest('.segmented-item');
     if (!btn) return;
     auditState().filteredDays = Number(btn.dataset.days) || 30;
-    for (const b of els.auditFilteredDays.querySelectorAll('.range-tab')) {
-      b.classList.toggle('active', b === btn);
+    for (const b of els.auditFilteredDays.querySelectorAll('.segmented-item')) {
+      b.setAttribute('aria-pressed', String(b === btn));
     }
     fetchFiltered(false);
   });

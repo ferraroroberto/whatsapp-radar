@@ -37,6 +37,9 @@
   --toggle-knob: #ffffff;
   --close-bg: transparent; /* glyph-only controls draw nothing at rest (fleet-config#1259) */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* chip / segmented-track fill; text on it is fg. Mixed from --muted, so the
+     dark theme's --muted gives the dark value with no second declaration. */
+  --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
   --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
   --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
   --deficit-soft: color-mix(in srgb, var(--deficit) 12%, transparent);
@@ -290,8 +293,11 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 #configForm .button-tint { margin-top: 12px; }
 
 /* ============================================================ range tabs */
-/* Canonical ghost segmented control (home-automation .range-tab): one height
-   everywhere (--control-h); active = accent tint + text + strong soft border.
+/* Legacy ghost pills (home-automation .range-tab), being retired for the
+   vendored segmented control (#372): Run's pickers and Audit's kind filter
+   convert in Step 2/6, Inbox's source row in Step 4/6, which deletes these
+   rules. One height everywhere (--control-h); active = accent tint + text +
+   strong soft border.
    The ::before extends the tap target to >=44px vertically without inflating
    the visual pill. */
 .range-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
@@ -424,7 +430,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   align-items: center;
   margin: var(--gap) 0;
 }
-.chats-toolbar .range-tabs { flex: 1; margin-bottom: 0; }
+.chats-toolbar .segmented { flex: 1; }
 .chats-search { margin-bottom: 10px; }
 #chatsCount { margin: 0 2px 10px; }
 
@@ -1030,6 +1036,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Cross-run filtered review (#194): a bounded flat list, folded by default.
    Each whole row is one >=60px drill-through target; entries use dividers,
    never nested cards, per the fleet list-row contract. */
+#auditFilteredDays { margin-bottom: 12px; }
 .audit-filtered-list { max-height: 360px; overflow-y: auto; }
 .audit-filtered-row + .audit-filtered-row { border-top: 1px solid var(--line-muted); }
 .audit-filtered-main {

@@ -42,6 +42,7 @@
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
+  <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>WhatsApp Radar</title>
 </head>
@@ -336,10 +337,10 @@
           </span>
         </div>
         <div class="chats-toolbar">
-          <div id="chatsFilter" class="range-tabs" role="radiogroup" aria-label="Message status filter">
-            <button id="chatsFilterMonitored" type="button" class="range-tab active" data-filter="monitored">Monitored</button>
-            <button id="chatsFilterIgnored" type="button" class="range-tab" data-filter="ignored">Ignored</button>
-            <button id="chatsFilterAll" type="button" class="range-tab" data-filter="all">All</button>
+          <div id="chatsFilter" class="segmented" role="group" aria-label="Message status filter">
+            <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
+            <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
+            <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
           </div>
         </div>
         <div id="chatsSourceFilter" class="range-tabs" role="radiogroup" aria-label="Message source filter">
@@ -590,10 +591,10 @@
         </summary>
         <div class="collapse-body">
           <p class="muted small">Recent messages the radar reviewed without raising an actionable item.</p>
-          <div id="auditFilteredDays" class="range-tabs" role="radiogroup" aria-label="Filtered-out time range">
-            <button type="button" class="range-tab" data-days="7">7 days</button>
-            <button type="button" class="range-tab active" data-days="30">30 days</button>
-            <button type="button" class="range-tab" data-days="90">90 days</button>
+          <div id="auditFilteredDays" class="segmented" role="group" aria-label="Filtered-out time range">
+            <button type="button" class="segmented-item" aria-pressed="false" data-days="7">7 days</button>
+            <button type="button" class="segmented-item" aria-pressed="true" data-days="30">30 days</button>
+            <button type="button" class="segmented-item" aria-pressed="false" data-days="90">90 days</button>
           </div>
           <p id="auditFilteredStatus" class="muted small" role="status" aria-live="polite">Reading filtered decisions…</p>
           <ul id="auditFiltered" class="card-list audit-filtered-list" aria-label="Filtered-out decisions"></ul>
@@ -697,11 +698,11 @@
             Text size
           </h3>
         </div>
-        <nav class="range-tabs" id="textSizeControl" aria-label="Text size">
-          <button type="button" class="range-tab" data-textsize="small">Small</button>
-          <button type="button" class="range-tab" data-textsize="default">Default</button>
-          <button type="button" class="range-tab" data-textsize="large">Large</button>
-        </nav>
+        <div class="segmented" id="textSizeControl" role="group" aria-label="Text size">
+          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
+          <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+        </div>
       </section>
       <details id="configCard" class="card card--collapsible">
         <summary class="collapse-summary">

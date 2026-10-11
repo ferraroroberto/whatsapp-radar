@@ -680,8 +680,8 @@ function setSourceFilter(source) {
 
 function setFilter(filter) {
   state.chatsFilter = filter;
-  els.chatsFilterMonitored.classList.toggle('active', filter === 'monitored');
-  els.chatsFilterIgnored.classList.toggle('active', filter === 'ignored');
-  els.chatsFilterAll.classList.toggle('active', filter === 'all');
+  els.chatsFilterMonitored.setAttribute('aria-pressed', String(filter === 'monitored'));
+  els.chatsFilterIgnored.setAttribute('aria-pressed', String(filter === 'ignored'));
+  els.chatsFilterAll.setAttribute('aria-pressed', String(filter === 'all'));
   render();
 }

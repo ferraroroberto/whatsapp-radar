@@ -17,7 +17,7 @@ WhatsApp ──▶ Node sidecar (Baileys) ──▶ data/linked_device/*.ndjson 
                                                                               ▼
                                                               Telegram digest (read-only, actionable-only)
 
-           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Messages · Execution · Audit · Family
+           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Activity · Messages · Family
                          access: Tailscale TLS (default) · Cloudflare named tunnel (optional)
 ```
 
@@ -77,7 +77,7 @@ After pairing, the sidecar:
 - writes the ignored buffer `data/linked_device/` (`chats.ndjson`, `messages.ndjson`, `status.json`);
 - reconnects automatically on transient drops; it only needs re-pairing if you log the device out from the phone.
 
-**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 7. You can also re-pair from the phone later via the Execution tab's QR — see [`manual.md`](manual.md).)
+**Leave the sidecar running** — it is a long-running process, not a one-shot. (App Launcher keeps it supervised; see Step 7. You can also re-pair from the phone later via the Sources health card's QR in Settings — see [`manual.md`](manual.md).)
 
 ## 3 — Point the core at the live connector
 
@@ -172,9 +172,9 @@ From the Jobs tab's **+**, add:
 | --- | --- | --- | --- |
 | `family-radar-scan` | `scan` | daily **18:00** (machine-local / Madrid time) | The WhatsApp/Gmail digest. |
 | `family-radar-calendar-sync` | `calendar-scan` | daily **18:05** | The family calendar-conflict summary (#168) always sends one Telegram summary on a live scheduled run, and carries the travel-block sweep (#263) inside it. Deliberately its own job, not chained after the scan job — a dead WhatsApp sidecar must never suppress the family calendar summary. Arm it as generously as you like: `wr calendar-scan` self-skips in-process when the local hour is before `family.run_hour` (#277), so the *effective* earliest run follows the config with no re-arm. Keep `family.run_hour` **below** this job's hour or the job will skip every day — with 18:05 here, the shipped default of 7 never gates. A skip logs one line and records no run row. |
-| `family-radar-traffic-check` | `traffic-check` | every **5 minutes** | Armed well below the configured `traffic.cadence_min` (default 30, editable from the Run tab's Traffic jam insurance card); `wr traffic-check` self-skips in-process when the cadence hasn't elapsed (#170), so a cadence edit takes effect immediately with no re-arm. A skip logs one line and records no run row. |
+| `family-radar-traffic-check` | `traffic-check` | every **5 minutes** | Armed well below the configured `traffic.cadence_min` (default 30, editable from the Family tab's Traffic jam insurance card); `wr traffic-check` self-skips in-process when the cadence hasn't elapsed (#170), so a cadence edit takes effect immediately with no re-arm. A skip logs one line and records no run row. |
 
-A live `scan` self-heals the sidecar when the device is still paired and **aborts loudly** (non-zero exit, run recorded failed, alert sent) if the source is dead, so a scheduled run can never report green while checking nothing. Change any cadence anytime in the Jobs tab; re-saving there re-syncs the schtasks entry (the traffic-check job's *effective* cadence is instead controlled from the Run tab, per above — its Task Scheduler entry itself should stay at the fixed 5-minute polling frequency). `wr resync` and `wr reprocess --confirm` can be registered the same way if you want them on a schedule.
+A live `scan` self-heals the sidecar when the device is still paired and **aborts loudly** (non-zero exit, run recorded failed, alert sent) if the source is dead, so a scheduled run can never report green while checking nothing. Change any cadence anytime in the Jobs tab; re-saving there re-syncs the schtasks entry (the traffic-check job's *effective* cadence is instead controlled from the Family tab, per above — its Task Scheduler entry itself should stay at the fixed 5-minute polling frequency). `wr resync` and `wr reprocess --confirm` can be registered the same way if you want them on a schedule.
 
 ### Apps tab — admin PWA
 
@@ -203,7 +203,7 @@ Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}`
 | --- | --- | --- |
 | Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `scripts\set_password.py` |
 | Telegram bot token | On leak only | Re-issue via BotFather, update `config\webapp_config.json` (or `WR_TELEGRAM_*`) |
-| Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from the Execution tab) |
+| Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from Settings → Sources health) |
 | Baileys (sidecar) updates | Occasionally — it tracks an unofficial protocol | `cd sidecar && npm update`; the buffer contract isolates churn to `sidecar/index.js` |
 
 See [`manual.md`](manual.md) for routine operation and troubleshooting, and [`linked-device.md`](linked-device.md) for the connector design and unofficial-library risk.

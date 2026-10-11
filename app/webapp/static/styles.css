@@ -25,6 +25,7 @@
   --deficit: #cf222e;       /* danger */
   --danger-text: #a40e26;   /* danger text on its own tint (button-tint.danger) */
   --attention: #9a6700;     /* attention */
+  --attention-text: #7d4e00; /* attention text on its own tint (status chip) */
   /* colors — the five saturated icon-tile fills (only saturated surfaces) */
   --tile-green: #1f883d;
   --tile-blue: #0969da;
@@ -112,6 +113,7 @@
   --deficit: #f85149;       /* danger */
   --danger-text: #ff7b72;
   --attention: #d29922;     /* attention */
+  --attention-text: #e3b341;
   --tile-green: #238636;
   --tile-blue: #1f6feb;
   --tile-purple: #8957e5;
@@ -294,9 +296,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ============================================================ range tabs */
 /* Legacy ghost pills (home-automation .range-tab), being retired for the
-   vendored segmented control (#372): Run's pickers and Audit's kind filter
-   convert in Step 2/6, Inbox's source row in Step 4/6, which deletes these
-   rules. One height everywhere (--control-h); active = accent tint + text +
+   vendored segmented control (#372, #373): the last consumer, Inbox's source
+   row, becomes a field chip in Step 4/6, which deletes these rules. One height everywhere (--control-h); active = accent tint + text +
    strong soft border.
    The ::before extends the tap target to >=44px vertically without inflating
    the visual pill. */
@@ -809,11 +810,9 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-traffic-actions { display: flex; gap: var(--space-sm); margin-top: 12px; }
 .exec-traffic-actions > button { flex: 1; }
 
-.exec-mode-seg .range-tab { white-space: nowrap; }
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }
-.exec-dry-opts .range-tabs { flex: 1; margin-bottom: 0; }
+.exec-dry-opts .segmented { flex: 1; }
 .exec-days { width: 84px; }
-.exec-stages-hint { margin: 0 0 4px; }
 
 /* Pipeline steps: flat separator rows — icon + label left, switch right. */
 .exec-stages { border: 0; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; }
@@ -879,7 +878,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-funnel-label { font-size: var(--font-caption); color: var(--muted); }
 .exec-preview { margin: 0 0 4px; }
 .exec-output { max-height: 280px; cursor: pointer; }
-.exec-viewer-kind { font-size: var(--font-label); font-weight: 600; color: var(--ink); margin: 0 0 2px; }
 
 .source-status-list,
 .source-funnel-list,
@@ -947,34 +945,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-radius: var(--radius-md);
 }
 
-/* Recent-runs list: one lean line each — OK/KO · kind · when. */
-.exec-runs { gap: 0; margin: 0; padding: 0; max-height: 210px; overflow-y: auto; }
-.exec-run-li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 4px;
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-.exec-run-li:last-child { border-bottom: 0; }
-/* Selected row: a square full-row shade consistent with the divider-separated
-   list (no rounded pill inside a flat list). */
-.exec-run-li.selected { background: var(--accent-soft); }
-.exec-run-badge {
-  font-size: var(--font-caption);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  min-width: 24px;
-  text-align: center;
-  flex: none;
-}
-.exec-run-badge.ok { color: var(--on); }
-.exec-run-badge.ko { color: var(--deficit); }
-.exec-run-badge.run { color: var(--attention); }
-.exec-run-name { font-size: var(--font-label); color: var(--ink); flex: 1; min-width: 0; }
-.exec-run-when { flex: none; }
-
 /* Recent-syncs list: one lean line each — when · +msgs/+chats · source (#31). */
 .exec-syncs { gap: 0; margin: 0; padding: 0; max-height: 195px; overflow-y: auto; }
 .exec-sync-li {
@@ -990,50 +960,101 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-sync-src { flex: none; }
 
 /* ============================================================ audit (#12) */
-.audit-runs { gap: 0; padding: 0; margin: 0; max-height: 310px; overflow-y: auto; }
-.audit-run-li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-.audit-run-li:last-child { border-bottom: 0; }
-/* Selected row: square full-row shade, matching the flat separator list. */
-.audit-run-li.selected { background: var(--accent-soft); }
-.audit-run-top { display: flex; align-items: center; gap: 10px; }
-.audit-run-when { flex: 1; min-width: 0; }
-.audit-run-funnel { margin: 0; padding-left: 34px; }
-.audit-mode-badge {
+/* ============================================================ activity (#373) */
+/* Run and Audit merged into one list. Day groups sit under an overline over a
+   full-bleed vendored action-list card; the scope is the vendored segmented
+   control; the open run is a sheet on a phone and a right-hand pane on a wide
+   pointer screen (design.md layout.wide). */
+.activity-scope { margin: 0 0 var(--gap); }
+/* Reserve the first screen while the list reads, so rows arriving never shift
+   the scope control or the header above it. */
+.activity-list[data-state="loading"],
+.activity-list[data-state="error"] { min-height: 50vh; }
+.activity-loading { margin: var(--space-sm) 2px; }
+.run-group { margin: 0 0 var(--gap); }
+.run-group-title {
+  margin: 0 2px var(--space-xs);
   font-size: var(--font-caption);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 1px 7px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.run-group .card.action-list { margin: 0; }
+.run-chips { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.run-fold-chevron { color: var(--muted); font-size: var(--font-body); padding: 0 var(--space-xs); }
+.run-fold [aria-expanded="true"] ~ .run-chips .run-fold-chevron { transform: rotate(90deg); }
+/* The open run's row on a wide screen: tinted, its context line in accent-text
+   (fg-muted on the tint is 4.17:1, design.md settings group). */
+.run-row.is-open { background: var(--accent-soft); }
+.run-row.is-open .action-row-meta { color: var(--accent-text); }
+.activity-skipped { margin: 0 2px var(--gap); }
+#activityMore { margin: 0 0 var(--gap); }
+
+@media (min-width: 1100px) and (pointer: fine) {
+  .activity-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--gap);
+    align-items: start;
+  }
+  .activity-detail-pane {
+    position: sticky;
+    top: var(--gap);
+    max-height: calc(100vh - 2 * var(--gap));
+    overflow: auto;
+    padding: 0;
+  }
+  .activity-detail-pane .detail-card { background: transparent; }
+}
+
+/* Run sheet: header, meta, funnel, traces, Telegram text, raw output, and Stop
+   in the footer only while the run is live (fixes LAYOUT-05). */
+.run-sheet-dialog { width: min(640px, 92vw); }
+.run-sheet { padding: var(--space-md); }
+.run-sheet .run-output { margin: var(--gap) 0 0; }
+.run-sheet-foot {
+  position: sticky;
+  bottom: 0;
+  margin: var(--gap) calc(-1 * var(--space-md)) calc(-1 * var(--space-md));
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  background: var(--card);
+  border-top: 1px solid var(--line-muted);
+}
+.run-now-card,
+.filtered-card { padding: var(--space-md); }
+.exec-dry-row { border-bottom: 0; margin: 0 0 var(--space-sm); }
+
+/* Status chip (design.md): the chip geometry in one tone map, exceptions only. */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-sm);
   border-radius: var(--radius-pill);
-  flex: none;
-  border: 1px solid var(--line);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  background: var(--neutral-soft);
+  color: var(--ink);
 }
-.audit-mode-badge.live { color: var(--on); border-color: var(--on); }
-.audit-mode-badge.dry { color: var(--attention); border-color: var(--attention); }
-.audit-mode-badge.review { color: var(--muted); }
-
-/* A multi-run connector outage replaces its individual failed rows with one
-   attention-state marker, keeping the trust gap legible without list noise. */
-.audit-gap-li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 10px 4px 10px 10px;
-  border-bottom: 1px solid var(--line);
-  border-left: 2px solid var(--attention);
+.status-chip[data-tone="accent"] { background: var(--accent-soft); color: var(--accent-text); }
+.status-chip[data-tone="attention"] {
+  background: color-mix(in srgb, var(--attention) 16%, transparent);
+  color: var(--attention-text);
 }
-.audit-gap-li:last-child { border-bottom: 0; }
-.audit-gap-title { color: var(--attention); font-size: var(--font-label); }
-.audit-gap-title .icon { margin-right: var(--space-xs); }
-.audit-gap-range { color: var(--ink); font-size: var(--font-caption); }
+.status-chip[data-tone="danger"] {
+  background: color-mix(in srgb, var(--deficit) 16%, transparent);
+  color: var(--danger-text);
+}
+/* The header context line takes its exception's *-text tone; a plain fact
+   stays the home-head's muted status. */
+.home-head .status[data-tone="danger"] { color: var(--danger-text); }
+.home-head .status[data-tone="accent"] { color: var(--accent-text); }
+.home-head .status[data-tone="attention"] { color: var(--attention-text); }
+.home-head .status[data-tone="neutral"] { color: var(--ink); }
 
-/* Cross-run filtered review (#194): a bounded flat list, folded by default.
+/* Cross-run filtered review (#194): a bounded flat list in its own sheet.
    Each whole row is one >=60px drill-through target; entries use dividers,
    never nested cards, per the fleet list-row contract. */
 #auditFilteredDays { margin-bottom: 12px; }

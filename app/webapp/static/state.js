@@ -4,8 +4,8 @@
  * ?token=… on first load and strips it from the URL. On 401, the login overlay
  * shows; password → /api/login → bearer token.
  *
- * The five tabs (Dashboard · Messages · Execution · Audit · Family) each own a
- * state slice below; Settings is a modal, not a tab.
+ * The four tabs (Home · Activity · Inbox · Family) each own a state slice
+ * below; Settings is a modal, not a tab.
  */
 
 export const APP_PREFIX = 'wa-radar'; // localStorage namespace (token, theme, text size)
@@ -31,16 +31,14 @@ export const state = {
     truncated: false,
   },
   config: null,
-  // Execution (#11)
+  // Run queue + run controls (#11), driven from Activity's Run-now sheet (#373).
   execution: {
     mode: 'live',          // 'live' | 'dry_run'  (applies to scan + process)
     window: 'new',         // 'new' | 'days'      (dry-run scan only)
     days: 7,
-    runs: [],
+    runs: [],              // /api/execution/runs records (both stores, #163)
     skippedCount: 0,       // self-skips hidden from `runs` (#234, #277)
     active: null,          // {kind, run_id} of the in-flight run, or null
-    selected: null,        // {kind, run_id} the viewer is showing, or null
-    detail: null,          // last fetched run detail
     queue: [],             // pending chained actions (multi-step run), fired in order
     sidecar: null,         // last /api/sidecar/status snapshot (connection health)
     syncs: [],             // recent sync_log rows (per-sync ingest deltas)
@@ -50,18 +48,24 @@ export const state = {
     traffic: null,         // last /api/family traffic slice (enabled/cadence/status)
     trafficAt: 0,
   },
-  // Audit (#12): per-run trace drill-down (read-only).
-  audit: {
-    runs: [],              // recent runs of every kind (funnel or summary, #163)
+  // Activity (#373): one list over the run store, scoped, plus the run sheet.
+  activity: {
+    scope: 'messages',     // 'messages' | 'calendar' | 'traffic'
+    runs: [],              // /api/audit/runs rows for the scope, newest first
     coverageGaps: [],      // contiguous multi-run connector outages (#195)
+    hasMore: false,
+    request: 0,            // discard out-of-order responses after fast scope changes
+    loaded: false,
+    headerRuns: [],        // newest message runs, for the header line on any scope
+    openDays: {},          // traffic day key -> true while that day's fold is open
+    open: null,            // {kind, runId, dbId} the run sheet shows, or null
+    exec: null,            // the open run's execution record (output, Telegram, status)
+    trace: null,           // the open run's audit detail {run, traces}
     filtered: [],          // recent cross-run decisions that did not alert (#194)
     filteredDays: 30,
     filteredTotal: 0,
     filteredHasMore: false,
-    filteredRequest: 0,    // discard out-of-order responses after fast range changes
-    selected: null,        // selected run id, or null
-    detail: null,          // last fetched {run, traces}
-    kindFilter: 'all',     // 'all' | 'messages' | 'traffic-check' | 'calendar-scan'
+    filteredRequest: 0,
   },
   // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
   family: null,
@@ -148,10 +152,10 @@ export const els = {
   cfgNote: document.getElementById('cfgNote'),
   cfgSave: document.getElementById('cfgSave'),
 
-  // Execution (#11)
-  execMode: document.getElementById('execMode'),
-  execModeLive: document.getElementById('execModeLive'),
-  execModeDry: document.getElementById('execModeDry'),
+  // Run-now sheet (#11, #373)
+  runNowSheet: document.getElementById('runNowSheet'),
+  runNowClose: document.getElementById('runNowClose'),
+  execDryRun: document.getElementById('execDryRun'),
   execModeHint: document.getElementById('execModeHint'),
   execDryOpts: document.getElementById('execDryOpts'),
   execWindow: document.getElementById('execWindow'),
@@ -182,43 +186,42 @@ export const els = {
   execSyncs: document.getElementById('execSyncs'),
   execSyncsEmpty: document.getElementById('execSyncsEmpty'),
   execSyncTotals: document.getElementById('execSyncTotals'),
-  execRunsCard: document.getElementById('execRunsCard'),
-  execViewerCard: document.getElementById('execViewerCard'),
-  execViewer: document.getElementById('execViewer'),
-  execViewerTitle: document.getElementById('execViewerTitle'),
-  execViewerMeta: document.getElementById('execViewerMeta'),
-  execViewerEmpty: document.getElementById('execViewerEmpty'),
-  execKill: document.getElementById('execKill'),
-  execFunnel: document.getElementById('execFunnel'),
-  execSourceFunnel: document.getElementById('execSourceFunnel'),
-  execPreview: document.getElementById('execPreview'),
-  execPreviewText: document.getElementById('execPreviewText'),
-  execOutput: document.getElementById('execOutput'),
-  execRuns: document.getElementById('execRuns'),
-  execRunsEmpty: document.getElementById('execRunsEmpty'),
-  execRunsSkipped: document.getElementById('execRunsSkipped'),
 
-  // Audit (#12)
-  auditRuns: document.getElementById('auditRuns'),
-  auditRunsEmpty: document.getElementById('auditRunsEmpty'),
-  auditKindFilter: document.getElementById('auditKindFilter'),
+  // Activity (#373): header line, scope, run list, run sheet, filtered sheet.
+  paneActivity: document.getElementById('paneActivity'),
+  activityStatus: document.getElementById('activityStatus'),
+  activityRunNow: document.getElementById('activityRunNow'),
+  activityScope: document.getElementById('activityScope'),
+  activityList: document.getElementById('activityList'),
+  activityEmpty: document.getElementById('activityEmpty'),
+  activityMore: document.getElementById('activityMore'),
+  activitySkipped: document.getElementById('activitySkipped'),
+  activityDetailPane: document.getElementById('activityDetailPane'),
+  runSheet: document.getElementById('runSheet'),
+  runSheetCard: document.getElementById('runSheetCard'),
+  runSheetTitle: document.getElementById('runSheetTitle'),
+  runSheetClose: document.getElementById('runSheetClose'),
+  runSheetMeta: document.getElementById('runSheetMeta'),
+  runFunnel: document.getElementById('runFunnel'),
+  runSourceFunnel: document.getElementById('runSourceFunnel'),
+  runTraces: document.getElementById('runTraces'),
+  runTracesEmpty: document.getElementById('runTracesEmpty'),
+  runPreview: document.getElementById('runPreview'),
+  runPreviewText: document.getElementById('runPreviewText'),
+  runOutputCard: document.getElementById('runOutputCard'),
+  runOutput: document.getElementById('runOutput'),
+  runSheetFoot: document.getElementById('runSheetFoot'),
+  runStop: document.getElementById('runStop'),
+  filteredSheet: document.getElementById('filteredSheet'),
+  filteredClose: document.getElementById('filteredClose'),
   auditFilteredCard: document.getElementById('auditFilteredCard'),
-  auditFilteredCount: document.getElementById('auditFilteredCount'),
   auditFilteredDays: document.getElementById('auditFilteredDays'),
   auditFilteredStatus: document.getElementById('auditFilteredStatus'),
   auditFiltered: document.getElementById('auditFiltered'),
   auditFilteredEmpty: document.getElementById('auditFilteredEmpty'),
   auditFilteredMore: document.getElementById('auditFilteredMore'),
-  auditDetailCard: document.getElementById('auditDetailCard'),
-  auditDetailTitle: document.getElementById('auditDetailTitle'),
-  auditDetailClose: document.getElementById('auditDetailClose'),
-  auditDetailMeta: document.getElementById('auditDetailMeta'),
-  auditFunnel: document.getElementById('auditFunnel'),
-  auditSourceFunnel: document.getElementById('auditSourceFunnel'),
-  auditTraces: document.getElementById('auditTraces'),
-  auditTracesEmpty: document.getElementById('auditTracesEmpty'),
 
-  // Family rules (#160, #167) — run controls + recent runs moved to the Run tab.
+  // Family rules (#160, #167); the traffic card lives here since #373.
   familyReadOnly: document.getElementById('familyReadOnly'),
   familyEditable: document.getElementById('familyEditable'),
   // Commute travel blocks (#268): knobs + per-calendar write capability.

@@ -259,6 +259,7 @@ def test_audit_scope_is_applied_in_sql_before_the_limit(tmp_path: Path) -> None:
         cal = client.get("/api/audit/runs?scope=calendar&limit=50").json()
         trf = client.get("/api/audit/runs?scope=traffic&limit=50").json()
         older = client.get(f"/api/audit/runs?scope=traffic&limit=50&before={traffic[10]}").json()
+        bogus = client.get("/api/audit/runs?scope=everything")
 
     assert [r["id"] for r in messages["runs"]] == [scan]
     assert messages["has_more"] is False
@@ -268,6 +269,7 @@ def test_audit_scope_is_applied_in_sql_before_the_limit(tmp_path: Path) -> None:
     # Paging: `before` is an exclusive run-id cursor, newest first.
     assert [r["id"] for r in older["runs"]] == list(reversed(traffic[:10]))
     assert older["has_more"] is False
+    assert bogus.status_code == 400
 
 
 def test_audit_run_drilldown_trace(tmp_path: Path) -> None:

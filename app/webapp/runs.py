@@ -1,4 +1,4 @@
-"""Run-record + output-streaming infra for the Execution tab.
+"""Run-record + output-streaming infra for the run queue and Activity's run sheet.
 
 Mirrors App Launcher's job-run model (``src/jobs.py`` there): each Execution
 action runs as a detached subprocess whose combined stdout+stderr streams to
@@ -7,7 +7,7 @@ structured result. The webapp polls the run directory — a finished run is a
 static log, a running one keeps growing — so the phone sees the process byte by
 byte exactly as it would in App Launcher's Jobs tab.
 
-Why a subprocess and not an in-process call: the Execution tab is where the
+Why a subprocess and not an in-process call: Run now is where the
 operator *validates* the very command App Launcher Jobs will schedule
 (``python launcher.py scan|resync|reprocess``). Running the identical process
 here means what you watch is byte-for-byte what runs there. The structured

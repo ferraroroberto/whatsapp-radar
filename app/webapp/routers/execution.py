@@ -1,5 +1,5 @@
-"""Execution tab (#11): run the end-to-end pipeline — or a single stage — and
-watch it live.
+"""Run queue (#11; Activity's Run now since #373): run the end-to-end
+pipeline — or a single stage — and watch it live.
 
 This router is a thin launcher over the CLI verbs. Every action maps to a
 ``python launcher.py <cmd>`` invocation spawned by :mod:`app.webapp.runs`, which
@@ -101,7 +101,7 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         if mode == "dry_run":
             argv.append("--dry-run")
         if action == "calendar-scan":
-            # Every run this router spawns is a button press: the Run tab's
+            # Every run this router spawns is a button press: Activity's Run-now
             # Calendar-sync step and the Family tab's Rehearse / Run sweep
             # controls (#276). The webapp schedules nothing of its own, so an
             # explicit human request must never be eaten by `family.run_hour`'s

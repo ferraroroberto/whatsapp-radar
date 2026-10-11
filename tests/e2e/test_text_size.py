@@ -18,7 +18,7 @@ from playwright.sync_api import Locator, Page, expect
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _LARGE_RATIO = 1.125
-_TABS = ["Dashboard", "Chats", "Execution", "Audit", "Family"]
+_TABS = ["Dashboard", "Activity", "Chats", "Family"]
 
 # Computed font-size of every visible element that carries its own text, in
 # document order. Closed <details> are opened so their content is measured too.

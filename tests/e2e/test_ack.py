@@ -69,12 +69,3 @@ def test_ack_empty_state(page: Page, base_url: str) -> None:
     expect(page.locator("#ackEmpty")).to_contain_text("No pending follow-ups")
     expect(page.locator("#ackItems .ack-item")).to_have_count(0)
 
-
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_nav_has_five_tabs_and_no_follow_ups_tab(page: Page, base_url: str) -> None:
-    """The fleet nav allows at most five tabs (#336): Follow-ups lives on Home."""
-    page.goto(base_url)
-    expect(page.locator("nav.tabs [role=tab]")).to_have_count(5)
-    expect(page.locator("#tabAck")).to_have_count(0)
-    expect(page.locator("#paneDashboard #ackItems")).to_have_count(1)

@@ -43,6 +43,7 @@
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
+  <link rel="stylesheet" href="/static/_vendored/action-row/action-row.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>WhatsApp Radar</title>
 </head>
@@ -64,6 +65,9 @@
     <symbol id="i-mail" viewBox="0 0 24 24" fill="none">
       <rect width="20" height="16" x="2" y="4" rx="2" />
       <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+    </symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none">
+      <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
     </symbol>
     <symbol id="i-play" viewBox="0 0 24 24" fill="none">
       <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
@@ -210,20 +214,15 @@
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
       <span class="tab-label">Home</span>
     </button>
+    <button id="tabActivity" type="button" class="tab" data-tab="activity"
+            role="tab" aria-selected="false" aria-controls="paneActivity" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>
+      <span class="tab-label">Activity</span>
+    </button>
     <button id="tabChats" type="button" class="tab" data-tab="chats"
             role="tab" aria-selected="false" aria-controls="paneChats" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-message-circle"></use></svg>
       <span class="tab-label">Inbox</span>
-    </button>
-    <button id="tabExecution" type="button" class="tab" data-tab="execution"
-            role="tab" aria-selected="false" aria-controls="paneExecution" tabindex="-1">
-      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>
-      <span class="tab-label">Run</span>
-    </button>
-    <button id="tabAudit" type="button" class="tab" data-tab="audit"
-            role="tab" aria-selected="false" aria-controls="paneAudit" tabindex="-1">
-      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
-      <span class="tab-label">Audit</span>
     </button>
     <button id="tabFamily" type="button" class="tab" data-tab="family"
             role="tab" aria-selected="false" aria-controls="paneFamily" tabindex="-1">
@@ -248,7 +247,7 @@
       </div>
       <!-- Last-activity grid (#165): one card per kind of work — when did each
            last run and what did it find. Tapping a card jumps to that run's
-           detail on the Run tab. Cards are built by dashboard.js from the
+           detail in Activity. Cards are built by dashboard.js from the
            unified run store so CLI/Jobs-launched runs show here too. -->
       <div id="dashActivity" class="activity-grid" aria-label="Last activity by kind"></div>
 
@@ -372,257 +371,47 @@
       </details>
     </section>
 
-    <section id="paneExecution" class="pane" role="tabpanel" aria-labelledby="tabExecution" hidden>
-      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
+    <section id="paneActivity" class="pane" role="tabpanel" aria-labelledby="tabActivity" hidden>
+      <!-- Page header (vendored home-head): the tab's name, a status line naming
+           the most severe exception (else one muted fact), the Run-now action,
+           theme toggle and Settings gear. The status span is always present so
+           its text arriving never shifts the row (#373). -->
       <div class="card home-head">
         <span class="home-title">
-          <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
-          Run
+          <svg class="icon" aria-hidden="true"><use href="#i-activity"></use></svg>
+          Activity
         </span>
+        <span id="activityStatus" class="status" role="status" aria-live="polite">&nbsp;</span>
+        <button id="activityRunNow" type="button" class="icon-button home-toggle" aria-label="Run now"
+                title="Run now" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg></button>
         <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
         <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
-            Messages &amp; calendar sync
-          </h2>
-          <div id="execMode" class="range-tabs exec-mode-seg" role="radiogroup" aria-label="Run mode">
-            <button id="execModeLive" type="button" class="range-tab active" data-mode="live">Live</button>
-            <button id="execModeDry" type="button" class="range-tab" data-mode="dry_run">Dry&nbsp;run</button>
+      <!-- One list over the one run store (#373): Run and Audit were two views of
+           it. A wide screen shows the open run in the right-hand pane; a phone
+           opens it as a sheet (#runSheet). -->
+      <div class="activity-layout">
+        <div class="activity-main">
+          <div id="activityScope" class="segmented activity-scope" role="group" aria-label="Activity scope">
+            <button type="button" class="segmented-item" aria-pressed="true" data-scope="messages">Messages</button>
+            <button type="button" class="segmented-item" aria-pressed="false" data-scope="calendar">Calendar</button>
+            <button type="button" class="segmented-item" aria-pressed="false" data-scope="traffic">Traffic</button>
           </div>
+          <div id="activityList" class="activity-list" aria-label="Runs" data-state="loading">
+            <p class="muted small activity-loading">Reading runs…</p>
+          </div>
+          <div id="activityEmpty" class="empty-state" hidden>
+            <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-history"></use></svg>
+            <p class="empty-state-message">No runs here yet.</p>
+          </div>
+          <button id="activityMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
+          <p id="activitySkipped" class="muted small activity-skipped" hidden></p>
         </div>
-        <p id="execModeHint" class="muted small">Live runs the steps for real.</p>
-
-        <div id="execDryOpts" class="exec-dry-opts" hidden>
-          <div id="execWindow" class="range-tabs" role="radiogroup" aria-label="Dry-run window">
-            <button id="execWinNew" type="button" class="range-tab active" data-window="new">New only</button>
-            <button id="execWinDays" type="button" class="range-tab" data-window="days">Last N days</button>
-          </div>
-          <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
-                 value="7" inputmode="numeric" aria-label="Days to replay" hidden>
-        </div>
-
-        <p class="muted small exec-stages-hint">Choose the steps to run, then Run.</p>
-        <fieldset class="exec-stages" aria-label="Pipeline steps to run">
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Sync messages</span>
-              <span class="exec-stage-desc">pull the latest into the store</span></span>
-            <button type="button" id="execStageSync" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Sync messages step"><span class="knob"></span><span class="toggle-label">ON</span></button>
-          </div>
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Process messages &amp; email</span>
-              <span class="exec-stage-desc">classify new items</span></span>
-            <button type="button" id="execStageProcess" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Process messages and email step"><span class="knob"></span><span class="toggle-label">ON</span></button>
-          </div>
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Send alerts</span>
-              <span class="exec-stage-desc">deliver the digest</span></span>
-            <button type="button" id="execStageMessage" class="toggle on" role="switch"
-                    aria-checked="true" aria-label="Send alerts step"><span class="knob"></span><span class="toggle-label">ON</span></button>
-          </div>
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Calendar sync</span>
-              <span class="exec-stage-desc">scan the household calendars</span></span>
-            <button type="button" id="execStageCalendar" class="toggle" role="switch"
-                    aria-checked="false" aria-label="Calendar sync step"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-          </div>
-        </fieldset>
-
-        <button id="execRunScan" type="button" class="button-tint btn-block">Run</button>
-        <p id="execBusy" class="muted small" hidden></p>
-      </section>
-
-      <details id="execTrafficCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
-            <h3 class="collapse-title">Traffic jam insurance</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">Checks your next commute and alerts only when a jam adds more
-            than the significant-delay threshold. Scheduling is an App Launcher job — this sets
-            how often it runs and lets you fire a one-off check now.</p>
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Enabled</span>
-              <span class="exec-stage-desc">let the scheduled job run live checks</span></span>
-            <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
-                    aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-          </div>
-          <label class="stacked"><span>Check every (minutes)</span>
-            <input id="execTrafficCadence" type="number" class="input-native" min="5" max="240"
-                   value="30" inputmode="numeric"></label>
-          <div class="exec-traffic-actions">
-            <button id="execTrafficRunLive" type="button" class="button-tint btn-block">Run now (live)</button>
-            <button id="execTrafficRunDry" type="button" class="button-ghost btn-block btn-touch">Run now (dry)</button>
-          </div>
-          <p id="execTrafficStatus" class="muted small"></p>
-        </div>
-      </details>
-
-      <details id="execRunsCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
-            <h3 class="collapse-title">Recent runs</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <ul id="execRuns" class="card-list exec-runs" aria-label="Recent runs"></ul>
-          <p id="execRunsEmpty" class="muted small" hidden>No runs yet.</p>
-          <p id="execRunsSkipped" class="muted small" hidden></p>
-        </div>
-      </details>
-
-      <details id="execViewerCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
-            <h3 class="collapse-title">Selected run detail</h3>
-            <button id="execKill" type="button" class="button-ghost btn-touch" title="Stop this run" hidden>Stop</button>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div id="execViewer">
-            <p id="execViewerTitle" class="exec-viewer-kind"></p>
-            <p id="execViewerMeta" class="muted small"></p>
-            <div id="execFunnel" class="exec-funnel" aria-label="Funnel"></div>
-            <div id="execSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
-            <div id="execPreview" class="exec-preview" hidden>
-              <h4 class="opt-group-title">Telegram message</h4>
-              <pre id="execPreviewText" class="codebox"></pre>
-            </div>
-            <h4 class="opt-group-title">Output</h4>
-            <pre id="execOutput" class="codebox exec-output" title="Tap to copy">(no output)</pre>
-          </div>
-          <p id="execViewerEmpty" class="muted small">Select a run above to see its detail.</p>
-        </div>
-      </details>
-
-      <details id="execSyncsCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
-            <h3 class="collapse-title">Recent syncs</h3>
-            <span id="execSyncTotals" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
-          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
-        </div>
-      </details>
-
-      <details id="execSourcesCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
-            <h3 class="collapse-title">Sources health</h3>
-            <span id="execSourcesCount" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
-          <div id="execReconnect" class="exec-reconnect" hidden>
-            <p id="execReconnectMsg" class="muted small"></p>
-            <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-            <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
-          </div>
-        </div>
-      </details>
-    </section>
-
-    <section id="paneAudit" class="pane" role="tabpanel" aria-labelledby="tabAudit" hidden>
-      <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
-      <div class="card home-head">
-        <span class="home-title">
-          <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
-          Audit
-        </span>
-        <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
-                aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-        <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
-          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
-        </button>
+        <aside id="activityDetailPane" class="card activity-detail-pane" aria-label="Run detail" hidden></aside>
       </div>
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
-            Audit
-          </h2>
-        </div>
-        <p class="muted small">Every run is listed and fully drillable — confirm exactly why each message was or wasn't promoted.</p>
-        <div id="auditKindFilter" class="range-tabs" role="radiogroup" aria-label="Run kind filter">
-          <button type="button" class="range-tab active" data-kind="all">All</button>
-          <button type="button" class="range-tab" data-kind="messages">Messages</button>
-          <button type="button" class="range-tab" data-kind="traffic-check">Traffic</button>
-          <button type="button" class="range-tab" data-kind="calendar-scan">Calendar</button>
-        </div>
-        <ul id="auditRuns" class="card-list audit-runs" aria-label="Recent runs"></ul>
-        <p id="auditRunsEmpty" class="muted small" hidden>No runs yet — run a scan from the Run tab.</p>
-      </section>
-
-      <details id="auditFilteredCard" class="card card--collapsible" data-state="loading">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
-            <h3 class="collapse-title">Filtered out</h3>
-            <span id="auditFilteredCount" class="collapse-count"></span>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">Recent messages the radar reviewed without raising an actionable item.</p>
-          <div id="auditFilteredDays" class="segmented" role="group" aria-label="Filtered-out time range">
-            <button type="button" class="segmented-item" aria-pressed="false" data-days="7">7 days</button>
-            <button type="button" class="segmented-item" aria-pressed="true" data-days="30">30 days</button>
-            <button type="button" class="segmented-item" aria-pressed="false" data-days="90">90 days</button>
-          </div>
-          <p id="auditFilteredStatus" class="muted small" role="status" aria-live="polite">Reading filtered decisions…</p>
-          <ul id="auditFiltered" class="card-list audit-filtered-list" aria-label="Filtered-out decisions"></ul>
-          <div id="auditFilteredEmpty" class="empty-state" hidden>
-            <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-search"></use></svg>
-            <p class="empty-state-message">Nothing was filtered out in this period.</p>
-          </div>
-          <button id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
-        </div>
-      </details>
-
-      <section id="auditDetailCard" class="card" hidden>
-        <div class="card-head">
-          <h3 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
-            <span id="auditDetailTitle"></span>
-          </h3>
-          <span class="card-actions">
-            <button id="auditDetailClose" type="button" class="icon-button" aria-label="Close"
-                    title="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
-          </span>
-        </div>
-        <p id="auditDetailMeta" class="muted small"></p>
-        <div id="auditFunnel" class="exec-funnel" aria-label="Funnel"></div>
-        <div id="auditSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
-        <div id="auditTraces" class="audit-traces" aria-label="Per-channel trace"></div>
-        <p id="auditTracesEmpty" class="muted small" hidden>No per-channel trace recorded for this run.</p>
-      </section>
     </section>
 
     <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
@@ -666,8 +455,37 @@
         <div class="collapse-body">
           <p class="muted small">Commute blocks the daily calendar sync keeps on each
             calendar — one before a trip out, one for the drive home. Turn it on in dry run
-            first, read the plan in the Audit tab, then take it live.</p>
+            first, read the plan in Activity's Calendar runs, then take it live.</p>
           <div id="familyTravelBlocks"></div>
+        </div>
+      </details>
+      <details id="execTrafficCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
+            <h3 class="collapse-title">Traffic jam insurance</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <p class="muted small">Checks your next commute and alerts only when a jam adds more
+            than the significant-delay threshold. Scheduling is an App Launcher job — this sets
+            how often it runs and lets you fire a one-off check now.</p>
+          <div class="exec-stage-row">
+            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
+            <span class="exec-stage-text"><span class="exec-stage-label">Enabled</span>
+              <span class="exec-stage-desc">let the scheduled job run live checks</span></span>
+            <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
+                    aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <label class="stacked"><span>Check every (minutes)</span>
+            <input id="execTrafficCadence" type="number" class="input-native" min="5" max="240"
+                   value="30" inputmode="numeric"></label>
+          <div class="exec-traffic-actions">
+            <button id="execTrafficRunLive" type="button" class="button-tint btn-block">Run now (live)</button>
+            <button id="execTrafficRunDry" type="button" class="button-ghost btn-block btn-touch">Run now (dry)</button>
+          </div>
+          <p id="execTrafficStatus" class="muted small"></p>
         </div>
       </details>
     </section>
@@ -716,7 +534,7 @@
           <div class="opt-group">
             <h3 class="opt-group-title">Shared Stage 2 system prompt <span class="opt-tag">src/analysis/prompts/classification_system.md</span></h3>
             <pre id="cfgPrompt" class="codebox" aria-label="classification system prompt"></pre>
-            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Audit shows the exact system and user prompt for every LLM call.</p>
+            <p class="opt-hint">There is no hidden or separate Gmail Stage-2 system prompt. Both sources use this file; the rendered user prompt adds an explicit Source: WhatsApp or Source: Gmail line. Activity shows the exact system and user prompt for every LLM call.</p>
             <h3 class="opt-group-title">WhatsApp Stage 1 roots <span class="opt-tag">src/analysis/prompts/keyword_roots.txt</span></h3>
             <pre id="cfgRoots" class="codebox" aria-label="keyword roots"></pre>
             <h3 class="opt-group-title">Gmail Stage 1 rules <span class="opt-tag">src/analysis/prompts/gmail_keyword_roots.txt</span></h3>
@@ -765,6 +583,38 @@
         </div>
       </details>
 
+      <details id="execSyncsCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+            <h3 class="collapse-title">Recent syncs</h3>
+            <span id="execSyncTotals" class="collapse-count"></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
+          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+        </div>
+      </details>
+      <details id="execSourcesCard" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+            <h3 class="collapse-title">Sources health</h3>
+            <span id="execSourcesCount" class="collapse-count"></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
+          <div id="execReconnect" class="exec-reconnect" hidden>
+            <p id="execReconnectMsg" class="muted small"></p>
+            <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
+            <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
+          </div>
+        </div>
+      </details>
       <details id="execMaintenanceCard" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -776,13 +626,137 @@
         <div class="collapse-body">
           <p class="muted small">
             Rebuild the local store from the connector buffer. The <strong>Sync messages</strong>
-            step on the Run tab is incremental and safe to run often. <strong>Rebuild</strong> is a
+            step under Activity's Run now is incremental and safe to run often. <strong>Rebuild</strong> is a
             full rebuild for when the reader logic changed — it backs up the DB and preserves your
             monitored/ignored/alias choices, but <strong>run history resets</strong>.
           </p>
           <button id="execReprocess" type="button" class="button-tint danger btn-block">Rebuild full cache</button>
         </div>
       </details>
+    </div>
+  </dialog>
+
+  <!-- Run sheet (#373): one detail for every run, opened from an Activity row.
+       A phone shows it as this sheet; a wide screen moves #runSheetCard into
+       the Activity pane's right-hand column instead (activity.js). -->
+  <dialog id="runSheet" class="detail-dialog run-sheet-dialog">
+    <div id="runSheetCard" class="detail-card run-sheet" aria-labelledby="runSheetTitle">
+      <div class="detail-header">
+        <h2 id="runSheetTitle"></h2>
+        <button id="runSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <p id="runSheetMeta" class="muted small"></p>
+      <div id="runFunnel" class="exec-funnel" aria-label="Funnel"></div>
+      <div id="runSourceFunnel" class="source-funnel-list" aria-label="Per-source funnel"></div>
+      <div id="runTraces" class="audit-traces" aria-label="Per-channel trace"></div>
+      <p id="runTracesEmpty" class="muted small" hidden></p>
+      <div id="runPreview" class="exec-preview" hidden>
+        <h4 class="opt-group-title">Telegram message</h4>
+        <pre id="runPreviewText" class="codebox"></pre>
+      </div>
+      <details id="runOutputCard" class="card card--collapsible run-output">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+            <h3 class="collapse-title">Raw output</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="collapse-body">
+          <pre id="runOutput" class="codebox exec-output" title="Tap to copy">(no output)</pre>
+        </div>
+      </details>
+      <div id="runSheetFoot" class="run-sheet-foot" hidden>
+        <button id="runStop" type="button" class="button-tint danger btn-block">Stop this run</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Run now (#373): manual runs are rare, so the controls fold behind the
+       Activity header action. Behaviour is execution.js's queue, unchanged. -->
+  <dialog id="runNowSheet" class="detail-dialog">
+    <div class="detail-card run-now-card" aria-labelledby="runNowTitle">
+      <div class="detail-header">
+        <h2 id="runNowTitle">Run now</h2>
+        <button id="runNowClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <fieldset class="exec-stages" aria-label="Pipeline steps to run">
+        <div class="exec-stage-row">
+          <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+          <span class="exec-stage-text"><span class="exec-stage-label">Sync messages</span>
+            <span class="exec-stage-desc">pull the latest into the store</span></span>
+          <button type="button" id="execStageSync" class="toggle on" role="switch"
+                  aria-checked="true" aria-label="Sync messages step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+        </div>
+        <div class="exec-stage-row">
+          <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
+          <span class="exec-stage-text"><span class="exec-stage-label">Process messages &amp; email</span>
+            <span class="exec-stage-desc">classify new items</span></span>
+          <button type="button" id="execStageProcess" class="toggle on" role="switch"
+                  aria-checked="true" aria-label="Process messages and email step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+        </div>
+        <div class="exec-stage-row">
+          <svg class="icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
+          <span class="exec-stage-text"><span class="exec-stage-label">Send alerts</span>
+            <span class="exec-stage-desc">deliver the digest</span></span>
+          <button type="button" id="execStageMessage" class="toggle on" role="switch"
+                  aria-checked="true" aria-label="Send alerts step"><span class="knob"></span><span class="toggle-label">ON</span></button>
+        </div>
+        <div class="exec-stage-row">
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+          <span class="exec-stage-text"><span class="exec-stage-label">Calendar sync</span>
+            <span class="exec-stage-desc">scan the household calendars</span></span>
+          <button type="button" id="execStageCalendar" class="toggle" role="switch"
+                  aria-checked="false" aria-label="Calendar sync step"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+      </fieldset>
+      <!-- Live versus dry run is a mode, not a peer choice: a switch. -->
+      <div class="exec-stage-row exec-dry-row">
+        <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
+        <span class="exec-stage-text"><span class="exec-stage-label">Dry run</span>
+          <span id="execModeHint" class="exec-stage-desc">off: the steps run for real</span></span>
+        <button type="button" id="execDryRun" class="toggle" role="switch"
+                aria-checked="false" aria-label="Dry run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+      </div>
+      <div id="execDryOpts" class="exec-dry-opts" hidden>
+        <div id="execWindow" class="segmented" role="group" aria-label="Dry-run window">
+          <button id="execWinNew" type="button" class="segmented-item" aria-pressed="true" data-window="new">New only</button>
+          <button id="execWinDays" type="button" class="segmented-item" aria-pressed="false" data-window="days">Last N days</button>
+        </div>
+        <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
+               value="7" inputmode="numeric" aria-label="Days to replay" hidden>
+      </div>
+      <button id="execRunScan" type="button" class="button-tint btn-block">Run</button>
+      <p id="execBusy" class="muted small" hidden></p>
+    </div>
+  </dialog>
+
+  <!-- Filtered out (#194, #373): opened from the fold row at the end of
+       Activity's Messages list. -->
+  <dialog id="filteredSheet" class="detail-dialog">
+    <div class="detail-card filtered-card" aria-labelledby="filteredTitle">
+      <div class="detail-header">
+        <h2 id="filteredTitle">Filtered out</h2>
+        <button id="filteredClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div id="auditFilteredCard" class="filtered-body" data-state="loading">
+        <p class="muted small">Recent messages the radar reviewed without raising an actionable item.</p>
+        <div id="auditFilteredDays" class="segmented" role="group" aria-label="Filtered-out time range">
+          <button type="button" class="segmented-item" aria-pressed="false" data-days="7">7 days</button>
+          <button type="button" class="segmented-item" aria-pressed="true" data-days="30">30 days</button>
+          <button type="button" class="segmented-item" aria-pressed="false" data-days="90">90 days</button>
+        </div>
+        <p id="auditFilteredStatus" class="muted small" role="status" aria-live="polite">Reading filtered decisions…</p>
+        <ul id="auditFiltered" class="card-list audit-filtered-list" aria-label="Filtered-out decisions"></ul>
+        <div id="auditFilteredEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+          <p class="empty-state-message">Nothing was filtered out in this period.</p>
+        </div>
+        <button id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
+      </div>
     </div>
   </dialog>
 

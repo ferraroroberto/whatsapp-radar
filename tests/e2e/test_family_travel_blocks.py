@@ -195,6 +195,9 @@ def test_dry_run_mode_is_unmistakable(page: Page, base_url: str) -> None:
     expect(banner).to_contain_text("Nothing is written to any calendar.")
     # The last sweep says so too, independently of the current setting.
     expect(page.locator("#familyTravelBlocks")).to_contain_text("planned only, nothing written")
+    # The traffic card (enable, cadence, Run now) lives in this pane since #373.
+    expect(page.locator("#paneFamily #execTrafficCard")).to_have_count(1)
+    expect(page.locator("#paneFamily #execTrafficRunLive")).to_have_count(1)
 
 
 # --------------------------------------------------- run controls (#276)

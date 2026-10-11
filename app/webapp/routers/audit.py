@@ -1,4 +1,4 @@
-"""Audit tab (#12): per-run trace drill-down — the surface that makes the radar
+"""Run trace (#12; Activity since #373): per-run drill-down — the surface that makes the radar
 trustworthy.
 
 A missed important message is a real failure, so for any run the operator must be
@@ -11,7 +11,7 @@ response, the parsed verdict, the final action, and the Telegram text.
 This router is **read-only** (SELECT only, no writes, no cursor changes) so it is
 safe on the request path. It exposes a run list (with the funnel), a bounded
 cross-run list of filtered decisions, and a per-run drill-down (the per-chat
-trace). It never triggers scans — that is the Execution tab (#11).
+trace). It never triggers scans — that is the execution router (#11).
 """
 
 from __future__ import annotations

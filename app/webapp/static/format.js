@@ -8,20 +8,20 @@
 
 function _pad(n) { return String(n).padStart(2, '0'); }
 
-// Per-kind display label, shared by the Run and Audit tabs so a run is named
-// identically wherever it appears (#163).
+// Per-kind display label and row glyph, so a run is named and drawn
+// identically wherever it appears (#163, #373).
 const KIND_META = {
-  scan: { label: 'Full pipeline' },
-  process: { label: 'Process' },
-  notify: { label: 'Message' },
-  resync: { label: 'Sync' },
-  reprocess: { label: 'Reprocess' },
-  'calendar-scan': { label: 'Calendar sync' },
-  'traffic-check': { label: 'Family: traffic' },
+  scan: { label: 'Message scan', icon: 'message-circle' },
+  process: { label: 'Process', icon: 'play' },
+  notify: { label: 'Send alerts', icon: 'send-horizontal' },
+  resync: { label: 'Sync', icon: 'refresh-cw' },
+  reprocess: { label: 'Rebuild', icon: 'wrench' },
+  'calendar-scan': { label: 'Calendar sync', icon: 'calendar-days' },
+  'traffic-check': { label: 'Traffic check', icon: 'car' },
 };
 
 /* Priced vs unpriced commute legs (#283), in one place because two surfaces
- * count them: the Execution funnel's cells and the Audit list's summary line.
+ * count them: the run sheet's funnel cells and the Activity row's summary line.
  *
  * `anchor_in_the_past` (the drive is over, no Routes call spent) and `error`
  * (the call failed) establish *nothing* about the road. Counting them as
@@ -49,20 +49,35 @@ export function legPricing(legs) {
 
 export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).label; }
 
-// One lean run-status badge: OK/KO first (right or wrong at a glance), anything
-// else — running, pending, or a status this build has never heard of — is the
-// same neutral "in flight / not concluded" mark. Shared by the Execution and
-// Audit tabs so a run cannot read as OK on one and unknown on the other (#294).
-export function statusBadge(status) {
-  if (status === 'completed') return { text: 'OK', cls: 'ok' };
-  if (status === 'failed') return { text: 'KO', cls: 'ko' };
-  return { text: '··', cls: 'run' };
+export function kindIcon(kind) { return (KIND_META[kind] || { icon: 'play' }).icon; }
+
+/* Status chip (design.md "status chip", #373): one class, one tone map, for
+ * exceptions only — a normal state (OK, live, connected) gets no chip at all.
+ * Tones: danger (failed, offline), accent (actionable, worth a look),
+ * attention (a pending item, a missing location, a conflict, a traffic alert),
+ * neutral (running, dry run). */
+export function statusChip(text, tone) {
+  const chip = document.createElement('span');
+  chip.className = 'status-chip';
+  chip.dataset.tone = tone;
+  chip.textContent = text;
+  return chip;
+}
+
+/* The page-header context line (#373; Step 3/6 reuses it on every tab): the
+ * most severe exception in its tone, else one muted fact. It writes into the
+ * vendored home-head `.status` slot, which ellipsizes and never shifts the row;
+ * an empty value keeps a non-breaking space so the slot holds its height. */
+export function setHeaderStatus(el, text, tone) {
+  el.textContent = text || ' ';
+  if (tone) el.dataset.tone = tone;
+  else delete el.dataset.tone;
 }
 
 // Funnel-cell mapping for the two family-check kinds (calendar-scan ·
-// traffic-check), shared by the Run tab's live funnelCells() and the Audit
-// tab's renderFamilyDetail() so a label/field change can't render differently
-// on Run vs Audit (#237). `payload` is a flat object carrying the fields below
+// traffic-check), shared by run-trace.js's funnelCells() and its
+// renderFamilyTrace() so a label/field change can't render differently for a
+// live run vs a stored one (#237). `payload` is a flat object carrying the fields below
 // — either a live run's `result` or a persisted run's `summary`, both shaped
 // the same way.
 export function familyKindCells(kind, payload) {
@@ -87,7 +102,7 @@ export function familyKindCells(kind, payload) {
 }
 
 /* Travel-block vocabulary (#276), in one place because three surfaces say it:
- * the Family tab's last-sweep line, the Run tab's funnel cells and the Audit
+ * the Family tab's last-sweep line, the run sheet's funnel cells and its
  * drill-down. `short` fits a funnel cell, `label` reads as a sentence fragment.
  *
  * A gated sweep is never spelled with numbers. `disabled` / `no_routes_api_key`
@@ -123,7 +138,7 @@ function travelBlockCells(section) {
   ];
 }
 
-// Per-source sprite icon + label, shared by the Run tab's source-health cards
+// Per-source sprite icon + label, shared by Settings' source-health cards
 // and the Dashboard's last-activity grid + source list so a source is drawn
 // identically wherever it appears (#165). `traffic` reuses the car glyph (#164).
 export const SOURCE_ICON = {
@@ -186,8 +201,8 @@ export function fmtLocalDateTime(ts, { withYear = true } = {}) {
 }
 
 // Renders a row of `{label, value}` cells (funnel stats: synced/monitored/
-// stage1/stage2/actionable) into `box` as `.exec-funnel-cell` blocks. Shared
-// by the Execution and Audit tabs so the funnel markup can't drift between
+// stage1/stage2/actionable) into `box` as `.exec-funnel-cell` blocks. One
+// renderer for the run sheet (#373), so the funnel markup can't drift between
 // the live-run viewer and the historical trace view. Missing values render
 // as an em-dash rather than "undefined"/"null".
 export function renderFunnelCells(box, cells) {

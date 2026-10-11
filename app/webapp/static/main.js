@@ -11,8 +11,8 @@ import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
 import { fetchDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { wireConfig, wireSettings } from './config.js';
-import { fetchExecution, wireExecution } from './execution.js';
-import { fetchAudit, wireAudit } from './audit.js';
+import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
+import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
 import { fetchAck } from './ack.js';
 
@@ -99,12 +99,14 @@ async function boot() {
   setInterval(function () {
     if (state.tab === 'dashboard') refreshHome();
   }, DASHBOARD_POLL_MS);
-  // While the Execution tab is open, poll runs so a live run streams; also keep
-  // polling whenever a run is in flight, so leaving the tab doesn't strand it.
+  // While Activity is open, poll runs so a live run streams; also keep polling
+  // whenever a run is in flight, so leaving the tab doesn't strand its queue.
+  // Settings' source-health card refreshes while it is open (the pairing QR).
   setInterval(function () {
-    if (state.tab === 'execution' || state.execution.active) {
+    if (state.tab === 'activity' || state.execution.active) {
       fetchExecution().catch(function () {});
     }
+    if (els.settingsDialog.open) fetchSettingsHealth();
   }, EXECUTION_POLL_MS);
 }
 
@@ -113,8 +115,7 @@ wireLoginForm(boot);
 wireTabs(function (tab) {
   if (tab === 'dashboard') refreshHome();
   if (tab === 'chats') fetchChats().catch(function () {});
-  if (tab === 'execution') fetchExecution().catch(function () {});
-  if (tab === 'audit') fetchAudit().catch(function () {});
+  if (tab === 'activity') fetchActivity().catch(function () {});
   if (tab === 'family') fetchFamily().catch(function () {});
 });
 wireWebauthn();
@@ -122,7 +123,7 @@ wireChats();
 wireConfig();
 wireSettings();
 wireExecution();
-wireAudit();
+wireActivity();
 wireFamily();
 
 boot();

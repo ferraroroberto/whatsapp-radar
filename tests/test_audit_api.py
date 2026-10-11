@@ -243,6 +243,35 @@ def test_audit_groups_contiguous_offline_scans_into_coverage_gap(tmp_path: Path)
     ]
 
 
+def test_audit_scope_is_applied_in_sql_before_the_limit(tmp_path: Path) -> None:
+    """A Messages scope still returns the scans when the newest 50+ runs are
+    all traffic checks (#373): the scope narrows the query, not the newest
+    ``limit`` rows after the fact."""
+    db = tmp_path / "scope.sqlite3"
+    conn = store.connect(db)
+    scan = store.start_run(conn, mode="live", kind="scan")
+    calendar = store.start_run(conn, mode="live", kind="calendar-scan")
+    traffic = [store.start_run(conn, mode="live", kind="traffic-check") for _ in range(60)]
+    conn.close()
+
+    with _client(db) as client:
+        messages = client.get("/api/audit/runs?scope=messages&limit=50").json()
+        cal = client.get("/api/audit/runs?scope=calendar&limit=50").json()
+        trf = client.get("/api/audit/runs?scope=traffic&limit=50").json()
+        older = client.get(f"/api/audit/runs?scope=traffic&limit=50&before={traffic[10]}").json()
+        bogus = client.get("/api/audit/runs?scope=everything")
+
+    assert [r["id"] for r in messages["runs"]] == [scan]
+    assert messages["has_more"] is False
+    assert [r["id"] for r in cal["runs"]] == [calendar]
+    assert [r["id"] for r in trf["runs"]] == list(reversed(traffic))[:50]
+    assert trf["has_more"] is True
+    # Paging: `before` is an exclusive run-id cursor, newest first.
+    assert [r["id"] for r in older["runs"]] == list(reversed(traffic[:10]))
+    assert older["has_more"] is False
+    assert bogus.status_code == 400
+
+
 def test_audit_run_drilldown_trace(tmp_path: Path) -> None:
     db = tmp_path / "audit.sqlite3"
     conn = store.connect(db)

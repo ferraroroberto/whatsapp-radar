@@ -14,19 +14,41 @@ def test_shell_loads(page: Page, base_url: str) -> None:
     expect(page.locator("#tabDashboard")).to_be_visible()
     # Dashboard is the default pane.
     expect(page.locator("#paneDashboard")).to_be_visible()
-    expect(page.locator("#paneAudit")).to_be_hidden()
+    expect(page.locator("#paneActivity")).to_be_hidden()
 
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
 def test_tab_switching(page: Page, base_url: str) -> None:
+    # Four tabs, Activity second (#373: Run and Audit merged); the fleet nav
+    # allows at most five, and Follow-ups lives on Home, never as a tab (#336).
     page.goto(base_url)
-    page.locator("#tabAudit").click()
-    expect(page.locator("#paneAudit")).to_be_visible()
+    tabs = page.locator("nav.tabs [role=tab]")
+    expect(tabs).to_have_count(4)
+    expect(tabs.nth(1)).to_have_attribute("data-tab", "activity")
+    expect(page.locator("#tabExecution, #tabAudit, #tabAck")).to_have_count(0)
+    expect(page.locator("#paneDashboard #ackItems")).to_have_count(1)
+    page.locator("#tabActivity").click()
+    expect(page.locator("#paneActivity")).to_be_visible()
     expect(page.locator("#paneDashboard")).to_be_hidden()
+    # Activity opens on Messages.
+    expect(page.locator('#activityScope [data-scope="messages"]')).to_have_attribute(
+        "aria-pressed", "true"
+    )
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
-    expect(page.locator("#paneAudit")).to_be_hidden()
+    expect(page.locator("#paneActivity")).to_be_hidden()
+
+
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_a_stored_run_or_audit_tab_opens_activity(page: Page, base_url: str) -> None:
+    # An installed PWA that last had Run or Audit open reopens on Activity.
+    page.goto(base_url)
+    for old in ("execution", "audit"):
+        page.evaluate("k => localStorage.setItem('wa-radar.tab', k)", old)
+        page.reload()
+        expect(page.locator("#paneActivity")).to_be_visible()
 
 
 @pytest.mark.smoke

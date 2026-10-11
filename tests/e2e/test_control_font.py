@@ -18,7 +18,7 @@ from playwright.sync_api import Page
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
-_TABS = ["Dashboard", "Chats", "Execution", "Audit", "Family"]
+_TABS = ["Dashboard", "Activity", "Chats", "Family"]
 
 # Visible controls under `rootSel` whose computed font-family is not the body's.
 _OFFENDERS = """([rootSel, bodyFamily]) => {

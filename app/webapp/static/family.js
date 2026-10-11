@@ -2,12 +2,11 @@
  * scheduled checks — the daily calendar-conflict scan and the traffic-jam
  * alert — run against, editable from the phone.
  *
- * Run controls (enable toggles, cadence, "run now") and recent runs moved to
- * the Run tab in #164/#163 — this tab's only job now is the rules themselves:
+ * Recent runs live in Activity (#373); this tab holds the rules themselves:
  * on-duty weekday pattern, kids-home time, childcare windows, quiet hours,
  * significant-delay threshold, the train-commute leave-now exemption (#227),
- * and the daily-scan enable switch. Edits POST to
- * /api/family (the same endpoint the Run tab's traffic card reads/writes) and
+ * and the daily-scan enable switch, plus the traffic card (enable, cadence,
+ * run now; here since #373). Edits POST to /api/family and
  * land in config/local.json; the next scan/traffic-check run picks them up
  * with no restart. All values go in via textContent/value only. */
 
@@ -67,6 +66,10 @@ function adopt(data) {
   travelDraft = toTravelDraft(data);
   travelBaseline = serializeTravel();
   render();
+  // The traffic card lives in this pane since #373; the same answer carries it.
+  state.execution.traffic = data.traffic || {};
+  state.execution.trafficAt = Date.now();
+  renderTraffic();
 }
 
 function toDraft(d) {
@@ -404,7 +407,7 @@ function renderEditable(box) {
     draft.ask_missing_locations = next;
     markDirty();
   }));
-  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the Audit trace.'));
+  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the run trace in Activity.'));
 
   renderResponsible(target);
 
@@ -730,7 +733,7 @@ function sweepOutcome(result) {
       + ' — nothing was planned and nothing was written.';
   }
   const c = section.counts;
-  if (!c) return 'The sweep ran but recorded no counts — see the Audit tab for its payload.';
+  if (!c) return 'The sweep ran but recorded no counts — see the run in Activity for its payload.';
   const mode = section.dry_run === false ? 'live' : 'planned only, nothing written';
   return 'Sweep finished (' + mode + ') — ' + c.adds + ' add · ' + c.deletes + ' delete · '
     + c.keeps + ' kept · ' + c.protected + ' left alone · ' + c.failures + ' unpriced.';
@@ -742,13 +745,13 @@ async function finishSweep(record) {
   sweep.runId = null;
   if (!record) {
     setSweep({ tone: 'error', message: 'The run left the queue but no record could be read — '
-      + 'open the Audit tab to see what it did.' });
+      + 'open the run in Activity to see what it did.' });
   } else if (record.status === 'failed' || record.error) {
     // The record's own `error` is often empty for a webapp-launched run (the
     // captured output carries the detail), so always name where to go look.
     setSweep({ tone: 'error', message: 'The calendar sync failed'
       + (record.error ? ': ' + record.error : '')
-      + '. Nothing was swept — open the Audit tab for the run.' });
+      + '. Nothing was swept — open the run in Activity.' });
   } else {
     setSweep({ tone: '', message: sweepOutcome(record.result) });
   }
@@ -788,7 +791,7 @@ function renderTravel(box) {
     markDirty();
   }));
   target.append(el('p', 'opt-hint', 'Leave dry run on until you have read a full plan in '
-    + 'the Audit tab and confirmed nothing unexpected is listed for deletion. Every delete '
+    + 'Activity and confirmed nothing unexpected is listed for deletion. Every delete '
     + 'backs the event up to data/calendar_backups/ first.'));
 
   if (tb.enabled && !tb.write_token_present) {
@@ -859,11 +862,11 @@ export function wireFamily() {
   // No boot-time wiring beyond fetch-on-activate; controls bind on render.
 }
 
-// ----------------------------------------------- Run-tab traffic card (#164)
-// The enable toggle + cadence render on the Execution tab (`els.execTraffic*`)
-// but the config they edit is this module's own /api/family — the traffic-jam
-// insurance feature is a family/traffic domain concern that happens to be
-// surfaced from the Run tab (#240). execution.js keeps only `runTraffic`, the
+// ------------------------------------------------ traffic card (#164, #373)
+// The enable toggle + cadence (`els.execTraffic*`, ids kept from the Run tab)
+// sit in this pane since #373 and edit this module's own /api/family — the
+// traffic-jam insurance feature is a family/traffic domain concern (#240).
+// execution.js keeps only `runTraffic`, the
 // one piece that genuinely belongs to its run queue (firing a one-off
 // traffic-check run); everything here is read/render/patch of config state,
 // sharing nothing with that queue.
@@ -885,7 +888,7 @@ function renderTraffic() {
 
 // Config comes from /api/family; throttled since it changes rarely (a POST also
 // returns the fresh slice). `force` bypasses the throttle after a run/edit.
-export async function fetchTraffic(force) {
+async function fetchTraffic(force) {
   const ex = state.execution;
   if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
   await fetchQuiet('/api/family', function (data) {

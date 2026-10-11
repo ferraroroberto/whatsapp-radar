@@ -466,8 +466,13 @@ def test_execution_runs_dedups_webapp_launched_run(
         db_run_id=run_id,
     )
 
+    (run_dir / "output.log").write_text("dry_run banner\n", encoding="utf-8")
+
     with _client(db) as client:
         body = client.get("/api/execution/runs").json()
+        # The Activity sheet opens a run by its DB id (#373): that must serve
+        # the captured record and its output, not the no-output placeholder.
+        detail = client.get(f"/api/execution/runs/scan/db-{run_id}").json()["run"]
 
     assert len(body["runs"]) == 1
     record = body["runs"][0]
@@ -475,6 +480,9 @@ def test_execution_runs_dedups_webapp_launched_run(
     assert record["db_run_id"] == run_id
     assert record["started_at"] == db_started  # DB clock is authoritative
     assert record["mode"] == "dry_run"
+    assert detail["run_id"] == "20260101T000000"
+    assert "dry_run banner" in detail["output_tail"]
+    assert detail["started_at"] == db_started
 
 
 def _seed_skip(runs_dir: Path, run_id: str, started_at: str) -> None:

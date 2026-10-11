@@ -381,17 +381,41 @@ _RUN_LIST_COLUMNS = (
 )
 
 
-def list_review_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+def list_review_runs(
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    *,
+    kinds: Sequence[str] | None = None,
+    exclude_kinds: Sequence[str] | None = None,
+    before_id: int | None = None,
+) -> list[sqlite3.Row]:
     """Review/scan runs newest-first, with the funnel columns the Audit list needs.
 
     Read-only (SELECT only) so it is safe on the webapp request path; powers the
-    Audit tab's run list where each run is shown with its mode, parameters, and
+    Activity tab's run list where each run is shown with its mode, parameters, and
     funnel counters before drilling into the per-chat trace.
+
+    ``kinds`` / ``exclude_kinds`` narrow the query in SQL *before* the ``LIMIT``
+    (#373): traffic checks are ~94% of runs, so filtering the newest ``limit``
+    rows afterwards would leave a Messages list nearly empty. ``before_id`` is an
+    exclusive id cursor for paging older rows.
     """
+    where: list[str] = []
+    args: list[object] = []
+    if kinds:
+        where.append(f"kind IN ({','.join('?' for _ in kinds)})")
+        args.extend(kinds)
+    if exclude_kinds:
+        where.append(f"kind NOT IN ({','.join('?' for _ in exclude_kinds)})")
+        args.extend(exclude_kinds)
+    if before_id is not None:
+        where.append("id < ?")
+        args.append(before_id)
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
     return list(
         conn.execute(
-            f"SELECT {_RUN_LIST_COLUMNS} FROM review_runs ORDER BY id DESC LIMIT ?",
-            (max(1, limit),),
+            f"SELECT {_RUN_LIST_COLUMNS} FROM review_runs{clause} ORDER BY id DESC LIMIT ?",
+            (*args, max(1, limit)),
         ).fetchall()
     )
 

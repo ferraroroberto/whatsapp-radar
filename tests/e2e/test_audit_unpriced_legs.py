@@ -58,7 +58,7 @@ def _traffic_run(*statuses: str, alerts: int = 0) -> dict[str, Any]:
 
 def _open_traffic_run(page: Page, base_url: str, run: dict[str, Any]) -> None:
     page.route(
-        "**/api/audit/runs",
+        "**/api/audit/runs?*",
         lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
@@ -70,7 +70,10 @@ def _open_traffic_run(page: Page, base_url: str, run: dict[str, Any]) -> None:
     )
     page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
     page.goto(base_url)
-    page.locator("#tabAudit").click()
+    page.locator("#tabActivity").click()
+    page.locator('#activityScope [data-scope="traffic"]').click()
+    # A day of traffic checks folds to one row (#373); open it to the checks.
+    page.locator("#activityList .run-fold .action-row-main").first.click()
 
 
 def test_an_all_unpriced_run_never_shows_a_healthy_checked_count(
@@ -84,7 +87,7 @@ def test_an_all_unpriced_run_never_shows_a_healthy_checked_count(
     """
     _open_traffic_run(page, base_url, _traffic_run("error", "anchor_in_the_past", "error"))
 
-    row = page.locator("#auditRuns .audit-run-li").first
+    row = page.locator("#activityList .run-row").first
     expect(row).to_contain_text("0 priced")
     expect(row).to_contain_text("3 not priced")
     expect(row).not_to_contain_text("3 checked")
@@ -100,14 +103,20 @@ def test_a_mixed_run_names_the_unpriced_half_in_the_list_and_the_funnel(
     """
     _open_traffic_run(page, base_url, _traffic_run("ok", "ok", "error", alerts=1))
 
-    row = page.locator("#auditRuns .audit-run-li").first
+    # The day's fold row says it had an alert (#373), in the attention tone.
+    fold = page.locator("#activityList .run-fold").first
+    expect(fold).to_contain_text("1 traffic check")
+    expect(fold.locator(".status-chip")).to_have_text("1 alert")
+    expect(fold.locator(".status-chip")).to_have_attribute("data-tone", "attention")
+
+    row = page.locator("#activityList .run-row").first
     expect(row).to_contain_text("2 priced")
     expect(row).to_contain_text("1 not priced")
 
-    row.click()
-    expect(page.locator("#auditDetailCard")).to_be_visible()
+    row.locator(".action-row-main").click()
+    expect(page.locator("#runSheetCard")).to_be_visible()
     # Labels are upper-cased by CSS, so the DOM text is the raw label.
-    funnel = page.locator("#auditFunnel")
+    funnel = page.locator("#runFunnel")
     expect(funnel.locator(".exec-funnel-cell", has_text="Not priced")).to_contain_text("1")
     expect(funnel).to_contain_text("Priced")
     expect(funnel).not_to_contain_text("Checked")
@@ -117,7 +126,7 @@ def test_a_fully_priced_run_gains_no_noise(page: Page, base_url: str) -> None:
     """The happy path must not become louder to make the unhappy one honest."""
     _open_traffic_run(page, base_url, _traffic_run("ok", "ok"))
 
-    row = page.locator("#auditRuns .audit-run-li").first
+    row = page.locator("#activityList .run-row").first
     expect(row).to_contain_text("2 priced")
     expect(row).not_to_contain_text("not priced")
 
@@ -135,7 +144,7 @@ def test_a_legacy_payload_without_statuses_still_reads_as_priced(
         del leg["status"]
     _open_traffic_run(page, base_url, run)
 
-    row = page.locator("#auditRuns .audit-run-li").first
+    row = page.locator("#activityList .run-row").first
     expect(row).to_contain_text("2 priced")
     expect(row).not_to_contain_text("not priced")
 
@@ -145,16 +154,16 @@ def test_the_split_funnel_fits_a_phone(page: Page, base_url: str) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
     _open_traffic_run(page, base_url, _traffic_run("ok", "error", "anchor_in_the_past"))
 
-    page.locator("#auditRuns .audit-run-li").first.click()
-    expect(page.locator("#auditDetailCard")).to_be_visible()
-    expect(page.locator("#auditFunnel")).to_contain_text("Not priced")
+    page.locator("#activityList .run-row .action-row-main").first.click()
+    expect(page.locator("#runSheetCard")).to_be_visible()
+    expect(page.locator("#runFunnel")).to_contain_text("Not priced")
 
     overflowing = page.evaluate(
         """
         () => {
           const vw = window.innerWidth;
           const bad = [];
-          document.querySelectorAll('#auditDetailCard *').forEach((el) => {
+          document.querySelectorAll('#runSheetCard *').forEach((el) => {
             const r = el.getBoundingClientRect();
             if (r.width > 0 && r.right > vw + 0.5) bad.push(String(el.className));
           });

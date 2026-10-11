@@ -1,8 +1,12 @@
-"""Browser e2e: the Execution tab runs a dry-run scan and shows the funnel.
+"""Browser e2e: Activity runs a dry-run scan, follows it live, and drills in.
 
-Drives the real PWA against the autobooted webapp: switch to Run, pick Dry-run,
-fire the full pipeline, and assert a run completes with its funnel + live output
-rendered — the issue's "dry-run shows the funnel" acceptance, through the UI.
+Drives the real PWA against the autobooted webapp (stub classifier + fixture
+connector, sanitized fixture DB): open Activity's Run-now sheet, switch Dry run
+on, fire the full pipeline, and assert the run sheet follows the run to
+completion with its funnel, per-source split, Telegram text and raw output;
+then the run sits in the list with a Dry run chip and its per-chat trace opens
+— the Run tab's "dry-run shows the funnel" and the Audit tab's "open a run,
+see the per-chat trace" acceptance, one story since #373 merged the two tabs.
 """
 
 from __future__ import annotations
@@ -18,52 +22,79 @@ from playwright.sync_api import Page, expect
 # connector/classifier the live tray is actually configured with, not the
 # stub/fixture env autoboot injects. Stays out of live mode until mocked.
 @pytest.mark.smoke
-def test_execution_dry_run_shows_funnel(
+def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:
     page.goto(base_url)
-    page.locator("#tabExecution").click()
-    expect(page.locator("#paneExecution")).to_be_visible()
-    sources_card = page.locator("#execSourcesCard")
-    expect(sources_card).to_be_visible()
-    # The traffic-jam card lives on the Run tab now (#164), folded by default.
-    expect(page.locator("#execTrafficCard")).to_be_visible()
-    # Maintenance moved off the Run tab (#164) and now lives in Settings (#337).
-    expect(page.locator("#paneExecution #execMaintenanceCard")).to_have_count(0)
+    page.locator("#tabActivity").click()
+    expect(page.locator("#paneActivity")).to_be_visible()
+    # The traffic card moved to Family, Maintenance to Settings (#164, #337, #373).
+    expect(page.locator("#paneActivity #execTrafficCard")).to_have_count(0)
     expect(page.locator("#settingsDialog #execMaintenanceCard")).to_have_count(1)
 
-    # Pick dry-run, then run the whole pipeline.
-    page.locator("#execModeDry").click()
+    # 1. Run now is one tap from the header; Dry run is a switch that reveals
+    #    the replay window.
+    page.locator("#activityRunNow").click()
+    expect(page.locator("#runNowSheet")).to_be_visible()
+    expect(page.locator("#execDryOpts")).to_be_hidden()
+    page.locator("#execDryRun").click()
+    expect(page.locator("#execDryRun")).to_have_attribute("aria-checked", "true")
     expect(page.locator("#execDryOpts")).to_be_visible()
     page.locator("#execRunScan").click()
 
-    # The viewer appears and the run reaches a terminal state (stub classifier →
-    # a couple of seconds; allow generous headroom for the cold subprocess).
-    viewer = page.locator("#execViewer")
-    expect(viewer).to_be_visible(timeout=scaled(15_000))
-    expect(page.locator("#execViewerMeta")).to_contain_text(
-        "completed", timeout=scaled(45_000)
-    )
+    # 2. The Run-now sheet closes and the run sheet follows the run live to a
+    #    terminal state (stub classifier → seconds; generous headroom for the
+    #    cold subprocess).
+    expect(page.locator("#runNowSheet")).to_be_hidden()
+    sheet = page.locator("#runSheetCard")
+    expect(sheet).to_be_visible(timeout=scaled(15_000))
+    expect(page.locator("#runSheetMeta")).to_contain_text("completed", timeout=scaled(45_000))
+    expect(page.locator("#runFunnel")).to_contain_text("Notify")
+    expect(page.locator("#runSourceFunnel")).to_contain_text("WhatsApp")
+    expect(page.locator("#runSourceFunnel")).to_contain_text("Gmail")
+    # Raw output sits in a closed disclosure; Stop shows only while live.
+    expect(page.locator("#runOutputCard")).not_to_have_attribute("open", "")
+    page.locator("#runOutputCard summary").click()
+    expect(page.locator("#runOutput")).to_contain_text("dry_run")
+    expect(page.locator("#runSheetFoot")).to_be_hidden()
+    page.locator("#runSheetClose").click()
 
-    # Funnel strip rendered, and the live output captured the dry-run banner.
-    expect(page.locator("#execFunnel")).to_contain_text("Notify")
-    expect(page.locator("#execSourceFunnel")).to_contain_text("WhatsApp")
-    expect(page.locator("#execSourceFunnel")).to_contain_text("Gmail")
-    expect(page.locator("#execOutput")).to_contain_text("dry_run")
+    # 3. The run is in the Messages list with an exception chip for Dry run and
+    #    no OK or Live stamp.
+    row = page.locator("#activityList .run-row", has_text="Message scan").first
+    expect(row).to_be_visible(timeout=scaled(10_000))
+    chips = row.locator(".status-chip")
+    expect(chips.filter(has_text="Dry run")).to_have_attribute("data-tone", "neutral")
+    expect(chips.filter(has_text="actionable")).to_have_attribute("data-tone", "accent")
+    expect(row).not_to_contain_text("OK")
+    expect(row).not_to_contain_text("Live")
 
-    # The run shows up in the recent-runs list too.
-    expect(page.locator("#execRuns")).to_contain_text("Full pipeline")
+    # 4. Drill in: the sheet's funnel and at least one per-chat trace carrying the
+    #    seeded monitored chat's name; expanding it reveals the per-message
+    #    breakdown (#12), each message with its own Stage-1 / LLM verdict badge.
+    row.locator(".action-row-main").click()
+    expect(sheet).to_be_visible(timeout=scaled(10_000))
+    expect(page.locator("#runFunnel")).to_contain_text("Stage 1")
+    trace = page.locator("#runTraces .audit-trace").first
+    expect(trace).to_be_visible(timeout=scaled(10_000))
+    expect(trace).to_contain_text("Class 4A Group")
+    trace.locator("summary").click()
+    expect(trace).to_contain_text("WhatsApp · Stage 1")
+    expect(trace).to_contain_text("Messages (")
+    messages = trace.locator(".audit-msg")
+    expect(messages.first).to_be_visible()
+    expect(messages.first.locator(".audit-msg-badge").first).to_be_visible()
 
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
-def test_execution_offline_shows_reconnect(
+def test_settings_sources_card_offers_reconnect_when_offline(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:
-    """With an empty sidecar buffer the health pill offers a relaunch (#29).
+    """With an empty sidecar buffer the health card offers a relaunch (#29).
 
-    Asserts the offline affordance *renders* — it never clicks Reconnect, so no
-    Node process is ever spawned from the test.
+    Sources health lives in Settings since #373. Asserts the offline affordance
+    *renders* — it never clicks Reconnect, so no Node process is ever spawned.
     """
     page.route(
         "**/api/execution/health",
@@ -95,11 +126,13 @@ def test_execution_offline_shows_reconnect(
         ),
     )
     page.goto(base_url)
-    page.locator("#tabExecution").click()
-    expect(page.locator("#paneExecution")).to_be_visible()
+    page.locator("#tabActivity").click()
+    page.locator("#paneActivity .home-settings").click()
+    expect(page.locator("#settingsDialog")).to_be_visible()
 
     # The throwaway buffer (conftest) has no status.json → 'stopped' → a red
-    # "Offline" status word and a visible Reconnect button.
+    # "Not connected" status word and a visible Reconnect button; the card
+    # opens itself when the source is down.
     expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
     expect(page.locator("#execReconnectBtn")).to_be_visible()
     whatsapp = page.locator(".source-status-card", has_text="WhatsApp")

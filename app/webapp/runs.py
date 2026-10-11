@@ -1,4 +1,4 @@
-"""Run-record + output-streaming infra for the Execution tab.
+"""Run-record + output-streaming infra for the run queue and Activity's run sheet.
 
 Mirrors App Launcher's job-run model (``src/jobs.py`` there): each Execution
 action runs as a detached subprocess whose combined stdout+stderr streams to
@@ -7,7 +7,7 @@ structured result. The webapp polls the run directory — a finished run is a
 static log, a running one keeps growing — so the phone sees the process byte by
 byte exactly as it would in App Launcher's Jobs tab.
 
-Why a subprocess and not an in-process call: the Execution tab is where the
+Why a subprocess and not an in-process call: Run now is where the
 operator *validates* the very command App Launcher Jobs will schedule
 (``python launcher.py scan|resync|reprocess``). Running the identical process
 here means what you watch is byte-for-byte what runs there. The structured
@@ -188,6 +188,24 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
     if with_output:
         record["output_tail"] = strip_result_line(read_output_tail(run_dir))
     return record
+
+
+def find_by_db_run_id(kind: str, db_run_id: int) -> dict[str, Any] | None:
+    """The record of ``kind`` that finalized with ``db_run_id``, with its output.
+
+    The Activity run sheet opens runs by their DB id (#373); this finds the
+    captured output a webapp- or CLI-launched run left behind. Scans the kind's
+    newest :data:`RETENTION_PER_KIND` records at most, which is everything
+    retention keeps; None when no record carries that id.
+    """
+    kind_dir = RUNS_DIR / kind
+    if not kind_dir.is_dir():
+        return None
+    names = sorted((e.name for e in kind_dir.iterdir() if e.is_dir()), reverse=True)
+    for name in names[:RETENTION_PER_KIND]:
+        if read_run(kind_dir / name).get("db_run_id") == db_run_id:
+            return get_run(kind, name)
+    return None
 
 
 def list_runs(limit: int = 50) -> list[dict[str, Any]]:

@@ -1,5 +1,5 @@
-"""Execution tab (#11): run the end-to-end pipeline — or a single stage — and
-watch it live.
+"""Run queue (#11; Activity's Run now since #373): run the end-to-end
+pipeline — or a single stage — and watch it live.
 
 This router is a thin launcher over the CLI verbs. Every action maps to a
 ``python launcher.py <cmd>`` invocation spawned by :mod:`app.webapp.runs`, which
@@ -101,7 +101,7 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         if mode == "dry_run":
             argv.append("--dry-run")
         if action == "calendar-scan":
-            # Every run this router spawns is a button press: the Run tab's
+            # Every run this router spawns is a button press: Activity's Run-now
             # Calendar-sync step and the Family tab's Rehearse / Run sweep
             # controls (#276). The webapp schedules nothing of its own, so an
             # explicit human request must never be eaten by `family.run_hour`'s
@@ -429,7 +429,17 @@ async def get_execution_run(
         row = store.review_run(conn, rid)
         if row is None or row["kind"] != kind:
             raise HTTPException(status_code=404, detail="run not found")
-        return {"run": _db_run_record(row)}
+        # A run launched from the webapp or the CLI left a record with its
+        # captured output (#373): serve that, with the DB row's timing and mode.
+        captured = runs.find_by_db_run_id(kind, rid)
+        if captured is None:
+            return {"run": _db_run_record(row)}
+        captured["started_at"] = row["started_at"]
+        if row["mode"] in ("live", "dry_run"):
+            captured["mode"] = row["mode"]
+        else:
+            captured.setdefault("mode", _fs_mode(captured))
+        return {"run": captured}
     record = runs.get_run(kind, run_id)
     if record is None:
         raise HTTPException(status_code=404, detail="run not found")

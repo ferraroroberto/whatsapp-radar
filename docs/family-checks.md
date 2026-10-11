@@ -53,7 +53,7 @@ A coverage number that silently counts non-coverage is how you end up trusting a
 
 ### Train commutes
 
-The ETA behind the leave-now nudge and the *"Tight schedule"* alert is a **driving** ETA, so it says nothing about a train departure — a daily by-train office run would otherwise nudge every morning for nothing. Any event whose title contains one of `traffic.train_keywords` (default `tren`, `train`, matched case-insensitively — e.g. `trabajo desde la oficina (en tren)`) is exempt from **both driving-ETA judgments** while `traffic.skip_leave_now_for_train` is on. Each skipped leg records `leave_now_suppressed` / `infeasible_suppressed` in its decision trace, so the Audit tab shows *why* nothing was sent.
+The ETA behind the leave-now nudge and the *"Tight schedule"* alert is a **driving** ETA, so it says nothing about a train departure — a daily by-train office run would otherwise nudge every morning for nothing. Any event whose title contains one of `traffic.train_keywords` (default `tren`, `train`, matched case-insensitively — e.g. `trabajo desde la oficina (en tren)`) is exempt from **both driving-ETA judgments** while `traffic.skip_leave_now_for_train` is on. Each skipped leg records `leave_now_suppressed` / `infeasible_suppressed` in its decision trace, so the run's trace in Activity shows *why* nothing was sent.
 
 The **delay** alert deliberately still fires for a train commute — congestion on the road is a real-world signal regardless of who is driving.
 
@@ -85,7 +85,7 @@ Edit `traffic.train_keywords` in `config/local.json` if a genuine *drive to the 
 
 ## Calendar sync (`wr calendar-scan`)
 
-Scans the next few days of both household Google Calendars, flags coverage gaps against the fixed weekly responsibility pattern (who is home which afternoon, the childcare pickups) plus same-person two-places-at-once overlaps, and records a per-event decision trace — visible in the Audit tab — explaining every verdict.
+Scans the next few days of both household Google Calendars, flags coverage gaps against the fixed weekly responsibility pattern (who is home which afternoon, the childcare pickups) plus same-person two-places-at-once overlaps, and records a per-event decision trace — visible in the run's trace in Activity — explaining every verdict.
 
 Every live run sends exactly one Telegram summary: the findings, or an explicit all-clear. Coverage gaps and overlaps are hard alerts and bypass quiet hours; a routine all-clear inside quiet hours is suppressed.
 
@@ -103,7 +103,7 @@ It is a **floor, not a fire time**: the App Launcher job decides when the verb i
 
 An unusable value lands in the same place. Anything that is not an hour in `0..23` — a hand edit to `config/local.json` never passes the Family tab's own validation — is **read as `0`, with a `⚠️` warning naming it**, rather than clamped to the nearest hour. A knob whose only power is to suppress the daily safety check has to fail towards *not* suppressing it: honouring `25` would gate the scan off permanently, and honouring `"seven"` would take the webapp down on every request. `GET /api/family` then reports the `0` actually in force, not the value in the file, so the app never displays a schedule it does not honour.
 
-An explicitly requested run ignores `run_hour` entirely: `wr calendar-scan --force`, and every button in the webapp — the Execution tab's Calendar-sync step and the Family tab's *Rehearse* / *Run sweep* — which all send `--force`, because the webapp schedules nothing of its own and a press at 22:00 is a person asking for a run now.
+An explicitly requested run ignores `run_hour` entirely: `wr calendar-scan --force`, and every button in the webapp — the Calendar-sync step in Activity's Run now and the Family tab's *Rehearse* / *Run sweep* — which all send `--force`, because the webapp schedules nothing of its own and a press at 22:00 is a person asking for a run now.
 
 ### Configuration (`family` in `config/local.json`)
 
@@ -190,15 +190,15 @@ Widening the read never widens the plan. A block found out there with no desired
 
 The **Family** tab's *Travel blocks* card drives everything. A banner states which of three modes is in force: **Off** (no plan, no Routes call), **Dry run** (the plan is computed and logged, nothing is written) or **Live** (blocks are created and removed).
 
-*Run a sweep* offers **Rehearse (dry run)** and **Run sweep**. Both post the existing `calendar-scan` verb to `POST /api/execution/run` — the same pipeline the Execution tab and the scheduled job use — because the sweep rides along inside the daily scan and a travel-blocks-only verb would need a whole second calendar read path. Rehearse sends `--dry-run`, which forces the sweep dry *server-side* as well as suppressing the summary message.
+*Run a sweep* offers **Rehearse (dry run)** and **Run sweep**. Both post the existing `calendar-scan` verb to `POST /api/execution/run` — the same pipeline Activity's Run now and the scheduled job use — because the sweep rides along inside the daily scan and a travel-blocks-only verb would need a whole second calendar read path. Rehearse sends `--dry-run`, which forces the sweep dry *server-side* as well as suppressing the summary message.
 
 **Run sweep** is unavailable — with every reason spelled out, never silently greyed out — whenever travel blocks are off, `dry_run` is on, the write token is missing, there is no Routes API key, or no home address is configured. Those reasons are *reported* by `GET /api/family` as `live_sweep_blockers`; they are *enforced* independently by `gate_status` and the apply short-circuit, which re-run on every invocation, so the button is a courtesy and never the thing standing between a click and a calendar write. A second run while one is in flight returns `409` and reads as "already running", not as a failure. When a run finishes, the card re-reads `/api/family` so **Last sweep** shows it with no page reload. Opening or rendering the tab never triggers a sweep — only a button press does.
 
 *Write access per calendar* lists every configured household calendar in one of three states — **Writable**, **Not writable**, **Unknown** — plus the last sweep's counts (legs, adds/deletes/keeps, Routes calls, unpriced legs, and what was actually written). `Unknown` renders as its own state, with its own colour, its own glyph and a dashed outline: it is never a tick, never a cross, and never an omitted row, because an unresolved probe is not permission. It is what you see before the first sweep, and if the calendar listing itself failed — the fix is to run a sync and re-read the card, never to assume the calendar is fine. The whole card renders from the newest recorded `calendar-scan` run, so opening the tab spends no Routes quota.
 
-**In the Execution tab,** a `calendar-scan` row's funnel carries the sweep's headline numbers (block adds, block deletes, unpriced legs), or one cell naming its gate when the sweep never computed a plan.
+**In Activity,** a `calendar-scan` run's funnel carries the sweep's headline numbers (block adds, block deletes, unpriced legs), or one cell naming its gate when the sweep never computed a plan.
 
-**In the Audit tab,** the drill-down renders the whole record above the raw payload dump: mode, counts, Routes calls, horizon and what was written; then each planned block as person · leg · event title · time box · minutes; each removal and each **left alone** block with the reason that spared it; and each unpriced leg with its `reason` discriminator. `protected` keeps its own heading rather than being folded into `keeps` — "left alone because its leg could not be priced" is a warning, "checked and already right" is not. A gated sweep is named by its gate and never rendered as a plan of zeros: `dry_run` and `counts` come back `null` precisely so nothing can dress "nothing was computed" up as "nothing needed doing".
+**In the run sheet,** the drill-down renders the whole record above the raw payload dump: mode, counts, Routes calls, horizon and what was written; then each planned block as person · leg · event title · time box · minutes; each removal and each **left alone** block with the reason that spared it; and each unpriced leg with its `reason` discriminator. `protected` keeps its own heading rather than being folded into `keeps` — "left alone because its leg could not be priced" is a warning, "checked and already right" is not. A gated sweep is named by its gate and never rendered as a plan of zeros: `dry_run` and `counts` come back `null` precisely so nothing can dress "nothing was computed" up as "nothing needed doing".
 
 ### Redaction in the Audit payload dump
 
@@ -378,13 +378,13 @@ Whatever you arm, keep `family.run_hour` at or below the earliest armed hour. At
 
 ## Run records and self-skips
 
-Every check execution — CLI, scheduled App Launcher Job, or webapp-launched — records a run row in the unified run store, so full per-run detail (every route checked, every conflict) is inspectable in the Execution and Audit tabs regardless of who launched it. A `--dry-run` never sends an alert, but the run row itself is recorded and badged.
+Every check execution — CLI, scheduled App Launcher Job, or webapp-launched — records a run row in the unified run store, so full per-run detail (every route checked, every conflict) is inspectable in Activity regardless of who launched it. A `--dry-run` never sends an alert, but the run row itself is recorded and badged.
 
-The exceptions are the two **self-skips**, which record no run row at all: a fire that deliberately did nothing is not a run, and recording one every few minutes would drown the Audit tab in no-ops. Both still write the usual *filesystem* run record (`webapp/runs/<kind>/…`), which reads as `skipped` with its reason, so the fire stays auditable without polluting the run history the Family and Audit tabs reason over. Both are hidden from **Recent runs** behind an "N self-skipped runs hidden" line rather than deleted, and stay fetchable with `GET /api/execution/runs?include_skipped=true`.
+The exceptions are the two **self-skips**, which record no run row at all: a fire that deliberately did nothing is not a run, and recording one every few minutes would drown Activity in no-ops. Both still write the usual *filesystem* run record (`webapp/runs/<kind>/…`), which reads as `skipped` with its reason, so the fire stays auditable without polluting the run history the Family and Activity tabs reason over. Both are hidden from Activity's list behind an "N self-skipped runs hidden" line rather than deleted, and stay fetchable with `GET /api/execution/runs?include_skipped=true`.
 
 | Self-skip | Trigger | Exemption |
 | --- | --- | --- |
-| `traffic-check` cadence | a **live** fire landing before `traffic.cadence_min` has elapsed | `--dry-run` — an explicit, on-demand human test pass (the Execution tab's *Run now (dry)*) always executes, and its run row never counts towards the live cadence clock |
+| `traffic-check` cadence | a **live** fire landing before `traffic.cadence_min` has elapsed | `--dry-run` — an explicit, on-demand human test pass (the Family tab's traffic card *Run now (dry)*) always executes, and its run row never counts towards the live cadence clock |
 | `calendar-scan` run hour | a fire before `family.run_hour` | `--force` — the *mode* is not the permission, so a scheduled `--dry-run` is gated like any other unattended fire, while every webapp button (which sends `--force`) always runs |
 
 The run-hour skip returning before the run row is opened is also what keeps it out of the Family tab's "last sweep" lookup, which scans recorded `calendar-scan` runs for the newest travel-block section: a skip must never be mistaken for a completed sweep, nor blank out the genuine earlier one.

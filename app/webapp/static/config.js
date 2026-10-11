@@ -9,6 +9,7 @@
 
 import { APP_PREFIX, els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
+import { fetchSettingsHealth } from './execution.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
 
@@ -143,10 +144,12 @@ export function wireConfig() {
 
 // ------------------------------------------------------------ settings view
 // Settings is the home-head gear on every pane, never a tab (#337): the gear
-// opens this dialog, which hosts the config + maintenance cards.
+// opens this dialog, which hosts the config, recent-sync, source-health and
+// maintenance cards (the sync and health cards moved here from Run in #373).
 function openSettings() {
   if (!els.settingsDialog.open) els.settingsDialog.showModal();
   if (!state.config) fetchConfig().catch(function () {});
+  fetchSettingsHealth();
 }
 
 export function wireSettings() {

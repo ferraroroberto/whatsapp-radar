@@ -2,15 +2,14 @@
  * grid plus the folded Sources / Monitored-channels detail.
  *
  * The 2×2 grid (WhatsApp · Gmail · Traffic · Calendar) answers "when did each
- * last run and what did it find" at a glance; tapping a card jumps to that
- * run's detail on the Run tab (#163's unified store makes CLI/Jobs runs visible
- * here too). Chat names go in via textContent only — never innerHTML. */
+ * last run and what did it find" at a glance; tapping a card opens that run
+ * in Activity (#163's unified store makes CLI/Jobs runs visible here too). Chat names go in via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
 import { fetchQuiet } from './api.js';
 import { fmtLocalDateTime, fmtNum, fmtRelative, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setTab } from './tabs.js';
-import { showRun } from './execution.js';
+import { openRun } from './activity.js';
 
 // Per-channel "Last msg" column: compact LOCAL time, no year ("06-07 14:47").
 function fmtTs(ts) {
@@ -39,15 +38,15 @@ function activityBadge(card) {
 
 function activityCard(card) {
   const ran = !!(card.kind && card.started_at);
-  // A ran card is a button (deep-links to the Run tab); a never-ran card is an
+  // A ran card is a button (opens the run in Activity); a never-ran card is an
   // inert div — nothing to open.
   const el = document.createElement(ran ? 'button' : 'div');
   el.className = 'activity-card card' + (ran ? '' : ' is-idle');
   if (ran) {
     el.type = 'button';
     el.addEventListener('click', function () {
-      setTab('execution');
-      showRun({ kind: card.kind, run_id: 'db-' + card.db_run_id });
+      setTab('activity');
+      openRun({ kind: card.kind, dbId: card.db_run_id });
     });
   }
 

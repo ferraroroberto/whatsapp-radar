@@ -1,30 +1,41 @@
-/* Execution tab (#11): run the pipeline — whole or in pieces — and watch it live.
+/* Run queue (#11): run the pipeline — whole or in pieces — from Activity's
+ * Run-now sheet (#373).
  *
  * Mirrors App Launcher's job-stub model: each action spawns `launcher.py <cmd>`
- * server-side; this module polls the run record and streams its growing output
- * into a viewer, with the structured funnel parsed from the run's result. The
- * pipeline is exposed both whole (Run full pipeline → scan) and in pieces (Sync
- * → resync, Process → review, Message → notify), live or dry-run, plus a guarded
- * Reprocess. Chat names / message text go in via textContent only (privacy). */
+ * server-side; this module fires the runs, polls /api/execution/runs for the
+ * active one and advances a chained queue. The pipeline is exposed both whole
+ * (all three message steps → scan) and in pieces (Sync → resync, Process →
+ * review, Message → notify), live or dry-run, plus a guarded Reprocess. The
+ * run list and the live viewer are activity.js's; this module tells it when
+ * the run state moved (onExecutionChange). It also owns the source-health and
+ * recent-sync cards in Settings and the traffic card's Run-now buttons.
+ * Chat names / message text go in via textContent only (privacy). */
 
-import { els, state, EXECUTION_POLL_MS } from './state.js';
+import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import {
-  familyKindCells, fmtLocalDateTime, fmtNum, kindLabel, renderFunnelCells,
-  renderSourceFunnels, sourceIcon, SOURCE_LABEL, statusBadge,
-} from './format.js';
+import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
-import { fetchTraffic, patchTraffic } from './family.js';
+import { patchTraffic } from './family.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
 let firing = false;
 
+// Activity re-renders its Running row, header line and open sheet from here.
+const listeners = [];
+export function onExecutionChange(fn) { listeners.push(fn); }
+function notify() { for (const fn of listeners) fn(); }
+
 // The vendored switch stores its state in aria-checked (class + aria move
 // together through setSwitch — the one write path).
 function stageOn(btn) { return btn.getAttribute('aria-checked') === 'true'; }
 
-function isRunning(status) { return status === 'running' || status === 'pending'; }
+export function isRunning(status) { return status === 'running' || status === 'pending'; }
+
+export function isBusy() {
+  const ex = execState();
+  return !!ex.active || ex.queue.length > 0 || firing;
+}
 
 // ----------------------------------------------------------- run actions
 
@@ -67,15 +78,11 @@ function buildChain(sel, mode) {
 
 async function startOne(body) {
   try {
-    const started = await jsonApi('/api/execution/run', {
+    return await jsonApi('/api/execution/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const ex = execState();
-    ex.selected = { kind: started.kind, run_id: started.run_id };
-    ex.detail = null;
-    return started;
   } catch (exc) {
     execState().queue = [];  // abort the rest of the chain on any failure
     if (exc.status === 409) toast('A run is already in progress', 'error');
@@ -99,18 +106,22 @@ async function pumpQueue() {
     firing = false;
   }
   renderControls();
+  notify();
 }
 
-async function runSelection() {
+// The Run-now sheet's Run button. Resolves to the first started run's
+// {kind, run_id} (null when nothing started), so Activity can follow it live.
+export async function runSelection() {
   const chain = buildChain(selection(), execState().mode);
   if (chain.length === 0) {
     toast('Pick at least one step to run', 'error');
-    return;
+    return null;
   }
   execState().queue = chain;
   toast(chain.length > 1 ? `Running ${chain.length} steps…` : 'Running…');
   await pumpQueue();
   fetchExecution().catch(function () {});
+  return execState().active;
 }
 
 function confirmReprocess() {
@@ -126,11 +137,10 @@ function confirmReprocess() {
   pumpQueue().then(function () { fetchExecution().catch(function () {}); });
 }
 
-async function killSelected() {
-  const sel = execState().selected;
-  if (!sel) return;
+// Stop the live run the run sheet shows (#373: Stop lives in its footer).
+export async function killRun(kind, runId) {
   try {
-    await jsonApi(`/api/execution/runs/${sel.kind}/${sel.run_id}/kill`, { method: 'POST' });
+    await jsonApi(`/api/execution/runs/${kind}/${runId}/kill`, { method: 'POST' });
     toast('Stopping run…');
   } catch (exc) {
     toast(String(exc.message || exc), 'error');
@@ -331,7 +341,7 @@ function renderSyncs() {
 
 // ----------------------------------------------------- traffic jam insurance
 
-// The Run-tab traffic card (#164): the enable toggle + cadence config and the
+// The traffic card (#164; Family pane since #373): the enable toggle + cadence config and the
 // last-check/last-alert status line are family.js's own /api/family concern
 // (#240 — fetchTraffic/patchTraffic + their rendering moved there, since they
 // share nothing with this file's run queue). This is the one piece that does:
@@ -391,10 +401,11 @@ async function reconnectSidecar() {
   fetchHealth().catch(function () {});
 }
 
+// The run poll: the active run and the unified records list (#163), which
+// Activity merges for the runs the DB store does not hold (a webapp-launched
+// sync or rebuild, a run still in flight). Sources health, syncs and traffic
+// are fetched where their cards live now (Settings, Family), not here.
 export async function fetchExecution() {
-  fetchHealth().catch(function () {});
-  fetchSyncs().catch(function () {});
-  fetchTraffic().catch(function () {});
   let data;
   try {
     data = await jsonApi('/api/execution/runs');
@@ -409,41 +420,15 @@ export async function fetchExecution() {
   // Advance a chained run once the current step finishes (server-authoritative).
   if (!firing && !ex.active && ex.queue.length > 0) await pumpQueue();
 
-  // Auto-follow the live run when nothing is being inspected yet.
-  if (!ex.selected && ex.active) ex.selected = { ...ex.active };
-
   renderControls();
-  renderRuns();
-
-  // Refresh the selected run's detail while it is live; a finished run is static.
-  const sel = ex.selected;
-  if (sel) {
-    const needFetch = !ex.detail
-      || ex.detail.run_id !== sel.run_id
-      || isRunning(ex.detail.status);
-    if (needFetch) await fetchDetail(sel);
-  }
+  notify();
 }
 
-async function fetchDetail(sel) {
-  try {
-    const data = await jsonApi(`/api/execution/runs/${sel.kind}/${sel.run_id}`);
-    execState().detail = data.run;
-    renderViewer(data.run);
-  } catch (_) {
-    /* transient — next poll retries */
-  }
-}
-
-// Deep-link entry point: the Dashboard's last-activity cards select a specific
-// run here after switching to this tab (#165). run_id is the unified id the
-// runs list/detail endpoints use (a "db-<id>" for CLI/Jobs-launched runs).
-export function showRun(sel) {
-  const ex = execState();
-  ex.selected = { kind: sel.kind, run_id: sel.run_id };
-  ex.detail = null;
-  renderRuns();
-  fetchDetail(ex.selected);
+// Settings holds the source-health and recent-sync cards (#373); refresh them
+// while it is open so the pairing QR and the connection word stay current.
+export function fetchSettingsHealth() {
+  fetchHealth().catch(function () {});
+  fetchSyncs().catch(function () {});
 }
 
 function updateRunLabel() {
@@ -461,9 +446,19 @@ function updateRunLabel() {
   els.execRunScan.textContent = parts.length ? 'Run ' + parts.join(' + ') : 'Run';
 }
 
+// One line naming what is in flight, for the Run-now sheet and the Activity
+// header: "Message scan in progress… (+1 queued)". Null when idle.
+export function busyLine() {
+  if (!isBusy()) return null;
+  const ex = execState();
+  const label = ex.active ? kindLabel(ex.active.kind) : 'Next step';
+  const queued = ex.queue.length ? ` (+${ex.queue.length} queued)` : '';
+  return label + ' in progress…' + queued;
+}
+
 function renderControls() {
   const ex = execState();
-  const busy = !!ex.active || ex.queue.length > 0 || firing;
+  const busy = isBusy();
   // In dry-run the whole pipeline is simulated on stored data, so the per-step
   // checklist doesn't apply — grey it out (also disabled while a run is busy).
   const stagesDisabled = busy || ex.mode === 'dry_run';
@@ -473,172 +468,17 @@ function renderControls() {
   // Calendar sync is an independent action (not part of the dry-run scan
   // simulation), so it stays togglable in dry-run — only a live run locks it.
   els.execStageCalendar.disabled = busy;
+  els.execDryRun.disabled = busy;
   els.execRunScan.disabled = busy;
   els.execReprocess.disabled = busy;
   for (const c of [els.execTrafficRunLive, els.execTrafficRunDry,
                    els.execTrafficEnabled, els.execTrafficCadence]) {
     c.disabled = busy;
   }
-  els.execBusy.hidden = !busy;
-  if (busy) {
-    const label = ex.active ? kindLabel(ex.active.kind) : 'next step';
-    const queued = ex.queue.length ? ` (+${ex.queue.length} queued)` : '';
-    els.execBusy.textContent = label + ' in progress…' + queued;
-  }
+  const line = busyLine();
+  els.execBusy.hidden = !line;
+  if (line) els.execBusy.textContent = line;
   updateRunLabel();
-}
-
-// One lean line per run: OK/KO badge first (right or wrong at a glance), then
-// the kind, then when. No per-row icons.
-function runsListItem(run) {
-  const li = document.createElement('li');
-  li.className = 'exec-run-li';
-  const ex = execState();
-  if (ex.selected && ex.selected.kind === run.kind && ex.selected.run_id === run.run_id) {
-    li.classList.add('selected');
-  }
-  const badge = document.createElement('span');
-  const b = statusBadge(run.status);
-  badge.className = 'exec-run-badge ' + b.cls;
-  badge.textContent = b.text;
-  const name = document.createElement('span');
-  name.className = 'exec-run-name';
-  name.textContent = kindLabel(run.kind);
-  const when = document.createElement('span');
-  when.className = 'exec-run-when muted small';
-  when.textContent = fmtLocalDateTime(run.started_at);
-  li.append(badge, name);
-  // A dry run must be visibly distinct in the list — four unlabeled "Full
-  // pipeline" dry entries read as four real runs (#163).
-  if (run.mode === 'dry_run') {
-    const dry = document.createElement('span');
-    dry.className = 'audit-mode-badge dry';
-    dry.textContent = 'Dry run';
-    li.append(dry);
-  }
-  li.append(when);
-  li.addEventListener('click', function () {
-    const e = execState();
-    e.selected = { kind: run.kind, run_id: run.run_id };
-    e.detail = null;
-    renderRuns();
-    fetchDetail(e.selected);
-  });
-  return li;
-}
-
-function renderRuns() {
-  const ex = execState();
-  const list = els.execRuns;
-  list.textContent = '';
-  els.execRunsEmpty.hidden = ex.runs.length > 0;
-  for (const run of ex.runs) list.appendChild(runsListItem(run));
-  // Self-skips are hidden from the list above (#234) but must stay visible in
-  // count, not just fetchable — see execution.py's include_skipped. Two kinds
-  // land here now: traffic-check's cadence window (#170) and calendar-scan's
-  // `family.run_hour` floor (#277), so the wording names neither. Both exist so
-  // the external job can be armed generously, which is exactly what makes the
-  // skips numerous enough to hide.
-  const n = ex.skippedCount || 0;
-  els.execRunsSkipped.hidden = n === 0;
-  if (n > 0) {
-    els.execRunsSkipped.textContent =
-      n === 1 ? '1 self-skipped run hidden' : `${n} self-skipped runs hidden`;
-  }
-}
-
-// Funnel cells per kind. Each cell is {label, value}; rendered as a small grid.
-function funnelCells(result) {
-  if (!result) return null;
-  const f = result.funnel || {};
-  if (result.kind === 'scan') {
-    return [
-      { label: 'Synced', value: f.messages_synced },
-      { label: 'Monitored', value: f.chats_monitored },
-      { label: 'New (Δ)', value: f.chats_with_delta },
-      { label: 'Transcribed', value: f.transcriptions },
-      { label: 'Stage 1', value: f.stage1_passed },
-      { label: 'LLM', value: f.stage2_llm_calls },
-      { label: 'Actionable', value: f.actionable },
-      { label: 'Notify', value: result.notification_status },
-    ];
-  }
-  if (result.kind === 'process') {
-    return [
-      { label: 'New (Δ)', value: f.chats_with_delta },
-      { label: 'Processed', value: f.messages_processed },
-      { label: 'Actionable', value: f.actionable },
-      { label: 'Notify', value: result.notification_status },
-    ];
-  }
-  if (result.kind === 'resync') {
-    return [
-      { label: 'Chats +', value: result.chats_added },
-      { label: 'Chats ~', value: result.chats_updated },
-      { label: 'Messages +', value: result.messages_added },
-    ];
-  }
-  if (result.kind === 'reprocess') {
-    return [
-      { label: 'Chats', value: result.chats_after },
-      { label: 'Messages', value: result.messages_after },
-      { label: 'Monitored', value: result.monitored_preserved },
-      { label: 'Ignored', value: result.ignored_preserved },
-      { label: 'Aliases', value: result.aliases_preserved },
-    ];
-  }
-  if (result.kind === 'notify') {
-    return [{ label: 'Notify', value: result.notification_status }];
-  }
-  if (result.kind === 'calendar-scan' || result.kind === 'traffic-check') {
-    return familyKindCells(result.kind, result);
-  }
-  return null;
-}
-
-function renderFunnel(run) {
-  const box = els.execFunnel;
-  const cells = funnelCells(run.result);
-  if (!cells) {
-    box.textContent = '';
-    const p = document.createElement('p');
-    p.className = 'muted small';
-    p.textContent = isRunning(run.status) ? 'Running… watch the output below.'
-      : 'No funnel for this run.';
-    box.appendChild(p);
-    return;
-  }
-  renderFunnelCells(box, cells);
-}
-
-function renderViewer(run) {
-  els.execViewer.hidden = false;
-  els.execViewerEmpty.hidden = true;
-  els.execViewerCard.open = true;  // reveal the detail when a run is selected
-  els.execViewerTitle.textContent = kindLabel(run.kind);
-
-  const bits = [run.status || '?'];
-  if (run.started_at) bits.push('started ' + fmtLocalDateTime(run.started_at));
-  if (run.result && run.result.backup_path) bits.push('backup: ' + run.result.backup_path);
-  if (run.result && Array.isArray(run.result.unmapped) && run.result.unmapped.length) {
-    bits.push(run.result.unmapped.length + ' unmapped');
-  }
-  els.execViewerMeta.textContent = bits.join(' · ');
-
-  // Stop button only while this exact run is the live one.
-  const ex = execState();
-  const live = isRunning(run.status) && ex.active
-    && ex.active.kind === run.kind && ex.active.run_id === run.run_id;
-  els.execKill.hidden = !live;
-
-  renderFunnel(run);
-  renderSourceFunnels(els.execSourceFunnel, (run.result && run.result.sources) || {});
-
-  const tg = run.result && run.result.telegram_text;
-  els.execPreview.hidden = !tg;
-  if (tg) els.execPreviewText.textContent = tg;
-
-  els.execOutput.textContent = run.output_tail || '(no output)';
 }
 
 // ----------------------------------------------------------- mode controls
@@ -646,28 +486,28 @@ function renderViewer(run) {
 function setMode(mode) {
   const ex = execState();
   ex.mode = mode;
-  els.execModeLive.classList.toggle('active', mode === 'live');
-  els.execModeDry.classList.toggle('active', mode === 'dry_run');
+  setSwitch(els.execDryRun, mode === 'dry_run');
   els.execDryOpts.hidden = mode !== 'dry_run';
   els.execModeHint.textContent = mode === 'dry_run'
-    ? 'Dry-run simulates the pipeline on stored messages — no sync, no delivery.'
-    : 'Live runs the steps for real (Message sends the alerts).';
+    ? 'on: simulates the pipeline on stored messages, no sync, no delivery'
+    : 'off: the steps run for real (Send alerts delivers)';
   renderControls();
 }
 
 function setWindow(win) {
   const ex = execState();
   ex.window = win;
-  els.execWinNew.classList.toggle('active', win === 'new');
-  els.execWinDays.classList.toggle('active', win === 'days');
+  els.execWinNew.setAttribute('aria-pressed', String(win === 'new'));
+  els.execWinDays.setAttribute('aria-pressed', String(win === 'days'));
   els.execDays.hidden = win !== 'days';
 }
 
 // ----------------------------------------------------------- wiring
 
 export function wireExecution() {
-  els.execModeLive.addEventListener('click', function () { setMode('live'); });
-  els.execModeDry.addEventListener('click', function () { setMode('dry_run'); });
+  els.execDryRun.addEventListener('click', function () {
+    setMode(stageOn(els.execDryRun) ? 'live' : 'dry_run');
+  });
   els.execWinNew.addEventListener('click', function () { setWindow('new'); });
   els.execWinDays.addEventListener('click', function () { setWindow('days'); });
   els.execDays.addEventListener('change', function () {
@@ -675,14 +515,8 @@ export function wireExecution() {
     els.execDays.value = execState().days;
   });
 
-  els.execRunScan.addEventListener('click', runSelection);
   els.execReprocess.addEventListener('click', confirmReprocess);
   els.execReconnectBtn.addEventListener('click', reconnectSidecar);
-  // Stop lives inside a <summary> element; stop its click from toggling the
-  // surrounding <details>.
-  els.execKill.addEventListener('click', function (ev) {
-    ev.preventDefault(); ev.stopPropagation(); killSelected();
-  });
 
   // Pipeline-step switches (vendored switch component): flip on tap, then
   // recompute the run button's label. setSwitch keeps class + aria in sync.
@@ -694,8 +528,9 @@ export function wireExecution() {
     });
   }
 
-  // Traffic jam insurance card: enable toggle + cadence persist through the
-  // family safe-override path; the two Run-now buttons fire a one-off check.
+  // Traffic card (Family pane since #373): enable toggle + cadence persist
+  // through the family safe-override path; the two Run-now buttons fire a
+  // one-off check through this queue.
   els.execTrafficEnabled.addEventListener('click', function () {
     const next = !stageOn(els.execTrafficEnabled);
     setSwitch(els.execTrafficEnabled, next);  // optimistic; patch confirms
@@ -708,21 +543,6 @@ export function wireExecution() {
   });
   els.execTrafficRunLive.addEventListener('click', function () { runTraffic('live'); });
   els.execTrafficRunDry.addEventListener('click', function () { runTraffic('dry_run'); });
-
-  // Viewer starts empty until a run is selected.
-  els.execViewer.hidden = true;
-
-  // Tap-to-copy the whole output pane (mirrors App Launcher's run output copy).
-  els.execOutput.addEventListener('click', function () {
-    const text = els.execOutput.textContent;
-    if (!text || text === '(no output)') return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        function () { toast('Output copied'); },
-        function () { toast('Copy failed', 'error'); }
-      );
-    }
-  });
 
   setMode('live');
   setWindow('new');

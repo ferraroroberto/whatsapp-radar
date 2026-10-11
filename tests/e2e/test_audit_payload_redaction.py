@@ -140,7 +140,7 @@ def _run() -> dict[str, Any]:
 def _open(page: Page, base_url: str) -> None:
     run = _run()
     page.route(
-        "**/api/audit/runs",
+        "**/api/audit/runs?*",
         lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
@@ -152,9 +152,10 @@ def _open(page: Page, base_url: str) -> None:
     )
     page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
     page.goto(base_url)
-    page.locator("#tabAudit").click()
-    page.locator("#auditRuns .audit-run-li").first.click()
-    expect(page.locator("#auditDetailCard")).to_be_visible()
+    page.locator("#tabActivity").click()
+    page.locator('#activityScope [data-scope="calendar"]').click()
+    page.locator("#activityList .run-row .action-row-main").first.click()
+    expect(page.locator("#runSheetCard")).to_be_visible()
 
 
 def test_no_sentinel_reaches_the_dom_by_any_route(page: Page, base_url: str) -> None:
@@ -242,7 +243,7 @@ def test_an_unknown_future_field_is_withheld_by_default(page: Page, base_url: st
     run = _run()
     run["summary"]["some_field_invented_later"] = "SENTINELFUTUREFIELD"
     page.route(
-        "**/api/audit/runs",
+        "**/api/audit/runs?*",
         lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
     )
     page.route(
@@ -254,9 +255,10 @@ def test_an_unknown_future_field_is_withheld_by_default(page: Page, base_url: st
     )
     page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
     page.goto(base_url)
-    page.locator("#tabAudit").click()
-    page.locator("#auditRuns .audit-run-li").first.click()
-    expect(page.locator("#auditDetailCard")).to_be_visible()
+    page.locator("#tabActivity").click()
+    page.locator('#activityScope [data-scope="calendar"]').click()
+    page.locator("#activityList .run-row .action-row-main").first.click()
+    expect(page.locator("#runSheetCard")).to_be_visible()
 
     assert "SENTINELFUTUREFIELD" not in page.content()
     expect(page.locator(".audit-redaction-note")).to_contain_text("some_field_invented_later")
@@ -300,7 +302,7 @@ def test_the_redaction_note_conforms_at_phone_width(
         () => {
           const vw = window.innerWidth;
           const bad = [];
-          document.querySelectorAll('#auditDetailCard *').forEach((el) => {
+          document.querySelectorAll('#runSheetCard *').forEach((el) => {
             const r = el.getBoundingClientRect();
             if (r.width > 0 && r.right > vw + 0.5) bad.push(String(el.className));
           });

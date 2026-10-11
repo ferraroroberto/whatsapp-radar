@@ -140,25 +140,48 @@ def _filtered_trace_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+#: The Activity tab's scopes (#373). Messages is every kind that is not a
+#: family check, so a new message-pipeline kind lands there without an edit.
+_FAMILY_KINDS = ("traffic-check", "calendar-scan")
+_SCOPES: dict[str, dict[str, tuple[str, ...]]] = {
+    "messages": {"exclude_kinds": _FAMILY_KINDS},
+    "calendar": {"kinds": ("calendar-scan",)},
+    "traffic": {"kinds": ("traffic-check",)},
+}
+
+
 @router.get("/api/audit/runs")
 async def list_runs(
     limit: int = 50,
     kind: str | None = None,
+    scope: str | None = None,
+    before: int | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Recent runs of every kind (with funnel/summary) plus connector coverage gaps.
+    """Recent runs (with funnel/summary) plus connector coverage gaps.
 
     ``runs`` are the inspectable runs, newest first — message scans, process
-    runs, and the family checks alike (#163); ``kind`` filters to one kind.
+    runs, and the family checks alike (#163). ``scope`` (messages / calendar /
+    traffic) or ``kind`` narrows the query in SQL before the limit (#373), and
+    ``before`` pages older runs by id; ``has_more`` says whether another page
+    exists.
     """
     limit = max(1, min(limit, 200))
-    runs = [
-        r
-        for r in (_run_list_row(row) for row in store.list_review_runs(conn, limit))
-        if kind is None or r["kind"] == kind
-    ]
+    if scope is not None and scope not in _SCOPES:
+        raise HTTPException(status_code=400, detail=f"scope must be one of {sorted(_SCOPES)}")
+    filters: dict[str, tuple[str, ...]] = dict(_SCOPES[scope]) if scope else {}
+    if kind is not None:
+        filters["kinds"] = (kind,)
+    rows = store.list_review_runs(
+        conn,
+        limit + 1,
+        kinds=filters.get("kinds"),
+        exclude_kinds=filters.get("exclude_kinds"),
+        before_id=before,
+    )
+    runs = [_run_list_row(row) for row in rows[:limit]]
     coverage_gaps = _coverage_gaps(store.list_live_scan_runs(conn))
-    return {"runs": runs, "coverage_gaps": coverage_gaps}
+    return {"runs": runs, "coverage_gaps": coverage_gaps, "has_more": len(rows) > limit}
 
 
 @router.get("/api/audit/filtered")

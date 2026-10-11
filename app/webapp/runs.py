@@ -190,6 +190,24 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
     return record
 
 
+def find_by_db_run_id(kind: str, db_run_id: int) -> dict[str, Any] | None:
+    """The record of ``kind`` that finalized with ``db_run_id``, with its output.
+
+    The Activity run sheet opens runs by their DB id (#373); this finds the
+    captured output a webapp- or CLI-launched run left behind. Scans the kind's
+    newest :data:`RETENTION_PER_KIND` records at most, which is everything
+    retention keeps; None when no record carries that id.
+    """
+    kind_dir = RUNS_DIR / kind
+    if not kind_dir.is_dir():
+        return None
+    names = sorted((e.name for e in kind_dir.iterdir() if e.is_dir()), reverse=True)
+    for name in names[:RETENTION_PER_KIND]:
+        if read_run(kind_dir / name).get("db_run_id") == db_run_id:
+            return get_run(kind, name)
+    return None
+
+
 def list_runs(limit: int = 50) -> list[dict[str, Any]]:
     """Newest-first run records across all kinds (no output bytes — cheap).
 

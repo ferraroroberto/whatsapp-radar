@@ -429,7 +429,17 @@ async def get_execution_run(
         row = store.review_run(conn, rid)
         if row is None or row["kind"] != kind:
             raise HTTPException(status_code=404, detail="run not found")
-        return {"run": _db_run_record(row)}
+        # A run launched from the webapp or the CLI left a record with its
+        # captured output (#373): serve that, with the DB row's timing and mode.
+        captured = runs.find_by_db_run_id(kind, rid)
+        if captured is None:
+            return {"run": _db_run_record(row)}
+        captured["started_at"] = row["started_at"]
+        if row["mode"] in ("live", "dry_run"):
+            captured["mode"] = row["mode"]
+        else:
+            captured.setdefault("mode", _fs_mode(captured))
+        return {"run": captured}
     record = runs.get_run(kind, run_id)
     if record is None:
         raise HTTPException(status_code=404, detail="run not found")

@@ -26,7 +26,7 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
     # Switch the source filter to Gmail: the not-monitored bucket keeps the same
     # "Ignored" label as WhatsApp (#182), but the count still speaks of senders,
     # not WhatsApp "channels".
-    page.locator("#chatsSourceGmail").click()
+    page.locator("#chatsSource").select_option("gmail")
     page.locator("#chatsFilterAll").click()
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
     expect(page.locator("#chatsCount")).to_contain_text("sender")
@@ -42,13 +42,13 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
 
     # Opening the sender shows its messages with a sender chip identifying the address.
     row.locator(".chat-main").click()
-    expect(page.locator("#historyOverlay")).to_be_visible()
-    expect(page.locator("#historySource")).to_have_text("Gmail")
-    expect(page.locator("#historySenderChip")).to_be_visible()
-    expect(page.locator("#historySenderChip")).to_contain_text("newsletter@example.com")
+    expect(page.locator("#historyCard")).to_be_visible()
+    expect(page.locator("#historySubtitle")).to_contain_text("Gmail")
+    # The sender address sits in the sheet's subtitle (#375; was a chip).
+    expect(page.locator("#historySubtitle")).to_contain_text("newsletter@example.com")
     page.locator("#historyClose").click()
-    expect(page.locator("#historyOverlay")).to_be_hidden()
+    expect(page.locator("#historyCard")).to_be_hidden()
 
     # Switching back to WhatsApp: the label stays "Ignored" either way (#182).
-    page.locator("#chatsSourceWhatsapp").click()
+    page.locator("#chatsSource").select_option("whatsapp")
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")

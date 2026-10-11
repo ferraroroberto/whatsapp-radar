@@ -52,7 +52,7 @@ def _open_class_4a_history(page: Page, base_url: str) -> None:
     expect(page.locator("#paneChats")).to_be_visible()
     page.locator("#chatsFilterAll").click()
     page.locator(".chat-main", has_text="Class 4A Group").first.click()
-    expect(page.locator("#historyOverlay")).to_be_visible()
+    expect(page.locator("#historyCard")).to_be_visible()
     expect(page.locator("#historyBody")).to_contain_text("class trip on Friday")
 
 

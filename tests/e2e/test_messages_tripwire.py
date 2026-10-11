@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -54,14 +56,20 @@ def test_tripwire_card_promotes_candidate_in_one_tap(page: Page, base_url: str) 
 
     card = page.locator("#tripwireCard")
     expect(card).to_be_visible()
-    expect(card).to_contain_text("Chats worth monitoring")
-
-    # Collapsed by default (#204) — expand via the summary before the row
-    # inside .collapse-body can be interacted with.
-    assert card.get_attribute("open") is None
-    card.locator("summary").click()
+    # "Worth a look" sits above the list (#375), its scope note in the tooltip.
+    expect(page.locator("#tripwireTitle")).to_have_text("Worth a look")
+    expect(page.locator("#tripwireTitle")).to_have_attribute("title", re.compile("Stage 1 only"))
+    assert card.evaluate(
+        "el => el.compareDocumentPosition(document.getElementById('chatsList'))"
+        " & Node.DOCUMENT_POSITION_FOLLOWING"
+    ), "Worth a look must sit above the chat list"
 
     suggestion = card.locator(".tripwire-row")
+    # The promote is the vendored icon-button: nothing painted at rest (COMP-05).
+    promote_bg = suggestion.locator(".tripwire-promote").evaluate(
+        "el => getComputedStyle(el).backgroundColor"
+    )
+    assert promote_bg == "rgba(0, 0, 0, 0)", promote_bg
     expect(suggestion).to_contain_text("School Parents Group")
     expect(suggestion).to_contain_text("urgent")
     suggestion.get_by_role("button", name="Not monitored — tap to monitor").click()

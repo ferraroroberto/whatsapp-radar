@@ -294,43 +294,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 #configForm .button-tint { margin-top: 12px; }
 
-/* ============================================================ range tabs */
-/* Legacy ghost pills (home-automation .range-tab), being retired for the
-   vendored segmented control (#372, #373): the last consumer, Inbox's source
-   row, becomes a field chip in Step 4/6, which deletes these rules. One height everywhere (--control-h); active = accent tint + text +
-   strong soft border.
-   The ::before extends the tap target to >=44px vertically without inflating
-   the visual pill. */
-.range-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
-.range-tab {
-  position: relative;
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: var(--control-h);
-  background: var(--card-off);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 0 10px;
-  color: var(--muted);
-  font-size: var(--font-label);
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-}
-.range-tab::before { content: ""; position: absolute; inset: -4px 0; }
-.range-tab.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent-border-strong);
-}
-.range-tab:disabled { opacity: 0.45; cursor: not-allowed; }
-/* Inside a card header the tabs are compact pills pinned right, not a
-   full-width strip. */
-.card-head .range-tabs { margin-bottom: 0; flex: none; }
-.card-head .range-tab { flex: none; }
-
 /* ============================================================ cards (app) */
 /* Base .card comes from the vendored card.css; app-side layout only. */
 .card { margin: 0 0 var(--gap); }
@@ -402,61 +365,31 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .detail-status[data-tone="danger"] { color: var(--danger-text); }
 .detail-header h2:has(+ .detail-status) { flex: none; }
 
-/* ============================================================ chats */
-/* Breathing room on both sides of the filter row: below the card head (the
-   search button) and above the count + chat list. */
-.chats-toolbar {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  margin: var(--gap) 0;
-}
-.chats-toolbar .segmented { flex: 1; }
-.chats-search { margin-bottom: 10px; }
-#chatsCount { margin: 0 2px 10px; }
-
-.tripwire-row {
-  min-height: 52px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 8px 4px;
-}
-.tripwire-row:last-child { border-bottom: 0; }
-.tripwire-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.tripwire-reason {
-  color: var(--muted);
-  font-size: var(--font-caption);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Dim eye-icon toggle, matching .chat-watch's not-monitored state — every
-   row here is unmonitored by definition, so it never gets the active/accent
-   treatment. */
-.tripwire-promote {
-  width: 44px;
-  height: 44px;
+/* ============================================================ chats (#375) */
+/* One scope switch and one filter field over one vendored action-row list; the
+   chat sheet is a dialog on a phone and a right-hand pane at layout.wide. */
+.chats-toolbar { margin: 0 0 var(--gap); }
+.chats-filter { margin: 0 0 var(--gap); }
+/* The source filter is a chip inside the field (design.md: a scope's narrowing
+   filter is a field chip, never a second segmented row). */
+.chats-source-chip {
   flex: none;
-  background: var(--card-off);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--muted);
-  line-height: 1;
+  height: 30px;
+  max-width: 45%;
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--neutral-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-label);
+  font-weight: 600;
   cursor: pointer;
-  opacity: 0.85;
-  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
 }
-.tripwire-promote .icon { width: var(--icon-title); height: var(--icon-title); }
-.tripwire-promote:active { opacity: .82; }
-
+#chatsCount { margin: 0 2px var(--space-sm); }
+.chats-list-card { margin: 0 0 var(--gap); }
+.worth-look .card.action-list { margin: 0; }
+.worth-look #tripwireMeta { margin: 0 2px var(--space-xs); }
 .card-list {
   list-style: none;
   padding: 0;
@@ -465,41 +398,39 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   flex-direction: column;
   gap: 0;
 }
-/* Flat separator rows (fleet flat-row canon): no per-row box — a hairline
-   under each row, cleared on the last so the card edge is the only frame. */
-.chat-row {
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: stretch;
-}
-.chat-row:last-child { border-bottom: 0; }
-.chat-main {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  color: var(--ink);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  padding: 12px 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-.chat-main:active { background: var(--card-off); }
-.chat-title-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* Three stacked lines, each clamped to one row with an ellipsis. */
-.chat-name {
-  min-width: 0;
-  max-width: 100%;
+
+/* The avatar: the chat's initial, with its source as a small mark in the
+   corner (the outlined source pill left the row). */
+.chat-avatar {
+  position: relative;
   font-size: var(--font-label);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--ink);
 }
+.chat-avatar-source {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+}
+.chat-avatar .chat-avatar-source .icon { width: var(--icon-inline); height: var(--icon-inline); }
+/* One muted line: the relative time stays whole, the preview is cut. */
+.chat-row .chat-line { display: flex; gap: 6px; }
+.chat-when { flex: none; }
+.chat-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-row .chat-watch,
+.tripwire-promote { --icon-btn-box: var(--row-sm); }
+.chat-row .chat-watch .icon,
+.tripwire-promote .icon { width: var(--icon-title); height: var(--icon-title); }
+.chat-row.is-open { background: var(--accent-soft); }
+.chat-row.is-open .action-row-meta { color: var(--accent-text); }
+.tripwire-row .action-row-main:disabled { cursor: default; }
 .source-badge {
   display: inline-flex;
   align-items: center;
@@ -513,79 +444,21 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   font-weight: 600;
   line-height: 1.2;
 }
-/* Source identity is icon + name only — every source pill shares one neutral
-   style (the WhatsApp look); color is reserved for state, not decoration. */
-/* Gmail sender chip in the history overlay (#166): identifies whose mail is shown. */
-.sender-chip {
-  align-self: flex-start;
-  max-width: 100%;
-  margin: 0 0 var(--space-xs);
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  color: var(--muted);
-  font-size: var(--font-caption);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.chat-meta { font-size: var(--font-caption); color: var(--muted); }
-.chat-sub {
-  min-width: 0;
-  max-width: 100%;
-  font-size: var(--font-caption);
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chat-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding-right: 4px;
-}
-/* Parent badge: a small chip showing how many chats are linked under this one.
-   Tapping it opens the overlay with the link panel expanded (#25). */
-.chat-link-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--card-off);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: var(--radius-pill);
-  padding: 4px 9px;
-  font-size: var(--font-caption);
-  font-family: inherit;
-  line-height: 1;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.chat-link-badge .icon { width: var(--icon-inline); height: var(--icon-inline); }
-/* Single watch toggle: visible-but-muted when off, lit + accent ring when
-   monitored. */
-.chat-watch {
-  width: 44px;
-  height: 44px;
-  background: var(--card-off);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--muted);
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.85;
-  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
-}
-.chat-watch .icon { width: var(--icon-title); height: var(--icon-title); }
-.chat-watch.active {
-  opacity: 1;
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+
+@media (min-width: 1100px) and (pointer: fine) {
+  .chats-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--gap);
+    align-items: start;
+  }
+  .chats-detail-pane {
+    position: sticky;
+    top: var(--gap);
+    padding: 0;
+    overflow: hidden;
+  }
+  .chats-detail-pane .history-card { background: transparent; }
 }
 
 /* ============================================================ disclosure (app) */
@@ -640,6 +513,26 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Chat sheet header (#375). */
+.history-header { gap: var(--space-sm); }
+.history-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.history-heading h2 {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-subtitle {
+  color: var(--muted);
+  font-size: var(--font-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-header .history-menu { --icon-btn-box: 34px; margin-left: 0; }
+.history-header .history-menu .icon { width: var(--icon-title); height: var(--icon-title); }
+.history-header .detail-close { margin-left: 12px; }
+.history-tripwire { margin: 0 0 var(--space-sm); }
 /* Link panel (#25): collapsible block under the overlay header showing the
    chat's link role. */
 .link-panel {
@@ -674,7 +567,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-top: 1px solid var(--line-muted);
 }
 .link-child-name { flex: 1; min-width: 0; font-size: var(--font-label); word-break: break-word; }
-.link-search { margin-bottom: 8px; }
+/* TOUCH-01: the picker's search is a full 44px target. */
+.link-search { margin-bottom: 8px; height: var(--row-sm); }
 
 .history-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hist-msg { padding: 8px 0; border-bottom: 1px solid var(--line-muted); }

@@ -164,21 +164,53 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     expected = "false" if before == "true" else "true"
     expect(toggle).to_have_attribute("aria-pressed", expected)
 
-    # History overlay (read-only) for the seeded chat that has messages.
+    # The row is one fleet row (#375): avatar, name, one line of time + preview,
+    # a plain watch icon button; no outlined source pill and no message count.
+    expect(row.locator(".chat-avatar")).to_be_visible()
+    expect(row.locator(".source-badge")).to_have_count(0)
+    expect(row).not_to_contain_text("msgs")
+    # Inbox opens on one scope switch and one filter field; no card heading.
+    expect(page.locator("#paneChats .card-title")).to_have_count(0)
+    expect(page.locator("#chatsSearch")).to_be_visible()
+
+    # The chat sheet (read-only) for the seeded chat that has messages.
     page.locator(".chat-main", has_text="Class 4A Group").first.click()
-    expect(page.locator("#historyOverlay")).to_be_visible()
+    expect(page.locator("#historyCard")).to_be_visible()
+    expect(page.locator("#historySubtitle")).to_contain_text("messages")
     expect(page.locator("#historyBody")).to_contain_text("sample message")
+    # TOUCH-02 (#375): the sheet header's actions never overlap at phone width —
+    # each icon button's 44px target, centred on its box, clears its neighbour.
+    page.set_viewport_size({"width": 390, "height": 844})
+    targets = page.locator(".history-card .detail-header button").evaluate_all(
+        """els => els.filter((e) => e.offsetParent !== null).map((e) => {
+            const r = e.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            return [Math.min(r.left, cx - 22), Math.max(r.right, cx + 22)];
+        })"""
+    )
+    assert len(targets) >= 2, targets
+    for (_, right), (left, _) in zip(targets, targets[1:], strict=False):
+        assert right <= left + 0.5, f"overlapping header targets: {targets}"
+    # One labelled menu: Rename…, Link chats… and the monitor toggle.
+    page.locator("#historyMenu").click()
+    menu = page.get_by_role("menu")
+    expect(menu.get_by_role("menuitem", name="Rename…")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Link chats…")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Monitor")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(menu).to_have_count(0)
     page.locator("#historyClose").click()
-    expect(page.locator("#historyOverlay")).to_be_hidden()
+    expect(page.locator("#historyCard")).to_be_hidden()
 
     # Source selector isolates Gmail and the email overlay exposes subject/body/
     # thread evidence with an unmistakable source badge.
-    page.locator("#chatsSourceGmail").click()
+    page.locator("#chatsSource").select_option("gmail")
+    # The count line shows only while the filter narrows the list.
+    expect(page.locator("#chatsCount")).to_contain_text("match")
     gmail_row = page.locator(".chat-row", has_text="School Updates")
     expect(gmail_row).to_be_visible()
-    expect(gmail_row.locator(".source-badge")).to_have_text("Gmail")
     gmail_row.locator(".chat-main").click()
-    expect(page.locator("#historySource")).to_have_text("Gmail")
+    expect(page.locator("#historySubtitle")).to_contain_text("Gmail")
     expect(page.locator("#historyBody")).to_contain_text("Activity schedule")
     expect(page.locator("#historyBody")).to_contain_text("e2e-thread-1")
     page.locator("#historyClose").click()

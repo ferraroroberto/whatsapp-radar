@@ -12,9 +12,10 @@
  * dependency on the rest of the Messages tab.
  *
  * chats.js is the only importer and stays the aggregator: this module never
- * imports chats.js back. `wireChatLinks(deps)` wires every DOM listener this
- * feature owns (link button, rename button, parent picker); anything it needs
- * from chats.js at click time — the currently open chat, alias-aware label
+ * imports chats.js back. `wireChatLinks()` wires the parent picker's DOM
+ * listeners; the chat sheet's menu (#375) calls `renameCurrentChat` and
+ * `openLinkPanel`. Anything this needs from chats.js at click time — the
+ * currently open chat, alias-aware label
  * formatting, refreshing the chat list + overlay after a mutation — is
  * threaded through `deps` rather than closed over, so the dependency stays
  * one-directional. `syncLinkPanel`/`resetLinkPanel` are the two extra calls
@@ -159,18 +160,22 @@ function renderPicker() {
     : (all.length ? fmtNum(all.length) + ' chat' + (all.length === 1 ? '' : 's') : '');
 
   for (const c of shown) {
+    // A vendored action-row (#375): a 60px target with the count + last time.
     const li = document.createElement('li');
-    li.className = 'chat-row';
+    li.className = 'action-row link-pick-row';
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'chat-main';
+    b.className = 'action-row-main';
+    const text = document.createElement('span');
+    text.className = 'action-row-text';
     const nm = document.createElement('span');
-    nm.className = 'chat-name';
+    nm.className = 'action-row-title';
     nm.textContent = picker.deps.chatLabel(c);
     const meta = document.createElement('span');
-    meta.className = 'chat-meta';
+    meta.className = 'action-row-meta';
     meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at);
-    b.append(nm, meta);
+    text.append(nm, meta);
+    b.append(text);
     b.addEventListener('click', function () { doLink(picker.child, c); });
     li.appendChild(b);
     els.linkPickerList.appendChild(li);
@@ -219,6 +224,17 @@ async function doLink(child, parent) {
 // in the DB (and the parenthesized label); the alias is the human-friendly
 // override that shows first — useful when the connector could only resolve a
 // bare number (e.g. an unsaved contact).
+// The chat sheet's menu items (#375) — Rename… and Link chats… — call these.
+export function renameCurrentChat(deps) {
+  renameChat(deps.getCurrentChat(), deps).catch(function () {});
+}
+
+export function openLinkPanel(deps) {
+  const chat = deps.getCurrentChat();
+  if (!chat) return;
+  syncLinkPanel(chat, deps, true);
+}
+
 async function renameChat(chat, deps) {
   if (!chat) return;
   const next = window.prompt('Alias for this chat (blank to clear):', chat.alias || '');
@@ -244,16 +260,7 @@ async function renameChat(chat, deps) {
 //   onLinked() => Promise,            reload the chat list + open overlay
 //   onRenamed(chat) => void,          refresh the overlay title + chat-list row
 // }
-export function wireChatLinks(deps) {
-  els.historyLink.addEventListener('click', function () {
-    const chat = deps.getCurrentChat();
-    if (!chat) return;
-    panelOpen = !panelOpen;
-    syncLinkPanel(chat, deps);
-  });
-  els.historyRename.addEventListener('click', function () {
-    renameChat(deps.getCurrentChat(), deps).catch(function () {});
-  });
+export function wireChatLinks() {
   els.linkPickerClose.addEventListener('click', closePicker);
   els.linkPickerOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.linkPickerOverlay) closePicker();

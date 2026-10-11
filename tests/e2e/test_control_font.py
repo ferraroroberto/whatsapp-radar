@@ -70,7 +70,7 @@ def test_every_control_inherits_the_page_font(
     page.locator("#paneChats .chat-main").first.click()
     page.wait_for_selector("#historyClose", state="visible", timeout=scaled(10_000))
     page.wait_for_timeout(scaled(500))
-    offenders += [f"history: {o}" for o in _offenders(page, "#historyOverlay")]
+    offenders += [f"history: {o}" for o in _offenders(page, "#historyCard")]
     page.locator("#historyClose").click()
 
     page.locator(".pane:not([hidden]) .home-settings").click()

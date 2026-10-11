@@ -44,6 +44,7 @@
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/action-row/action-row.css">
+  <link rel="stylesheet" href="/static/_vendored/row-menu/row-menu.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>Family Radar</title>
 </head>
@@ -85,6 +86,11 @@
     <symbol id="i-x" viewBox="0 0 24 24" fill="none">
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </symbol>
+    <symbol id="i-ellipsis-vertical" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="19" r="1" />
     </symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24" fill="none">
       <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
@@ -294,51 +300,47 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            <svg class="icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-            Messages
-          </h2>
-          <span class="card-actions">
-            <button id="chatsSearchToggle" type="button" class="icon-button" title="Search by name"
-                    aria-label="Search" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></button>
-          </span>
-        </div>
-        <div class="chats-toolbar">
-          <div id="chatsFilter" class="segmented" role="group" aria-label="Message status filter">
-            <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
-            <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
-            <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
+      <!-- One scope switch and one filter field over one fleet row (#375): the
+           source filter is a chip inside the field, never a second row. -->
+      <div class="chats-layout">
+        <div class="chats-main">
+          <div class="chats-toolbar">
+            <div id="chatsFilter" class="segmented" role="group" aria-label="Message status filter">
+              <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
+              <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
+              <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
+            </div>
+          </div>
+          <label class="action-row-filter chats-filter">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <input id="chatsSearch" type="search" placeholder="Search by name" autocomplete="off"
+                   aria-label="Search chats by name">
+            <select id="chatsSource" class="chats-source-chip" aria-label="Message source">
+              <option value="all">All sources</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="gmail">Gmail</option>
+            </select>
+          </label>
+          <!-- Worth a look (#375): chats whose recent messages match their source's
+               Stage-1 rules, shown above the list only when there is something. -->
+          <section id="tripwireCard" class="run-group worth-look" aria-live="polite" hidden>
+            <h3 id="tripwireTitle" class="run-group-title">Worth a look</h3>
+            <p id="tripwireMeta" class="muted small" hidden></p>
+            <div class="card action-list">
+              <ul id="tripwireList" class="action-rows" aria-label="Chats worth a look"></ul>
+            </div>
+          </section>
+          <p id="chatsCount" class="muted small" hidden></p>
+          <div class="card action-list chats-list-card">
+            <ul id="chatsList" class="action-rows" aria-label="Message channels"></ul>
+          </div>
+          <div id="chatsEmpty" class="empty-state" hidden>
+            <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+            <p class="empty-state-message">No message channels match these filters.</p>
           </div>
         </div>
-        <div id="chatsSourceFilter" class="range-tabs" role="radiogroup" aria-label="Message source filter">
-          <button id="chatsSourceAll" type="button" class="range-tab active" data-source="all">All sources</button>
-          <button id="chatsSourceWhatsapp" type="button" class="range-tab" data-source="whatsapp">WhatsApp</button>
-          <button id="chatsSourceGmail" type="button" class="range-tab" data-source="gmail">Gmail</button>
-        </div>
-        <input id="chatsSearch" type="search" class="input-native chats-search" placeholder="Search messages by channel…" autocomplete="off" hidden>
-        <p id="chatsCount" class="muted small"></p>
-        <ul id="chatsList" class="card-list" aria-label="Message channels"></ul>
-        <div id="chatsEmpty" class="empty-state" hidden>
-          <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-          <p class="empty-state-message">No message channels match these filters.</p>
-        </div>
-      </section>
-
-      <details id="tripwireCard" class="card card--collapsible" aria-live="polite" hidden>
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
-            <h3 class="collapse-title">Chats worth monitoring</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p id="tripwireMeta" class="card-meta"></p>
-          <ul id="tripwireList" class="card-list" aria-label="Chats worth monitoring"></ul>
-        </div>
-      </details>
+        <aside id="chatsDetailPane" class="card chats-detail-pane" aria-label="Chat" hidden></aside>
+      </div>
     </section>
 
     <section id="paneActivity" class="pane" role="tabpanel" aria-labelledby="tabActivity" hidden>
@@ -745,18 +747,20 @@
   </dialog>
 
   <dialog id="historyOverlay" class="detail-dialog">
-    <div class="detail-card history-card" aria-labelledby="historyTitle">
-      <div class="detail-header">
-        <h2 id="historyTitle"></h2>
-        <span id="historySource" class="source-badge"></span>
-        <button id="historyRename" type="button" class="icon-button" aria-label="Rename channel"
-                title="Rename — set an alias"><svg class="icon" aria-hidden="true"><use href="#i-pencil"></use></svg></button>
-        <button id="historyLink" type="button" class="icon-button" aria-label="Manage links"
-                title="Link — merge another chat onto this person"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg></button>
+    <div id="historyCard" class="detail-card history-card" aria-labelledby="historyTitle">
+      <!-- One labelled menu and the close (#375): no overlapping hit areas. -->
+      <div class="detail-header history-header">
+        <span id="historyAvatar" class="action-row-avatar chat-avatar" aria-hidden="true"></span>
+        <span class="history-heading">
+          <h2 id="historyTitle"></h2>
+          <span id="historySubtitle" class="history-subtitle"></span>
+        </span>
+        <button id="historyMenu" type="button" class="icon-button history-menu" aria-label="Chat actions"
+                title="Chat actions"><svg class="icon" aria-hidden="true"><use href="#i-ellipsis-vertical"></use></svg></button>
         <button id="historyClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
-      <div id="historySenderChip" class="sender-chip" hidden></div>
+      <p id="historyTripwire" class="muted small history-tripwire" hidden></p>
       <div id="historyLinkPanel" class="link-panel" hidden></div>
       <div id="historyBody" class="history-body"></div>
       <p id="historyEmpty" class="muted small" hidden>No messages stored for this channel.</p>
@@ -772,7 +776,7 @@
       </div>
       <input id="linkPickerSearch" type="search" class="input-native link-search" placeholder="Search by name or alias…" autocomplete="off">
       <p id="linkPickerCount" class="muted small"></p>
-      <ul id="linkPickerList" class="card-list history-body" aria-label="Link candidates"></ul>
+      <ul id="linkPickerList" class="action-rows history-body" aria-label="Link candidates"></ul>
       <p id="linkPickerEmpty" class="muted small" hidden>No matching chats.</p>
     </div>
   </dialog>

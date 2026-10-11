@@ -1,19 +1,25 @@
-/* Messages tab (#61): inspect and monitor WhatsApp and Gmail channels.
+/* Inbox (#61, #375): inspect and monitor WhatsApp and Gmail channels.
  *
- * Filtered into one of three buckets (Monitored | Ignored | All) + a name
- * search; "All" is capped at CHATS_RENDER_CAP rows so a ~900-chat account stays
- * usable on a phone. Each row is three lines (name · count + last-msg time ·
- * preview) with a single watch toggle on the right — lit when monitored, dim
- * otherwise; tapping it monitors (baselining the cursor server side) or ignores.
- * The history overlay loads the most recent messages and lazily pages older ones
- * in as you scroll up. All chat-derived text goes in via textContent. */
+ * One scope switch (Monitored | Ignored | All) and one filter field (a name
+ * search with the source as a chip inside it); "All" is capped at
+ * CHATS_RENDER_CAP rows so a ~900-chat account stays usable on a phone. Each
+ * chat is one vendored action-row: an initial avatar with a source mark, the
+ * name, and one line of relative time plus the last message's preview, with a
+ * plain watch icon button trailing (accent when monitored); tapping it
+ * monitors (baselining the cursor server side) or ignores. The chat sheet (a
+ * right-hand pane on a wide screen) loads the most recent messages and lazily
+ * pages older ones in; its one labelled menu holds Rename, Link chats and the
+ * monitor toggle. All chat-derived text goes in via textContent. */
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum, setHeaderStatus } from './format.js';
+import { fmtLocalDateTime, fmtNum, fmtRelative, setHeaderStatus } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
-import { childrenOf, resetLinkPanel, syncLinkPanel, wireChatLinks } from './chat-links.js';
+import {
+  childrenOf, openLinkPanel, renameCurrentChat, resetLinkPanel, syncLinkPanel, wireChatLinks,
+} from './chat-links.js';
+import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 
 // A sprite glyph wrapped for insertion next to textContent-only user data.
 // Static markup only — never user content — so innerHTML is safe here.
@@ -59,7 +65,7 @@ function unitNoun(n) {
   return n === 1 ? 'channel' : 'channels';
 }
 // The Gmail sender address behind a "sender:addr" chat id, else null (labels /
-// WhatsApp). Used for the history overlay's sender chip.
+// WhatsApp). Shown in the chat sheet's subtitle.
 function gmailSenderAddress(c) {
   if (c.source !== 'gmail' || typeof c.source_chat_id !== 'string') return null;
   if (!c.source_chat_id.startsWith('sender:')) return null;
@@ -87,6 +93,13 @@ export async function fetchChats() {
   render();
 }
 
+// The status scope alone: Monitored, or everything else (Ignored), or All.
+function inScope(c) {
+  if (state.chatsFilter === 'monitored') return c.status === 'monitored';
+  if (state.chatsFilter === 'ignored') return c.status !== 'monitored';
+  return true;
+}
+
 function visibleChats() {
   const q = state.chatsSearch.trim().toLowerCase();
   return state.chats.filter(function (c) {
@@ -96,8 +109,7 @@ function visibleChats() {
     // Two states that matter: monitored, or not. A chat is "ignored" by default
     // (never-touched 'discovered' chats included), so the Ignored bucket is
     // simply everything that isn't monitored.
-    if (state.chatsFilter === 'monitored' && c.status !== 'monitored') return false;
-    if (state.chatsFilter === 'ignored' && c.status === 'monitored') return false;
+    if (!inScope(c)) return false;
     if (state.chatsSourceFilter !== 'all' && c.source !== state.chatsSourceFilter) return false;
     if (q && !chatLabel(c).toLowerCase().includes(q)) return false;
     return true;
@@ -126,16 +138,54 @@ function render() {
   els.chatsList.textContent = '';
   els.chatsEmpty.hidden = all.length > 0;
 
-  if (all.length > shown.length) {
-    els.chatsCount.textContent =
-      'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.';
-  } else {
-    els.chatsCount.textContent = all.length
-      ? fmtNum(all.length) + ' ' + unitNoun(all.length)
-      : '';
+  // The count shows only while the search or the source chip narrows the list
+  // (#375); the header line carries the monitored count otherwise.
+  const narrowed = !!state.chatsSearch.trim() || state.chatsSourceFilter !== 'all';
+  let count = '';
+  if (narrowed) {
+    const scoped = state.chats.filter(function (c) { return !isChild(c) && inScope(c); }).length;
+    count = fmtNum(all.length) + ' of ' + fmtNum(scoped) + ' ' + unitNoun(scoped) + ' match';
+  } else if (all.length > shown.length) {
+    count = 'Showing ' + shown.length + ' of ' + fmtNum(all.length) + ' — search to narrow.';
   }
+  els.chatsCount.textContent = count;
+  els.chatsCount.hidden = !count;
 
   for (const c of shown) els.chatsList.appendChild(row(c));
+}
+
+// One action-row avatar: the chat's initial, with its source as a small mark
+// in the corner (#375; the outlined source pill left the row).
+function avatar(label, source) {
+  const span = document.createElement('span');
+  span.className = 'action-row-avatar chat-avatar';
+  span.setAttribute('aria-hidden', 'true');
+  fillAvatar(span, label, source);
+  return span;
+}
+
+function fillAvatar(span, label, source) {
+  span.textContent = (String(label || '?').trim().charAt(0) || '?').toUpperCase();
+  const mark = document.createElement('span');
+  mark.className = 'chat-avatar-source';
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  mark.innerHTML = icon(source === 'gmail' ? 'mail' : 'message-circle');
+  span.appendChild(mark);
+}
+
+function tripwireScopeNote() {
+  const tw = state.tripwire;
+  return 'Stage 1 only · last ' + tw.windowDays + ' days'
+    + (tw.truncated ? ' · bounded scan' : '')
+    + (tw.phase === 'stale' ? ' · showing the last successful check' : '');
+}
+
+function tripwireHit(chatId) {
+  return state.tripwire.hits.find(function (hit) { return hit.id === chatId; }) || null;
+}
+
+function hitSignals(hit) {
+  return hit.source === 'gmail' && hit.buckets.length ? hit.buckets : hit.roots;
 }
 
 function renderTripwire() {
@@ -152,121 +202,105 @@ function renderTripwire() {
     return;
   }
   els.tripwireCard.hidden = false;
+  els.tripwireMeta.hidden = tw.phase !== 'error';
   if (tw.phase === 'error') {
     els.tripwireMeta.textContent = 'Could not check recent unmonitored chats.';
     return;
   }
-  const bounded = tw.truncated ? ' · bounded scan' : '';
-  const stale = tw.phase === 'stale' ? ' · showing the last successful check' : '';
-  els.tripwireMeta.textContent =
-    'Stage 1 only · last ' + tw.windowDays + ' days' + bounded + stale;
+  // The scope note sits behind the section header's tooltip and in the chat
+  // sheet, not as a permanent line (#375).
+  els.tripwireTitle.title = tripwireScopeNote();
 
   for (const hit of hits) {
+    const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
     const li = document.createElement('li');
-    li.className = 'tripwire-row';
-    const copy = document.createElement('div');
-    copy.className = 'tripwire-copy';
-    const title = document.createElement('div');
-    title.className = 'chat-title-line';
-    const badge = document.createElement('span');
-    badge.className = 'source-badge source-' + hit.source;
-    badge.textContent = hit.source === 'gmail' ? 'Gmail' : 'WhatsApp';
-    const name = document.createElement('span');
-    name.className = 'chat-name';
-    name.textContent = hit.name;
-    title.append(badge, name);
-    const reason = document.createElement('div');
-    reason.className = 'tripwire-reason';
-    const signals = hit.source === 'gmail' && hit.buckets.length ? hit.buckets : hit.roots;
-    reason.textContent = 'Matched: ' + signals.join(', ');
-    copy.append(title, reason);
+    li.className = 'action-row tripwire-row';
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'action-row-main';
+    main.disabled = !chat;
+    if (chat) {
+      main.setAttribute('aria-haspopup', 'dialog');
+      main.addEventListener('click', function () { openHistory(chat); });
+    }
+    const text = document.createElement('span');
+    text.className = 'action-row-text';
+    const title = document.createElement('span');
+    title.className = 'action-row-title';
+    title.textContent = hit.name;
+    const reason = document.createElement('span');
+    reason.className = 'action-row-meta tripwire-reason';
+    reason.textContent = 'Matched: ' + hitSignals(hit).join(', ');
+    text.append(title, reason);
+    main.append(avatar(hit.name, hit.source), text);
 
+    // The vendored icon-button: a glyph on nothing at rest (COMP-05).
     const promote = document.createElement('button');
     promote.type = 'button';
-    promote.className = 'tripwire-promote';
+    promote.className = 'icon-button action-row-trail tripwire-promote';
     promote.title = 'Not monitored — tap to monitor';
     promote.setAttribute('aria-label', promote.title);
     promote.innerHTML = icon('eye');
     promote.addEventListener('click', function () {
-      const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
       if (chat) setStatus(chat, 'monitored');
     });
-    li.append(copy, promote);
+    li.append(main, promote);
     els.tripwireList.appendChild(li);
   }
 }
 
+// Monitored, or not; Gmail still demotes to 'discovered' internally (so the
+// 30-day discovery window and retention exemptions keep applying), never
+// 'ignored' — only the UI-facing label is shared with WhatsApp (#182).
+function demoteTo(c) { return c.source === 'gmail' ? 'discovered' : 'ignored'; }
+
+function toggleWatch(c) {
+  setStatus(c, c.status === 'monitored' ? demoteTo(c) : 'monitored');
+}
+
+// One chat row (vendored action-row, #375): avatar, name, and one muted line of
+// relative time (kept outside the ellipsis) plus the preview, which is cut.
 function row(c) {
   const li = document.createElement('li');
-  li.className = 'chat-row';
+  li.className = 'action-row chat-row';
+  if (hist.chatId === c.id) li.classList.add('is-open');
 
-  // Tapping the body (the three text lines) opens the conversation overlay.
   const body = document.createElement('button');
   body.type = 'button';
-  body.className = 'chat-main';
+  body.className = 'action-row-main chat-main';
+  body.setAttribute('aria-haspopup', 'dialog');
   body.addEventListener('click', function () { openHistory(c); });
 
-  const title = document.createElement('span');
-  title.className = 'chat-title-line';
-  const badge = document.createElement('span');
-  badge.className = 'source-badge source-' + c.source;
-  badge.textContent = c.source === 'gmail' ? 'Gmail' : 'WhatsApp';
+  const text = document.createElement('span');
+  text.className = 'action-row-text';
   const name = document.createElement('span');
-  name.className = 'chat-name';
+  name.className = 'action-row-title chat-name';
   name.title = chatLabel(c);
   name.textContent = chatLabel(c);
-
   const meta = document.createElement('span');
-  meta.className = 'chat-meta';
-  meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at);
+  meta.className = 'action-row-meta chat-line';
+  const when = document.createElement('span');
+  when.className = 'chat-when';
+  when.textContent = c.last_message_at ? fmtRelative(c.last_message_at) : '—';
+  const preview = document.createElement('span');
+  preview.className = 'chat-preview';
+  preview.textContent = c.last_message_text ? String(c.last_message_text) : '';
+  meta.append(when, preview);
+  text.append(name, meta);
+  body.append(avatar(chatLabel(c), c.source), text);
 
-  const sub = document.createElement('span');
-  sub.className = 'chat-sub';
-  sub.textContent = c.last_message_text ? String(c.last_message_text) : '—';
-
-  title.append(badge, name);
-  body.append(title, meta, sub);
-
-  // Single watch toggle: lit/active when monitored, dim otherwise.
-  const actions = document.createElement('div');
-  actions.className = 'chat-actions';
-
-  // A parent shows a link-count badge; tapping it opens the overlay with the
-  // link panel already expanded so the family can be managed in one tap.
-  const kids = childrenOf(c.id);
-  if (kids.length) {
-    const badge = document.createElement('button');
-    badge.type = 'button';
-    badge.className = 'chat-link-badge';
-    badge.innerHTML = icon('link');
-    badge.appendChild(document.createTextNode(String(kids.length)));
-    badge.title = kids.length + ' linked chat' + (kids.length === 1 ? '' : 's');
-    badge.setAttribute('aria-label', badge.title);
-    badge.addEventListener('click', function () { openHistory(c, true); });
-    actions.appendChild(badge);
-  }
-
+  // The watch toggle: a plain icon button, accent (pressed) when monitored.
+  const monitored = c.status === 'monitored';
   const watch = document.createElement('button');
   watch.type = 'button';
-  watch.className = 'chat-watch';
-  const monitored = c.status === 'monitored';
-  // Internally Gmail still demotes to 'discovered' (so the 30-day discovery
-  // window and retention exemptions keep applying), never 'ignored' — that
-  // mechanic is unchanged. Only the UI-facing label is shared with WhatsApp
-  // now: both read "ignore" (#182).
-  const demoteTo = c.source === 'gmail' ? 'discovered' : 'ignored';
-  watch.classList.toggle('active', monitored);
+  watch.className = 'icon-button action-row-trail chat-watch';
   watch.setAttribute('aria-pressed', monitored ? 'true' : 'false');
-  watch.title = monitored
-    ? 'Monitoring — tap to ignore'
-    : 'Not monitored — tap to monitor';
+  watch.title = monitored ? 'Monitoring — tap to ignore' : 'Not monitored — tap to monitor';
+  watch.setAttribute('aria-label', watch.title);
   watch.innerHTML = icon('eye');
-  watch.addEventListener('click', function () {
-    setStatus(c, monitored ? demoteTo : 'monitored');
-  });
-  actions.appendChild(watch);
+  watch.addEventListener('click', function () { toggleWatch(c); });
 
-  li.append(body, actions);
+  li.append(body, watch);
   return li;
 }
 
@@ -528,27 +562,50 @@ function appendPage(msgs) {
   if (msgs.length) { hist.oldestTs = msgs[0].ts; hist.oldestId = msgs[0].id; }
 }
 
-async function openHistory(chat, openPanel) {
+// The sheet's subtitle (#375): source, message count and monitoring state, and
+// for a Gmail sender the address (filter parity, #166: whose mail this is).
+function renderSheetHeader(chat) {
   els.historyTitle.textContent = chatLabel(chat);
+  fillAvatar(els.historyAvatar, chatLabel(chat), chat.source);
+  const bits = [chat.source === 'gmail' ? 'Gmail' : 'WhatsApp',
+    fmtNum(chat.count) + (chat.count === 1 ? ' message' : ' messages'),
+    chat.status === 'monitored' ? 'monitoring' : 'not monitored'];
+  const senderAddress = gmailSenderAddress(chat);
+  if (senderAddress) bits.push(senderAddress);
+  els.historySubtitle.textContent = bits.join(' · ');
+  // A chat the tripwire flagged says why, with the scan's scope (#375).
+  const hit = tripwireHit(chat.id);
+  els.historyTripwire.hidden = !hit;
+  els.historyTripwire.textContent = hit
+    ? 'Worth a look — matched ' + hitSignals(hit).join(', ') + ' (' + tripwireScopeNote() + ')'
+    : '';
+}
+
+// A phone opens the chat as a sheet; a wide pointer screen (design.md
+// layout.wide) shows it in the right-hand pane beside the list (#375).
+const WIDE = window.matchMedia('(min-width: 1100px) and (pointer: fine)');
+
+function placeSheet() {
+  if (WIDE.matches) {
+    if (els.historyOverlay.open) els.historyOverlay.close();
+    els.chatsDetailPane.appendChild(els.historyCard);
+    els.chatsDetailPane.hidden = false;
+  } else {
+    els.chatsDetailPane.hidden = true;
+    els.historyOverlay.appendChild(els.historyCard);
+    if (!els.historyOverlay.open) els.historyOverlay.showModal();
+  }
+}
+
+async function openHistory(chat, openPanel) {
   els.historyBody.textContent = '';
   els.historyEmpty.hidden = true;
-  if (!els.historyOverlay.open) els.historyOverlay.showModal();
   hist.chat = chat;
   hist.chatId = chat.id;
-  els.historySource.textContent = chat.source === 'gmail' ? 'Gmail' : 'WhatsApp';
-  els.historySource.className = 'source-badge source-' + chat.source;
-  // Filter parity (#166): viewing a monitored sender shows that sender's messages
-  // with a sender chip so the operator knows exactly whose mail they're reading.
-  const senderAddress = gmailSenderAddress(chat);
-  if (senderAddress) {
-    els.historySenderChip.textContent = 'Sender: ' + senderAddress;
-    els.historySenderChip.hidden = false;
-  } else {
-    els.historySenderChip.textContent = '';
-    els.historySenderChip.hidden = true;
-  }
-  els.historyLink.hidden = chat.source !== 'whatsapp';
-  // Panel starts collapsed on a normal open; the link badge opens it expanded.
+  renderSheetHeader(chat);
+  placeSheet();
+  render();
+  // The link panel starts collapsed; the menu's Link chats… opens it.
   syncLinkPanel(chat, linkDeps, chat.source === 'whatsapp' && !!openPanel);
   hist.oldestTs = null;
   hist.oldestId = null;
@@ -593,20 +650,52 @@ async function loadOlder() {
   hist.loading = false;
 }
 
-// Reset the overlay's contents once the native <dialog> has closed — runs for
-// every close path (button, backdrop tap, Esc) via the 'close' event.
+// Reset the sheet's contents once it closes — every close path (button,
+// backdrop tap, Esc, and the wide pane's close) ends here.
 function onHistoryClosed() {
   cancelSummarySpeech();
   els.historyBody.textContent = '';
-  els.historySenderChip.hidden = true;
-  els.historySenderChip.textContent = '';
+  els.historyTripwire.hidden = true;
   resetLinkPanel();
   hist.chat = null;
   hist.chatId = null;
+  render();
 }
 
 function closeHistory() {
-  if (els.historyOverlay.open) els.historyOverlay.close();
+  sheetMenu.close();
+  if (els.historyOverlay.open) {
+    els.historyOverlay.close();  // its 'close' event resets the sheet
+  } else if (!els.chatsDetailPane.hidden) {
+    els.chatsDetailPane.hidden = true;
+    onHistoryClosed();
+  }
+}
+
+// The sheet's one labelled menu (#375; vendored row-menu): Rename…, Link
+// chats… with the linked count, and the monitor toggle.
+const sheetMenu = createRowMenu({ className: 'history-menu-list' });
+
+function wireSheetMenu() {
+  sheetMenu.attach('chat-sheet', els.historyMenu, [
+    { label: 'Rename…', glyph: 'pencil', onTap: function () { renameCurrentChat(linkDeps); } },
+    {
+      label: function () {
+        const n = hist.chat ? childrenOf(hist.chat.id).length : 0;
+        return n ? 'Link chats… (' + n + ' linked)' : 'Link chats…';
+      },
+      glyph: 'link',
+      hidden: function () { return !hist.chat || hist.chat.source !== 'whatsapp'; },
+      onTap: function () { openLinkPanel(linkDeps); },
+    },
+    {
+      label: function () {
+        return hist.chat && hist.chat.status === 'monitored' ? 'Stop monitoring' : 'Monitor';
+      },
+      glyph: 'eye',
+      onTap: function () { if (hist.chat) toggleWatch(hist.chat); },
+    },
+  ]);
 }
 
 // ------------------------------------------------------- link management
@@ -620,7 +709,7 @@ function closeHistory() {
 // itself vanished from the data (shouldn't happen) the overlay just closes.
 async function refreshAfterLink() {
   await fetchChats();
-  if (!els.historyOverlay.open) return;
+  if (hist.chatId == null) return;  // no sheet open (dialog or wide pane)
   const fresh = state.chats.find(function (c) { return c.id === hist.chatId; });
   if (!fresh) { closeHistory(); return; }
   openHistory(fresh, true).catch(function () {});
@@ -631,7 +720,7 @@ async function refreshAfterLink() {
 // taken at wiring time) so every click always acts on whichever chat's overlay
 // is currently open; onRenamed mirrors what a rename used to do inline here.
 function onChatRenamed(chat) {
-  els.historyTitle.textContent = chatLabel(chat);
+  renderSheetHeader(chat);
   render();
 }
 
@@ -647,22 +736,7 @@ export function wireChats() {
   els.chatsFilterMonitored.addEventListener('click', function () { setFilter('monitored'); });
   els.chatsFilterIgnored.addEventListener('click', function () { setFilter('ignored'); });
   els.chatsFilterAll.addEventListener('click', function () { setFilter('all'); });
-  els.chatsSourceAll.addEventListener('click', function () { setSourceFilter('all'); });
-  els.chatsSourceWhatsapp.addEventListener('click', function () { setSourceFilter('whatsapp'); });
-  els.chatsSourceGmail.addEventListener('click', function () { setSourceFilter('gmail'); });
-  // Search lives behind an icon button (App Launcher style); reveal + focus on tap.
-  els.chatsSearchToggle.addEventListener('click', function () {
-    const show = els.chatsSearch.hidden;
-    els.chatsSearch.hidden = !show;
-    els.chatsSearchToggle.setAttribute('aria-pressed', String(show));
-    if (show) {
-      els.chatsSearch.focus();
-    } else if (state.chatsSearch) {
-      els.chatsSearch.value = '';
-      state.chatsSearch = '';
-      render();
-    }
-  });
+  els.chatsSource.addEventListener('change', function () { setSourceFilter(els.chatsSource.value); });
   els.chatsSearch.addEventListener('input', function () {
     state.chatsSearch = els.chatsSearch.value;
     render();
@@ -673,10 +747,15 @@ export function wireChats() {
   els.historyOverlay.addEventListener('click', function (ev) {
     if (ev.target === els.historyOverlay) closeHistory();
   });
-  els.historyOverlay.addEventListener('close', onHistoryClosed);
+  // A wide screen closes the dialog only to move the card into the pane.
+  els.historyOverlay.addEventListener('close', function () {
+    if (!WIDE.matches) onHistoryClosed();
+  });
   // Link/rename controls + the parent-picker overlay (#25) are chat-links.js's
   // own feature (#240) — one call wires everything it owns.
-  wireChatLinks(linkDeps);
+  wireChatLinks();
+  wireSheetMenu();
+  WIDE.addEventListener('change', function () { if (hist.chat) placeSheet(); });
   // Newest is at the top; scrolling to the bottom pages in older messages.
   els.historyBody.addEventListener('scroll', function () {
     const b = els.historyBody;
@@ -686,9 +765,7 @@ export function wireChats() {
 
 function setSourceFilter(source) {
   state.chatsSourceFilter = source;
-  els.chatsSourceAll.classList.toggle('active', source === 'all');
-  els.chatsSourceWhatsapp.classList.toggle('active', source === 'whatsapp');
-  els.chatsSourceGmail.classList.toggle('active', source === 'gmail');
+  els.chatsSource.value = source;
   render();
 }
 

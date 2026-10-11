@@ -57,7 +57,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 ### Admin webapp & tray
 
-- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Four tabs live (named under **UX surface** below; Run and Audit merged into Activity, #373; Follow-ups folded into the Dashboard tab, #336); endpoint lists in `README.md` §"Admin Webapp".
+- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Four tabs live (named under **UX surface** below; Run and Audit merged into Activity, #373; follow-ups are Telegram-only, #374); endpoint lists in `README.md` §"Admin Webapp".
 - Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkey enrollment (Tailscale-only; provisioning state, no passkey sign-in, #353), Tailscale TLS, dormant Cloudflare scaffolding.
 - Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`.
 - **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`.
@@ -107,7 +107,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
   - app/webapp/static/**/*.css
   - app/webapp/static/**/*.{js,html}
 - key views:                      # single tabbed SPA served at `/`
-  - /          (Dashboard · Activity · Messages · Family tabs)
+  - /          (Home · Activity · Inbox · Family tabs)
 
 ## Verification
 

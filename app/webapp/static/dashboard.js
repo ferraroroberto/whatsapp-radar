@@ -1,113 +1,168 @@
-/* Dashboard tab (#9, #165): the app's front door — a per-kind "last activity"
- * grid plus the folded Sources / Monitored-channels detail.
+/* Home (#9, #165, #374): is the radar working, and does anything need me?
  *
- * The 2×2 grid (WhatsApp · Gmail · Traffic · Calendar) answers "when did each
- * last run and what did it find" at a glance; tapping a card opens that run
- * in Activity (#163's unified store makes CLI/Jobs runs visible here too). Chat names go in via textContent only — never innerHTML. */
+ * One glance card (WhatsApp · Gmail · Calendar · Traffic): a row per source
+ * with a liveness badge on its glyph, the last run as a relative time, and
+ * chips for exceptions only — never an OK. The header line names the most
+ * severe exception and, like every row, opens that run's sheet in Activity
+ * (the owner's first stop when an alert looks odd). Below it, Latest runs: the
+ * last three runs of any kind as Activity's own row, plus "All activity".
+ *
+ * Liveness comes from the source-health poll (execution.js, also feeding the
+ * Settings cards) and runs from /api/dashboard; each lands on its own, so
+ * neither delays the first paint. The per-source counts card lives in Settings
+ * since #374 and is still rendered here from the same answer. Chat names go in
+ * via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
-import { fetchQuiet } from './api.js';
-import { fmtLocalDateTime, fmtNum, fmtRelative, sourceIcon, SOURCE_LABEL } from './format.js';
+import { fetchQuiet, jsonApi } from './api.js';
+import {
+  fmtLocalDateTime, fmtNum, fmtRelative, setHeaderStatus, SOURCE_ICON, SOURCE_LABEL,
+  sourceIcon, statusChip,
+} from './format.js';
 import { setTab } from './tabs.js';
-import { openRun } from './activity.js';
+import { openRunInActivity, runRowFor } from './activity.js';
+import { fetchHealth, isRunning } from './execution.js';
+import { icon } from './_vendored/icons/icons.js';
 
-// Per-channel "Last msg" column: compact LOCAL time, no year ("06-07 14:47").
-function fmtTs(ts) {
-  return fmtLocalDateTime(ts, { withYear: false });
-}
+const GLANCE = ['whatsapp', 'gmail', 'calendar', 'traffic'];
 
 export async function fetchDashboard() {
+  fetchHealth().then(renderGlance).catch(function () {});
+  fetchLatest().catch(function () {});
   await fetchQuiet('/api/dashboard', function (data) {
     state.dashboard = data;
-    render(data);
+    renderGlance();
+    renderSourceCounts(data);
   });
 }
 
-// The badge distils each card's outcome to one of: never ran · KO · running ·
-// N alerts · OK — mapped to a status-color class (design.md: status colors
-// signal state only).
-function activityBadge(card) {
-  if (!card.kind || !card.started_at) return { text: 'never ran', cls: 'muted' };
-  if (card.status === 'failed') return { text: 'KO', cls: 'ko' };
-  if (card.status === 'running' || card.status === 'pending') return { text: '···', cls: 'run' };
-  if (card.alerts > 0) {
-    return { text: card.alerts + ' alert' + (card.alerts === 1 ? '' : 's'), cls: 'act' };
-  }
-  return { text: 'OK', cls: 'ok' };
+// ----------------------------------------------------------- glance card
+
+function card(source) {
+  const d = state.dashboard;
+  return d ? (d.last_activity || []).find(function (c) { return c.source === source; }) : null;
 }
 
-function activityCard(card) {
-  const ran = !!(card.kind && card.started_at);
-  // A ran card is a button (opens the run in Activity); a never-ran card is an
-  // inert div — nothing to open.
-  const el = document.createElement(ran ? 'button' : 'div');
-  el.className = 'activity-card card' + (ran ? '' : ' is-idle');
+// Alive / down for the avatar badge: connected and expected to be, or should be
+// up and is not. Traffic has no connection of its own, so it never gets one; a
+// source not yet reported or turned off gets none either (design.md avatar).
+function liveness(source) {
+  const ex = state.execution;
+  const health = (ex.sourceHealth || []).find(function (s) { return s.source === source; });
+  if (!health || !health.enabled) return null;
+  const connected = source === 'whatsapp' && ex.sidecar ? !!ex.sidecar.is_live : !!health.connected;
+  return connected ? 'up' : 'down';
+}
+
+// Exceptions only (#374): no OK, and success is never a chip.
+function glanceChips(source, c, live) {
+  const chips = [];
+  if (live === 'down') chips.push(statusChip('Offline', 'danger'));
+  if (!c || !c.started_at) return chips;
+  if (c.status === 'failed') chips.push(statusChip('Failed', 'danger'));
+  else if (isRunning(c.status)) chips.push(statusChip('Running', 'neutral'));
+  if (c.alerts > 0) {
+    if (source === 'traffic') chips.push(statusChip(c.alerts + (c.alerts === 1 ? ' alert' : ' alerts'), 'attention'));
+    else if (source === 'calendar') chips.push(statusChip(c.alerts + ' to check', 'attention'));
+    else chips.push(statusChip(c.alerts + ' actionable', 'accent'));
+  }
+  return chips;
+}
+
+function glanceRow(source) {
+  const c = card(source);
+  const live = liveness(source);
+  const ran = !!(c && c.kind && c.started_at);
+  const li = document.createElement('li');
+  li.className = 'action-row glance-row';
+  li.dataset.source = source;
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'action-row-main';
+  main.disabled = !ran;
   if (ran) {
-    el.type = 'button';
-    el.addEventListener('click', function () {
-      setTab('activity');
-      openRun({ kind: card.kind, dbId: card.db_run_id });
+    main.setAttribute('aria-haspopup', 'dialog');
+    main.addEventListener('click', function () {
+      openRunInActivity({ kind: c.kind, dbId: c.db_run_id });
     });
   }
-
-  // Line 1: icon + kind name, given the full row so a name never truncates.
-  const head = document.createElement('div');
-  head.className = 'activity-head';
-  const ico = sourceIcon(card.source);
-  ico.classList.add('activity-icon');
-  const name = document.createElement('span');
-  name.className = 'activity-name';
-  name.textContent = SOURCE_LABEL[card.source] || card.source;
-  head.append(ico, name);
-
-  // Line 2: relative last-run time on the left, the outcome badge pinned right.
-  const meta = document.createElement('div');
-  meta.className = 'activity-meta';
-  const when = document.createElement('span');
-  when.className = 'activity-when muted small';
-  when.textContent = ran ? fmtRelative(card.started_at) : 'no run yet';
-  const b = activityBadge(card);
-  const badge = document.createElement('span');
-  badge.className = 'activity-badge ' + b.cls;
-  badge.textContent = b.text;
-  meta.append(when, badge);
-
-  const summary = document.createElement('span');
-  summary.className = 'activity-summary';
-  summary.textContent = card.summary || '—';
-
-  el.append(head, meta, summary);
-  return el;
-}
-
-function renderActivity(cards) {
-  els.dashActivity.textContent = '';
-  for (const card of cards || []) els.dashActivity.appendChild(activityCard(card));
-}
-
-function render(d) {
-  renderActivity(d.last_activity);
-
-  const body = els.dashChannelsBody;
-  body.textContent = '';
-  const channels = d.messages.per_channel || [];
-  els.dashChannelsEmpty.hidden = channels.length > 0;
-  for (const ch of channels) {
-    const tr = document.createElement('tr');
-    const name = document.createElement('td');
-    name.className = 'name';
-    name.title = ch.name;  // full name on hover/long-press; cell truncates with …
-    name.textContent = (ch.source === 'gmail' ? 'Gmail · ' : 'WhatsApp · ') + ch.name;
-    const count = document.createElement('td');
-    count.className = 'num';
-    count.textContent = fmtNum(ch.count);
-    const ts = document.createElement('td');
-    ts.className = 'when';
-    ts.textContent = fmtTs(ch.last_message_at);
-    tr.append(name, count, ts);
-    body.appendChild(tr);
+  const avatar = document.createElement('span');
+  avatar.className = 'action-row-avatar';
+  avatar.setAttribute('aria-hidden', 'true');
+  if (live) avatar.dataset.badge = live;
+  // Static sprite markup only — never user content — so innerHTML is safe here.
+  avatar.innerHTML = icon(SOURCE_ICON[source].slice(3));
+  const text = document.createElement('span');
+  text.className = 'action-row-text';
+  const title = document.createElement('span');
+  title.className = 'action-row-title';
+  title.textContent = SOURCE_LABEL[source];
+  const meta = document.createElement('span');
+  meta.className = 'action-row-meta';
+  if (!state.dashboard) meta.textContent = '—';
+  else meta.textContent = ran ? fmtRelative(c.started_at) + (c.summary ? ' · ' + c.summary : '') : 'no run yet';
+  text.append(title, meta);
+  main.append(avatar, text);
+  li.appendChild(main);
+  const chips = glanceChips(source, c, live);
+  if (chips.length) {
+    const trail = document.createElement('span');
+    trail.className = 'action-row-trail run-chips';
+    trail.append(...chips);
+    li.appendChild(trail);
   }
+  return li;
+}
 
+// The most severe exception across the sources, else one muted fact.
+function renderHeader() {
+  const offline = GLANCE.find(function (s) { return liveness(s) === 'down'; });
+  const failed = GLANCE.find(function (s) { const c = card(s); return c && c.status === 'failed'; });
+  const btn = els.dashStatus;
+  let target = null;
+  if (offline) {
+    setHeaderStatus(btn, SOURCE_LABEL[offline] + ' offline', 'danger');
+    target = card(offline);
+  } else if (failed) {
+    setHeaderStatus(btn, SOURCE_LABEL[failed] + (failed === 'traffic' ? ' check failed'
+      : failed === 'calendar' ? ' sync failed' : ' scan failed'), 'danger');
+    target = card(failed);
+  } else {
+    const last = state.dashboard && state.dashboard.scans && state.dashboard.scans.last;
+    setHeaderStatus(btn, state.dashboard
+      ? (last ? 'Scanned ' + fmtLocalDateTime(last.started_at, { withYear: false }).slice(6) : 'No scan yet')
+      : '', null);
+  }
+  // The exception line is a link into that run in Activity; a plain fact is not.
+  const ref = target && target.kind && target.started_at ? { kind: target.kind, dbId: target.db_run_id } : null;
+  btn.disabled = !ref;
+  btn.onclick = ref ? function () { openRunInActivity(ref); } : null;
+}
+
+function renderGlance() {
+  els.dashGlance.textContent = '';
+  for (const source of GLANCE) els.dashGlance.appendChild(glanceRow(source));
+  renderHeader();
+}
+
+// ----------------------------------------------------------- latest runs
+
+async function fetchLatest() {
+  const data = await jsonApi('/api/audit/runs?limit=3');
+  const runs = data.runs || [];
+  els.dashLatest.textContent = '';
+  for (const run of runs) els.dashLatest.appendChild(runRowFor(run, openRunInActivity));
+  if (!runs.length) {
+    const li = document.createElement('li');
+    li.className = 'dash-latest-empty muted small';
+    li.textContent = 'No runs yet.';
+    els.dashLatest.appendChild(li);
+  }
+}
+
+// ----------------------------------------------------------- source counts (Settings)
+
+function renderSourceCounts(d) {
   els.dashSources.textContent = '';
   const sources = d.sources || [];
   if (!sources.length) {
@@ -123,7 +178,7 @@ function render(d) {
   }
   // Calendar is a read-only, non-ingesting source (#164/#165): no stored/
   // monitored counts, so its row shows provenance + freshness of the last scan.
-  const cal = (d.last_activity || []).find(function (c) { return c.source === 'calendar'; });
+  const cal = card('calendar');
   if (cal) {
     els.dashSources.appendChild(sourceRow('calendar', cal.kind && cal.started_at
       ? 'read-only · last scan ' + fmtRelative(cal.started_at)
@@ -131,7 +186,7 @@ function render(d) {
   }
 }
 
-// One Sources-card row: an icon+label source badge plus a muted detail line.
+// One source-counts row: an icon+label source badge plus a muted detail line.
 function sourceRow(sourceKey, detailText) {
   const row = document.createElement('div');
   row.className = 'source-summary-row';
@@ -144,4 +199,10 @@ function sourceRow(sourceKey, detailText) {
   detail.textContent = detailText;
   row.append(name, detail);
   return row;
+}
+
+export function wireDashboard() {
+  // Draw the rows at once, a dash for every value still loading (#374).
+  renderGlance();
+  els.dashAllActivity.addEventListener('click', function () { setTab('activity'); });
 }

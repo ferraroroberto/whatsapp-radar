@@ -7,6 +7,7 @@ dialog, which hosts the classifier config and maintenance cards.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 import pytest
@@ -50,6 +51,15 @@ def test_gear_opens_settings_with_config_and_maintenance(
     dialog = page.locator("#settingsDialog")
     expect(dialog).to_be_visible()
     expect(dialog.locator("#settingsTitle")).to_be_visible()
+    # The header line (#374): a source that should be up and is not, else the
+    # build; the title never truncates beside it.
+    status = dialog.locator("#settingsStatus")
+    expect(status).to_have_text(re.compile(r"offline$|^Build: "))
+    assert dialog.locator("#settingsTitle").evaluate(
+        "el => el.scrollWidth <= el.clientWidth"
+    ), "Settings title truncates beside its status line"
+    # The per-source counts card moved here from Home (#374).
+    expect(dialog.locator("#dashSourcesCard")).to_be_visible()
     expect(dialog.locator("#configCard")).to_be_visible()
     expect(dialog.locator("#execMaintenanceCard")).to_be_visible()
     # Recent syncs and Sources health moved here from the Run tab (#373).

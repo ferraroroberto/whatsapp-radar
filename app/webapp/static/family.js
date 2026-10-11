@@ -12,7 +12,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, travelStatusLabel } from './format.js';
+import { fmtLocalDateTime, setHeaderStatus, travelStatusLabel } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 
@@ -66,10 +66,26 @@ function adopt(data) {
   travelDraft = toTravelDraft(data);
   travelBaseline = serializeTravel();
   render();
+  renderHeader(data);
   // The traffic card lives in this pane since #373; the same answer carries it.
   state.execution.traffic = data.traffic || {};
   state.execution.trafficAt = Date.now();
   renderTraffic();
+}
+
+// Family's header line (#374): a missing calendar token (nothing can be
+// checked), else the last calendar run's missing locations, else the rules.
+function renderHeader(d) {
+  const cal = d.last_calendar;
+  const missing = (cal && cal.missing_locations) || 0;
+  if ((d.calendars || []).length && !d.token_present) {
+    setHeaderStatus(els.familyStatus, 'Calendar token missing', 'danger');
+  } else if (missing) {
+    setHeaderStatus(els.familyStatus,
+      missing + ' missing location' + (missing === 1 ? '' : 's'), 'attention');
+  } else {
+    setHeaderStatus(els.familyStatus, 'Rules in force', null);
+  }
 }
 
 function toDraft(d) {

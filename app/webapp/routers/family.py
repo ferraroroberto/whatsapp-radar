@@ -427,12 +427,17 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         for window in family.childcare_windows
     ]
     # One newest-first, per-kind-bounded read of the unified run store (#163) feeds
-    # the recent-runs list, the Run-tab traffic card's status line (#164) and the
+    # the recent-runs list, the traffic card's status line (#164) and the
     # last travel sweep — a chatty traffic-check can't crowd out calendar-scan.
     recent_runs = store.list_runs_by_kind(conn, tuple(_FAMILY_KINDS))
     family_runs = [
         _run_summary(row) for row in recent_runs if row["kind"] in _FAMILY_KINDS
     ][:15]
+    # The daily calendar run, by itself: a day of traffic checks pushes it out of
+    # the 15 above, and the Family header names its missing locations (#374).
+    last_calendar = next(
+        (_run_summary(row) for row in recent_runs if row["kind"] == "calendar-scan"), None
+    )
     traffic_rows = [row for row in recent_runs if row["kind"] == "traffic-check"]
     last_check = traffic_rows[0]["started_at"] if traffic_rows else None
     last_alert = next(
@@ -479,6 +484,7 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         # and never fires a sweep of its own (#268).
         "travel_blocks": _travel_blocks_payload(config, recent_runs),
         "runs": family_runs,
+        "last_calendar": last_calendar,
     }
 
 

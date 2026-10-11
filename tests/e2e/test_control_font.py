@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
@@ -72,6 +72,18 @@ def test_every_control_inherits_the_page_font(
     page.wait_for_timeout(scaled(500))
     offenders += [f"history: {o}" for o in _offenders(page, "#historyCard")]
     page.locator("#historyClose").click()
+
+    # Family: the rule sheets host the 44px inputs and pickers (#376).
+    page.locator("#tabFamily").click()
+    expect(page.locator('#paneFamily [data-value="duty"]')).not_to_be_empty()
+    for opener, root, close in (
+        ('[data-sheet="duty"]', "#familySheet", "#familySheetClose"),
+        ("#familyTravelRow", "#familyTravelSheet", "#familyTravelClose"),
+    ):
+        page.locator(f"#paneFamily {opener}").click()
+        page.wait_for_selector(root, state="visible", timeout=scaled(10_000))
+        offenders += [f"{root}: {o}" for o in _offenders(page, root)]
+        page.locator(close).click()
 
     page.locator(".pane:not([hidden]) .home-settings").click()
     offenders += [f"settings: {o}" for o in _offenders(page, "#settingsDialog")]

@@ -15,7 +15,7 @@ import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum, kindLabel, setHeaderStatus, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
-import { patchTraffic } from './family.js';
+import { patchFamily } from './family.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
@@ -357,10 +357,11 @@ function renderSyncs() {
 
 // ----------------------------------------------------- traffic jam insurance
 
-// The traffic card (#164; Family pane since #373): the enable toggle + cadence config and the
-// last-check/last-alert status line are family.js's own /api/family concern
-// (#240 — fetchTraffic/patchTraffic + their rendering moved there, since they
-// share nothing with this file's run queue). This is the one piece that does:
+// Traffic checks (#164; Family pane since #373, a group there since #376): the
+// enable switch, the cadence sheet and the last-check/last-alert line are
+// family.js's own /api/family concern (#240 — patchFamily and the rendering
+// live there, since they share nothing with this file's run queue). This is
+// the one piece that does:
 // firing a one-off traffic-check run through the same queue every other
 // pipeline step uses. The App Launcher job (`family-radar-traffic-check`) is
 // armed at a fixed high frequency; `wr traffic-check` self-skips in-process
@@ -487,8 +488,7 @@ function renderControls() {
   els.execDryRun.disabled = busy;
   els.execRunScan.disabled = busy;
   els.execReprocess.disabled = busy;
-  for (const c of [els.execTrafficRunLive, els.execTrafficRunDry,
-                   els.execTrafficEnabled, els.execTrafficCadence]) {
+  for (const c of [els.execTrafficRunLive, els.execTrafficRunDry, els.execTrafficEnabled]) {
     c.disabled = busy;
   }
   const line = busyLine();
@@ -544,18 +544,13 @@ export function wireExecution() {
     });
   }
 
-  // Traffic card (Family pane since #373): enable toggle + cadence persist
-  // through the family safe-override path; the two Run-now buttons fire a
-  // one-off check through this queue.
+  // Traffic checks (Family pane since #373): the enable switch persists on tap
+  // through the family safe-override path (the cadence is a Family sheet,
+  // #376); the two Check-now rows fire a one-off check through this queue.
   els.execTrafficEnabled.addEventListener('click', function () {
     const next = !stageOn(els.execTrafficEnabled);
     setSwitch(els.execTrafficEnabled, next);  // optimistic; patch confirms
-    patchTraffic({ traffic_enabled: next });
-  });
-  els.execTrafficCadence.addEventListener('change', function () {
-    const v = Math.max(5, Math.min(240, Number(els.execTrafficCadence.value) || 30));
-    els.execTrafficCadence.value = String(v);
-    patchTraffic({ cadence_min: v });
+    patchFamily({ traffic_enabled: next });
   });
   els.execTrafficRunLive.addEventListener('click', function () { runTraffic('live'); });
   els.execTrafficRunDry.addEventListener('click', function () { runTraffic('dry_run'); });

@@ -93,7 +93,7 @@ Every live run sends exactly one Telegram summary: the findings, or an explicit 
 
 A no-location event is **assumed home**. The assumption is logged, the event is flagged `assumed` in the decision trace and listed under `missing_locations` in the run payload, and it is surfaced as a "please add a location" ask.
 
-`family.ask_missing_locations` (default on — Family tab → *Daily calendar sync → Ask for missing locations*, or `WR_FAMILY_ASK_MISSING_LOCATIONS`) hides only the `📍 No location set` section, for a household where some events will never get a location and the daily repeat just drowns the coverage alerts it shares a message with. The setting silences the nag; it does not make the assumption invisible.
+`family.ask_missing_locations` (default on — Family tab → *Calendar scan → Ask for missing locations*, or `WR_FAMILY_ASK_MISSING_LOCATIONS`) hides only the `📍 No location set` section, for a household where some events will never get a location and the daily repeat just drowns the coverage alerts it shares a message with. The setting silences the nag; it does not make the assumption invisible.
 
 ### `family.run_hour` — the earliest hour an unattended scan acts
 
@@ -120,7 +120,7 @@ An explicitly requested run ignores `run_hour` entirely: `wr calendar-scan --for
 | `ask_missing_locations` | `true` | surface the "please add a location" ask |
 | `travel_blocks` | see below | the commute-block feature |
 
-Everything on that table except `home_address`, the calendar accounts, and `travel_blocks.horizon_days` is editable from the phone in the Family tab's *Rules in force* card. Edits save straight to `config/local.json` and the next run picks them up — no restart. Server-side validation rejects a bad save with a message naming the field: every time must parse as `HH:MM`, the on-duty pattern must name exactly the 7 weekdays, and a childcare window's end must come after its start.
+Everything on that table except `home_address`, the calendar accounts, and `travel_blocks.horizon_days` is editable from the phone in the Family tab, each rule in its own sheet that saves on *Done* (closing it discards the edit). Edits save straight to `config/local.json` and the next run picks them up — no restart. Server-side validation rejects a bad save with a message naming the field: every time must parse as `HH:MM`, the on-duty pattern must name exactly the 7 weekdays, and a childcare window's end must come after its start.
 
 ### Duplicate calendar entries are collapsed
 
@@ -188,11 +188,11 @@ Widening the read never widens the plan. A block found out there with no desired
 
 ### Running and reading a sweep from the phone
 
-The **Family** tab's *Travel blocks* card drives everything. A banner states which of three modes is in force: **Off** (no plan, no Routes call), **Dry run** (the plan is computed and logged, nothing is written) or **Live** (blocks are created and removed).
+The **Family** tab's *Travel blocks* sheet (opened from its row, which shows the mode in force) drives everything. A banner states which of three modes is in force: **Off** (no plan, no Routes call), **Dry run** (the plan is computed and logged, nothing is written) or **Live** (blocks are created and removed).
 
 *Run a sweep* offers **Rehearse (dry run)** and **Run sweep**. Both post the existing `calendar-scan` verb to `POST /api/execution/run` — the same pipeline Activity's Run now and the scheduled job use — because the sweep rides along inside the daily scan and a travel-blocks-only verb would need a whole second calendar read path. Rehearse sends `--dry-run`, which forces the sweep dry *server-side* as well as suppressing the summary message.
 
-**Run sweep** is unavailable — with every reason spelled out, never silently greyed out — whenever travel blocks are off, `dry_run` is on, the write token is missing, there is no Routes API key, or no home address is configured. Those reasons are *reported* by `GET /api/family` as `live_sweep_blockers`; they are *enforced* independently by `gate_status` and the apply short-circuit, which re-run on every invocation, so the button is a courtesy and never the thing standing between a click and a calendar write. A second run while one is in flight returns `409` and reads as "already running", not as a failure. When a run finishes, the card re-reads `/api/family` so **Last sweep** shows it with no page reload. Opening or rendering the tab never triggers a sweep — only a button press does.
+**Run sweep** is unavailable — with every reason spelled out, never silently greyed out — whenever travel blocks are off, `dry_run` is on, the write token is missing, there is no Routes API key, or no home address is configured. Those reasons are *reported* by `GET /api/family` as `live_sweep_blockers`; they are *enforced* independently by `gate_status` and the apply short-circuit, which re-run on every invocation, so the button is a courtesy and never the thing standing between a click and a calendar write. A second run while one is in flight returns `409` and reads as "already running", not as a failure. When a run finishes, the sheet re-reads `/api/family`, keeping any unsaved edit, so **Last sweep** shows it with no page reload. Opening or rendering the tab never triggers a sweep — only a button press does.
 
 *Write access per calendar* lists every configured household calendar in one of three states — **Writable**, **Not writable**, **Unknown** — plus the last sweep's counts (legs, adds/deletes/keeps, Routes calls, unpriced legs, and what was actually written). `Unknown` renders as its own state, with its own colour, its own glyph and a dashed outline: it is never a tick, never a cross, and never an omitted row, because an unresolved probe is not permission. It is what you see before the first sweep, and if the calendar listing itself failed — the fix is to run a sync and re-read the card, never to assume the calendar is fine. The whole card renders from the newest recorded `calendar-scan` run, so opening the tab spends no Routes quota.
 
@@ -256,13 +256,13 @@ Full detail in [`calendar-bootstrap.md`](calendar-bootstrap.md).
 
 The sharing level the conflict scan and the traffic check were set up with — *"See all event details"* — is a read grant, and is not enough to write a block. Each other member opens Google Calendar → their calendar's *Settings and sharing → Share with specific people* → change the bootstrapping account's permission to **Make changes to events**.
 
-Then open the **Family** tab → *Travel blocks* → *Write access per calendar* and confirm every row reads **Writable**. A row reading **Unknown** is not "probably fine" — it means the role was never established (no sweep has reported on that calendar yet, or the listing failed); run step 3 and re-read the card. A row reading **Not writable** is still shared read-only. Only `writable` calendars are ever written to.
+Then open the **Family** tab → *Travel blocks* → *Write access per calendar* and confirm every row reads **Writable**. A row reading **Unknown** is not "probably fine" — it means the role was never established (no sweep has reported on that calendar yet, or the listing failed); run step 3 and re-read the sheet. A row reading **Not writable** is still shared read-only. Only `writable` calendars are ever written to.
 
 **Undo:** set the sharing back down to *See all event details*; the next sweep reports that calendar `not_writable` and leaves it alone.
 
 ### 3. Enable, with `dry_run` still on
 
-Family tab → *Travel blocks* → turn **Write travel blocks** on and leave **Dry run** on. The card's banner must read **Dry run**. (Equivalently, `family.travel_blocks.enabled: true` in `config/local.json` — never in `config/default.json`.) No restart: the next run picks it up.
+Family tab → *Travel blocks* → turn **Write travel blocks** on, leave **Dry run** on, and tap **Done**. The sheet's banner must read **Dry run**. (Equivalently, `family.travel_blocks.enabled: true` in `config/local.json` — never in `config/default.json`.) No restart: the next run picks it up.
 
 **Undo:** turn the toggle back off; a disabled sweep computes nothing and spends no Routes call.
 
@@ -285,7 +285,7 @@ Rehearse as many times as you like — a dry run performs zero inserts, zero del
 
 ### 5. Go live
 
-Only now turn **Dry run** off. The banner must read **Live**. The next scheduled `family-radar-calendar-sync` writes the plan; **Run sweep** on the Family tab does it immediately. Re-read the Audit record afterwards: `apply` reports what was actually inserted, deleted, kept, skipped, and how many backups were written. Watch one real day before walking away.
+Only now turn **Dry run** off and tap **Done**. The banner must read **Live**. The next scheduled `family-radar-calendar-sync` writes the plan; **Run sweep** on the Family tab does it immediately. Re-read the Audit record afterwards: `apply` reports what was actually inserted, deleted, kept, skipped, and how many backups were written. Watch one real day before walking away.
 
 **Undo:** turn **Dry run** back on. That stops all further writing instantly, but it does **not** remove the blocks already written — see step 7.
 
@@ -384,7 +384,7 @@ The exceptions are the two **self-skips**, which record no run row at all: a fir
 
 | Self-skip | Trigger | Exemption |
 | --- | --- | --- |
-| `traffic-check` cadence | a **live** fire landing before `traffic.cadence_min` has elapsed | `--dry-run` — an explicit, on-demand human test pass (the Family tab's traffic card *Run now (dry)*) always executes, and its run row never counts towards the live cadence clock |
+| `traffic-check` cadence | a **live** fire landing before `traffic.cadence_min` has elapsed | `--dry-run` — an explicit, on-demand human test pass (the Family tab's Traffic checks → *Check now (dry run)*) always executes, and its run row never counts towards the live cadence clock |
 | `calendar-scan` run hour | a fire before `family.run_hour` | `--force` — the *mode* is not the permission, so a scheduled `--dry-run` is gated like any other unattended fire, while every webapp button (which sends `--force`) always runs |
 
 The run-hour skip returning before the run row is opened is also what keeps it out of the Family tab's "last sweep" lookup, which scans recorded `calendar-scan` runs for the newest travel-block section: a skip must never be mistaken for a completed sweep, nor blank out the genuine earlier one.

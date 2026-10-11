@@ -7,7 +7,8 @@ Chromium's desktop-style `<input type=time>` doesn't reproduce it, so this
 is pinned WebKit-only, matching test_iphone_revalidate.py's precedent).
 #187 flattens the sub-cards to flat list-row content (design.md's list-row
 contract: full-bleed rows on a top hairline after the first, never a nested
-canvas-subtle card) and gives Start/End a constrained two-column grid.
+canvas-subtle card) and gives Start/End a constrained two-column grid. Since
+#376 the windows live in the Childcare windows sheet, opened from their row.
 
 Privacy: the autobooted app receives a disposable sanitized local-config
 fixture, including its Family rules. This test only adds blank windows via the
@@ -32,12 +33,11 @@ def _open_family_with_two_new_windows(page, base_url: str, scaled: Callable[[flo
     page.locator("#tabFamily").click()
     page.wait_for_selector("#paneFamily", state="visible")
 
-    card = page.locator("#familyRulesCard")
-    if card.get_attribute("open") is None:
-        page.locator("#familyRulesCard summary").click()
+    page.locator('#paneFamily [data-sheet="windows"]').click()
+    page.wait_for_selector("#familySheet", state="visible")
     page.wait_for_timeout(scaled(200))
 
-    add_btn = page.locator("#familyEditable .button-ghost", has_text="Add childcare window")
+    add_btn = page.locator("#familySheet .button-ghost", has_text="Add childcare window")
     add_btn.click()
     add_btn.click()
     page.wait_for_timeout(scaled(200))
@@ -78,13 +78,13 @@ def test_childcare_windows_flat_and_fit_390px(
             f"second window should have a hairline top divider, got {second_divider!r}"
         )
 
-        # 2. Zero horizontal overflow anywhere in the Family pane at 390px.
+        # 2. Zero horizontal overflow anywhere in the Family pane or its sheet at 390px.
         overflowing = page.evaluate(
             """
             () => {
               const vw = window.innerWidth;
               const bad = [];
-              document.querySelectorAll('#paneFamily *').forEach((el) => {
+              document.querySelectorAll('#paneFamily *, #familySheet *').forEach((el) => {
                 const r = el.getBoundingClientRect();
                 if (r.width > 0 && r.right > vw + 0.5) {
                   bad.push({tag: el.tagName, cls: String(el.className), right: r.right});
@@ -112,17 +112,24 @@ def test_childcare_windows_flat_and_fit_390px(
             f"End input overflows the 390px viewport: {end_box}"
         )
 
-        # 4. Bottom clearance: scrolled to the document's true end, "+ Add
-        # childcare window" clears the floating nav pill (no overlap).
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        # 4. Bottom clearance: scrolled to the sheet's true end, "+ Add
+        # childcare window" sits fully above the sticky Done footer, and the
+        # footer itself is on screen.
+        page.evaluate(
+            "() => { const d = document.getElementById('familySheet');"
+            " d.scrollTop = d.scrollHeight; }"
+        )
         page.wait_for_timeout(scaled(200))
         add_box = page.locator(
-            "#familyEditable .button-ghost", has_text="Add childcare window"
+            "#familySheet .button-ghost", has_text="Add childcare window"
         ).bounding_box()
-        nav_box = page.locator(".tabs").bounding_box()
-        assert add_box is not None and nav_box is not None
-        assert add_box["y"] + add_box["height"] <= nav_box["y"] + 0.5, (
-            f"add-window button ({add_box}) overlaps the floating nav pill ({nav_box})"
+        foot_box = page.locator("#familySheetFoot").bounding_box()
+        assert add_box is not None and foot_box is not None
+        assert add_box["y"] + add_box["height"] <= foot_box["y"] + 0.5, (
+            f"add-window button ({add_box}) sits under the Done footer ({foot_box})"
+        )
+        assert foot_box["y"] + foot_box["height"] <= 844 + 0.5, (
+            f"the Done footer ({foot_box}) runs past the 844px viewport"
         )
     finally:
         context.close()

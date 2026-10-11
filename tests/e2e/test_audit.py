@@ -126,6 +126,13 @@ def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> N
     filtered = page.locator("#auditFilteredCard")
     expect(filtered).not_to_have_attribute("open", "")
     filtered.locator("summary").click()
+    # The day range is the segmented control: 30 days is raised by default,
+    # and a tap moves the raised segment.
+    days = page.locator("#auditFilteredDays")
+    expect(days.locator('[data-days="30"]')).to_have_attribute("aria-pressed", "true")
+    days.locator('[data-days="7"]').click()
+    expect(days.locator('[data-days="7"]')).to_have_attribute("aria-pressed", "true")
+    expect(days.locator('[data-days="30"]')).to_have_attribute("aria-pressed", "false")
     row = page.locator("#auditFiltered .audit-filtered-row")
     expect(row).to_contain_text("School Parents Group")
     expect(row).to_contain_text("Routine pickup acknowledgement")

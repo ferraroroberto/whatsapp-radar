@@ -59,6 +59,9 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     # regardless of status) and assert the toggle label simply *flips*, whatever
     # the starting state left by a prior run.
     page.locator("#chatsFilterAll").click()
+    # The status scope is the segmented control: the raised segment is the state.
+    expect(page.locator("#chatsFilterAll")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#chatsFilterMonitored")).to_have_attribute("aria-pressed", "false")
     row = page.locator(".chat-row", has_text="School Parents Group")
     expect(row).to_be_visible()
     toggle = row.locator(".chat-watch")

@@ -84,10 +84,19 @@ def test_large_scales_every_view(
     page.wait_for_timeout(scaled(1_000))
     default = _measure_all(page)
 
-    # Switch through the real control, in Settings.
+    # Switch through the real control, in Settings. The segmented track is a
+    # fixed control height, so the Large step grows its labels, not the track.
     _gear(page).click()
+    control = page.locator("#textSizeControl")
+    track_before = control.bounding_box()
     page.locator('#textSizeControl [data-textsize="large"]').click()
     expect(page.locator("html")).to_have_attribute("data-textsize", "large")
+    expect(page.locator('#textSizeControl [data-textsize="large"]')).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    track_after = control.bounding_box()
+    assert track_before and track_after
+    assert track_after["height"] == track_before["height"], "Large reflowed the text-size track"
     page.locator("#settingsClose").click()
     large = _measure_all(page)
 

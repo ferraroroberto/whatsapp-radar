@@ -3,8 +3,8 @@
 design.md "Layout" -> "Text size": a persisted Small / Default / Large setting
 scales the root font-size (112.5% at Large), so every rem-based type role grows
 with it. The probe measures the computed font-size of every text-bearing
-element in each pane, in a Family rule sheet (#376) and in the Settings dialog
-at Default and at Large and
+element in each pane, in a Family rule sheet (#376), in the Settings dialog and
+one of its sheets (#377) at Default and at Large and
 fails on any element that does not grow by exactly the Large step, which is how
 a px font-size hiding in the app's own CSS shows up.
 """
@@ -22,6 +22,8 @@ _LARGE_RATIO = 1.125
 _TABS = ["Dashboard", "Activity", "Chats", "Family"]
 # The week sheet: a Family rule sheet with its 44px pickers (#376).
 _FAMILY_SHEET = "FamilySheet"
+# Settings' Delivery sheet: its 44px fields (#377).
+_SETTINGS_SHEET = "SettingsSheet"
 
 # Computed font-size of every visible element that carries its own text, in
 # document order. Closed <details> are opened so their content is measured too.
@@ -58,19 +60,28 @@ def _open(page: Page, name: str | None) -> str:
         page.locator('#paneFamily [data-sheet="duty"]').click()
         expect(page.locator("#familySheet")).to_be_visible()
         return "#familySheet"
+    if name == _SETTINGS_SHEET:
+        _gear(page).click()
+        expect(page.locator('#settingsDialog [data-value="delivery"]')).not_to_be_empty()
+        page.locator('#settingsDialog [data-settings-sheet="delivery"]').click()
+        expect(page.locator("#settingsSheet")).to_be_visible()
+        return "#settingsSheet"
     page.locator(f"#tab{name}").click()
     return f"#pane{name}"
 
 
 def _measure_all(page: Page) -> dict[str, list[list]]:
     sizes: dict[str, list[list]] = {}
-    for name in [*_TABS, _FAMILY_SHEET, None]:
+    for name in [*_TABS, _FAMILY_SHEET, _SETTINGS_SHEET, None]:
         root = _open(page, name)
         sizes[root] = page.evaluate(_MEASURE, root)
         if name is None:
             page.locator("#settingsClose").click()
         elif name == _FAMILY_SHEET:
             page.locator("#familySheetClose").click()
+        elif name == _SETTINGS_SHEET:
+            page.locator("#settingsSheetClose").click()
+            page.locator("#settingsClose").click()
     return sizes
 
 

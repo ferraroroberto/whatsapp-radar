@@ -7,10 +7,10 @@ import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_P
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
 import { wireTabs } from './tabs.js';
-import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
+import { fetchWebauthnStatus } from './webauthn.js';
 import { fetchDashboard, wireDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
-import { wireConfig, wireSettings } from './config.js';
+import { wireSettings } from './config.js';
 import { fetchExecution, fetchSettingsHealth, renderSettingsStatus, wireExecution } from './execution.js';
 import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
@@ -116,9 +116,7 @@ wireTabs(function (tab) {
   if (tab === 'activity') fetchActivity().catch(function () {});
   if (tab === 'family') fetchFamily().catch(function () {});
 });
-wireWebauthn();
 wireChats();
-wireConfig();
 wireSettings();
 wireExecution();
 wireActivity();

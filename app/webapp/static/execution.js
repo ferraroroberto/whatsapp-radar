@@ -7,8 +7,9 @@
  * (all three message steps → scan) and in pieces (Sync → resync, Process →
  * review, Message → notify), live or dry-run, plus a guarded Reprocess. The
  * run list and the live viewer are activity.js's; this module tells it when
- * the run state moved (onExecutionChange). It also owns the source-health and
- * recent-sync cards in Settings and the traffic card's Run-now buttons.
+ * the run state moved (onExecutionChange). It also owns the source health,
+ * recent syncs and Reconnect inside Settings' source sheets, the Sources rows'
+ * values (#377) and the traffic group's Check-now rows.
  * Chat names / message text go in via textContent only (privacy). */
 
 import { els, state } from './state.js';
@@ -16,6 +17,7 @@ import { fetchQuiet, jsonApi, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum, kindLabel, setHeaderStatus, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { patchFamily } from './family.js';
+import { setRowValue } from './edit-sheet.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
@@ -124,16 +126,12 @@ export async function runSelection() {
   return execState().active;
 }
 
-function confirmReprocess() {
-  // Destructive: a full rebuild that resets run history. Guard with an explicit
-  // confirm even though the API also requires confirm:true (defence in depth).
-  const ok = window.confirm(
-    'Rebuild reconstructs the local cache from the connector buffer.\n\n' +
-    'Your monitored/ignored/alias choices are preserved and the DB is backed up '
-    + 'first, but run & analysis history will reset.\n\nProceed?'
-  );
-  if (!ok) return;
+// Destructive: a full rebuild that resets run history. Settings' confirm sheet
+// (#377) is the explicit confirmation, on top of the API's own confirm:true
+// (defence in depth).
+export function rebuildCache() {
   execState().queue = [{ action: 'reprocess', confirm: true }];
+  toast('Rebuilding the message cache…');
   pumpQueue().then(function () { fetchExecution().catch(function () {}); });
 }
 
@@ -182,6 +180,7 @@ function addStatusLine(list, label, value) {
 function renderCalendarHealth(source) {
   const card = document.createElement('section');
   card.className = 'source-status-card';
+  card.dataset.source = 'calendar';
   const head = document.createElement('div');
   head.className = 'source-status-head';
   const badge = document.createElement('span');
@@ -207,28 +206,65 @@ function renderCalendarHealth(source) {
   return card;
 }
 
+function isLiveSource(s) {
+  const ex = execState();
+  return s.source === 'whatsapp' && ex.sidecar ? !!ex.sidecar.is_live : !!s.connected;
+}
+
 // The Settings header line (#374): a source that should be up and is not,
-// else the build the PWA is running.
+// else an open passkey enrollment window (#377), else the build the PWA is
+// running.
 export function renderSettingsStatus() {
   const ex = execState();
-  const down = (ex.sourceHealth || []).find(function (s) {
-    if (!s.enabled) return false;
-    return s.source === 'whatsapp' && ex.sidecar ? !ex.sidecar.is_live : !s.connected;
-  });
+  const down = (ex.sourceHealth || []).find(function (s) { return s.enabled && !isLiveSource(s); });
+  const w = state.webauthn || {};
   if (down) {
     setHeaderStatus(els.settingsStatus, (SOURCE_LABEL[down.source] || down.source) + ' offline', 'danger');
+  } else if (w.configured && w.enrollment_open) {
+    setHeaderStatus(els.settingsStatus, 'Passkey enrollment open', 'accent');
   } else {
     setHeaderStatus(els.settingsStatus, els.buildReadout.textContent, null);
   }
 }
 
+// A sync row's source: the connector stamps Gmail; everything else is the
+// WhatsApp connector (fixture or linked device).
+function syncSource(row) {
+  return row.connector_source === 'gmail' ? 'gmail' : 'whatsapp';
+}
+
+// The Sources rows (#377): connected or not and when it last synced, Off for a
+// source that is switched off, a dash until the first health read lands.
+export function renderSourceRows() {
+  const ex = execState();
+  for (const source of ['whatsapp', 'gmail', 'calendar']) {
+    const h = (ex.sourceHealth || []).find(function (s) { return s.source === source; });
+    const configured = state.config && state.config.settings && state.config.settings.sources;
+    let text = '—';
+    let tone = null;
+    // No health entry yet: a source the config has switched off still says so.
+    if (!h && configured && source !== 'calendar' && !configured.includes(source)) {
+      text = 'Off';
+    } else if (h && !h.enabled) {
+      text = 'Off';
+    } else if (h) {
+      const live = isLiveSource(h);
+      const ok = ex.syncs.find(function (r) { return syncSource(r) === source && r.status === 'success'; });
+      const when = source === 'calendar'
+        ? h.last_success_at
+        : (ok && ok.ran_at) || (h.last_success && h.last_success.ran_at);
+      text = (live ? 'Connected' : 'Not connected') + (when ? ' · ' + fmtSyncWhen(when) : '');
+      tone = live ? null : 'danger';
+    }
+    setRowValue(els.settingsDialog, 'src-' + source, text, tone);
+  }
+}
+
 function renderSourceHealth() {
   renderSettingsStatus();
+  renderSourceRows();
   const ex = execState();
   els.execSources.textContent = '';
-  els.execSourcesCount.textContent = ex.sourceHealth.length
-    ? ex.sourceHealth.length + ' sources'
-    : '';
   if (!ex.sourceHealth.length) {
     const unavailable = document.createElement('section');
     unavailable.className = 'source-status-card muted small';
@@ -242,9 +278,10 @@ function renderSourceHealth() {
       continue;
     }
     const sidecar = source.source === 'whatsapp' ? ex.sidecar : null;
-    const connected = sidecar ? !!sidecar.is_live : !!source.connected;
+    const connected = isLiveSource(source);
     const card = document.createElement('section');
     card.className = 'source-status-card';
+    card.dataset.source = source.source;
     const head = document.createElement('div');
     head.className = 'source-status-head';
     const badge = document.createElement('span');
@@ -284,7 +321,7 @@ function renderSourceHealth() {
     addStatusLine(details, 'Stored', fmtNum(storedMessages) + ' messages in ' + fmtNum(storedChannels) + ' channels');
     addStatusLine(details, 'Monitored', fmtNum(monitoredChannels) + ' channels');
     addStatusLine(details, 'Latest stored', fmtSyncWhen(latestStored));
-    const sourceSyncs = ex.syncs.filter(function (row) { return row.connector_source === source.source; });
+    const sourceSyncs = ex.syncs.filter(function (row) { return syncSource(row) === source.source; });
     const attempt = sourceSyncs[0] || source.last_attempt;
     addStatusLine(details, 'Last checked', attempt
       ? fmtSyncWhen(attempt.ran_at) + ' · ' + attempt.status + ' · +' + attempt.messages_added
@@ -330,6 +367,7 @@ export async function fetchSyncs() {
 function syncRow(s) {
   const li = document.createElement('li');
   li.className = 'exec-sync-li';
+  li.dataset.source = syncSource(s);
   const when = document.createElement('span');
   when.className = 'exec-sync-when muted small';
   when.textContent = fmtSyncWhen(s.ran_at);
@@ -345,14 +383,14 @@ function syncRow(s) {
   return li;
 }
 
-function renderSyncs() {
+// Every row is drawn; the open source sheet shows its own (data-source), so
+// its empty line is judged on that source's rows alone.
+export function renderSyncs() {
   const ex = execState();
+  const shown = els.sourceSheet.dataset.source;
   els.execSyncs.textContent = '';
-  els.execSyncsEmpty.hidden = ex.syncs.length > 0;
+  els.execSyncsEmpty.hidden = ex.syncs.some(function (s) { return syncSource(s) === shown; });
   for (const s of ex.syncs) els.execSyncs.appendChild(syncRow(s));
-  els.execSyncTotals.textContent = ex.syncTotals
-    ? `${fmtNum(ex.syncTotals.chats)} chats · ${fmtNum(ex.syncTotals.messages)} msgs`
-    : '';
 }
 
 // ----------------------------------------------------- traffic jam insurance
@@ -384,7 +422,6 @@ function renderReconnect(s) {
     return;
   }
   els.execReconnect.hidden = false;
-  els.execSourcesCard.open = true;
   if (s.state === 'needs_qr') {
     els.execReconnectMsg.textContent =
       'In WhatsApp, open Linked devices and choose Link a device, then scan this code.';
@@ -441,8 +478,9 @@ export async function fetchExecution() {
   notify();
 }
 
-// Settings holds the source-health and recent-sync cards (#373); refresh them
-// while it is open so the pairing QR and the connection word stay current.
+// Settings holds the source health and recent syncs (#373; in the source
+// sheets since #377); refresh them while it is open so the pairing QR, the
+// connection word and the Sources rows stay current.
 export function fetchSettingsHealth() {
   fetchHealth().catch(function () {});
   fetchSyncs().catch(function () {});
@@ -531,7 +569,6 @@ export function wireExecution() {
     els.execDays.value = execState().days;
   });
 
-  els.execReprocess.addEventListener('click', confirmReprocess);
   els.execReconnectBtn.addEventListener('click', reconnectSidecar);
 
   // Pipeline-step switches (vendored switch component): flip on tap, then

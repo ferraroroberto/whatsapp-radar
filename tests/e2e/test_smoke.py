@@ -116,7 +116,7 @@ def test_home_glance_card_links_into_activity(page: Page, base_url: str) -> None
     expect(rows.nth(0).locator(".action-row-avatar")).to_have_attribute("data-badge", "up")
     # The Monitored table left Home; the source counts moved into Settings.
     expect(page.locator("#dashChannelsCard")).to_have_count(0)
-    expect(page.locator("#settingsDialog #dashSourcesCard")).to_have_count(1)
+    expect(page.locator("#sourceSheet #dashSources")).to_have_count(1)
     expect(page.locator("#dashAllActivity")).to_be_visible()
 
     # The header names the worst exception and opens that run in Activity.
@@ -215,15 +215,21 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     expect(page.locator("#historyBody")).to_contain_text("e2e-thread-1")
     page.locator("#historyClose").click()
 
-    # The classifier config renders the read-only system prompt.
+    # How messages are judged: each read-only text opens in its own sheet.
     page.locator("#paneChats .home-settings").click()
     expect(page.locator("#settingsDialog")).to_be_visible()
-    page.locator("#configCard summary").click()
+    judged = page.locator("#settingsDialog")
+    judged.locator('[data-settings-sheet="instructions"]').click()
     expect(page.locator("#cfgPrompt")).to_contain_text(
         "triage new messages from a named communication channel"
     )
+    page.keyboard.press("Escape")
+    judged.locator('[data-settings-sheet="rules-gmail"]').click()
     expect(page.locator("#cfgGmailRoots")).not_to_be_empty()
+    page.keyboard.press("Escape")
+    judged.locator('[data-settings-sheet="taxonomy"]').click()
     expect(page.locator("#cfgGmailTaxonomy")).not_to_be_empty()
+    page.keyboard.press("Escape")
 
 
 @pytest.mark.smoke

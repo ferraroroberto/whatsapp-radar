@@ -71,7 +71,7 @@ The classifier assets are plain text, so **read and tune them freely** without t
 - `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail survey/reference bucket definitions used to generate Stage-1 rules; this file is not sent to Stage 2.
 - `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
 
-The PWA's **Settings (header gear) → Classifier & settings** disclosure renders all four assets read-only with their paths, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
+The PWA's **Settings (header gear) → How messages are judged** rows open all four assets read-only, each sheet naming its path, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
 
 To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
 
@@ -89,14 +89,14 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 - Keep the **sidecar running** — it captures live messages and history. While the **tray** is open it keeps itself alive: a keep-alive supervisor re-checks the sidecar every `WR_SIDECAR_SUPERVISE_SECONDS` (default 90) and relaunches it if the process died (never killing a live one; on a phone-side logout it toasts you to re-pair rather than crash-looping). So the buffer stays warm continuously and a scan reads an already-current source. App Launcher can also supervise it headlessly; see [`bootstrapping.md`](bootstrapping.md) Step 7.
 - The scheduled **`family-radar-scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace. `family-radar-calendar-sync` and `family-radar-traffic-check` are its sibling family-check Jobs — see [`bootstrapping.md`](bootstrapping.md) Step 7 for the full table (schedule, and the traffic-check cadence self-skip, #170). Their behaviour, every knob, and the travel-blocks rollout runbook are in [`family-checks.md`](family-checks.md).
 - For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): **Messages** filters stored channels by source and monitoring state; **Run** shows separate truthful WhatsApp/Gmail status cards and per-source funnels; **Audit** is the read-only trust surface over every message's Stage-1/LLM path. WhatsApp keeps one-tap reconnect/re-pair. Gmail shows a masked account plus the configured whitelist but never credentials or OAuth tokens.
-- Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from Settings → Sources health).
+- Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from Settings → Sources → WhatsApp).
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `status` shows *sidecar not started* | Node sidecar isn't running | Start it (`cd sidecar && npm start`) or use Reconnect in Settings → Sources health |
-| `status` shows *not paired* | QR not scanned yet | Scan the QR (sidecar terminal, or Settings → Sources health) |
+| `status` shows *sidecar not started* | Node sidecar isn't running | Start it (`cd sidecar && npm start`) or use Reconnect in Settings → Sources → WhatsApp |
+| `status` shows *not paired* | QR not scanned yet | Scan the QR (sidecar terminal, or Settings → Sources → WhatsApp) |
 | `status` shows *stale* | Sidecar process stopped/crashed | Restart `npm start`, or let a live `scan` self-heal it |
 | `ingest` finds 0 chats | History not synced yet | Wait a moment after pairing, re-run `ingest` |
 | Delivery `failed` | Bad token/chat id or no network | Fix the Telegram secrets, then `wr notify` |

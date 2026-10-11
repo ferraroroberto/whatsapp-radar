@@ -45,8 +45,6 @@ export const state = {
     syncTotals: null,      // {chats, messages} current stored totals
     sourceHealth: [],      // secret-free per-source status snapshots
     sourceHealthAt: 0,
-    traffic: null,         // last /api/family traffic slice (enabled/cadence/status)
-    trafficAt: 0,
   },
   // Activity (#373): one list over the run store, scoped, plus the run sheet.
   activity: {
@@ -173,7 +171,6 @@ export const els = {
   // Traffic jam insurance card (#164)
   execTrafficCard: document.getElementById('execTrafficCard'),
   execTrafficEnabled: document.getElementById('execTrafficEnabled'),
-  execTrafficCadence: document.getElementById('execTrafficCadence'),
   execTrafficRunLive: document.getElementById('execTrafficRunLive'),
   execTrafficRunDry: document.getElementById('execTrafficRunDry'),
   execTrafficStatus: document.getElementById('execTrafficStatus'),
@@ -222,12 +219,28 @@ export const els = {
   auditFilteredEmpty: document.getElementById('auditFilteredEmpty'),
   auditFilteredMore: document.getElementById('auditFilteredMore'),
 
-  // Family rules (#160, #167); the traffic card lives here since #373.
+  // Family rules (#160, #167) as inset groups with sheets (#376); the traffic
+  // group lives here since #373.
+  paneFamily: document.getElementById('paneFamily'),
   familyStatus: document.getElementById('familyStatus'),
-  familyReadOnly: document.getElementById('familyReadOnly'),
-  familyEditable: document.getElementById('familyEditable'),
-  // Commute travel blocks (#268): knobs + per-calendar write capability.
+  familySyncSwitch: document.getElementById('familySyncSwitch'),
+  familyAskSwitch: document.getElementById('familyAskSwitch'),
+  familySheet: document.getElementById('familySheet'),
+  familySheetTitle: document.getElementById('familySheetTitle'),
+  familySheetClose: document.getElementById('familySheetClose'),
+  familySheetBody: document.getElementById('familySheetBody'),
+  familySheetError: document.getElementById('familySheetError'),
+  familySheetFoot: document.getElementById('familySheetFoot'),
+  familySheetDone: document.getElementById('familySheetDone'),
+  // Commute travel blocks (#268): knobs + per-calendar write capability, in
+  // their own sheet (#376).
+  familyTravelRow: document.getElementById('familyTravelRow'),
+  familyTravelSheet: document.getElementById('familyTravelSheet'),
+  familyTravelClose: document.getElementById('familyTravelClose'),
   familyTravelBlocks: document.getElementById('familyTravelBlocks'),
+  familyTravelError: document.getElementById('familyTravelError'),
+  familyTravelSweep: document.getElementById('familyTravelSweep'),
+  familyTravelDone: document.getElementById('familyTravelDone'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

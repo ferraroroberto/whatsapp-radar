@@ -205,6 +205,35 @@
     <symbol id="i-check" viewBox="0 0 24 24" fill="none">
       <path d="M20 6 9 17l-5-5" />
     </symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none">
+      <path d="m9 18 6-6-6-6" />
+    </symbol>
+    <symbol id="i-house" viewBox="0 0 24 24" fill="none">
+      <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+      <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </symbol>
+    <symbol id="i-map-pin" viewBox="0 0 24 24" fill="none">
+      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="10" r="3" />
+    </symbol>
+    <symbol id="i-train-front" viewBox="0 0 24 24" fill="none">
+      <path d="M8 3.1V7a4 4 0 0 0 8 0V3.1" />
+      <path d="m9 15-1-1" />
+      <path d="m15 15 1-1" />
+      <path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z" />
+      <path d="m8 19-2 3" />
+      <path d="m16 19 2 3" />
+    </symbol>
   </svg>
 
   <!-- Fleet navigation (vendored nav component): a body-level sibling of .app —
@@ -400,67 +429,184 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <details id="familyRulesCard" class="card card--collapsible" open>
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
-            <h3 class="collapse-title">Rules in force</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">The exact household schedule the daily calendar-conflict scan
-            and the traffic-jam check run against. Edit any rule below — it saves straight to
-            your local config and the next run picks it up, no restart needed.</p>
-          <div id="familyReadOnly"></div>
-          <div id="familyEditable"></div>
+      <!-- Family (#376): the household rules as inset groups, each row showing
+           its rule's current value (filled by family.js from /api/family). A
+           row that edits something opens a sheet (#familySheet, or the travel
+           sheet) holding the real control; the sheet commits on Done. The two
+           switch rows and Traffic checks' switch apply on tap. -->
+      <section class="run-group family-group" aria-labelledby="familyHouseholdTitle">
+        <h3 id="familyHouseholdTitle" class="run-group-title">Household</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row family-row">
+              <div class="action-row-main family-static">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-house"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Home</span>
+                  <span class="action-row-meta" data-value="home">&nbsp;</span></span>
+              </div>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="calendars" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Calendars</span>
+                  <span class="action-row-meta" data-value="calendars">&nbsp;</span></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <div class="action-row-main family-static">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Scan window</span>
+                  <span class="action-row-meta" data-value="scan">&nbsp;</span></span>
+              </div>
+            </li>
+          </ul>
         </div>
-      </details>
+      </section>
 
-      <details id="familyTravelCard" class="card card--collapsible" open>
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
-            <h3 class="collapse-title">Travel blocks</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">Commute blocks the daily calendar sync keeps on each
-            calendar — one before a trip out, one for the drive home. Turn it on in dry run
-            first, read the plan in Activity's Calendar runs, then take it live.</p>
-          <div id="familyTravelBlocks"></div>
+      <section class="run-group family-group" aria-labelledby="familyScheduleTitle">
+        <h3 id="familyScheduleTitle" class="run-group-title">Schedule</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="duty" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-users"></use></svg>
+                <span class="action-row-title">Who's on duty</span>
+                <span class="family-row-value" data-value="duty"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="kids" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-clock"></use></svg>
+                <span class="action-row-title">Kids home by</span>
+                <span class="family-row-value" data-value="kids"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="windows" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+                <span class="action-row-title">Childcare windows</span>
+                <span class="family-row-value" data-value="windows"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="quiet" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-moon"></use></svg>
+                <span class="action-row-title">Quiet hours</span>
+                <span class="family-row-value" data-value="quiet"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
         </div>
-      </details>
-      <details id="execTrafficCard" class="card card--collapsible">
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
-            <h3 class="collapse-title">Traffic jam insurance</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">&rsaquo;</span>
-        </summary>
-        <div class="collapse-body">
-          <p class="muted small">Checks your next commute and alerts only when a jam adds more
-            than the significant-delay threshold. Scheduling is an App Launcher job — this sets
-            how often it runs and lets you fire a one-off check now.</p>
-          <div class="exec-stage-row">
-            <svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg>
-            <span class="exec-stage-text"><span class="exec-stage-label">Enabled</span>
-              <span class="exec-stage-desc">let the scheduled job run live checks</span></span>
-            <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
-                    aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-          </div>
-          <label class="stacked"><span>Check every (minutes)</span>
-            <input id="execTrafficCadence" type="number" class="input-native" min="5" max="240"
-                   value="30" inputmode="numeric"></label>
-          <div class="exec-traffic-actions">
-            <button id="execTrafficRunLive" type="button" class="button-tint btn-block">Run now (live)</button>
-            <button id="execTrafficRunDry" type="button" class="button-ghost btn-block btn-touch">Run now (dry)</button>
-          </div>
-          <p id="execTrafficStatus" class="muted small"></p>
+      </section>
+
+      <section class="run-group family-group" aria-labelledby="familyScanTitle">
+        <h3 id="familyScanTitle" class="run-group-title">Calendar scan</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="sync" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+                <span class="action-row-title">Calendar sync</span>
+              </button>
+              <span class="action-row-trail">
+                <button type="button" id="familySyncSwitch" class="toggle" role="switch"
+                        aria-checked="false" aria-label="Calendar sync"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+              </span>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="ask" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-map-pin"></use></svg>
+                <span class="action-row-title">Ask for missing locations</span>
+              </button>
+              <span class="action-row-trail">
+                <button type="button" id="familyAskSwitch" class="toggle" role="switch"
+                        aria-checked="false" aria-label="Ask for missing locations"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+              </span>
+            </li>
+          </ul>
         </div>
-      </details>
+      </section>
+
+      <!-- Traffic checks (#164; moved here from Run in #373, a group in #376).
+           The switch and the two check rows keep their execTraffic* ids, which
+           execution.js wires to its run queue. -->
+      <section id="execTrafficCard" class="run-group family-group" aria-labelledby="familyTrafficTitle">
+        <h3 id="familyTrafficTitle" class="run-group-title">Traffic checks</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="traffic" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Traffic checks</span>
+                  <span id="execTrafficStatus" class="action-row-meta">&nbsp;</span></span>
+              </button>
+              <span class="action-row-trail">
+                <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
+                        aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+              </span>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="cadence" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
+                <span class="action-row-title">Check every</span>
+                <span class="family-row-value" data-value="cadence"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="delay" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-gauge"></use></svg>
+                <span class="action-row-title">Significant delay</span>
+                <span class="family-row-value" data-value="delay"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" class="action-row-main" data-sheet="train" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-train-front"></use></svg>
+                <span class="action-row-title">Skip train commutes</span>
+                <span class="family-row-value" data-value="train"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" id="execTrafficRunLive" class="action-row-main">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-play"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Check now</span>
+                  <span class="action-row-meta" data-value="checkLive">Live — sends an alert if a jam is found</span></span>
+              </button>
+            </li>
+            <li class="action-row family-row">
+              <button type="button" id="execTrafficRunDry" class="action-row-main">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-eye"></use></svg>
+                <span class="action-row-text"><span class="action-row-title">Check now (dry run)</span>
+                  <span class="action-row-meta">Nothing is sent</span></span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="run-group family-group" aria-labelledby="familyTravelGroupTitle">
+        <h3 id="familyTravelGroupTitle" class="run-group-title">Travel blocks</h3>
+        <div class="card action-list">
+          <ul class="action-rows">
+            <li class="action-row family-row">
+              <button type="button" id="familyTravelRow" class="action-row-main" aria-haspopup="dialog">
+                <svg class="icon family-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
+                <span class="action-row-title">Travel blocks</span>
+                <span class="family-row-value" data-value="travel"></span>
+                <svg class="icon family-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
     </section>
 
     <!-- Build identity: which build the PWA is running. Filled by main.js;
@@ -716,6 +862,43 @@
       </div>
       <button id="execRunScan" type="button" class="button-tint btn-block">Run</button>
       <p id="execBusy" class="muted small" hidden></p>
+    </div>
+  </dialog>
+
+  <!-- Family sheets (#376). One shell filled per rule by family.js, plus the
+       travel-block sheet (its sweep controls poll in place, so it keeps its
+       own nodes). Done commits through POST /api/family; the close button,
+       the backdrop and Esc discard the sheet's edits. -->
+  <dialog id="familySheet" class="detail-dialog family-sheet">
+    <div class="detail-card" aria-labelledby="familySheetTitle">
+      <div class="detail-header">
+        <h2 id="familySheetTitle"></h2>
+        <button id="familySheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div id="familySheetBody"></div>
+      <p id="familySheetError" class="family-sheet-error" role="alert" hidden></p>
+      <div id="familySheetFoot" class="detail-actions">
+        <button id="familySheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <p class="family-sheet-rule">Done saves. Close discards your changes.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="familyTravelSheet" class="detail-dialog family-sheet">
+    <div id="familyTravelCard" class="detail-card" aria-labelledby="familyTravelTitle">
+      <div class="detail-header">
+        <h2 id="familyTravelTitle">Travel blocks</h2>
+        <button id="familyTravelClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div id="familyTravelBlocks"></div>
+      <p id="familyTravelError" class="family-sheet-error" role="alert" hidden></p>
+      <div id="familyTravelSweep"></div>
+      <div class="detail-actions">
+        <button id="familyTravelDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <p class="family-sheet-rule">Done saves. Close discards your changes.</p>
+      </div>
     </div>
   </dialog>
 

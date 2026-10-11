@@ -131,7 +131,7 @@ The write-scope token is authorized as **one** Google account, exactly like the 
 
 For a second household member's calendar to be maintained, they re-share it with the bootstrapping account at **"Make changes to events"** (Google Calendar → the calendar's *Settings and sharing → Share with specific people → permission dropdown*). Nothing else changes: same token, same client, same consent.
 
-The app never probes this by writing. It reads the calendar's published `accessRole` and reports one of three states per person, visible on the **Family** tab's *Travel blocks → Write access per calendar* list:
+The app never probes this by writing. It reads the calendar's published `accessRole` and reports one of three states per person, visible in the **Family** tab's *Travel blocks* sheet, under *Write access per calendar*:
 
 | State | What it means | What the sweep does |
 | --- | --- | --- |

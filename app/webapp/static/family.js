@@ -1,14 +1,17 @@
-/* Family tab (#160, #167): the exact household schedule the two deterministic
- * scheduled checks — the daily calendar-conflict scan and the traffic-jam
- * alert — run against, editable from the phone.
+/* Family tab (#160, #167, #376): the exact household schedule the two
+ * deterministic scheduled checks — the daily calendar-conflict scan and the
+ * traffic-jam alert — run against, editable from the phone.
  *
- * Recent runs live in Activity (#373); this tab holds the rules themselves:
- * on-duty weekday pattern, kids-home time, childcare windows, quiet hours,
- * significant-delay threshold, the train-commute leave-now exemption (#227),
- * and the daily-scan enable switch, plus the traffic card (enable, cadence,
- * run now; here since #373). Edits POST to /api/family and
- * land in config/local.json; the next scan/traffic-check run picks them up
- * with no restart. All values go in via textContent/value only. */
+ * Recent runs live in Activity (#373); this tab holds the rules themselves as
+ * inset groups (#376): Household, Schedule, Calendar scan, Traffic checks and
+ * Travel blocks. Each row shows its rule's current value; a row that edits
+ * something opens a sheet holding the real control. A sheet keeps one draft
+ * and commits it on Done through POST /api/family: a toast on success, the
+ * server's field-naming message inside the sheet on a rejection (the sheet
+ * stays open). Its close button, the backdrop and Esc discard the draft. The
+ * three switches on the page apply on tap. Edits land in config/local.json;
+ * the next scan/traffic-check run picks them up with no restart. All values go
+ * in via textContent/value only. */
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
@@ -17,6 +20,10 @@ import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// The "Where this lives" line every rule sheet ends on (J-07: paths and config
+// keys never sit in a label).
+const LOCAL_CONFIG = 'config/local.json. The next run picks a change up, no restart.';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -32,54 +39,59 @@ function defRow(dl, term, value) {
 
 // --------------------------------------------------------------- state
 
-let lastData = null;   // last /api/family payload (read-only display + option lists)
-let draft = null;       // editable working copy, mutated in place by the widgets below
-let baseline = '';      // serializeDraft() snapshot at load/save time (dirty gate)
-let travelDraft = null;      // travel-block working copy (#268), same contract
-let travelBaseline = '';
+let lastData = null;   // last /api/family payload: the page's values, every sheet's start
 
-/* The tab has two independently-savable forms (the schedule and the
- * travel blocks), each in its own card with its own Save button — a control
- * whose Save sits in a different card reads as broken. They share one dirty
- * gate: every widget calls markDirty(), which re-evaluates each registered
- * form against its own baseline. Re-registered on every render because the
- * buttons are rebuilt with the DOM; the baselines are module state and only
- * move when the server's answer does. */
-const forms = { rules: null, travel: null };
+/* The open sheet: its spec, its shell, its draft, and the payload it opened
+ * with (Done with nothing changed closes without a POST). One at a time — the
+ * sheets are modal. */
+let open = null;
 
-function registerForm(name, serialize, base, btn, status) {
-  forms[name] = { serialize: serialize, baseline: base, btn: btn, status: status };
-  btn.disabled = serialize() === base;
-}
+const RULE_SHELL = {
+  dialog: els.familySheet,
+  title: els.familySheetTitle,
+  close: els.familySheetClose,
+  body: els.familySheetBody,
+  error: els.familySheetError,
+  foot: els.familySheetFoot,
+  done: els.familySheetDone,
+};
+// The travel sheet keeps its own nodes: its sweep controls update in place
+// while a run polls, under whatever the operator is typing (#276).
+const TRAVEL_SHELL = {
+  dialog: els.familyTravelSheet,
+  title: null,
+  close: els.familyTravelClose,
+  body: els.familyTravelBlocks,
+  error: els.familyTravelError,
+  foot: null,
+  done: els.familyTravelDone,
+};
 
 export async function fetchFamily() {
   await fetchQuiet('/api/family', adopt);
 }
 
-// The server's answer is the single source of truth for both drafts and both
-// baselines — after a load or a save, nothing is dirty.
+// The server's answer is the single source of truth for the page and for the
+// next sheet opened from it.
 function adopt(data) {
   state.family = data;
   lastData = data;
-  draft = toDraft(data);
-  baseline = serializeDraft();
-  travelDraft = toTravelDraft(data);
-  travelBaseline = serializeTravel();
-  render();
+  renderValues();
   renderHeader(data);
-  // The traffic card lives in this pane since #373; the same answer carries it.
-  state.execution.traffic = data.traffic || {};
-  state.execution.trafficAt = Date.now();
   renderTraffic();
 }
 
 // Family's header line (#374): a missing calendar token (nothing can be
-// checked), else the last calendar run's missing locations, else the rules.
+// checked), else a missing Routes API key while something needs it, else the
+// last calendar run's missing locations, else the rules.
 function renderHeader(d) {
   const cal = d.last_calendar;
   const missing = (cal && cal.missing_locations) || 0;
+  const routesNeeded = !!(d.traffic.enabled || (d.travel_blocks || {}).enabled);
   if ((d.calendars || []).length && !d.token_present) {
     setHeaderStatus(els.familyStatus, 'Calendar token missing', 'danger');
+  } else if (routesNeeded && !d.traffic.api_key_set) {
+    setHeaderStatus(els.familyStatus, 'Routes API key missing', 'danger');
   } else if (missing) {
     setHeaderStatus(els.familyStatus,
       missing + ' missing location' + (missing === 1 ? '' : 's'), 'attention');
@@ -88,89 +100,84 @@ function renderHeader(d) {
   }
 }
 
-function toDraft(d) {
-  const responsible = {};
-  const stored = d.family.responsible_by_weekday || {};
-  for (const day of WEEKDAYS) responsible[day] = stored[day] || '';
-  return {
-    enabled: !!d.family.enabled,
-    kids_home_time: d.family.kids_home_time || '',
-    responsible: responsible,
-    windows: (d.family.childcare_windows || []).map(function (w) {
-      return {
-        label: w.label || '',
-        days: new Set(w.days || []),
-        time: w.time || '',
-        end_time: w.end_time || '',
-      };
-    }),
-    quiet_start_hour: d.traffic.quiet_start_hour,
-    quiet_end_hour: d.traffic.quiet_end_hour,
-    significant_delay_min: d.traffic.significant_delay_min,
-    skip_leave_now_for_train: !!d.traffic.skip_leave_now_for_train,
-    ask_missing_locations: d.family.ask_missing_locations !== false,
-  };
-}
+// ----------------------------------------------------------- page values
 
-function serializeDraft() {
-  return JSON.stringify({
-    enabled: draft.enabled,
-    kids_home_time: draft.kids_home_time,
-    responsible: draft.responsible,
-    windows: draft.windows.map(function (w) {
-      return { label: w.label, days: Array.from(w.days).sort(), time: w.time, end_time: w.end_time };
-    }),
-    quiet_start_hour: draft.quiet_start_hour,
-    quiet_end_hour: draft.quiet_end_hour,
-    significant_delay_min: draft.significant_delay_min,
-    skip_leave_now_for_train: draft.skip_leave_now_for_train,
-    ask_missing_locations: draft.ask_missing_locations,
-  });
-}
-
-function toTravelDraft(d) {
-  const tb = d.travel_blocks || {};
-  return {
-    enabled: !!tb.enabled,
-    dry_run: tb.dry_run !== false,
-    min_home_dwell_min: tb.min_home_dwell_min != null ? tb.min_home_dwell_min : 45,
-    title_template: tb.title_template || '',
-  };
-}
-
-function serializeTravel() {
-  return JSON.stringify(travelDraft);
-}
-
-function markDirty() {
-  for (const name of Object.keys(forms)) {
-    const form = forms[name];
-    if (!form) continue;
-    if (form.btn) form.btn.disabled = form.serialize() === form.baseline;
-    if (form.status) form.status.textContent = '';
+function setValue(key, text, tone) {
+  for (const node of els.paneFamily.querySelectorAll('[data-value="' + key + '"]')) {
+    node.textContent = text;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
   }
 }
 
-// ----------------------------------------------------------- read-only
+function personLabel(person) {
+  if (!person) return 'nobody';
+  const cal = lastData.calendars.find(function (c) { return c.person === person; });
+  return cal ? (cal.label || cal.person) : person;
+}
 
-function renderReadOnly(box) {
+// "Mon–Fri Parent A, Sat–Sun nobody": consecutive days with the same person
+// fold into one span.
+function dutySummary(byDay) {
+  const runs = [];
+  for (const day of WEEKDAYS) {
+    const who = personLabel(byDay[day] || '');
+    const last = runs[runs.length - 1];
+    if (last && last.who === who) last.end = day;
+    else runs.push({ start: day, end: day, who: who });
+  }
+  if (runs.length === 1) return runs[0].who.charAt(0).toUpperCase() + runs[0].who.slice(1) + ' every day';
+  return runs.map(function (r) {
+    return (r.start === r.end ? r.start : r.start + '–' + r.end) + ' ' + r.who;
+  }).join(', ');
+}
+
+function hourLabel(h) {
+  return h == null ? '—' : String(h).padStart(2, '0') + ':00';
+}
+
+function travelMode(tb) {
+  return !tb.enabled ? 'off' : (tb.dry_run !== false ? 'dry' : 'live');
+}
+
+function renderValues() {
   const d = lastData;
-  const dl = el('dl', 'family-rules');
-  defRow(dl, 'Home', d.family.home_address || '—');
-  defRow(dl, 'Calendars', d.calendars.map(function (c) { return c.label || c.person; }).join(', ') || '—');
-  defRow(dl, 'Scan window', d.family.assessment_days + 'd conflict · ' + d.family.unknown_scan_days + 'd unknown pre-check');
-  box.append(dl);
+  const f = d.family;
+  const t = d.traffic;
+  const tb = d.travel_blocks || {};
+  const names = d.calendars.map(function (c) { return c.label || c.person; }).join(', ');
+  const tokenMissing = d.calendars.length > 0 && !d.token_present;
 
-  if (!d.token_present) {
-    box.append(warnNote('No Calendar token — run the bootstrap (see docs/calendar-bootstrap.md).'));
-  }
-  if (!d.traffic.api_key_set) {
-    box.append(warnNote('No Routes API key configured — traffic checks will error.'));
+  setValue('home', f.home_address || 'Not set');
+  setValue('calendars', (tokenMissing ? 'Token missing · ' : '') + (names || 'None configured'),
+    tokenMissing ? 'danger' : null);
+  setValue('scan', f.assessment_days + 'd conflict · ' + f.unknown_scan_days + 'd unknown pre-check');
+
+  setValue('duty', dutySummary(f.responsible_by_weekday || {}));
+  setValue('kids', f.kids_home_time || 'Not set');
+  const n = (f.childcare_windows || []).length;
+  setValue('windows', n ? n + (n === 1 ? ' window' : ' windows') : 'None');
+  setValue('quiet', hourLabel(t.quiet_start_hour) + '–' + hourLabel(t.quiet_end_hour));
+  setSwitch(els.familySyncSwitch, !!f.enabled);
+  setSwitch(els.familyAskSwitch, f.ask_missing_locations !== false);
+
+  setValue('cadence', 'every ' + (t.cadence_min != null ? t.cadence_min : 30) + ' min');
+  setValue('delay', t.significant_delay_min + ' min');
+  setValue('train', t.skip_leave_now_for_train ? 'On' : 'Off');
+  setValue('checkLive', t.api_key_set
+    ? 'Live — sends an alert if a jam is found'
+    : 'No Routes API key — checks will error', t.api_key_set ? null : 'danger');
+
+  const mode = travelMode(tb);
+  if (tb.enabled && !tb.write_token_present) {
+    setValue('travel', 'No write token', 'attention');
+  } else {
+    setValue('travel', { off: 'Off', dry: 'Dry run', live: 'Live' }[mode], null);
   }
 }
 
-// A missing-credential notice. The glyph is the sprite's triangle-alert, not an
-// emoji, so the tab carries one icon set (design.md Icons contract, #209).
+// A missing-credential notice inside a sheet. The glyph is the sprite's
+// triangle-alert, not an emoji, so the tab carries one icon set (design.md
+// Icons contract, #209).
 function warnNote(text) {
   const p = el('p', 'muted small family-warn');
   // Static sprite markup only — never user content — so innerHTML is safe here.
@@ -179,36 +186,120 @@ function warnNote(text) {
   return p;
 }
 
-// -------------------------------------------------------------- widgets
+// -------------------------------------------------------------- sheets
 
-function toggleRow(labelText, enabled, onToggle) {
-  const row = el('div', 'family-control-row');
-  row.append(el('span', 'family-control-label', labelText));
+async function postFamily(payload) {
+  return jsonApi('/api/family', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+function showError(shell, message) {
+  shell.error.textContent = message;
+  shell.error.hidden = !message;
+  if (message) shell.error.scrollIntoView({ block: 'nearest' });
+}
+
+function openSheet(spec) {
+  if (!lastData || !spec) return;
+  const shell = spec.shell || RULE_SHELL;
+  const draft = spec.draft();
+  open = { spec: spec, shell: shell, draft: draft, baseline: JSON.stringify(spec.payload(draft)) };
+  if (shell.title) shell.title.textContent = spec.title;
+  if (shell.foot) shell.foot.hidden = !!spec.readOnly;
+  showError(shell, '');
+  renderSheet();
+  if (!shell.dialog.open) shell.dialog.showModal();
+}
+
+function renderSheet() {
+  const spec = open.spec;
+  const body = open.shell.body;
+  body.textContent = '';
+  if (spec.help) body.append(el('p', 'family-sheet-help', spec.help));
+  spec.render(body, open.draft);
+  if (spec.where) body.append(el('p', 'family-sheet-where', 'Where this lives: ' + spec.where));
+  if (spec.after) spec.after();
+}
+
+async function commitSheet() {
+  if (!open) return;
+  const current = open;
+  const payload = current.spec.payload(current.draft);
+  if (JSON.stringify(payload) === current.baseline) {
+    current.shell.dialog.close();
+    return;
+  }
+  current.shell.done.disabled = true;
+  try {
+    const data = await postFamily(payload);
+    toast(current.spec.title + ' saved.');
+    open = null;
+    current.shell.dialog.close();
+    adopt(data);
+  } catch (exc) {
+    // The server names the field it rejected; the sheet stays open on it.
+    showError(current.shell, exc.message || String(exc));
+  } finally {
+    current.shell.done.disabled = false;
+  }
+}
+
+// A switch on the page applies on tap (#376 keeps the immediate patch).
+export async function patchFamily(body) {
+  try {
+    adopt(await postFamily(body));
+  } catch (exc) {
+    toast(String(exc.message || exc), 'error');
+    fetchFamily().catch(function () {});  // re-sync the controls to the server's truth
+  }
+}
+
+// ------------------------------------------------------- sheet controls
+
+function switchControl(labelText, on, onToggle) {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.className = 'toggle';
   btn.setAttribute('role', 'switch');
   btn.setAttribute('aria-label', labelText);
-  setSwitch(btn, enabled);
+  btn.innerHTML = '<span class="knob"></span><span class="toggle-label"></span>';
+  setSwitch(btn, on);
   btn.addEventListener('click', function () {
     const next = btn.getAttribute('aria-checked') !== 'true';
     setSwitch(btn, next);
     onToggle(next);
   });
-  row.append(btn);
+  return btn;
+}
+
+function switchRow(labelText, on, onToggle) {
+  const row = el('div', 'row');
+  row.append(el('span', undefined, labelText), switchControl(labelText, on, onToggle));
+  return row;
+}
+
+// Label left, control right (the modal's .row contract).
+function fieldRow(labelText, control) {
+  const row = el('label', 'row');
+  row.append(el('span', undefined, labelText), control);
   return row;
 }
 
 function fieldLabel(text) { return el('p', 'field-label', text); }
 
 function personOptions() {
-  const opts = [{ value: '', label: '— nobody —' }];
+  const opts = [{ value: '', label: 'Nobody' }];
   for (const c of lastData.calendars) opts.push({ value: c.person, label: c.label || c.person });
   return opts;
 }
 
-function buildSelect(options, current, onChange) {
+function buildSelect(options, current, labelText, onChange) {
   const sel = document.createElement('select');
   sel.className = 'select-native';
+  sel.setAttribute('aria-label', labelText);
   let matched = false;
   for (const opt of options) {
     const o = document.createElement('option');
@@ -224,25 +315,20 @@ function buildSelect(options, current, onChange) {
     extra.selected = true;
     sel.append(extra);
   }
-  sel.addEventListener('change', function () { onChange(sel.value); markDirty(); });
+  sel.addEventListener('change', function () { onChange(sel.value); });
   return sel;
 }
 
-function timeField(labelText, value, onChange) {
-  const label = el('label', 'stacked');
-  label.append(el('span', undefined, labelText));
+function timeInput(value, onChange) {
   const input = document.createElement('input');
   input.type = 'time';
   input.className = 'input-native';
   input.value = value;
-  input.addEventListener('change', function () { onChange(input.value); markDirty(); });
-  label.append(input);
-  return label;
+  input.addEventListener('input', function () { onChange(input.value); });
+  return input;
 }
 
-function numberField(labelText, value, min, max, onChange) {
-  const label = el('label', 'stacked');
-  label.append(el('span', undefined, labelText));
+function numberInput(value, min, max, onChange) {
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'input-native';
@@ -250,52 +336,66 @@ function numberField(labelText, value, min, max, onChange) {
   input.max = String(max);
   input.inputMode = 'numeric';
   input.value = String(value);
-  input.addEventListener('change', function () {
+  const clamp = function () {
     const v = parseInt(input.value, 10);
-    if (Number.isFinite(v)) onChange(Math.max(min, Math.min(max, v)));
-    markDirty();
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : null;
+  };
+  input.addEventListener('input', function () {
+    const v = clamp();
+    if (v !== null) onChange(v);
   });
-  label.append(input);
-  return label;
-}
-
-// Same stacked label/control shape as timeField/numberField, for free text.
-function labelledTextField(labelText, value, maxLength, onChange) {
-  const label = el('label', 'stacked');
-  label.append(el('span', undefined, labelText));
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'input-native';
-  input.value = value;
-  if (maxLength) input.maxLength = maxLength;
-  input.addEventListener('change', function () { onChange(input.value); markDirty(); });
-  label.append(input);
-  return label;
-}
-
-function textField(placeholder, value, onChange) {
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'input-native';
-  input.placeholder = placeholder;
-  input.value = value;
-  input.addEventListener('change', function () { onChange(input.value); markDirty(); });
+  input.addEventListener('change', function () {
+    const v = clamp();
+    if (v !== null) input.value = String(v);
+  });
   return input;
 }
 
-// ---------------------------------------------------- on-duty pattern
+function textInput(value, placeholder, maxLength, onChange) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'input-native';
+  input.value = value;
+  if (placeholder) input.placeholder = placeholder;
+  if (maxLength) input.maxLength = maxLength;
+  input.addEventListener('input', function () { onChange(input.value); });
+  return input;
+}
 
-function renderResponsible(box) {
-  box.append(fieldLabel('On duty'));
-  const grid = el('div', 'cfg-fields');
+// ---------------------------------------------------- on-duty week (#376)
+
+/* One picker per day: a segmented control while the people fit in 2-5
+ * options, otherwise (or for a stored value no calendar matches) a select. */
+function personPicker(day, current, onPick) {
   const opts = personOptions();
-  for (const day of WEEKDAYS) {
-    const label = el('label', 'stacked');
-    label.append(el('span', undefined, day));
-    label.append(buildSelect(opts, draft.responsible[day], function (v) { draft.responsible[day] = v; }));
-    grid.append(label);
+  const known = opts.some(function (o) { return o.value === current; });
+  if (!known || opts.length < 2 || opts.length > 5) {
+    return buildSelect(opts, current, day, onPick);
   }
-  box.append(grid);
+  const group = el('div', 'segmented');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', day);
+  for (const opt of opts) {
+    const btn = el('button', 'segmented-item', opt.label);
+    btn.type = 'button';
+    btn.title = opt.label;
+    btn.setAttribute('aria-pressed', String(opt.value === current));
+    btn.addEventListener('click', function () {
+      for (const other of group.children) other.setAttribute('aria-pressed', String(other === btn));
+      onPick(opt.value);
+    });
+    group.append(btn);
+  }
+  return group;
+}
+
+function renderDuty(body, draft) {
+  for (const day of WEEKDAYS) {
+    const row = el('div', 'row family-day');
+    row.append(el('span', 'family-day-label', day));
+    row.append(personPicker(day, draft[day], function (v) { draft[day] = v; }));
+    body.append(row);
+  }
 }
 
 // ---------------------------------------------------- childcare windows
@@ -304,7 +404,7 @@ function windowRow(w, onRemove) {
   const card = el('div', 'family-window');
 
   const head = el('div', 'family-window-head');
-  head.append(textField('Label (e.g. swim practice)', w.label, function (v) { w.label = v; }));
+  head.append(textInput(w.label, 'Label (e.g. swim practice)', 0, function (v) { w.label = v; }));
   const rm = document.createElement('button');
   rm.type = 'button';
   rm.className = 'icon-button danger';
@@ -317,155 +417,217 @@ function windowRow(w, onRemove) {
 
   const chips = el('div', 'weekday-chips');
   for (const day of WEEKDAYS) {
-    const chip = el('button', 'weekday-chip' + (w.days.has(day) ? ' on' : ''), day);
+    const chip = el('button', 'weekday-chip' + (w.days.includes(day) ? ' on' : ''), day);
     chip.type = 'button';
-    chip.setAttribute('aria-pressed', w.days.has(day) ? 'true' : 'false');
+    chip.setAttribute('aria-pressed', w.days.includes(day) ? 'true' : 'false');
     chip.addEventListener('click', function () {
-      if (w.days.has(day)) w.days.delete(day); else w.days.add(day);
-      chip.classList.toggle('on');
-      chip.setAttribute('aria-pressed', w.days.has(day) ? 'true' : 'false');
-      markDirty();
+      const i = w.days.indexOf(day);
+      if (i >= 0) w.days.splice(i, 1); else w.days.push(day);
+      chip.classList.toggle('on', i < 0);
+      chip.setAttribute('aria-pressed', i < 0 ? 'true' : 'false');
     });
     chips.append(chip);
   }
   card.append(chips);
 
   const times = el('div', 'family-window-times');
-  times.append(timeField('Start', w.time, function (v) { w.time = v; }));
-  times.append(timeField('End (optional)', w.end_time, function (v) { w.end_time = v; }));
+  for (const [labelText, key] of [['Start', 'time'], ['End (optional)', 'end_time']]) {
+    const label = el('label', 'stacked');
+    label.append(el('span', undefined, labelText));
+    label.append(timeInput(w[key], function (v) { w[key] = v; }));
+    times.append(label);
+  }
   card.append(times);
 
   return card;
 }
 
-function renderWindows(box) {
-  box.append(fieldLabel('Childcare windows'));
+function renderWindows(body, draft) {
   const list = el('div', 'family-windows');
-  draft.windows.forEach(function (w) {
+  draft.forEach(function (w) {
     list.append(windowRow(w, function () {
-      draft.windows.splice(draft.windows.indexOf(w), 1);
-      markDirty();
-      renderEditable();
+      draft.splice(draft.indexOf(w), 1);
+      renderSheet();
     }));
   });
-  box.append(list);
+  body.append(list);
 
-  const add = el('button', 'button-ghost btn-touch', '+ Add childcare window');
+  const add = el('button', 'button-ghost btn-touch btn-block', '+ Add childcare window');
   add.type = 'button';
   add.addEventListener('click', function () {
-    draft.windows.push({ label: '', days: new Set(), time: '', end_time: '' });
-    markDirty();
-    renderEditable();
+    draft.push({ label: '', days: [], time: '', end_time: '' });
+    renderSheet();
   });
-  box.append(add);
+  body.append(add);
 }
 
-// -------------------------------------------------------------- save
-
-async function saveDraft() {
-  const windows = draft.windows
-    .filter(function (w) { return w.label.trim() || w.days.size || w.time; })
-    .map(function (w) {
-      return { label: w.label.trim(), days: Array.from(w.days), time: w.time, end_time: w.end_time };
-    });
-  const payload = {
-    family_enabled: draft.enabled,
-    kids_home_time: draft.kids_home_time,
-    responsible_by_weekday: draft.responsible,
-    childcare_windows: windows,
-    quiet_start_hour: draft.quiet_start_hour,
-    quiet_end_hour: draft.quiet_end_hour,
-    significant_delay_min: draft.significant_delay_min,
-    skip_leave_now_for_train: draft.skip_leave_now_for_train,
-    ask_missing_locations: draft.ask_missing_locations,
+function windowsPayload(draft) {
+  return {
+    childcare_windows: draft
+      .filter(function (w) { return w.label.trim() || w.days.length || w.time; })
+      .map(function (w) {
+        return {
+          label: w.label.trim(),
+          days: WEEKDAYS.filter(function (d) { return w.days.includes(d); }),
+          time: w.time,
+          end_time: w.end_time,
+        };
+      }),
   };
-  await postForm('rules', payload, 'Schedule saved.');
 }
 
-/* One POST path for both cards: disable the form's own button, send, adopt the
- * server's fresh payload (which re-renders and re-baselines both forms), and on
- * a rejection surface the server's message — which names the offending field —
- * in that card rather than as a toast alone. */
-async function postForm(name, payload, okText) {
-  const form = forms[name];
-  if (form && form.btn) form.btn.disabled = true;
-  try {
-    const data = await jsonApi('/api/family', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    toast(okText);
-    adopt(data);
-  } catch (exc) {
-    const message = exc.message || String(exc);
-    toast(message, 'error');
-    if (form && form.status) form.status.textContent = message;
-    if (form && form.btn) form.btn.disabled = false;
-  }
-}
+// --------------------------------------------------------- rule sheets
 
-// -------------------------------------------------------------- editable
+const SCHEDULE_HELP = 'Part of the household schedule the daily calendar scan and the traffic check run against.';
 
-function renderEditable(box) {
-  const target = box || els.familyEditable;
-  target.textContent = '';
-
-  target.append(toggleRow('Calendar sync', draft.enabled, function (next) {
-    draft.enabled = next;
-    markDirty();
-  }));
-  // Sits directly under the switch it qualifies rather than at the far end of
-  // the form. #253: events with no location are always *assumed home* and
-  // always kept in the decision trace — this only controls whether the daily
-  // summary nags to fill them in, for a household where some never will be.
-  target.append(toggleRow('Ask for missing locations', draft.ask_missing_locations, function (next) {
-    draft.ask_missing_locations = next;
-    markDirty();
-  }));
-  target.append(el('p', 'opt-hint', 'Off hides the "No location set" list from the summary. Events are still assumed to be at home and still recorded in the run trace in Activity.'));
-
-  renderResponsible(target);
-
-  target.append(fieldLabel('Kids home by'));
-  const kidsGrid = el('div', 'cfg-fields');
-  kidsGrid.append(timeField('Time', draft.kids_home_time, function (v) { draft.kids_home_time = v; }));
-  target.append(kidsGrid);
-
-  renderWindows(target);
-
-  target.append(fieldLabel('Quiet hours'));
-  const quietGrid = el('div', 'cfg-fields');
-  quietGrid.append(numberField('From (hour)', draft.quiet_start_hour, 0, 23, function (v) { draft.quiet_start_hour = v; }));
-  quietGrid.append(numberField('Until (hour)', draft.quiet_end_hour, 0, 23, function (v) { draft.quiet_end_hour = v; }));
-  target.append(quietGrid);
-
-  target.append(fieldLabel('Significant delay'));
-  const delayGrid = el('div', 'cfg-fields');
-  delayGrid.append(numberField('Minutes', draft.significant_delay_min, 0, 240, function (v) { draft.significant_delay_min = v; }));
-  target.append(delayGrid);
-
-  // #227: the leave-now nudge is a driving judgment, so a train-titled commute
-  // has no use for it. Keywords themselves stay file-edited (config/local.json).
-  target.append(fieldLabel('Leave-now alerts'));
-  target.append(toggleRow('Skip train commutes', draft.skip_leave_now_for_train, function (next) {
-    draft.skip_leave_now_for_train = next;
-    markDirty();
-  }));
-  const trainWords = (lastData.traffic.train_keywords || []).join(', ');
-  if (trainWords) {
-    target.append(el('p', 'opt-hint', 'Matches event titles containing: ' + trainWords));
-  }
-
-  const save = el('button', 'button-tint btn-block', 'Save schedule');
-  save.type = 'button';
-  save.addEventListener('click', saveDraft);
-  target.append(save);
-
-  const status = el('p', 'muted small', '');
-  target.append(status);
-  registerForm('rules', serializeDraft, baseline, save, status);
-}
+/* Each spec: `draft()` copies the current values out of lastData, `render`
+ * draws the controls over that draft, `payload` is the partial POST body. */
+const SHEETS = {
+  calendars: {
+    title: 'Calendars',
+    readOnly: true,
+    help: 'The household calendars the daily scan reads.',
+    where: 'config/local.json. The Calendar token comes from the bootstrap in docs/calendar-bootstrap.md.',
+    draft: function () { return {}; },
+    payload: function () { return {}; },
+    render: function (body) {
+      for (const c of lastData.calendars) {
+        const row = el('div', 'row');
+        row.append(el('span', undefined, c.label || c.person));
+        body.append(row);
+      }
+      if (!lastData.calendars.length) body.append(el('p', 'muted small', 'No household calendars configured yet.'));
+      const token = el('div', 'row');
+      token.append(el('span', undefined, 'Calendar token'),
+        el('span', 'family-sheet-value', lastData.token_present ? 'present' : 'missing'));
+      body.append(token);
+      if (!lastData.token_present) body.append(warnNote('No Calendar token — nothing can be checked.'));
+    },
+  },
+  duty: {
+    title: "Who's on duty",
+    help: SCHEDULE_HELP,
+    where: LOCAL_CONFIG,
+    draft: function () {
+      const stored = lastData.family.responsible_by_weekday || {};
+      const out = {};
+      for (const day of WEEKDAYS) out[day] = stored[day] || '';
+      return out;
+    },
+    payload: function (d) { return { responsible_by_weekday: d }; },
+    render: renderDuty,
+  },
+  kids: {
+    title: 'Kids home by',
+    help: SCHEDULE_HELP,
+    where: LOCAL_CONFIG,
+    draft: function () { return { time: lastData.family.kids_home_time || '' }; },
+    payload: function (d) { return { kids_home_time: d.time }; },
+    render: function (body, d) {
+      body.append(fieldRow('Time', timeInput(d.time, function (v) { d.time = v; })));
+    },
+  },
+  windows: {
+    title: 'Childcare windows',
+    help: SCHEDULE_HELP,
+    where: LOCAL_CONFIG,
+    draft: function () {
+      return (lastData.family.childcare_windows || []).map(function (w) {
+        return { label: w.label || '', days: (w.days || []).slice(), time: w.time || '', end_time: w.end_time || '' };
+      });
+    },
+    payload: windowsPayload,
+    render: renderWindows,
+  },
+  quiet: {
+    title: 'Quiet hours',
+    help: 'No traffic alert is sent between these hours.',
+    where: LOCAL_CONFIG,
+    draft: function () {
+      return { from: lastData.traffic.quiet_start_hour, until: lastData.traffic.quiet_end_hour };
+    },
+    payload: function (d) { return { quiet_start_hour: d.from, quiet_end_hour: d.until }; },
+    render: function (body, d) {
+      body.append(fieldRow('From (hour)', numberInput(d.from, 0, 23, function (v) { d.from = v; })));
+      body.append(fieldRow('Until (hour)', numberInput(d.until, 0, 23, function (v) { d.until = v; })));
+    },
+  },
+  sync: {
+    title: 'Calendar sync',
+    help: 'Turns the daily calendar scan on or off.',
+    where: LOCAL_CONFIG,
+    draft: function () { return { on: !!lastData.family.enabled }; },
+    payload: function (d) { return { family_enabled: d.on }; },
+    render: function (body, d) {
+      body.append(switchRow('Calendar sync', d.on, function (v) { d.on = v; }));
+    },
+  },
+  ask: {
+    title: 'Ask for missing locations',
+    // #253: events with no location are always *assumed home* and always kept
+    // in the decision trace — this only controls whether the summary nags.
+    help: 'Off hides the "No location set" list from the summary; those events are still assumed to be at home and still recorded in Activity.',
+    where: LOCAL_CONFIG,
+    draft: function () { return { on: lastData.family.ask_missing_locations !== false }; },
+    payload: function (d) { return { ask_missing_locations: d.on }; },
+    render: function (body, d) {
+      body.append(switchRow('Ask for missing locations', d.on, function (v) { d.on = v; }));
+    },
+  },
+  traffic: {
+    title: 'Traffic checks',
+    help: 'Checks your next commute and alerts only when a jam adds more than the significant delay.',
+    where: 'config/local.json. The schedule is an App Launcher job; this sets whether it runs live checks.',
+    draft: function () { return { on: !!lastData.traffic.enabled }; },
+    payload: function (d) { return { traffic_enabled: d.on }; },
+    render: function (body, d) {
+      body.append(switchRow('Traffic checks', d.on, function (v) { d.on = v; }));
+      if (!lastData.traffic.api_key_set) {
+        body.append(warnNote('No Routes API key configured — traffic checks will error.'));
+      }
+    },
+  },
+  cadence: {
+    title: 'Check every',
+    help: 'How often the scheduled traffic check runs, in minutes.',
+    // #170: the job is armed at a fixed high frequency and skips itself
+    // in-process against this cadence, so a change needs no re-arm.
+    where: 'config/local.json. App Launcher fires the job; it skips itself between checks.',
+    draft: function () {
+      return { min: lastData.traffic.cadence_min != null ? lastData.traffic.cadence_min : 30 };
+    },
+    payload: function (d) { return { cadence_min: d.min }; },
+    render: function (body, d) {
+      body.append(fieldRow('Minutes', numberInput(d.min, 5, 240, function (v) { d.min = v; })));
+    },
+  },
+  delay: {
+    title: 'Significant delay',
+    help: 'A traffic alert is sent only when a jam adds more than this.',
+    where: LOCAL_CONFIG,
+    draft: function () { return { min: lastData.traffic.significant_delay_min }; },
+    payload: function (d) { return { significant_delay_min: d.min }; },
+    render: function (body, d) {
+      body.append(fieldRow('Minutes', numberInput(d.min, 0, 240, function (v) { d.min = v; })));
+    },
+  },
+  train: {
+    title: 'Skip train commutes',
+    // #227: the leave-now nudge is a driving judgment, so a train-titled
+    // commute has no use for it. The keywords stay file-edited.
+    help: 'The leave-now alert is a driving judgment, so it is skipped for a commute whose title names a train.',
+    where: 'config/local.json, which is also where the keywords are edited.',
+    draft: function () { return { on: !!lastData.traffic.skip_leave_now_for_train }; },
+    payload: function (d) { return { skip_leave_now_for_train: d.on }; },
+    render: function (body, d) {
+      body.append(switchRow('Skip train commutes', d.on, function (v) { d.on = v; }));
+      const words = (lastData.traffic.train_keywords || []).join(', ');
+      const row = el('div', 'row');
+      row.append(el('span', undefined, 'Matches titles with'), el('span', 'family-sheet-value', words || '—'));
+      body.append(row);
+    },
+  },
+};
 
 // ------------------------------------------------- travel blocks (#268)
 
@@ -474,7 +636,7 @@ function renderEditable(box) {
  * attempted and nobody may read the row as a pass. It gets its own colour,
  * its own glyph (never a tick, never a cross), its own word, and a dashed
  * border so it still reads apart in greyscale. Omitting the row entirely —
- * the other tempting shortcut — is exactly the failure this card exists to
+ * the other tempting shortcut — is exactly the failure this sheet exists to
  * fix. */
 const CAP_LABEL = { writable: 'Writable', not_writable: 'Not writable', unknown: 'Unknown' };
 const CAP_ICON = { writable: 'check', not_writable: 'x', unknown: 'triangle-alert' };
@@ -509,7 +671,7 @@ function capabilityBadge(state) {
  * It reports the state the server currently holds — never the unsaved draft —
  * so it can never claim a mode that is not yet in force. */
 function travelModeBanner(tb) {
-  const mode = !tb.enabled ? 'off' : (tb.dry_run !== false ? 'dry' : 'live');
+  const mode = travelMode(tb);
   const text = {
     off: 'Off — no plan is computed and no Routes call is made.',
     dry: 'Dry run — the plan is computed and logged. Nothing is written to any calendar.',
@@ -592,20 +754,89 @@ function renderLastSweep(box, tb) {
   }
 }
 
+function renderTravel(body, draft) {
+  const tb = lastData.travel_blocks || {};
+
+  body.prepend(travelModeBanner(tb));
+
+  body.append(switchRow('Write travel blocks', draft.enabled, function (next) {
+    draft.enabled = next;
+  }));
+  body.append(switchRow('Dry run', draft.dry_run, function (next) {
+    draft.dry_run = next;
+  }));
+  body.append(el('p', 'opt-hint', 'Leave dry run on until you have read a full plan in '
+    + 'Activity and confirmed nothing unexpected is listed for deletion.'));
+
+  if (tb.enabled && !tb.write_token_present) {
+    body.append(warnNote('No Calendar write token — nothing can be written.'));
+  }
+
+  body.append(fieldRow('Minimum time at home (min)',
+    numberInput(draft.min_home_dwell_min, 0, 480, function (v) { draft.min_home_dwell_min = v; })));
+  body.append(el('p', 'opt-hint', 'Below this much free time at home between two events, '
+    + 'a direct hop is assumed and no drive-home block is written.'));
+
+  body.append(fieldRow('Block title', textInput(draft.title_template, '',
+    tb.max_title_template || 60, function (v) { draft.title_template = v; })));
+  body.append(el('p', 'opt-hint', 'Never the destination — a shared calendar view must '
+    + 'leak nothing about where anyone is going.'));
+
+  renderCapability(body);
+  renderLastSweep(body, tb);
+
+  // Read-only, file-edited: widening the horizon past the days the daily scan
+  // actually fetches is clamped, so it is changed next to family.unknown_scan_days.
+  const dl = el('dl', 'family-rules');
+  defRow(dl, 'Horizon', (tb.horizon_days || 0) + ' day(s)');
+  defRow(dl, 'Write token', tb.write_token_present ? 'present' : 'missing');
+  body.append(dl);
+}
+
+const TRAVEL = {
+  shell: TRAVEL_SHELL,
+  title: 'Travel blocks',
+  help: 'Commute blocks the daily calendar sync keeps on each calendar: one before a trip '
+    + 'out, one for the drive home.',
+  where: 'config/local.json, horizon included. Every delete backs the event up to '
+    + 'data/calendar_backups/ first; the write token comes from docs/calendar-bootstrap.md.',
+  draft: function () {
+    const tb = lastData.travel_blocks || {};
+    return {
+      enabled: !!tb.enabled,
+      dry_run: tb.dry_run !== false,
+      min_home_dwell_min: tb.min_home_dwell_min != null ? tb.min_home_dwell_min : 45,
+      title_template: tb.title_template || '',
+    };
+  },
+  payload: function (d) {
+    return {
+      travel_blocks_enabled: d.enabled,
+      travel_blocks_dry_run: d.dry_run,
+      min_home_dwell_min: d.min_home_dwell_min,
+      title_template: d.title_template,
+    };
+  },
+  render: renderTravel,
+  // The sweep controls sit below the settings, outside the draft: rendering
+  // them never fires anything — only a click does.
+  after: function () { renderSweepControls(els.familyTravelSweep, lastData.travel_blocks || {}); },
+};
+
 // --------------------------------------------- sweep run controls (#276)
 
 /* Firing a sweep reuses the one execution pipeline every other run goes
  * through: POST /api/execution/run with the existing `calendar-scan` verb, then
- * poll /api/execution/runs until it leaves the active slot — the same shape as
- * the Run tab's traffic card. #266 rejected a travel-blocks-only verb (it would
- * need either a second calendar read seam or a re-run of the whole scan), so
- * the sweep rides along inside the scan exactly as the scheduled job runs it.
+ * poll /api/execution/runs until it leaves the active slot. #266 rejected a
+ * travel-blocks-only verb (it would need either a second calendar read seam or
+ * a re-run of the whole scan), so the sweep rides along inside the scan
+ * exactly as the scheduled job runs it.
  *
  * Deliberately *not* routed through execution.js's client-side queue: that
- * module already imports this one (the Run-tab traffic card), and the Family
- * tab has to work whether or not the Run tab has ever been rendered. What
- * actually serialises runs is the server's single-flight guard, so a 409 is the
- * contract — and it renders as "already running", not as a failure.
+ * module already imports this one (the traffic switch), and the Family tab has
+ * to work whether or not anything else has rendered. What actually serialises
+ * runs is the server's single-flight guard, so a 409 is the contract — and it
+ * renders as "already running", not as a failure.
  *
  * Neither button is a safety mechanism. `run_travel_blocks` re-checks the gate,
  * the dry-run short-circuit and the write token on every invocation, and
@@ -629,9 +860,9 @@ function setSweep(patch) {
   syncSweepControls();
 }
 
-/* The controls are updated in place rather than by re-rendering the card: a
+/* The controls are updated in place rather than by re-rendering the sheet: a
  * poll tick that rebuilt the DOM would throw away whatever the operator is
- * typing into the dwell/title fields (they commit on `change`, i.e. on blur). */
+ * typing into the dwell/title fields. */
 function syncSweepControls() {
   if (!sweepEls.status) return;
   const blocked = liveSweepBlockers().length > 0;
@@ -652,6 +883,7 @@ function sweepButton(text, glyph, tier, mode) {
 }
 
 function renderSweepControls(box, tb) {
+  box.textContent = '';
   box.append(fieldLabel('Run a sweep'));
   const actions = el('div', 'tb-actions');
   const rehearse = sweepButton('Rehearse (dry run)', 'eye', 'button-ghost btn-touch', 'dry_run');
@@ -667,7 +899,7 @@ function renderSweepControls(box, tb) {
 
   box.append(el('p', 'opt-hint', 'Both fire the daily calendar sync — the run that '
     + 'performs the sweep. A rehearsal forces the sweep to plan only and sends no summary '
-    + 'message. Both run against the saved settings above, not unsaved edits.'));
+    + 'message. Both run against the saved settings, not unsaved edits.'));
 
   const blockers = tb.live_sweep_blockers || [];
   if (blockers.length) {
@@ -775,156 +1007,67 @@ async function finishSweep(record) {
 }
 
 /* Pull the fresh reported state so "Last sweep" reflects the run just fired —
- * without a page reload, and without discarding unsaved edits: `adopt` resets
- * both drafts to the server's answer, which is right after a save but would
- * silently throw away half-typed settings here. */
+ * without a page reload, and without discarding the open sheet's draft: the
+ * sheet redraws from the draft it already holds over the new report. */
 async function refreshAfterSweep() {
   await fetchQuiet('/api/family', function (data) {
-    const dirty = serializeDraft() !== baseline || serializeTravel() !== travelBaseline;
-    if (!dirty) {
-      adopt(data);
-      return;
-    }
-    state.family = data;
-    lastData = data;
-    render();
+    adopt(data);
+    if (open && open.spec === TRAVEL) renderSheet();
   });
 }
 
-function renderTravel(box) {
-  const target = box || els.familyTravelBlocks;
-  target.textContent = '';
-  const tb = lastData.travel_blocks || {};
-
-  target.append(travelModeBanner(tb));
-
-  target.append(toggleRow('Write travel blocks', travelDraft.enabled, function (next) {
-    travelDraft.enabled = next;
-    markDirty();
-  }));
-  target.append(toggleRow('Dry run', travelDraft.dry_run, function (next) {
-    travelDraft.dry_run = next;
-    markDirty();
-  }));
-  target.append(el('p', 'opt-hint', 'Leave dry run on until you have read a full plan in '
-    + 'Activity and confirmed nothing unexpected is listed for deletion. Every delete '
-    + 'backs the event up to data/calendar_backups/ first.'));
-
-  if (tb.enabled && !tb.write_token_present) {
-    target.append(warnNote('No Calendar write token — nothing can be written. '
-      + 'See docs/calendar-bootstrap.md.'));
-  }
-
-  target.append(fieldLabel('Minimum time at home'));
-  const dwellGrid = el('div', 'cfg-fields');
-  dwellGrid.append(numberField('Minutes', travelDraft.min_home_dwell_min, 0, 480, function (v) {
-    travelDraft.min_home_dwell_min = v;
-  }));
-  target.append(dwellGrid);
-  target.append(el('p', 'opt-hint', 'Below this much free time at home between two events, '
-    + 'a direct hop is assumed and no drive-home block is written.'));
-
-  target.append(fieldLabel('Block title'));
-  const titleGrid = el('div', 'cfg-fields');
-  titleGrid.append(labelledTextField('Shown on the calendar', travelDraft.title_template,
-    tb.max_title_template || 60, function (v) { travelDraft.title_template = v; }));
-  target.append(titleGrid);
-  target.append(el('p', 'opt-hint', 'Never the destination — a shared calendar view must '
-    + 'leak nothing about where anyone is going.'));
-
-  renderCapability(target);
-  renderLastSweep(target, tb);
-
-  // Read-only, file-edited: widening the horizon past the days the daily scan
-  // actually fetches is clamped, so it is changed next to family.unknown_scan_days.
-  const dl = el('dl', 'family-rules');
-  defRow(dl, 'Horizon', (tb.horizon_days || 0) + ' day(s) (config/local.json)');
-  defRow(dl, 'Write token', tb.write_token_present ? 'present' : 'missing');
-  target.append(dl);
-
-  const save = el('button', 'button-tint btn-block', 'Save travel blocks');
-  save.type = 'button';
-  save.addEventListener('click', saveTravel);
-  target.append(save);
-
-  const status = el('p', 'muted small', '');
-  target.append(status);
-  registerForm('travel', serializeTravel, travelBaseline, save, status);
-
-  // Last, below the Save button: the settings are edited and saved, *then* a
-  // sweep is asked for. Rendering these never fires anything — only a click does.
-  renderSweepControls(target, tb);
-}
-
-async function saveTravel() {
-  await postForm('travel', {
-    travel_blocks_enabled: travelDraft.enabled,
-    travel_blocks_dry_run: travelDraft.dry_run,
-    min_home_dwell_min: travelDraft.min_home_dwell_min,
-    title_template: travelDraft.title_template,
-  }, 'Travel blocks saved.');
-}
-
-// ---------------------------------------------------------------- boot
-
-function render() {
-  els.familyReadOnly.textContent = '';
-  renderReadOnly(els.familyReadOnly);
-  renderEditable(els.familyEditable);
-  renderTravel(els.familyTravelBlocks);
-}
-
-export function wireFamily() {
-  // No boot-time wiring beyond fetch-on-activate; controls bind on render.
-}
-
-// ------------------------------------------------ traffic card (#164, #373)
-// The enable toggle + cadence (`els.execTraffic*`, ids kept from the Run tab)
-// sit in this pane since #373 and edit this module's own /api/family — the
-// traffic-jam insurance feature is a family/traffic domain concern (#240).
-// execution.js keeps only `runTraffic`, the
-// one piece that genuinely belongs to its run queue (firing a one-off
-// traffic-check run); everything here is read/render/patch of config state,
-// sharing nothing with that queue.
+// ------------------------------------------------ traffic checks (#164, #373)
+// The enable switch (`els.execTrafficEnabled`, id kept from the Run tab) and
+// the last-check line sit in this pane since #373 and edit this module's own
+// /api/family — the traffic-jam insurance feature is a family/traffic domain
+// concern (#240). execution.js keeps only `runTraffic`, the one piece that
+// genuinely belongs to its run queue (firing a one-off traffic-check run).
 function trafficWhen(iso) {
   return iso ? fmtLocalDateTime(iso, { withYear: false }) : 'never';
 }
 
 function renderTraffic() {
-  const t = state.execution.traffic;
+  const t = lastData && lastData.traffic;
   if (!t) return;
   setSwitch(els.execTrafficEnabled, !!t.enabled);
-  // Don't clobber the field while the operator is typing in it.
-  if (document.activeElement !== els.execTrafficCadence) {
-    els.execTrafficCadence.value = t.cadence_min != null ? String(t.cadence_min) : '30';
-  }
   els.execTrafficStatus.textContent =
-    'Last check: ' + trafficWhen(t.last_check) + ' · Last alert: ' + trafficWhen(t.last_alert);
+    'Last check ' + trafficWhen(t.last_check) + ' · last alert ' + trafficWhen(t.last_alert);
 }
 
-// Config comes from /api/family; throttled since it changes rarely (a POST also
-// returns the fresh slice). `force` bypasses the throttle after a run/edit.
-async function fetchTraffic(force) {
-  const ex = state.execution;
-  if (!force && ex.trafficAt && Date.now() - ex.trafficAt < 12000) return;
-  await fetchQuiet('/api/family', function (data) {
-    ex.traffic = data.traffic || {};
-    ex.trafficAt = Date.now();
-    renderTraffic();
+// ---------------------------------------------------------------- boot
+
+function wireShell(shell) {
+  shell.close.addEventListener('click', function () { shell.dialog.close(); });
+  // Native <dialog>: a click on the element itself is the ::backdrop.
+  shell.dialog.addEventListener('click', function (ev) {
+    if (ev.target === shell.dialog) shell.dialog.close();
+  });
+  // Close, backdrop and Esc all end here, and all discard the draft. The event
+  // is queued, so only drop the sheet that is actually gone.
+  shell.dialog.addEventListener('close', function () {
+    if (open && open.shell === shell && !shell.dialog.open) open = null;
+  });
+  shell.done.addEventListener('click', commitSheet);
+}
+
+function wireSwitch(btn, key) {
+  btn.addEventListener('click', function () {
+    const next = btn.getAttribute('aria-checked') !== 'true';
+    setSwitch(btn, next);  // optimistic; the patch answer confirms
+    const body = {};
+    body[key] = next;
+    patchFamily(body);
   });
 }
 
-export async function patchTraffic(body) {
-  try {
-    const data = await jsonApi('/api/family', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    state.execution.traffic = data.traffic || {};
-    renderTraffic();
-  } catch (exc) {
-    toast(String(exc.message || exc), 'error');
-    fetchTraffic(true);  // re-sync the controls to the server's truth
-  }
+export function wireFamily() {
+  els.paneFamily.addEventListener('click', function (ev) {
+    const row = ev.target.closest('[data-sheet]');
+    if (row) openSheet(SHEETS[row.dataset.sheet]);
+  });
+  els.familyTravelRow.addEventListener('click', function () { openSheet(TRAVEL); });
+  wireSwitch(els.familySyncSwitch, 'family_enabled');
+  wireSwitch(els.familyAskSwitch, 'ask_missing_locations');
+  wireShell(RULE_SHELL);
+  wireShell(TRAVEL_SHELL);
 }

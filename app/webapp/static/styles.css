@@ -681,8 +681,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ============================================================ execution (#11) */
 /* Traffic card's paired Run-now buttons sit side by side (#164). */
-.exec-traffic-actions { display: flex; gap: var(--space-sm); margin-top: 12px; }
-.exec-traffic-actions > button { flex: 1; }
 
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }
 .exec-dry-opts .segmented { flex: 1; }
@@ -1025,22 +1023,86 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ----------------------------------------------------------- Family (#160)
    Layout only — colours/typography come from the shared tokens + .toggle /
-   button-tint / .muted classes, so this stays theme-aware with no new tokens. */
-.family-control-row {
-  display: flex;
+   button-tint / .muted classes, so this stays theme-aware with no new tokens.
+
+   #376: inset groups (the run-group overline over an action-list card) whose
+   rows read glyph + label + current value + chevron at the 52px row height; a
+   row that edits something opens a sheet. Two-line rows (Household, Traffic
+   checks) keep the action-row meta line. */
+.family-row .action-row-main {
+  flex-direction: row;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--line-muted);
+  justify-content: flex-start;
+  gap: var(--space-sm);
 }
-.family-control-row:last-of-type { border-bottom: 0; }
-.family-control-label { flex: 1; font-weight: 600; }
-/* A control's explanatory line belongs to the row above it, not floating as a
-   standalone paragraph — drop .opt-hint's leading gap so the two read as one
-   block instead of the hint dangling halfway to the next control. Its 2px side
-   inset goes too: every other control in this panel starts at the card's own
-   padding edge, so the hint has to share that baseline. */
-.family-control-row + .opt-hint { margin: 0 0 var(--space-sm); }
+.family-row-glyph {
+  flex: none;
+  width: var(--icon-title);
+  height: var(--icon-title);
+  color: var(--muted);
+}
+.family-row .action-row-main > .action-row-title { flex: 0 1 auto; min-width: 0; }
+.family-row-value {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.family-row-chevron {
+  flex: none;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  color: var(--muted);
+}
+.family-row [data-tone="danger"] { color: var(--danger-text); }
+.family-row [data-tone="attention"] { color: var(--attention-text); }
+/* Read-only rows: the row shape without the tap affordance; the value wraps
+   rather than hiding the end of an address. */
+.family-static { cursor: default; }
+.family-static:active { background: transparent; }
+.family-static .action-row-meta { white-space: normal; }
+
+/* Sheets: every input, select and segmented track at the 44px floor
+   (TOUCH-01; the vendored controls size from --control-h), one short help
+   line on top, the "Where this lives" line last, the field-naming rejection
+   above the Done footer. */
+.family-sheet { --control-h: var(--row-sm); }
+.family-sheet-help { margin: 0 0 var(--space-sm); color: var(--muted); font-size: var(--font-body-sm); }
+.family-sheet-where {
+  margin: var(--space-md) 0 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+.family-sheet-value { color: var(--muted); font-weight: 400; text-align: right; }
+.detail-card .row .family-sheet-value { color: var(--muted); font-weight: 400; }
+.family-sheet-error {
+  margin: var(--space-md) 0 0;
+  color: var(--danger-text);
+  font-size: var(--font-body-sm);
+  font-weight: 600;
+}
+.family-sheet-rule {
+  margin: var(--space-xs) 0 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  text-align: center;
+}
+.detail-actions[hidden] { display: none; }
+/* The travel sheet's sweep controls: outside the draft, so set apart from it. */
+#familyTravelSweep {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--line);
+}
+/* Week sheet: the day, then its picker taking the rest of the row. */
+.family-day .family-day-label { flex: none; width: 3em; }
+.family-day .segmented,
+.detail-card .row.family-day .select-native { flex: 1; min-width: 0; }
 .family-rules {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -1052,7 +1114,11 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Missing-credential notices (#209): the leading glyph stays in inline flow so
    the copy wraps naturally under it on a phone — a flex row would centre the
    icon against the whole wrapped block. */
-.family-warn .icon { margin-right: var(--space-xs); }
+.family-warn .icon {
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  margin-right: var(--space-xs);
+}
 
 /* Editable schedule (#167): field-group headings, one childcare-window block
    per row, and a weekday multi-select rendered as a chip row. */
@@ -1102,7 +1168,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--accent);
   border-color: var(--accent-border-strong);
 }
-#familyEditable .button-tint { margin-top: var(--space-md); }
 
 /* ------------------------------------------------- travel blocks (#268)
    Layout + the three status roles only — every colour is an existing token
@@ -1124,7 +1189,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   font-weight: 600;
   line-height: 1.4;
 }
-.tb-mode .icon { flex: none; margin-top: 2px; }
+.tb-mode .icon { flex: none; width: var(--icon-inline); height: var(--icon-inline); margin-top: 2px; }
 .tb-mode--off { color: var(--muted); }
 .tb-mode--dry { color: var(--attention); border-color: var(--attention); }
 .tb-mode--live { color: var(--on); border-color: var(--on); }
@@ -1166,7 +1231,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-color: var(--attention);
   border-style: dashed;
 }
-#familyTravelBlocks .button-tint { margin-top: var(--space-md); }
 
 /* Sweep run controls (#276): the paired rehearse/live buttons sit side by side
    (the `.exec-traffic-actions` shape), with the run's status line under them.
@@ -1183,7 +1247,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   justify-content: center;
   gap: var(--space-xs);
 }
-.tb-actions > button .icon { flex: none; }
+.tb-actions > button .icon { flex: none; width: var(--icon-inline); height: var(--icon-inline); }
 .tb-run-status { margin: var(--space-xs) 0 0; }
 .tb-run-status.tb-run-status--error { color: var(--deficit); }
 

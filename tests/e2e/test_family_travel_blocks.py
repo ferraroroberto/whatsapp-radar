@@ -1,6 +1,9 @@
-"""Family tab: the travel-block card's write capability (#268) and run controls (#276).
+"""Family tab: the travel-block sheet's write capability (#268) and run controls
+(#276), and the rule sheets' Done / discard contract (#376).
 
-The whole point of the card is that a household member's calendar state is
+Since #376 the travel blocks live in a sheet opened from the Travel blocks row,
+and every other rule in a sheet opened from its row. The whole point of the
+travel sheet is that a household member's calendar state is
 readable at a glance instead of out of a log — so `unknown` must render as its
 own thing: not a green tick, not a red cross, not an omitted row. #276 adds the
 two run controls and the reasons a live sweep is unavailable. This drives both
@@ -104,10 +107,19 @@ def _open_family(page: Page, base_url: str, payload: dict[str, Any] | None = Non
     # rather than firing a real calendar-scan.
     page.route("**/api/execution/**", lambda route: route.abort())
     page.route("**/api/family", lambda route: route.fulfill(json=payload or _PAYLOAD))
+    _show_family(page, base_url)
+
+
+def _show_family(page: Page, base_url: str, *, travel: bool = True) -> None:
     page.goto(base_url)
     page.wait_for_selector("#tabFamily", state="attached")
     page.locator("#tabFamily").click()
     page.wait_for_selector("#paneFamily", state="visible")
+    # The rows fill once /api/family answers; the travel sheet opens from its row.
+    expect(page.locator('#paneFamily [data-value="travel"]')).not_to_be_empty()
+    if travel:
+        page.locator("#familyTravelRow").click()
+        expect(page.locator("#familyTravelCard")).to_be_visible()
 
 
 def _no_overflow(page: Page) -> list[str]:
@@ -124,6 +136,49 @@ def _no_overflow(page: Page) -> list[str]:
         }
         """
     )
+
+
+# TOUCH-01 / TOUCH-02 / COMP-02 (#376), structural only: every visible input
+# and select is at least 44px tall, no two switches' 44px vertical target bands
+# overlap in the same column, and no glyph is drawn under the 16px inline icon
+# token.
+_TOUCH_OFFENDERS = """(roots) => {
+    const bad = [];
+    const shown = (el) => el.getClientRects().length > 0
+        && getComputedStyle(el).visibility !== 'hidden';
+    for (const root of roots) {
+        const scope = document.querySelector(root);
+        if (!scope || !shown(scope)) continue;
+        for (const el of scope.querySelectorAll('input:not([type=hidden]), select')) {
+            if (!shown(el)) continue;
+            const h = el.getBoundingClientRect().height;
+            const tag = el.tagName.toLowerCase();
+            if (h < 43.5) bad.push(root + ' short ' + tag + ' ' + Math.round(h));
+        }
+        for (const el of scope.querySelectorAll('svg.icon')) {
+            if (!shown(el)) continue;
+            const w = el.getBoundingClientRect().width;
+            if (w < 15.5) bad.push(root + ' small glyph ' + Math.round(w));
+        }
+        const bands = [...scope.querySelectorAll('[role=switch]')].filter(shown).map((el) => {
+            const r = el.getBoundingClientRect();
+            const cy = r.top + r.height / 2;
+            return [Math.min(r.top, cy - 22), Math.max(r.bottom, cy + 22), Math.round(r.left)];
+        }).sort((a, b) => a[0] - b[0]);
+        for (let i = 1; i < bands.length; i++) {
+            const [top, , left] = bands[i];
+            const [, prevBottom, prevLeft] = bands[i - 1];
+            if (Math.abs(left - prevLeft) < 60 && top < prevBottom - 0.5) {
+                bad.push(root + ' overlapping switch targets at ' + Math.round(top));
+            }
+        }
+    }
+    return bad;
+}"""
+
+
+def _touch_offenders(page: Page, *roots: str) -> list[str]:
+    return page.evaluate(_TOUCH_OFFENDERS, list(roots))
 
 
 def _glyph(page: Page, selector: str) -> str:
@@ -185,6 +240,10 @@ def test_unknown_write_capability_is_its_own_visible_state(
     overflowing = _no_overflow(page)
     assert overflowing == [], f"travel-block card overflows 390px: {overflowing}"
 
+    # TOUCH-01 / TOUCH-02 / COMP-02 at phone width: the page and the open sheet.
+    offenders = _touch_offenders(page, "#paneFamily", "#familyTravelCard")
+    assert offenders == [], f"Family touch targets: {offenders}"
+
 
 def test_dry_run_mode_is_unmistakable(page: Page, base_url: str) -> None:
     """A sweep that plans but does not write must not read like one that writes."""
@@ -195,9 +254,12 @@ def test_dry_run_mode_is_unmistakable(page: Page, base_url: str) -> None:
     expect(banner).to_contain_text("Nothing is written to any calendar.")
     # The last sweep says so too, independently of the current setting.
     expect(page.locator("#familyTravelBlocks")).to_contain_text("planned only, nothing written")
-    # The traffic card (enable, cadence, Run now) lives in this pane since #373.
+    # The traffic group (enable, cadence, Check now) lives in this pane since #373.
     expect(page.locator("#paneFamily #execTrafficCard")).to_have_count(1)
     expect(page.locator("#paneFamily #execTrafficRunLive")).to_have_count(1)
+    expect(page.locator('#paneFamily [data-sheet="cadence"]')).to_have_count(1)
+    # The page row reads the server's mode, not a draft.
+    expect(page.locator('#paneFamily [data-value="travel"]')).to_have_text("Dry run")
 
 
 # --------------------------------------------------- run controls (#276)
@@ -271,10 +333,7 @@ def _drive_sweep(
     ))
     page.route("**/api/execution/run", on_run)
     page.route("**/api/family", on_family)
-    page.goto(base_url)
-    page.wait_for_selector("#tabFamily", state="attached")
-    page.locator("#tabFamily").click()
-    page.wait_for_selector("#paneFamily", state="visible")
+    _show_family(page, base_url)
 
 
 def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base_url: str) -> None:
@@ -286,7 +345,7 @@ def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base
     page.set_viewport_size({"width": 390, "height": 844})
     _open_family(page, base_url)
 
-    buttons = page.locator("#familyTravelBlocks .tb-actions > button")
+    buttons = page.locator("#familyTravelCard .tb-actions > button")
     expect(buttons).to_have_count(2)
     expect(buttons.nth(0)).to_contain_text("Rehearse")
     expect(buttons.nth(1)).to_contain_text("Run sweep")
@@ -306,7 +365,7 @@ def test_live_sweep_control_is_available_once_every_gate_clears(
     page: Page, base_url: str
 ) -> None:
     _open_family(page, base_url, _payload(dry_run=False, live_sweep_blockers=[]))
-    buttons = page.locator("#familyTravelBlocks .tb-actions > button")
+    buttons = page.locator("#familyTravelCard .tb-actions > button")
     expect(buttons.nth(1)).to_be_enabled()
     expect(page.locator("#familyTravelCard")).not_to_contain_text("A live sweep is unavailable")
 
@@ -324,9 +383,10 @@ def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
 
     blocks = page.locator("#familyTravelBlocks")
     expect(blocks).to_contain_text("4 leg(s) · 2 add")
-    blocks.locator(".tb-actions > button").nth(0).click()
+    sheet = page.locator("#familyTravelCard")
+    sheet.locator(".tb-actions > button").nth(0).click()
 
-    status = blocks.locator(".tb-run-status")
+    status = sheet.locator(".tb-run-status")
     expect(status).to_contain_text("Sweep finished", timeout=15_000)
     expect(status).to_contain_text("planned only, nothing written")
     expect(status).to_contain_text("1 left alone")
@@ -340,13 +400,13 @@ def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) 
     posted: list[dict[str, Any]] = []
     _drive_sweep(page, base_url, posted=posted, run_status=409)
 
-    page.locator("#familyTravelBlocks .tb-actions > button").nth(0).click()
-    status = page.locator("#familyTravelBlocks .tb-run-status")
+    page.locator("#familyTravelCard .tb-actions > button").nth(0).click()
+    status = page.locator("#familyTravelCard .tb-run-status")
     expect(status).to_contain_text("already in progress", timeout=15_000)
     expect(status).not_to_contain_text("Could not start")
     expect(status).not_to_have_class(re.compile("tb-run-status--error"))
     # The control comes back — a busy queue is temporary, not terminal.
-    expect(page.locator("#familyTravelBlocks .tb-actions > button").nth(0)).to_be_enabled()
+    expect(page.locator("#familyTravelCard .tb-actions > button").nth(0)).to_be_enabled()
 
 
 def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:
@@ -366,3 +426,85 @@ def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) 
 
     overflowing = _no_overflow(page)
     assert overflowing == [], f"gated sweep overflows 390px: {overflowing}"
+
+
+# ------------------------------------------------ rule sheets (#376)
+
+
+def _family_with_posts(page: Page, base_url: str, posted: list[dict[str, Any]],
+                       *, reject: str | None = None) -> None:
+    """Family on the sanitized payload; POSTs are captured, never sent.
+
+    ``reject`` answers every POST with a 400 naming a field, as the server does
+    for an invalid value.
+    """
+
+    def on_family(route: Route) -> None:
+        if route.request.method == "POST":
+            posted.append(json.loads(route.request.post_data or "{}"))
+            if reject:
+                route.fulfill(status=400, json={"detail": reject})
+                return
+        route.fulfill(json=_PAYLOAD)
+
+    page.route("**/api/execution/**", lambda route: route.abort())
+    page.route("**/api/family", on_family)
+    _show_family(page, base_url, travel=False)
+
+
+def test_week_sheet_commits_on_done_and_close_discards(page: Page, base_url: str) -> None:
+    """One row, one sheet, one partial POST on Done; Close sends nothing."""
+    page.set_viewport_size({"width": 390, "height": 844})
+    posted: list[dict[str, Any]] = []
+    _family_with_posts(page, base_url, posted)
+
+    sheet = page.locator("#familySheet")
+    page.locator('#paneFamily [data-sheet="duty"]').click()
+    expect(sheet).to_be_visible()
+    # Four options (nobody + three calendars) fit a segmented control per day.
+    pickers = sheet.locator(".family-day .segmented")
+    expect(pickers).to_have_count(7)
+    expect(pickers.nth(0).locator(".segmented-item")).to_have_count(4)
+    offenders = _touch_offenders(page, "#familySheet")
+    assert offenders == [], f"week sheet touch targets: {offenders}"
+
+    # Close discards: an edit then the close button posts nothing.
+    pickers.nth(0).locator(".segmented-item").nth(1).click()
+    page.locator("#familySheetClose").click()
+    expect(sheet).to_be_hidden()
+    assert posted == []
+
+    # Reopened, the sheet starts from the server's values again.
+    page.locator('#paneFamily [data-sheet="duty"]').click()
+    first = page.locator("#familySheet .family-day .segmented").nth(0).locator(".segmented-item")
+    expect(first.nth(0)).to_have_attribute("aria-pressed", "true")
+    first.nth(1).click()
+    page.locator("#familySheetDone").click()
+    expect(sheet).to_be_hidden()
+    expect(page.locator("#toast")).to_contain_text("saved")
+    assert len(posted) == 1
+    assert list(posted[0]) == ["responsible_by_weekday"]
+    week = posted[0]["responsible_by_weekday"]
+    assert list(week) == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    assert week["Mon"] == _PAYLOAD["calendars"][0]["person"]
+    assert [week[d] for d in ("Tue", "Wed", "Thu", "Fri", "Sat", "Sun")] == [""] * 6
+
+
+def test_a_rejected_value_keeps_the_sheet_open_naming_the_field(
+    page: Page, base_url: str
+) -> None:
+    posted: list[dict[str, Any]] = []
+    _family_with_posts(page, base_url, posted, reject="kids_home_time must be HH:MM")
+
+    page.locator('#paneFamily [data-sheet="kids"]').click()
+    sheet = page.locator("#familySheet")
+    sheet.locator("input[type=time]").fill("06:15")
+    page.locator("#familySheetDone").click()
+
+    error = page.locator("#familySheetError")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("kids_home_time")
+    expect(sheet).to_be_visible()
+    assert posted == [{"kids_home_time": "06:15"}]
+    # The dismissal rule is stated in the sheet itself.
+    expect(sheet).to_contain_text("Close discards your changes")

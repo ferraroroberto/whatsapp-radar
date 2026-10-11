@@ -568,6 +568,20 @@ def test_family_endpoint_reads_db_runs(tmp_path: Path) -> None:
     assert run["alerts"] == 1
 
 
+def test_family_endpoint_names_the_last_calendar_run_behind_traffic(tmp_path: Path) -> None:
+    """The Family header reads the daily calendar run even when 20 newer traffic
+    checks push it out of the recent-runs slice (#374)."""
+    db = tmp_path / "family.sqlite3"
+    calendar_id = _seed_family_run(db, kind="calendar-scan")
+    for _ in range(20):
+        _seed_family_run(db, kind="traffic-check")
+    with _client(db) as client:
+        body = client.get("/api/family").json()
+    assert all(r["kind"] == "traffic-check" for r in body["runs"])
+    assert body["last_calendar"]["run_id"] == f"db-{calendar_id}"
+    assert body["last_calendar"]["missing_locations"] == 0
+
+
 def test_family_traffic_status_line_from_run_store(tmp_path: Path) -> None:
     """The Run-tab traffic card's status line reads last check / last alert (#164)."""
     db = tmp_path / "traffic.sqlite3"

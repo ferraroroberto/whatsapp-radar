@@ -17,7 +17,6 @@ Routes (split across ``app/webapp/routers/``, one module per area):
     GET/POST /api/family            → family-check rules + traffic   (family)
     /api/audit/*                    → per-run trace drill-down       (audit)
     /api/sidecar/*                  → WhatsApp connection state/QR   (sidecar)
-    /api/ack/*                      → non-routine follow-ups (#219)  (ack)
 
 The app is a single tabbed SPA with five tabs — Dashboard (which also hosts the
 pending follow-ups), Messages, Execution, Audit, Family; Settings is a modal,
@@ -42,7 +41,6 @@ from starlette.types import Scope
 from app.webapp import runs
 from app.webapp.middleware import BearerTokenMiddleware
 from app.webapp.routers import (
-    ack,
     audit,
     auth,
     chats,
@@ -181,7 +179,6 @@ def create_app() -> FastAPI:
     app.include_router(family.router)
     app.include_router(audit.router)
     app.include_router(sidecar.router)
-    app.include_router(ack.router)
 
     return app
 

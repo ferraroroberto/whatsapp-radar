@@ -346,81 +346,61 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .card-actions { display: inline-flex; align-items: center; gap: var(--space-sm); flex: none; }
 .card-title .icon { color: var(--muted); }
 
-/* ===================================================== last-activity grid */
-/* The Dashboard hero (#165): a 2×2 grid of per-kind cards, each a button that
-   deep-links to its run detail on the Run tab. minmax(0,1fr) tracks so a long
-   summary line can't push the grid past the viewport (design.md Layout). */
-.activity-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--gap);
-  margin-bottom: var(--gap);
-}
-.activity-card {
+/* ============================================================ home (#374) */
+/* The glance card: one vendored action-row per source, drawn at once with a
+   dash while loading, so the poll answering never shifts a row. Latest runs
+   reserves its three rows the same way. */
+.glance-card { margin: 0 0 var(--gap); }
+.glance-row .action-row-main:disabled { cursor: default; opacity: 1; }
+.dash-latest #dashLatest:empty { min-height: calc(3 * var(--row-lg)); }
+.dash-latest-empty { padding: 14px; list-style: none; }
+.dash-all-activity {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 0;
-  padding: 11px 10px;
-  text-align: left;
+  align-items: center;
+  width: 100%;
+  min-height: var(--row-sm);
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--line-muted);
+  background: transparent;
+  color: var(--accent-text);
   font: inherit;
-  color: var(--ink);
-  appearance: none;
-  -webkit-appearance: none;
-}
-.activity-card:not(.is-idle) { cursor: pointer; transition: border-color 0.15s ease; }
-.activity-card:not(.is-idle):hover { border-color: var(--accent-border-soft); }
-.activity-card.is-idle { opacity: 0.85; }
-.activity-head { display: flex; align-items: center; gap: 6px; }
-.activity-icon { width: var(--icon-title); height: var(--icon-title); color: var(--muted); flex: none; }
-.activity-name {
-  flex: 1;
-  min-width: 0;
   font-size: var(--font-label);
-  font-weight: 700;
-  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Home's header line is a button: the exception it names opens that run in
+   Activity. At rest (a plain fact) it is disabled and reads as the
+   home-head's muted status. */
+.home-head button.status-link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-label);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.home-head button.status-link:disabled { cursor: default; }
+.home-head button.status-link:disabled:not([data-tone]) { color: var(--muted); }
+.home-head button.status-link:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+/* Settings' header line (#374): a source offline, else the build. */
+.detail-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: var(--space-sm);
+  color: var(--muted);
+  font-size: var(--font-caption);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.activity-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.activity-when { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.activity-badge {
-  flex: none;
-  padding: 1px 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  font-size: var(--font-caption);
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.activity-badge.ok { color: var(--on); border-color: var(--on); }
-.activity-badge.ko { color: var(--deficit); border-color: var(--deficit); }
-.activity-badge.run,
-.activity-badge.act { color: var(--attention); border-color: var(--attention); }
-.activity-badge.muted { color: var(--muted); border-color: var(--line); }
-.activity-summary { font-size: var(--font-caption); color: var(--ink); overflow-wrap: anywhere; }
-
-/* ============================================================ tables */
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: var(--font-caption);
-}
-.data-table th,
-.data-table td {
-  text-align: left;
-  padding: 8px 4px;
-  border-bottom: 1px solid var(--line-muted);
-}
-.data-table th { color: var(--muted); font-weight: 600; }
-.data-table tr:last-child td { border-bottom: none; }
-.data-table td.name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.data-table .num { width: 58px; text-align: right; }
-.data-table .when { width: 104px; white-space: nowrap; text-align: right; }
+.detail-status[data-tone="danger"] { color: var(--danger-text); }
+.detail-header h2:has(+ .detail-status) { flex: none; }
 
 /* ============================================================ chats */
 /* Breathing room on both sides of the filter row: below the card head (the
@@ -1313,21 +1293,3 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .tb-run-status { margin: var(--space-xs) 0 0; }
 .tb-run-status.tb-run-status--error { color: var(--deficit); }
 
-/* ============================================================ ack (#219) */
-/* Follow-ups tab: flat separator rows (fleet list-row canon), each with a
-   text block + an inline tint action button — mirrors .chat-row's hairline
-   pattern, no per-row nested card. */
-.ack-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.ack-item:last-child { border-bottom: 0; }
-.ack-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ack-item-title { font-size: var(--font-label); color: var(--ink); font-weight: 600; }
-.ack-item-meta { font-size: var(--font-caption); color: var(--muted); }
-/* The Acknowledge action is a vendored button-tint; it only needs to keep
-   its natural width beside the text block. */
-.ack-item .button-tint { flex: none; }

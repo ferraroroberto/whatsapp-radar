@@ -69,10 +69,6 @@ export const state = {
   },
   // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
   family: null,
-  // Follow-ups (#219): pending non-routine acknowledgment items.
-  ack: {
-    items: [],
-  },
 };
 
 export const EXECUTION_POLL_MS = 1500;
@@ -90,12 +86,17 @@ export const els = {
   settingsDialog: document.getElementById('settingsDialog'),
   settingsClose: document.getElementById('settingsClose'),
   textSizeControl: document.getElementById('textSizeControl'),
-  dashActivity: document.getElementById('dashActivity'),
-  dashChannelsBody: document.getElementById('dashChannelsBody'),
-  dashChannelsEmpty: document.getElementById('dashChannelsEmpty'),
+  settingsStatus: document.getElementById('settingsStatus'),
+  // Home (#374): header line, glance card, Latest runs; the source counts card
+  // lives in Settings.
+  dashStatus: document.getElementById('dashStatus'),
+  dashGlance: document.getElementById('dashGlance'),
+  dashLatest: document.getElementById('dashLatest'),
+  dashAllActivity: document.getElementById('dashAllActivity'),
   dashSources: document.getElementById('dashSources'),
 
   // Chats (#10)
+  chatsStatus: document.getElementById('chatsStatus'),
   chatsFilterMonitored: document.getElementById('chatsFilterMonitored'),
   chatsFilterIgnored: document.getElementById('chatsFilterIgnored'),
   chatsFilterAll: document.getElementById('chatsFilterAll'),
@@ -222,14 +223,11 @@ export const els = {
   auditFilteredMore: document.getElementById('auditFilteredMore'),
 
   // Family rules (#160, #167); the traffic card lives here since #373.
+  familyStatus: document.getElementById('familyStatus'),
   familyReadOnly: document.getElementById('familyReadOnly'),
   familyEditable: document.getElementById('familyEditable'),
   // Commute travel blocks (#268): knobs + per-calendar write capability.
   familyTravelBlocks: document.getElementById('familyTravelBlocks'),
-
-  // Follow-ups (#219)
-  ackItems: document.getElementById('ackItems'),
-  ackEmpty: document.getElementById('ackEmpty'),
 
   enrollCard: document.getElementById('enrollCard'),
   webauthnStatus: document.getElementById('webauthnStatus'),

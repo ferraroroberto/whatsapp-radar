@@ -13,7 +13,7 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from './format.js';
+import { fmtLocalDateTime, fmtNum, kindLabel, setHeaderStatus, sourceIcon, SOURCE_LABEL } from './format.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { patchTraffic } from './family.js';
 
@@ -207,7 +207,23 @@ function renderCalendarHealth(source) {
   return card;
 }
 
+// The Settings header line (#374): a source that should be up and is not,
+// else the build the PWA is running.
+export function renderSettingsStatus() {
+  const ex = execState();
+  const down = (ex.sourceHealth || []).find(function (s) {
+    if (!s.enabled) return false;
+    return s.source === 'whatsapp' && ex.sidecar ? !ex.sidecar.is_live : !s.connected;
+  });
+  if (down) {
+    setHeaderStatus(els.settingsStatus, (SOURCE_LABEL[down.source] || down.source) + ' offline', 'danger');
+  } else {
+    setHeaderStatus(els.settingsStatus, els.buildReadout.textContent, null);
+  }
+}
+
 function renderSourceHealth() {
+  renderSettingsStatus();
   const ex = execState();
   els.execSources.textContent = '';
   els.execSourcesCount.textContent = ex.sourceHealth.length

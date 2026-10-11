@@ -62,7 +62,8 @@ def test_version_shape(loopback: TestClient) -> None:
 def test_index_served_and_stamped(loopback: TestClient) -> None:
     r = loopback.get("/")
     assert r.status_code == 200
-    assert "WhatsApp Radar" in r.text
+    assert "<title>Family Radar</title>" in r.text
+    assert "WhatsApp Radar" not in r.text and "WA Radar" not in r.text
     assert "?v=" in r.text  # asset URLs are version-stamped
 
 

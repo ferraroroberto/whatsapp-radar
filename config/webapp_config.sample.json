@@ -13,7 +13,7 @@
   "auth_password": "",
   "tailnet_allowlist": [],
   "webauthn_rp_id": "",
-  "webauthn_rp_name": "WhatsApp Radar",
+  "webauthn_rp_name": "Family Radar",
   "webauthn_origin": "",
   "telegram_bot_token": "",
   "telegram_chat_id": "",

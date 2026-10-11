@@ -13,7 +13,7 @@ def test_missing_file_yields_defaults(tmp_path: Path) -> None:
     cfg = load_webapp_config(tmp_path / "nope.json")
     assert cfg.port == 8455
     assert cfg.auth_token == ""
-    assert cfg.webauthn_rp_name == "WhatsApp Radar"
+    assert cfg.webauthn_rp_name == "Family Radar"
     assert cfg.tailnet_allowlist == []
     assert cfg.sender_voice_genders == {}
     assert cfg.default_voice_gender == "female"

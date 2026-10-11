@@ -260,7 +260,7 @@ def _abort_offline(
     emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
     alert_status, _ = send_alert(
         config,
-        f"⚠️ WhatsApp Radar: live scan aborted — all sources offline ({exc}). "
+        f"⚠️ Family Radar: live scan aborted — all sources offline ({exc}). "
         "No messages were checked. Restore at least one enabled source.",
     )
     emit(progress, f"• offline alert: {alert_status}")
@@ -363,7 +363,7 @@ def _run_tripwire(
     suffix = f" (+{len(result.hits) - len(names)} more)" if len(result.hits) > len(names) else ""
     status, detail = send_alert(
         config,
-        f"WhatsApp Radar: {len(result.hits)} unmonitored chat(s) matched actionable "
+        f"Family Radar: {len(result.hits)} unmonitored chat(s) matched actionable "
         f"keywords recently: {', '.join(names)}{suffix}. Open Messages → "
         "Chats worth monitoring to review and promote them.",
     )
@@ -589,22 +589,6 @@ def scan(
                 item_id=item_id,
                 chat_display_name=chat["display_name"],
                 result=result,
-            )
-
-        # Non-routine ack surface (Step 5/5 of #206, #219) — additive, live-only
-        # (dry-run replays the same messages every call, which would otherwise
-        # queue a fresh duplicate ack item each time). calendar_event_id is
-        # always None here: routine (#218) and non_routine are mutually
-        # exclusive prep_complexity states today, so this item never has one.
-        if mode == "live" and result.action_required and result.prep_complexity == "non_routine":
-            store.insert_ack_item(
-                conn,
-                run_id,
-                chat_id,
-                child=result.child,
-                task_category=result.task_category,
-                summary=result.summary,
-                calendar_event_id=None,
             )
 
         telegram_text: str | None = None

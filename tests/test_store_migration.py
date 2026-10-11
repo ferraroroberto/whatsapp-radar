@@ -384,12 +384,9 @@ def test_connect_creates_ack_items_on_a_legacy_db(tmp_path: Path) -> None:
             row["name"]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
+        # Retired from the app in #374 but kept, rows and all (no destructive
+        # migration), so a legacy DB still gains it.
         assert "ack_items" in tables
-        run_id = store.start_run(conn, kind="scan")
-        item_id = store.insert_ack_item(
-            conn, run_id, 1, child="Sam", task_category="permission_slip", summary=None
-        )
-        assert [r["id"] for r in store.pending_ack_items(conn)] == [item_id]
     finally:
         conn.close()
 

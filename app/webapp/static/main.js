@@ -8,13 +8,12 @@ import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.j
 import { icon } from './_vendored/icons/icons.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus, wireWebauthn } from './webauthn.js';
-import { fetchDashboard } from './dashboard.js';
+import { fetchDashboard, wireDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { wireConfig, wireSettings } from './config.js';
-import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
+import { fetchExecution, fetchSettingsHealth, renderSettingsStatus, wireExecution } from './execution.js';
 import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
-import { fetchAck } from './ack.js';
 
 // --------------------------------------------------------- build identity
 // Identical text + format to home-automation's footer readout.
@@ -35,6 +34,7 @@ async function fetchVersion() {
     const sha = body.git_sha || 'unknown';
     const ts = fmtBuildTime(body.built_at || '');
     els.buildReadout.textContent = ts ? ('Build: ' + sha + ' · ' + ts) : ('Build: ' + sha);
+    renderSettingsStatus();
   } catch (exc) {
     els.buildReadout.textContent = '';
     // An auth failure must reach boot(): it stops there, before any poll timer is
@@ -66,10 +66,8 @@ function toggleTheme() {
 els.themeToggles.forEach(function (btn) { btn.addEventListener('click', toggleTheme); });
 
 // --------------------------------------------------------- boot
-// Home hosts the dashboard and the pending follow-ups (#336).
 function refreshHome() {
   fetchDashboard().catch(function () {});
-  fetchAck().catch(function () {});
 }
 
 // boot() re-runs after a successful password login (wireLoginForm); the poll
@@ -89,7 +87,7 @@ async function boot() {
     return;
   }
   await fetchWebauthnStatus();
-  await Promise.all([fetchDashboard(), fetchAck().catch(function () {})]);
+  await fetchDashboard();
 
   if (pollsArmed) return;
   pollsArmed = true;
@@ -124,6 +122,7 @@ wireConfig();
 wireSettings();
 wireExecution();
 wireActivity();
+wireDashboard();
 wireFamily();
 
 boot();

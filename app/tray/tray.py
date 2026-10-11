@@ -141,7 +141,7 @@ def _notify(title: str, message: str) -> None:
     try:
         from winotify import Notification
 
-        Notification(app_id="WhatsApp Radar", title=title, msg=message).show()
+        Notification(app_id="Family Radar", title=title, msg=message).show()
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"winotify failed: {exc}")
 
@@ -179,11 +179,11 @@ def run_tray() -> int:
     def _start() -> None:
         try:
             manager.start(wait=True)
-            _notify("WhatsApp Radar ready", manager.base_url)
+            _notify("Family Radar ready", manager.base_url)
         except Exception as exc:  # noqa: BLE001
             starter_error["exc"] = exc
             logger.error(f"❌ webapp start failed: {exc}")
-            _notify("WhatsApp Radar start failed", str(exc))
+            _notify("Family Radar start failed", str(exc))
 
     threading.Thread(target=_start, daemon=True).start()
 
@@ -240,7 +240,7 @@ def run_tray() -> int:
         # relaunching can't help, so nag once rather than every 90 s tick.
         if action == sidecar.ACTION_NEEDS_QR and last_supervisor_state["state"] != state:
             _notify(
-                "WhatsApp Radar: re-pair needed",
+                "Family Radar: re-pair needed",
                 "The linked device was logged out — open the webapp to scan a new QR.",
             )
         last_supervisor_state["state"] = state
@@ -287,9 +287,9 @@ def run_tray() -> int:
     def restart_webapp(icon: object, item: object) -> None:
         def _do() -> None:
             try:
-                _notify("WhatsApp Radar", "Restarting webapp…")
+                _notify("Family Radar", "Restarting webapp…")
                 manager.restart(wait=True)
-                _notify("WhatsApp Radar restarted", manager.base_url)
+                _notify("Family Radar restarted", manager.base_url)
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"❌ webapp restart failed: {exc}")
                 _notify("Restart failed", str(exc))
@@ -318,7 +318,7 @@ def run_tray() -> int:
 
     def show_status(icon: object, item: object) -> None:
         s = manager.status()
-        _notify("WhatsApp Radar status", f"{s.detail} · {s.base_url}")
+        _notify("Family Radar status", f"{s.detail} · {s.base_url}")
 
     def open_local(icon: object, item: object) -> None:
         webbrowser.open(manager.base_url)
@@ -335,7 +335,7 @@ def run_tray() -> int:
         icon.stop()  # type: ignore[attr-defined]
 
     menu = Menu(
-        MenuItem("📡 Open WhatsApp Radar", open_local, default=True),
+        MenuItem("📡 Open Family Radar", open_local, default=True),
         MenuItem("📋 Copy local URL", copy_local),
         MenuItem("📋 Copy Tailscale URL", copy_tailscale),
         MenuItem("📋 Copy Cloudflare URL", copy_tunnel),
@@ -347,7 +347,7 @@ def run_tray() -> int:
         MenuItem("🚪 Quit", quit_app),
     )
 
-    icon = pystray.Icon("whatsapp-radar", icon=_build_icon(), title="WhatsApp Radar", menu=menu)
+    icon = pystray.Icon("whatsapp-radar", icon=_build_icon(), title="Family Radar", menu=menu)
     icon.run()
     if starter_error["exc"] is not None:
         return 1

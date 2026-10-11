@@ -10,7 +10,7 @@
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum } from './format.js';
+import { fmtLocalDateTime, fmtNum, setHeaderStatus } from './format.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
 import { childrenOf, resetLinkPanel, syncLinkPanel, wireChatLinks } from './chat-links.js';
@@ -104,8 +104,22 @@ function visibleChats() {
   });
 }
 
+// Inbox's header line (#374): chats worth a look, else how many are watched.
+function renderHeader() {
+  const worth = state.tripwire.hits.length;
+  if (worth) {
+    setHeaderStatus(els.chatsStatus, worth + ' worth a look', 'accent');
+    return;
+  }
+  const monitored = state.chats.filter(function (c) {
+    return c.status === 'monitored' && !isChild(c);
+  }).length;
+  setHeaderStatus(els.chatsStatus, fmtNum(monitored) + ' monitored', null);
+}
+
 function render() {
   renderTripwire();
+  renderHeader();
   const all = visibleChats();
   const shown = all.slice(0, CHATS_RENDER_CAP);
 

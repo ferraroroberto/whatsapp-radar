@@ -23,6 +23,7 @@ import {
   renderMessageTrace,
 } from './run-trace.js';
 import { busyLine, fetchExecution, isRunning, killRun, onExecutionChange, runSelection } from './execution.js';
+import { setTab } from './tabs.js';
 
 function ax() { return state.activity; }
 
@@ -150,7 +151,7 @@ function runRow(item) {
   text.append(title, meta);
   main.append(glyph(kindIcon(item.kind)), text);
   main.addEventListener('click', function () {
-    openRun({ kind: item.kind, dbId: item.dbId, runId: item.runId });
+    (item.onOpen || openRun)({ kind: item.kind, dbId: item.dbId, runId: item.runId });
   });
   li.appendChild(main);
   const chips = rowChips(item);
@@ -462,9 +463,10 @@ export async function fetchActivity() {
   await Promise.all(jobs);
 }
 
-function setScope(scope) {
+// Switch the scope; false when it already was. The caller fetches.
+function presetScope(scope) {
   const a = ax();
-  if (a.scope === scope) return;
+  if (a.scope === scope) return false;
   a.scope = scope;
   a.runs = [];
   a.hasMore = false;
@@ -473,7 +475,32 @@ function setScope(scope) {
     b.setAttribute('aria-pressed', String(b.dataset.scope === scope));
   }
   els.activityList.dataset.state = 'loading';
-  fetchActivity().catch(function () {});
+  return true;
+}
+
+function setScope(scope) {
+  if (presetScope(scope)) fetchActivity().catch(function () {});
+}
+
+function scopeOf(kind) {
+  if (kind === 'calendar-scan') return 'calendar';
+  if (kind === 'traffic-check') return 'traffic';
+  return 'messages';
+}
+
+/* From another tab (Home's glance rows, header line and Latest runs, #374):
+ * open Activity at the run's scope with its sheet open. */
+export function openRunInActivity(ref) {
+  const here = state.tab === 'activity';
+  const changed = presetScope(scopeOf(ref.kind));
+  setTab('activity');  // a tab change fetches the list itself
+  if (here && changed) fetchActivity().catch(function () {});
+  openRun(ref);
+}
+
+// Activity's run row for another tab's list (Home's Latest runs, #374).
+export function runRowFor(run, onOpen) {
+  return runRow({ ...auditItem(run), onOpen: onOpen });
 }
 
 // ----------------------------------------------------------- run sheet

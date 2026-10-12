@@ -119,7 +119,7 @@
   --tile-purple: #8957e5;
   --tile-orange: #bd561d;
   --tile-yellow: #9e6a03;
-  --input-bg: var(--bg);
+  --input-bg: var(--line-muted);
   --control-border: #6e7681;
   --toggle-knob: var(--ink);
   --close-bg: transparent;

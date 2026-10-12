@@ -24,6 +24,7 @@ disclosure = { src = "app/webapp/static/_vendored/disclosure", sha = "f70569640e
 segmented = { src = "app/webapp/static/_vendored/segmented", sha = "92d16e00cd47561de647cda12faea7fcdb6f081b", dest = "app/webapp/static/_vendored/segmented" }
 action-row = { src = "app/webapp/static/_vendored/action-row", sha = "92d16e00cd47561de647cda12faea7fcdb6f081b", dest = "app/webapp/static/_vendored/action-row" }
 row-menu = { src = "app/webapp/static/_vendored/row-menu", sha = "92d16e00cd47561de647cda12faea7fcdb6f081b", dest = "app/webapp/static/_vendored/row-menu" }
+empty-state = { src = "app/webapp/static/_vendored/empty-state", sha = "69351311c9c4d6500c79f45ddd3c4441b1e90fa4", dest = "app/webapp/static/_vendored/empty-state" }
 
 # Diff-proportionate e2e routing (project-scaffolding#180, schema:
 # project-scaffolding/docs/e2e-routing.md). Rules are evaluated top-to-bottom;

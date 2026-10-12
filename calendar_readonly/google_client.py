@@ -20,6 +20,10 @@ CredentialLoader = Callable[[str, list[str]], Any]
 RequestFactory = Callable[[], Any]
 ServiceBuilder = Callable[..., Any]
 
+# googleapiclient retries SSL/connection/timeout drops and 5xx/429 itself when
+# asked; a read is safe to repeat. Writes (calendar_write) deliberately don't.
+READ_RETRIES = 3
+
 
 class GoogleCalendarReadClient:
     """Narrow adapter over the official Calendar discovery client (read-only)."""
@@ -58,7 +62,7 @@ class GoogleCalendarReadClient:
                 kwargs["privateExtendedProperty"] = private_extended_property
             if page_token:
                 kwargs["pageToken"] = page_token
-            response = self._service.events().list(**kwargs).execute()
+            response = self._service.events().list(**kwargs).execute(num_retries=READ_RETRIES)
             events.extend(response.get("items") or [])
             page_token = response.get("nextPageToken")
             if not page_token:

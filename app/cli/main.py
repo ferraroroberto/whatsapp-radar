@@ -17,6 +17,7 @@ run's output, not merely its outcome.
 from __future__ import annotations
 
 import argparse
+import logging
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -42,6 +43,8 @@ from src.notify import deliver_digest
 from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
 from src.runresult import format_result
+
+logger = logging.getLogger(__name__)
 
 
 def _progress(line: str) -> None:
@@ -637,6 +640,10 @@ def _cmd_family_check(
         _emit_result({"kind": kind, "status": "skipped", "reason": skip_reason})
         return 0
 
+    # A check killed before it could finalize its row (Job timeout, restart,
+    # reboot) cannot clean up after itself, so each fire first sweeps the rows
+    # earlier fires left at `running` (#371).
+    store.reconcile_stale_runs(conn)
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
     runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check
     try:
@@ -646,6 +653,24 @@ def _cmd_family_check(
         store.finish_run_summary(conn, run_id, "failed", None, error=str(exc))
         _emit_result({"kind": kind, "status": "error", "error": str(exc), "run_id": run_id})
         return 1
+    except Exception as exc:
+        # Anything else (a network error, a malformed payload) used to escape with
+        # the row still `running` (#371). Record it, then let it propagate so the
+        # process still exits non-zero with its traceback.
+        logger.error("❌ %s run %s failed unexpectedly: %r", kind, run_id, exc)
+        store.finish_run_summary(
+            conn, run_id, "failed", None, error=f"{type(exc).__name__}: {exc}"
+        )
+        raise
+    except BaseException as exc:
+        # Interrupt / termination: nobody observed an outcome, so neither `failed`
+        # nor `completed` is true (#371).
+        logger.warning(
+            "⚠️ %s run %s interrupted (%s); recording it abandoned",
+            kind, run_id, type(exc).__name__,
+        )
+        store.abandon_run(conn, run_id, f"abandoned: interrupted ({type(exc).__name__})")
+        raise
     payload["run_id"] = run_id
     if kind == "calendar-scan":
         _progress(

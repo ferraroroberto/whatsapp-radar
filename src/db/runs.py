@@ -11,10 +11,31 @@ tables this module writes.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 from src.db.connection import _now, _rowid
+
+logger = logging.getLogger(__name__)
+
+#: A run whose process ended before it recorded a result (#371). Its own terminal
+#: state — neither ``failed`` (no error was observed) nor ``completed`` (no result
+#: was recorded) — so the Run list stops showing it as in progress without
+#: claiming an outcome nobody saw.
+STATUS_ABANDONED = "abandoned"
+
+#: How long a run of each kind may legitimately stay at ``running`` (#371). Only
+#: kinds with a known, short bound are listed: a one-shot family check records
+#: its result within seconds (slowest observed ~160 s, a Routes call per leg), so
+#: a row still ``running`` long past that has no process behind it. A kind absent
+#: here (``scan`` / ``process`` can legitimately run for many minutes, and nothing
+#: bounds them) is never reconciled — its age cannot establish that it is dead.
+STALE_RUNNING_AFTER: dict[str, timedelta] = {
+    "traffic-check": timedelta(minutes=30),
+    "calendar-scan": timedelta(minutes=30),
+}
 
 
 def start_run(
@@ -50,6 +71,65 @@ def finish_run_summary(
         (_now(), status, summary_json, error, run_id),
     )
     conn.commit()
+
+
+def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
+    """Mark a still-``running`` run abandoned (#371); True if this call changed it.
+
+    Guarded on ``status = 'running'`` so a run that finalized itself between the
+    caller's read and this write is never overwritten. ``completed_at`` stays NULL:
+    nobody observed when (or whether) it ended, and a timestamp would assert that.
+    """
+    cur = conn.execute(
+        "UPDATE review_runs SET status = ?, error = ? WHERE id = ? AND status = 'running'",
+        (STATUS_ABANDONED, error, run_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def reconcile_stale_runs(conn: sqlite3.Connection, *, now: datetime | None = None) -> list[int]:
+    """Move runs that can no longer be running to ``abandoned`` (#371); returns their ids.
+
+    The rule is age: a ``running`` row of a kind in :data:`STALE_RUNNING_AFTER`
+    older than that kind's bound. Anything the rule cannot establish is left
+    exactly as it is — a kind with no bound, a row younger than its bound (a live
+    check), a ``started_at`` that does not parse. Run it on webapp startup and before
+    each family check opens its own row, so a killed or restarted process is
+    swept up by the next one. One info line per reconciled run.
+    """
+    now = now or datetime.now(UTC)
+    reconciled: list[int] = []
+    placeholders = ",".join("?" for _ in STALE_RUNNING_AFTER)
+    rows = conn.execute(
+        "SELECT id, kind, started_at FROM review_runs "
+        f"WHERE status = 'running' AND kind IN ({placeholders}) ORDER BY id",
+        tuple(STALE_RUNNING_AFTER),
+    ).fetchall()
+    for row in rows:
+        try:
+            started = datetime.fromisoformat(str(row["started_at"]))
+        except ValueError:
+            continue
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        limit = STALE_RUNNING_AFTER[row["kind"]]
+        age = now - started
+        if age < limit:
+            continue
+        minutes = int(age.total_seconds() // 60)
+        reason = (
+            f"abandoned: still running {minutes} min after it started "
+            f"(limit {int(limit.total_seconds() // 60)} min); "
+            "the process ended without recording a result"
+        )
+        if abandon_run(conn, int(row["id"]), reason):
+            reconciled.append(int(row["id"]))
+            logger.info(
+                "ℹ️ run %s (%s, started %s) reconciled running -> %s after %d min",
+                row["id"], row["kind"], row["started_at"], STATUS_ABANDONED, minutes,
+            )
+    return reconciled
 
 
 def record_run_funnel(

@@ -214,6 +214,8 @@ A check that self-skips records too, reading as *skipped* with its reason, so a 
 
 `webapp/runs/` is gitignored and each kind is pruned to its newest 200 records after every run finishes and once at webapp startup (`app/webapp/runs.py::prune_runs`). The active in-flight run is never touched, and a "running" record older than 24h — a crashed run whose finalize never ran — is treated as dead rather than kept forever.
 
+The run store has the same escape (#371): a traffic-check or calendar-scan row still `running` more than 30 minutes after it started has no process behind it, so it is moved to its own terminal state, **`abandoned`** (shown as an *Abandoned* chip, never folded into *failed* or *completed*; `completed_at` stays empty because nobody saw it end). `store.reconcile_stale_runs` does this on webapp startup and before every family check opens its own row, logging one info line per run. A check that hits an unexpected error records `failed`; one that is interrupted records `abandoned`. Scan and process runs have no known duration bound, so they are never reconciled.
+
 - `GET /api/audit/runs?scope=messages|calendar|traffic&limit=N&before=ID`, `GET /api/audit/runs/{id}`, `GET /api/audit/filtered?days=N&limit=N&offset=N`
 - `POST /api/execution/run`, `GET /api/execution/runs`
 - `GET /api/execution/runs/{kind}/{id}` (a `db-<id>` serves the run's captured record when one exists), `POST /api/execution/runs/{kind}/{id}/kill`

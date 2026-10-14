@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import mimetypes
 import os
+import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -54,6 +55,7 @@ from app.webapp.routers import (
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
+from src.db import store
 from src.logging_setup import configure_file_logging
 from src.runtime_data import runtime_db_path
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
@@ -130,6 +132,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         runs.prune_runs()
     except OSError as exc:
         _log.warning(f"⚠️ startup run-prune failed: {exc}")
+    # Runs a restart or kill left at `running` can never finish now (#371).
+    # Best-effort for the same reason as the prune above.
+    try:
+        conn = store.connect(Path(app.state.db_path))
+        try:
+            store.reconcile_stale_runs(conn)
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        _log.warning(f"⚠️ startup stale-run reconcile failed: {exc}")
     yield
 
 

@@ -15,8 +15,9 @@ import { els, state } from './state.js';
 import { jsonApi, toast } from './api.js';
 import {
   fmtLocalDateTime, fmtRelative, kindIcon, kindLabel, legPricing, renderFunnelCells,
-  renderSourceFunnels, setHeaderStatus, statusChip,
+  renderSourceFunnels, statusChip,
 } from './format.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { icon } from './_vendored/icons/icons.js';
 import {
   actionMeta, funnelCells, isFamilyKind, modeLabel, paramsSummary, renderFamilyTrace,
@@ -399,11 +400,11 @@ export function renderList() {
 // The most severe exception, else one muted fact (#373).
 function renderHeader() {
   const busy = busyLine();
-  if (busy) { setHeaderStatus(els.activityStatus, busy, 'neutral'); return; }
+  if (busy) { renderHeadStatus(els.activityStatus, [], busy); return; }
   const runs = ax().headerRuns;
   const scans = runs.filter(function (r) { return r.kind === 'scan' && r.mode !== 'dry_run'; });
   if (scans.length && scans[0].status === 'failed') {
-    setHeaderStatus(els.activityStatus, 'Last scan failed', 'danger');
+    renderHeadStatus(els.activityStatus, [{ text: 'Last scan failed', tone: 'danger' }]);
     return;
   }
   const today = dayKey(Date.now());
@@ -412,11 +413,11 @@ function renderHeader() {
     return n + (r.mode !== 'dry_run' && dayKey(r.started_at) === today ? (f.actionable || 0) : 0);
   }, 0);
   if (actionable) {
-    setHeaderStatus(els.activityStatus, `${actionable} actionable today`, 'accent');
+    renderHeadStatus(els.activityStatus, [{ text: `${actionable} actionable today`, tone: 'attention' }]);
     return;
   }
-  setHeaderStatus(els.activityStatus,
-    scans.length ? 'Last scan ' + fmtRelative(scans[0].started_at) : 'No live scan yet', null);
+  renderHeadStatus(els.activityStatus, [],
+    scans.length ? 'Last scan ' + fmtRelative(scans[0].started_at) : 'No live scan yet');
 }
 
 // ----------------------------------------------------------- fetch

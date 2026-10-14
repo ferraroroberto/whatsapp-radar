@@ -64,16 +64,6 @@ export function statusChip(text, tone) {
   return chip;
 }
 
-/* The page-header context line (#373; Step 3/6 reuses it on every tab): the
- * most severe exception in its tone, else one muted fact. It writes into the
- * vendored home-head `.status` slot, which ellipsizes and never shifts the row;
- * an empty value keeps a non-breaking space so the slot holds its height. */
-export function setHeaderStatus(el, text, tone) {
-  el.textContent = text || ' ';
-  if (tone) el.dataset.tone = tone;
-  else delete el.dataset.tone;
-}
-
 // Funnel-cell mapping for the two family-check kinds (calendar-scan ·
 // traffic-check), shared by run-trace.js's funnelCells() and its
 // renderFamilyTrace() so a label/field change can't render differently for a

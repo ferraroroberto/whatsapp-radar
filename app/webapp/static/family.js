@@ -15,7 +15,8 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, setHeaderStatus, travelStatusLabel } from './format.js';
+import { fmtLocalDateTime, travelStatusLabel } from './format.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
 import {
@@ -84,14 +85,16 @@ function renderHeader(d) {
   const missing = (cal && cal.missing_locations) || 0;
   const routesNeeded = !!(d.traffic.enabled || (d.travel_blocks || {}).enabled);
   if ((d.calendars || []).length && !d.token_present) {
-    setHeaderStatus(els.familyStatus, 'Calendar token missing', 'danger');
+    renderHeadStatus(els.familyStatus, [{ text: 'Calendar token missing', tone: 'danger' }]);
   } else if (routesNeeded && !d.traffic.api_key_set) {
-    setHeaderStatus(els.familyStatus, 'Routes API key missing', 'danger');
+    renderHeadStatus(els.familyStatus, [{ text: 'Routes API key missing', tone: 'danger' }]);
   } else if (missing) {
-    setHeaderStatus(els.familyStatus,
-      missing + ' missing location' + (missing === 1 ? '' : 's'), 'attention');
+    renderHeadStatus(els.familyStatus, [{
+      text: missing + ' missing location' + (missing === 1 ? '' : 's'),
+      tone: 'attention',
+    }]);
   } else {
-    setHeaderStatus(els.familyStatus, 'Rules in force', null);
+    renderHeadStatus(els.familyStatus, [], 'Rules in force');
   }
 }
 

@@ -55,7 +55,9 @@ from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
 from src.config import load_config
 from src.logging_setup import configure_file_logging
+from src.runtime_data import runtime_db_path
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
+from src.usage_log import usage_router
 from src.webapp_config import load_webapp_config
 from src.webauthn_gate import WebAuthnGate
 
@@ -179,6 +181,11 @@ def create_app() -> FastAPI:
     app.include_router(family.router)
     app.include_router(audit.router)
     app.include_router(sidecar.router)
+    # Local-only view/tap log (#386). No `dependencies`: BearerTokenMiddleware above
+    # already gates every /api path, loopback bypass included.
+    app.include_router(usage_router(
+        runtime_db_path("whatsapp-radar", "usage.sqlite3", env_var="WR_USAGE_DB_PATH", create=True),
+    ))
 
     return app
 

@@ -6,9 +6,20 @@
  * keeps state.tab in sync and forwards the per-tab refresh callback. */
 
 import { state } from './state.js';
+import { readToken } from './api.js';
 import { initNavTabs } from './_vendored/nav/nav-tabs.js';
+import { initUsageLog } from './_vendored/usage-log/usage-log.js';
 
 let nav = null;
+
+// Local-only view/tap log (#386): same-origin, ids only, never content. The bearer
+// token is read per send so a rotated one is picked up.
+const usage = initUsageLog({
+  headers: function () {
+    const token = readToken();
+    return token ? { Authorization: 'Bearer ' + token } : {};
+  },
+});
 
 export function setTab(tab) {
   if (nav) nav.setTab(tab);
@@ -31,6 +42,7 @@ export function wireTabs(onTab) {
     storageKey: STORAGE_KEY,
     onChange: function (tab) {
       state.tab = tab;
+      usage.trackView(tab);
       if (onTab) onTab(tab);
     },
   });

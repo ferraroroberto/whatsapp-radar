@@ -13,7 +13,8 @@
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum, fmtRelative, setHeaderStatus } from './format.js';
+import { fmtLocalDateTime, fmtNum, fmtRelative } from './format.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
 import {
@@ -120,13 +121,13 @@ function visibleChats() {
 function renderHeader() {
   const worth = state.tripwire.hits.length;
   if (worth) {
-    setHeaderStatus(els.chatsStatus, worth + ' worth a look', 'accent');
+    renderHeadStatus(els.chatsStatus, [{ text: worth + ' worth a look', tone: 'attention' }]);
     return;
   }
   const monitored = state.chats.filter(function (c) {
     return c.status === 'monitored' && !isChild(c);
   }).length;
-  setHeaderStatus(els.chatsStatus, fmtNum(monitored) + ' monitored', null);
+  renderHeadStatus(els.chatsStatus, [], fmtNum(monitored) + ' monitored');
 }
 
 function render() {

@@ -66,6 +66,8 @@ from src.db.messages import (
 from src.db.reprocess_support import clear_all_data, snapshot_operator_state
 from src.db.retention import PruneOutcome, prune_gmail_unmonitored
 from src.db.runs import (
+    STATUS_ABANDONED,
+    abandon_run,
     actionable_items_for_run,
     count_actionable_items,
     count_filtered_traces,
@@ -83,6 +85,7 @@ from src.db.runs import (
     list_live_scan_runs,
     list_review_runs,
     list_runs_by_kind,
+    reconcile_stale_runs,
     record_notification,
     record_run_funnel,
     review_run,
@@ -100,6 +103,8 @@ from src.db.tripwire import (
 __all__ = [
     "LinkError",
     "PruneOutcome",
+    "STATUS_ABANDONED",
+    "abandon_run",
     "actionable_items_for_run",
     "advance_cursor",
     "baseline_cursor",
@@ -156,6 +161,7 @@ __all__ = [
     "recent_messages_family",
     "recent_syncs",
     "record_notification",
+    "reconcile_stale_runs",
     "record_run_funnel",
     "record_sync",
     "review_run",

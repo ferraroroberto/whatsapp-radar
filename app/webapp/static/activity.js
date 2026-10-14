@@ -100,6 +100,9 @@ function execSummaryBits(rec) {
 function rowChips(item) {
   const chips = [];
   if (item.status === 'failed') chips.push(statusChip('Failed', 'danger'));
+  // Its own chip (#371): the process ended without recording a result — not
+  // in progress, and not a failure anyone observed.
+  else if (item.status === 'abandoned') chips.push(statusChip('Abandoned', 'attention'));
   else if (isRunning(item.status)) chips.push(statusChip('Running', 'neutral'));
   if (item.mode === 'dry_run') chips.push(statusChip('Dry run', 'neutral'));
   const r = item.run;
@@ -213,11 +216,13 @@ function foldRow(key, items, label) {
     return n + ((it.run && it.run.summary && it.run.summary.alerts) || 0);
   }, 0);
   const failed = items.filter(function (it) { return it.status === 'failed'; }).length;
+  const abandoned = items.filter(function (it) { return it.status === 'abandoned'; }).length;
   title.textContent = `${label} · ${items.length} traffic check${items.length === 1 ? '' : 's'}`;
   const meta = document.createElement('span');
   meta.className = 'action-row-meta';
   meta.textContent = (alerts ? `${alerts} alert${alerts === 1 ? '' : 's'}` : 'no alerts')
-    + (failed ? ` · ${failed} failed` : '');
+    + (failed ? ` · ${failed} failed` : '')
+    + (abandoned ? ` · ${abandoned} abandoned` : '');
   text.append(title, meta);
   main.append(glyph('car'), text);
   main.addEventListener('click', function () {

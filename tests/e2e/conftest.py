@@ -285,6 +285,8 @@ def base_url() -> Iterator[str]:
     db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
     db_path = Path(db_dir) / "e2e.sqlite3"
     env["WR_DB_PATH"] = str(db_path)
+    # The usage log (#386) gets the same disposable directory, never the real one.
+    env["WR_USAGE_DB_PATH"] = str(Path(db_dir) / "e2e-usage.sqlite3")
     # Family rules normally live in the developer's ignored local config. Give
     # the e2e webapp an explicit sanitized config layer so both reads and any
     # accidental Family-tab saves stay inside this disposable directory.

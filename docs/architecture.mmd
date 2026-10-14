@@ -33,6 +33,7 @@ flowchart TB
     SERVER["server.py — app assembly, static mount"]
     MANAGER["manager.py — WebappManager (start/stop/restart)"]
     MIDDLEWARE["middleware.py — bearer-token gate"]
+    USAGELOG["src/usage_log.py — vendored local-only view/tap log\n(ids + device class only, usage.sqlite3, #386)"]
     RUNS["runs.py — spawns CLI pieces, streams output;\nowns the run-record shape both surfaces write"]
     ROUTERS["routers/: dashboard · chats · execution ·\nconfig · sidecar · auth · webauthn · audit · family · misc\n(family also owns the travel-block knobs, the three-state\nper-calendar write-capability readout #268, and the\nreported live-sweep blockers #276 — enforcement stays\nin src/family/)"]
     STATIC["static/ — PWA shell: Home · Activity · Inbox · Family\n+ the Settings gear dialog\n(activity.js: one run list + run sheet reading the\naudit + execution routers; Run and Audit merged, #373;\nedit-sheet.js: the Done-to-save sheets behind\nFamily and Settings rows, #376/#377)"]
@@ -40,6 +41,7 @@ flowchart TB
   TRAYPY --> MANAGER
   MANAGER --> SERVER
   SERVER --> MIDDLEWARE
+  SERVER --> USAGELOG
   SERVER --> ROUTERS
   SERVER --> STATIC
   STATIC --> ROUTERS

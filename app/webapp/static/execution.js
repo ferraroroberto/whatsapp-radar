@@ -14,7 +14,8 @@
 
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum, kindLabel, setHeaderStatus, sourceIcon, SOURCE_LABEL } from './format.js';
+import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from './format.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { patchFamily } from './family.js';
 import { setRowValue } from './edit-sheet.js';
@@ -219,11 +220,14 @@ export function renderSettingsStatus() {
   const down = (ex.sourceHealth || []).find(function (s) { return s.enabled && !isLiveSource(s); });
   const w = state.webauthn || {};
   if (down) {
-    setHeaderStatus(els.settingsStatus, (SOURCE_LABEL[down.source] || down.source) + ' offline', 'danger');
+    renderHeadStatus(els.settingsStatus, [{
+      text: (SOURCE_LABEL[down.source] || down.source) + ' offline',
+      tone: 'danger',
+    }]);
   } else if (w.configured && w.enrollment_open) {
-    setHeaderStatus(els.settingsStatus, 'Passkey enrollment open', 'accent');
+    renderHeadStatus(els.settingsStatus, [{ text: 'Passkey enrollment open', tone: 'attention' }]);
   } else {
-    setHeaderStatus(els.settingsStatus, els.buildReadout.textContent, null);
+    renderHeadStatus(els.settingsStatus, [], els.buildReadout.textContent);
   }
 }
 

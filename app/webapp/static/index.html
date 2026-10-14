@@ -277,9 +277,9 @@
           Home
         </span>
         <button id="dashStatus" type="button" class="status status-link" disabled>&nbsp;</button>
-        <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
+        <button type="button" class="icon-button home-toggle theme-toggle" data-track="theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-        <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
+        <button type="button" class="icon-button home-toggle home-settings" data-track="settings-open" aria-label="Settings" title="Settings">
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
@@ -293,7 +293,7 @@
         <h3 class="run-group-title">Latest runs</h3>
         <div class="card action-list">
           <ul id="dashLatest" class="action-rows" aria-label="Latest runs"></ul>
-          <button id="dashAllActivity" type="button" class="dash-all-activity">All activity</button>
+          <button id="dashAllActivity" type="button" data-track="home.all-activity" class="dash-all-activity">All activity</button>
         </div>
       </section>
     </section>
@@ -306,9 +306,9 @@
           Inbox
         </span>
         <span id="chatsStatus" class="status" role="status" aria-live="polite">&nbsp;</span>
-        <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
+        <button type="button" class="icon-button home-toggle theme-toggle" data-track="theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-        <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
+        <button type="button" class="icon-button home-toggle home-settings" data-track="settings-open" aria-label="Settings" title="Settings">
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
@@ -317,7 +317,7 @@
       <div class="chats-layout">
         <div class="chats-main">
           <div class="chats-toolbar">
-            <div id="chatsFilter" class="segmented" role="group" aria-label="Message status filter">
+            <div id="chatsFilter" class="segmented" data-track="chats.filter" role="group" aria-label="Message status filter">
               <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
               <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
               <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
@@ -366,11 +366,11 @@
           Activity
         </span>
         <span id="activityStatus" class="status" role="status" aria-live="polite">&nbsp;</span>
-        <button id="activityRunNow" type="button" class="icon-button home-toggle" aria-label="Run now"
+        <button id="activityRunNow" type="button" data-track="activity.run-now" class="icon-button home-toggle" aria-label="Run now"
                 title="Run now" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg></button>
-        <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
+        <button type="button" class="icon-button home-toggle theme-toggle" data-track="theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-        <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
+        <button type="button" class="icon-button home-toggle home-settings" data-track="settings-open" aria-label="Settings" title="Settings">
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
@@ -379,7 +379,7 @@
            opens it as a sheet (#runSheet). -->
       <div class="activity-layout">
         <div class="activity-main">
-          <div id="activityScope" class="segmented activity-scope" role="group" aria-label="Activity scope">
+          <div id="activityScope" class="segmented activity-scope" data-track="activity.scope" role="group" aria-label="Activity scope">
             <button type="button" class="segmented-item" aria-pressed="true" data-scope="messages">Messages</button>
             <button type="button" class="segmented-item" aria-pressed="false" data-scope="calendar">Calendar</button>
             <button type="button" class="segmented-item" aria-pressed="false" data-scope="traffic">Traffic</button>
@@ -391,7 +391,7 @@
             <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-history"></use></svg>
             <p class="empty-state-message">No runs here yet.</p>
           </div>
-          <button id="activityMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
+          <button id="activityMore" type="button" data-track="activity.load-more" class="button-ghost btn-block btn-touch" hidden>Load more</button>
           <p id="activitySkipped" class="muted small activity-skipped" hidden></p>
         </div>
         <aside id="activityDetailPane" class="card activity-detail-pane" aria-label="Run detail" hidden></aside>
@@ -406,9 +406,9 @@
           Family
         </span>
         <span id="familyStatus" class="status" role="status" aria-live="polite">&nbsp;</span>
-        <button type="button" class="icon-button home-toggle theme-toggle" title="Toggle theme"
+        <button type="button" class="icon-button home-toggle theme-toggle" data-track="theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
-        <button type="button" class="icon-button home-toggle home-settings" aria-label="Settings" title="Settings">
+        <button type="button" class="icon-button home-toggle home-settings" data-track="settings-open" aria-label="Settings" title="Settings">
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
@@ -429,7 +429,7 @@
               </div>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="calendars" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="calendars" data-track="family:calendars" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Calendars</span>
                   <span class="action-row-meta" data-value="calendars">&nbsp;</span></span>
@@ -452,7 +452,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="duty" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="duty" data-track="family:duty" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-users"></use></svg>
                 <span class="action-row-title">Who's on duty</span>
                 <span class="inset-row-value" data-value="duty"></span>
@@ -460,7 +460,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="kids" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="kids" data-track="family:kids" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-clock"></use></svg>
                 <span class="action-row-title">Kids home by</span>
                 <span class="inset-row-value" data-value="kids"></span>
@@ -468,7 +468,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="windows" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="windows" data-track="family:windows" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
                 <span class="action-row-title">Childcare windows</span>
                 <span class="inset-row-value" data-value="windows"></span>
@@ -476,7 +476,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="quiet" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="quiet" data-track="family:quiet" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-moon"></use></svg>
                 <span class="action-row-title">Quiet hours</span>
                 <span class="inset-row-value" data-value="quiet"></span>
@@ -492,7 +492,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="sync" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="sync" data-track="family:sync" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
                 <span class="action-row-title">Calendar sync</span>
               </button>
@@ -502,7 +502,7 @@
               </span>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="ask" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="ask" data-track="family:ask" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-map-pin"></use></svg>
                 <span class="action-row-title">Ask for missing locations</span>
               </button>
@@ -523,7 +523,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="traffic" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="traffic" data-track="family:traffic" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Traffic checks</span>
                   <span id="execTrafficStatus" class="action-row-meta">&nbsp;</span></span>
@@ -534,7 +534,7 @@
               </span>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="cadence" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="cadence" data-track="family:cadence" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
                 <span class="action-row-title">Check every</span>
                 <span class="inset-row-value" data-value="cadence"></span>
@@ -542,7 +542,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="delay" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="delay" data-track="family:delay" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-gauge"></use></svg>
                 <span class="action-row-title">Significant delay</span>
                 <span class="inset-row-value" data-value="delay"></span>
@@ -550,7 +550,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-sheet="train" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-sheet="train" data-track="family:train" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-train-front"></use></svg>
                 <span class="action-row-title">Skip train commutes</span>
                 <span class="inset-row-value" data-value="train"></span>
@@ -558,14 +558,14 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" id="execTrafficRunLive" class="action-row-main">
+              <button type="button" id="execTrafficRunLive" class="action-row-main" data-track="family:traffic-run-live">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-play"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Check now</span>
                   <span class="action-row-meta" data-value="checkLive">Live — sends an alert if a jam is found</span></span>
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" id="execTrafficRunDry" class="action-row-main">
+              <button type="button" id="execTrafficRunDry" class="action-row-main" data-track="family:traffic-run-dry">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-eye"></use></svg>
                 <span class="action-row-text"><span class="action-row-title">Check now (dry run)</span>
                   <span class="action-row-meta">Nothing is sent</span></span>
@@ -580,7 +580,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" id="familyTravelRow" class="action-row-main" aria-haspopup="dialog">
+              <button type="button" id="familyTravelRow" class="action-row-main" data-track="family:travel-blocks" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-car"></use></svg>
                 <span class="action-row-title">Travel blocks</span>
                 <span class="inset-row-value" data-value="travel"></span>
@@ -642,7 +642,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-whatsapp" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="source-whatsapp" data-track="settings:source-whatsapp" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-message-circle"></use></svg>
                 <span class="action-row-title">WhatsApp</span>
                 <span class="inset-row-value" data-value="src-whatsapp"></span>
@@ -650,7 +650,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-gmail" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="source-gmail" data-track="settings:source-gmail" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-mail"></use></svg>
                 <span class="action-row-title">Gmail</span>
                 <span class="inset-row-value" data-value="src-gmail"></span>
@@ -658,7 +658,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-calendar" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="source-calendar" data-track="settings:source-calendar" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
                 <span class="action-row-title">Calendar</span>
                 <span class="inset-row-value" data-value="src-calendar"></span>
@@ -674,7 +674,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="classifier" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="classifier" data-track="settings:classifier" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-radar"></use></svg>
                 <span class="action-row-title">Classifier</span>
                 <span class="inset-row-value" data-value="classifier"></span>
@@ -682,7 +682,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="rules-whatsapp" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="rules-whatsapp" data-track="settings:rules-whatsapp" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
                 <span class="action-row-title">Keyword rules · WhatsApp</span>
                 <span class="inset-row-value"></span>
@@ -690,7 +690,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="rules-gmail" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="rules-gmail" data-track="settings:rules-gmail" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
                 <span class="action-row-title">Keyword rules · Gmail</span>
                 <span class="inset-row-value"></span>
@@ -698,7 +698,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="taxonomy" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="taxonomy" data-track="settings:taxonomy" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
                 <span class="action-row-title">Gmail survey taxonomy</span>
                 <span class="inset-row-value"></span>
@@ -706,7 +706,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="instructions" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="instructions" data-track="settings:instructions" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
                 <span class="action-row-title">Instructions to the model</span>
                 <span class="inset-row-value"></span>
@@ -722,7 +722,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="delivery" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="delivery" data-track="settings:delivery" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
                 <span class="action-row-title">Delivery</span>
                 <span class="inset-row-value" data-value="delivery"></span>
@@ -730,7 +730,7 @@
               </button>
             </li>
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="hub" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="hub" data-track="settings:hub" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-link"></use></svg>
                 <span class="action-row-title">Model hub</span>
                 <span class="inset-row-value" data-value="hub"></span>
@@ -746,7 +746,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row inset-row--danger">
-              <button type="button" id="execReprocess" class="action-row-main" data-settings-sheet="rebuild" aria-haspopup="dialog">
+              <button type="button" id="execReprocess" class="action-row-main" data-settings-sheet="rebuild" data-track="settings:rebuild" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
                 <span class="action-row-title">Rebuild message cache</span>
                 <span class="inset-row-value"></span>
@@ -762,7 +762,7 @@
         <div class="card action-list">
           <ul class="action-rows">
             <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="passkeys" aria-haspopup="dialog">
+              <button type="button" class="action-row-main" data-settings-sheet="passkeys" data-track="settings:passkeys" aria-haspopup="dialog">
                 <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-lock"></use></svg>
                 <span class="action-row-title">Passkeys</span>
                 <span class="inset-row-value" data-value="passkeys"></span>
@@ -821,7 +821,7 @@
       <div id="execReconnect" class="exec-reconnect" data-source="whatsapp" hidden>
         <p id="execReconnectMsg" class="muted small"></p>
         <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-        <button id="execReconnectBtn" type="button" class="button-tint btn-block">Reconnect WhatsApp</button>
+        <button id="execReconnectBtn" type="button" data-track="source.reconnect" class="button-tint btn-block">Reconnect WhatsApp</button>
       </div>
       <div class="source-syncs">
         <p class="field-label">Recent syncs</p>
@@ -867,7 +867,7 @@
         </div>
       </details>
       <div id="runSheetFoot" class="run-sheet-foot" hidden>
-        <button id="runStop" type="button" class="button-tint danger btn-block">Stop this run</button>
+        <button id="runStop" type="button" data-track="run.stop" class="button-tint danger btn-block">Stop this run</button>
       </div>
     </div>
   </dialog>
@@ -916,7 +916,7 @@
         <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>
         <span class="exec-stage-text"><span class="exec-stage-label">Dry run</span>
           <span id="execModeHint" class="exec-stage-desc">off: the steps run for real</span></span>
-        <button type="button" id="execDryRun" class="toggle" role="switch"
+        <button type="button" id="execDryRun" class="toggle" data-track="run.dry-run" role="switch"
                 aria-checked="false" aria-label="Dry run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
       </div>
       <div id="execDryOpts" class="exec-dry-opts" hidden>
@@ -927,7 +927,7 @@
         <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
                value="7" inputmode="numeric" aria-label="Days to replay" hidden>
       </div>
-      <button id="execRunScan" type="button" class="button-tint btn-block">Run</button>
+      <button id="execRunScan" type="button" data-track="run.start" class="button-tint btn-block">Run</button>
       <p id="execBusy" class="muted small" hidden></p>
     </div>
   </dialog>
@@ -1005,7 +1005,7 @@
           <h2 id="historyTitle"></h2>
           <span id="historySubtitle" class="history-subtitle"></span>
         </span>
-        <button id="historyMenu" type="button" class="icon-button history-menu" aria-label="Chat actions"
+        <button id="historyMenu" type="button" data-track="chat.actions" class="icon-button history-menu" aria-label="Chat actions"
                 title="Chat actions"><svg class="icon" aria-hidden="true"><use href="#i-ellipsis-vertical"></use></svg></button>
         <button id="historyClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>

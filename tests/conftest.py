@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -18,6 +19,10 @@ from tests.helpers import ingest_all
 # (whose module-level `create_app()` attaches the file logger) — so the suite never
 # writes into the real `webapp/` log directory (#351). Empty string disables it.
 os.environ.setdefault("WR_LOG_DIR", "")
+# Same reason for the usage log (#386): `create_app()` mounts it at import, and it must
+# not land in the real fleet runtime-data directory.
+_usage_dir = Path(tempfile.mkdtemp(prefix="wr-usage-"))
+os.environ.setdefault("WR_USAGE_DB_PATH", str(_usage_dir / "usage.sqlite3"))
 
 
 @pytest.fixture(autouse=True)

@@ -18,9 +18,10 @@
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
 import {
-  fmtLocalDateTime, fmtNum, fmtRelative, setHeaderStatus, SOURCE_ICON, SOURCE_LABEL,
+  fmtLocalDateTime, fmtNum, fmtRelative, SOURCE_ICON, SOURCE_LABEL,
   sourceIcon, statusChip,
 } from './format.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setTab } from './tabs.js';
 import { openRunInActivity, runRowFor } from './activity.js';
 import { fetchHealth, isRunning } from './execution.js';
@@ -127,20 +128,23 @@ function renderHeader() {
   let target = null;
   let open = null;
   if (offline) {
-    setHeaderStatus(btn, SOURCE_LABEL[offline] + ' offline', 'danger');
+    renderHeadStatus(btn, [{ text: SOURCE_LABEL[offline] + ' offline', tone: 'danger' }]);
     target = card(offline);
   } else if (failed) {
-    setHeaderStatus(btn, SOURCE_LABEL[failed] + (failed === 'traffic' ? ' check failed'
-      : failed === 'calendar' ? ' sync failed' : ' scan failed'), 'danger');
+    renderHeadStatus(btn, [{
+      text: SOURCE_LABEL[failed] + (failed === 'traffic' ? ' check failed'
+        : failed === 'calendar' ? ' sync failed' : ' scan failed'),
+      tone: 'danger',
+    }]);
     target = card(failed);
   } else if (w.configured && w.enrollment_open) {
-    setHeaderStatus(btn, 'Passkey enrollment open', 'accent');
+    renderHeadStatus(btn, [{ text: 'Passkey enrollment open', tone: 'attention' }]);
     open = openPasskeys;
   } else {
     const last = state.dashboard && state.dashboard.scans && state.dashboard.scans.last;
-    setHeaderStatus(btn, state.dashboard
+    renderHeadStatus(btn, [], state.dashboard
       ? (last ? 'Scanned ' + fmtLocalDateTime(last.started_at, { withYear: false }).slice(6) : 'No scan yet')
-      : '', null);
+      : ' ');
   }
   // The exception line is a link into that run in Activity; a plain fact is not.
   const ref = target && target.kind && target.started_at ? { kind: target.kind, dbId: target.db_run_id } : null;

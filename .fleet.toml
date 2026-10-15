@@ -26,7 +26,7 @@ action-row = { src = "app/webapp/static/_vendored/action-row", sha = "4c699636af
 row-menu = { src = "app/webapp/static/_vendored/row-menu", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/row-menu" }
 empty-state = { src = "app/webapp/static/_vendored/empty-state", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/empty-state" }
 card = { src = "app/webapp/static/_vendored/card", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/card" }
-icons = { src = "app/webapp/static/_vendored/icons", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/icons" }
+icons = { src = "app/webapp/static/_vendored/icons", sha = "c5b52c2ec67cc51d19396c9b0c22f3e43480665d", dest = "app/webapp/static/_vendored/icons" }
 usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/usage-log" }
 usage_log = { src = "src/usage_log.py", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "src/usage_log.py" }
 

@@ -17,7 +17,7 @@ WhatsApp ──▶ Node sidecar (Baileys) ──▶ data/linked_device/*.ndjson 
                                                                               ▼
                                                               Telegram digest (read-only, actionable-only)
 
-           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Dashboard · Activity · Messages · Family
+           Admin PWA (FastAPI + vanilla JS, :8455) ──▶ Home · Activity · Inbox · Family
                          access: Tailscale TLS (default) · Cloudflare named tunnel (optional)
 ```
 
@@ -192,7 +192,7 @@ Phone access itself (Tailscale, optional Cloudflare named tunnel) is Steps 5–6
 ```powershell
 .\wr.bat status                                  # connector connected
 .\wr.bat scan --dry-run                          # replay stored messages, no delivery, no cursor advance
-# open the PWA on the phone → Dashboard shows channels/messages/scans; Execution shows a green health dot
+# open the PWA on the phone → Home's glance card shows channels/messages/scans; Settings → Sources shows a green health dot
 ```
 
 Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart the `git_sha` should match `HEAD`.

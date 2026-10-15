@@ -43,7 +43,7 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 .\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
 ```
 
-Live `scan` advances each chat's cursor only **after** that chat's analysis and trace are persisted, so a classifier error safely reprocesses the same delta next run. `--dry-run` replays history straight from SQLite — it never touches the connector, delivers, or advances a cursor — so it's the safe way to preview what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`. Both are surfaced read-only in the PWA's **Audit** tab.
+Live `scan` advances each chat's cursor only **after** that chat's analysis and trace are persisted, so a classifier error safely reprocesses the same delta next run. `--dry-run` replays history straight from SQLite — it never touches the connector, delivers, or advances a cursor — so it's the safe way to preview what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`. Both are surfaced read-only in Activity's run sheet.
 
 A live `scan` / `resync` **preflights the source**: if the sidecar's heartbeat is stale it first tries to relaunch the sidecar (when the device is still paired) and re-checks; set `WR_SIDECAR_AUTOSTART=0` to disable the self-heal. If the source still isn't live it **aborts loudly** — exits non-zero, records the run failed, advances no cursor, and fires an alert — so a scheduled job against a dead sidecar can never report green while checking nothing.
 
@@ -71,7 +71,7 @@ The classifier assets are plain text, so **read and tune them freely** without t
 - `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail survey/reference bucket definitions used to generate Stage-1 rules; this file is not sent to Stage 2.
 - `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
 
-The PWA's **Settings (header gear) → How messages are judged** rows open all four assets read-only, each sheet naming its path, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. The **Audit** drill-down is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
+The PWA's **Settings (header gear) → How messages are judged** rows open all four assets read-only, each sheet naming its path, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. Activity's run sheet is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
 
 To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
 
@@ -88,7 +88,7 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 
 - Keep the **sidecar running** — it captures live messages and history. While the **tray** is open it keeps itself alive: a keep-alive supervisor re-checks the sidecar every `WR_SIDECAR_SUPERVISE_SECONDS` (default 90) and relaunches it if the process died (never killing a live one; on a phone-side logout it toasts you to re-pair rather than crash-looping). So the buffer stays warm continuously and a scan reads an already-current source. App Launcher can also supervise it headlessly; see [`bootstrapping.md`](bootstrapping.md) Step 7.
 - The scheduled **`family-radar-scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace. `family-radar-calendar-sync` and `family-radar-traffic-check` are its sibling family-check Jobs — see [`bootstrapping.md`](bootstrapping.md) Step 7 for the full table (schedule, and the traffic-check cadence self-skip, #170). Their behaviour, every knob, and the travel-blocks rollout runbook are in [`family-checks.md`](family-checks.md).
-- For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): **Messages** filters stored channels by source and monitoring state; **Run** shows separate truthful WhatsApp/Gmail status cards and per-source funnels; **Audit** is the read-only trust surface over every message's Stage-1/LLM path. WhatsApp keeps one-tap reconnect/re-pair. Gmail shows a masked account plus the configured whitelist but never credentials or OAuth tokens.
+- For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): **Home**'s glance card shows separate truthful WhatsApp/Gmail status; **Inbox** filters stored channels by source and monitoring state; **Activity** is the read-only trust surface over every message's Stage-1/LLM path. WhatsApp keeps one-tap reconnect/re-pair. Gmail shows a masked account plus the configured whitelist but never credentials or OAuth tokens.
 - Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from Settings → Sources → WhatsApp).
 
 ## Troubleshooting
@@ -100,7 +100,7 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 | `status` shows *stale* | Sidecar process stopped/crashed | Restart `npm start`, or let a live `scan` self-heal it |
 | `ingest` finds 0 chats | History not synced yet | Wait a moment after pairing, re-run `ingest` |
 | Delivery `failed` | Bad token/chat id or no network | Fix the Telegram secrets, then `wr notify` |
-| Empty digest every run | Nothing ingested/monitored, no new delta, or Stage 1 rejected everything | Check Messages source/status filters, Run's per-source card/funnel, then Audit; tune source-specific rules only when the evidence shows they are too strict |
+| Empty digest every run | Nothing ingested/monitored, no new delta, or Stage 1 rejected everything | Check Inbox source/status filters, then Activity's run sheet and per-source funnel; tune source-specific rules only when the evidence shows they are too strict |
 | Scheduled scan exits non-zero | Source was dead (sidecar down) — by design | Bring the sidecar back; the run alerted rather than reporting green |
 
 ## Verification gate (for contributors)

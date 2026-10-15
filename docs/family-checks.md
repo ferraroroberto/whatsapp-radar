@@ -46,8 +46,8 @@ A leg that established nothing about the road is never counted as a route that w
 
 - The CLI prints `0 route(s) priced, 3 not priced` rather than `3 route(s) checked`.
 - `GET /api/family`'s run summary carries `priced` and `unpriced` beside the old `checked` total.
-- The Execution funnel and the Audit drill-down render **Priced** and **Not priced** as two cells.
-- A mixed run reads `no significant delay · 1 not priced` on the Dashboard.
+- Activity's run sheet funnel renders **Priced** and **Not priced** as two cells.
+- A mixed run reads `no significant delay · 1 not priced` on Home's glance card.
 
 A coverage number that silently counts non-coverage is how you end up trusting a check that has not been running. A leg carrying no `status` at all counts as **priced** — run rows written before the split have no such field and were genuinely all priced, so the other default would invent a gap that never existed.
 
@@ -276,7 +276,7 @@ Press **Rehearse (dry run)** on the same card, or:
 
 `--force` is what makes it run regardless of `family.run_hour`; `--dry-run` forces the sweep dry server-side, so this cannot write even if step 5 has already happened.
 
-Then open the **Audit** tab, select that run, and read the travel-block section: every block it would **add** (person · leg · event title · time box · minutes), every block it would **delete** *with the reason*, every block **left alone** with the reason that spared it, and every **unpriced** leg. Two things to confirm before going further:
+Then open **Activity** (Calendar scope), select that run, and read the travel-block section: every block it would **add** (person · leg · event title · time box · minutes), every block it would **delete** *with the reason*, every block **left alone** with the reason that spared it, and every **unpriced** leg. Two things to confirm before going further:
 
 1. The adds match the journeys you actually expect for a day with a known school run.
 2. **Nothing outside that plan is listed for deletion.**
@@ -285,7 +285,7 @@ Rehearse as many times as you like — a dry run performs zero inserts, zero del
 
 ### 5. Go live
 
-Only now turn **Dry run** off and tap **Done**. The banner must read **Live**. The next scheduled `family-radar-calendar-sync` writes the plan; **Run sweep** on the Family tab does it immediately. Re-read the Audit record afterwards: `apply` reports what was actually inserted, deleted, kept, skipped, and how many backups were written. Watch one real day before walking away.
+Only now turn **Dry run** off and tap **Done**. The banner must read **Live**. The next scheduled `family-radar-calendar-sync` writes the plan; **Run sweep** on the Family tab does it immediately. Re-read the run sheet in Activity afterwards: `apply` reports what was actually inserted, deleted, kept, skipped, and how many backups were written. Watch one real day before walking away.
 
 **Undo:** turn **Dry run** back on. That stops all further writing instantly, but it does **not** remove the blocks already written — see step 7.
 

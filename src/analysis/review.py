@@ -1,27 +1,26 @@
-"""Review engine — the heart of the spike.
+"""Review-engine primitives shared by the scan pipeline (#394).
 
-For each monitored chat it selects only the message delta (since the cursor),
-classifies it, validates the JSON, persists the analysis, and *then* advances the
-cursor. The cursor is advanced ONLY after the analysis row is committed, and not
-at all when the classifier output fails the contract — so a bad run is safely
-retried against the same delta next time.
+Per-chat analysis used to have two implementations — this module's own
+``review_monitored_chats`` loop (the ``wr review`` verb) and
+:mod:`src.analysis.pipeline`'s traced ``scan`` loop (the ``wr scan`` verb) — that
+had drifted apart (no trace, no reminders, estimated LLM-call counts). The verb
+is now ``scan(mode="process")``; this module keeps only the pieces both the
+``live``/``dry_run``/``process`` modes and ``CascadeClassifier``-style callers
+share: the cursor-advance invariant (advance ONLY after the analysis row is
+committed, never on a contract failure, so a bad run safely retries the same
+delta), the Stage-2-offline abort, the recent-alert prompt memory, and the
+transcription hold-back gate.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.analysis.classifier import Classifier, ClassifierUnavailable
-from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import has_actionable_signal
-from src.analysis.source_funnel import (
-    SourceFunnel,
-    ensure_source_funnel,
-    source_funnels_json,
-)
+from src.analysis.classifier import ClassifierUnavailable
+from src.analysis.contract import AnalysisResult
+from src.analysis.source_funnel import SourceFunnel, ensure_source_funnel
 from src.analysis.transcription import hold_back_untranscribed
 from src.config import Config
 from src.db import store
@@ -35,19 +34,6 @@ from src.progress import Progress, emit
 CLASSIFIER_OFFLINE_STATUS = "classifier_offline"
 
 
-@dataclass
-class ReviewOutcome:
-    run_id: int
-    chats_with_delta: int = 0
-    messages_processed: int = 0
-    actionable_chats: int = 0
-    errors: list[tuple[int, str]] = field(default_factory=list)
-    source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
-    # Set to ``CLASSIFIER_OFFLINE_STATUS`` when the run was aborted and already
-    # finalized as failed; ``None`` means the caller still owns the funnel.
-    notification_status: str | None = None
-
-
 def abort_classifier_offline(
     conn: sqlite3.Connection,
     config: Config | None,
@@ -59,10 +45,10 @@ def abort_classifier_offline(
 ) -> str:
     """Finish a run stranded by an unreachable Stage-2 classifier, and alert.
 
-    Shared by ``scan`` and :func:`review_monitored_chats`: both call the hub
-    inside a loop over monitored chats, and an unreachable hub fails identically
-    for every remaining one. Before this existed the SDK error raised straight
-    out of the command, leaving the ``review_runs`` row at ``status='running'``
+    Shared by every ``scan`` mode: each calls the hub inside a loop over
+    monitored chats, and an unreachable hub fails identically for every
+    remaining one. Before this existed the SDK error raised straight out of
+    the command, leaving the ``review_runs`` row at ``status='running'``
     forever, firing no alert, and leaving every later chat unanalysed (#298).
     Cursors are untouched, so the held deltas are retried on the next run.
 
@@ -167,8 +153,8 @@ def hold_back_if_transcribing(
 ) -> list[StoredMessage]:
     """Apply the untranscribed-voice-note hold-back gate (#36/#132) when enabled.
 
-    Shared by ``scan``'s live loop and ``review_monitored_chats`` so the gate
-    can only be added/changed in one place (issue #129).
+    Shared by every ``scan`` mode that analyses live deltas so the gate can
+    only be added/changed in one place (issue #129).
     """
     return hold_back_untranscribed(delta) if transcription_enabled else delta
 
@@ -176,7 +162,7 @@ def hold_back_if_transcribing(
 def note_delta_funnel(
     source_funnels: dict[str, SourceFunnel], source: str, delta_len: int
 ) -> SourceFunnel:
-    """Record a chat's delta on its source funnel; shared by scan and review."""
+    """Record a chat's delta on its source funnel; shared by every scan mode."""
     source_funnel = ensure_source_funnel(source_funnels, source)
     source_funnel.channels_with_delta += 1
     source_funnel.messages_checked += delta_len
@@ -186,7 +172,7 @@ def note_delta_funnel(
 def persist_analysis_result(
     conn: sqlite3.Connection, run_id: int, chat_id: int, result: AnalysisResult
 ) -> int:
-    """Insert a parsed :class:`AnalysisResult`; shared by scan and review.
+    """Insert a parsed :class:`AnalysisResult`; shared by every scan mode.
 
     Returns the new ``analysis_items`` row id — the scan pipeline needs it to
     record a routine-prep reminder's ``calendar_event_id`` after the fact (#218).
@@ -207,129 +193,3 @@ def persist_analysis_result(
         task_category=result.task_category,
         prep_complexity=result.prep_complexity,
     )
-
-
-def review_monitored_chats(
-    conn: sqlite3.Connection,
-    classifier: Classifier,
-    *,
-    since_days: int = 7,
-    config: Config | None = None,
-) -> ReviewOutcome:
-    """Review every monitored family's delta and persist results within one run.
-
-    Iterates *family heads* (``store.monitored_chats`` already excludes linked
-    children); each head's delta is the merge of its own and its children's
-    messages since each member's cursor, classified once under the head.
-
-    Holds the delta before any voice note still awaiting transcription (#132),
-    mirroring ``scan``'s live-mode gate: without it, a note stuck ``pending``/
-    ``failed`` gets classified on its literal "[voice note]" placeholder and the
-    family cursor advances past it, so the real transcript is never analysed.
-    Gated on ``config.transcription.enabled``; ``config=None`` (as in tests with
-    no transcription feature in play) leaves the delta untouched.
-    """
-    run_id = store.start_run(conn, kind="process")
-    outcome = ReviewOutcome(run_id=run_id)
-    monitored = store.monitored_chats(conn)
-    if config is not None:
-        for source in config.sources:
-            ensure_source_funnel(outcome.source_funnels, source)
-    for chat in monitored:
-        ensure_source_funnel(
-            outcome.source_funnels, str(chat["source"])
-        ).monitored_channels += 1
-
-    for chat in monitored:
-        chat_id = int(chat["id"])
-        source = str(chat["source"])
-        delta = store.family_delta_since_cursor(conn, chat_id)
-        delta = hold_back_if_transcribing(
-            delta, config is not None and config.transcription.enabled
-        )
-        if not delta:
-            continue
-
-        outcome.chats_with_delta += 1
-        source_funnel = note_delta_funnel(outcome.source_funnels, source, len(delta))
-        signal = (
-            has_actionable_signal(delta, source)
-            if config is not None and config.classifier == "cascade"
-            else None
-        )
-        if signal is not None:
-            if signal.matched:
-                source_funnel.stage1_passed += 1
-            else:
-                source_funnel.stage1_rejected += 1
-        if config is not None and (
-            config.classifier == "hub"
-            or (config.classifier == "cascade" and signal is not None and signal.matched)
-        ):
-            source_funnel.llm_calls += 1
-        prior = recent_alert_context(
-            conn, chat_id, since_days=since_days, exclude_run_id=run_id
-        )
-
-        try:
-            raw = classifier.classify(
-                chat["display_name"], delta, prior, source=source
-            )
-            result = parse_analysis(raw)
-        except ClassifierUnavailable as exc:
-            outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
-            outcome.errors.append((chat_id, str(exc)))
-            abort_classifier_offline(
-                conn,
-                config,
-                run_id,
-                exc,
-                chats_with_delta=outcome.chats_with_delta,
-            )
-            store.record_run_funnel(
-                conn,
-                run_id,
-                chats_synced=0,
-                messages_synced=0,
-                chats_monitored=len(monitored),
-                stage1_passed=sum(
-                    f.stage1_passed for f in outcome.source_funnels.values()
-                ),
-                stage2_llm_calls=sum(f.llm_calls for f in outcome.source_funnels.values()),
-                actionable=outcome.actionable_chats,
-                notification_status=CLASSIFIER_OFFLINE_STATUS,
-                source_funnel_json=source_funnels_json(outcome.source_funnels),
-            )
-            return outcome
-        except ContractError as exc:
-            # Do NOT advance the cursor: the same delta is retried next run.
-            outcome.errors.append((chat_id, str(exc)))
-            continue
-
-        persist_analysis_result(conn, run_id, chat_id, result)
-
-        outcome.messages_processed += len(delta)
-        if result.action_required:
-            outcome.actionable_chats += 1
-            source_funnel.actionable += 1
-
-        # Cursor advance happens only after the analysis row above is committed,
-        # and per-member across the family (each member keeps its own cursor).
-        advance_family_cursors(conn, chat_id, delta, result.summary)
-        source_funnel.cursors_advanced += 1
-
-    status = "completed_with_errors" if outcome.errors else "completed"
-    store.finish_run(conn, run_id, status, outcome.chats_with_delta)
-    store.record_run_funnel(
-        conn,
-        run_id,
-        chats_synced=0,
-        messages_synced=0,
-        chats_monitored=len(monitored),
-        stage1_passed=sum(f.stage1_passed for f in outcome.source_funnels.values()),
-        stage2_llm_calls=sum(f.llm_calls for f in outcome.source_funnels.values()),
-        actionable=outcome.actionable_chats,
-        notification_status="none",
-        source_funnel_json=source_funnels_json(outcome.source_funnels),
-    )
-    return outcome

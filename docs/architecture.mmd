@@ -48,7 +48,7 @@ flowchart TB
   ROUTERS --> RUNS
 
   subgraph pipeline["src/analysis/pipeline.py — scan (the one callable App Launcher's Jobs tab fires)"]
-    SCAN["scan(mode: live | dry_run)"]
+    SCAN["scan(mode: live | dry_run | process)"]
     TRANSCRIBE["transcription.py — voice notes -> hub Whisper"]
     KEYWORDS["keywords.py — Stage 1 prefilter"]
     TRIPWIRE["tripwire.py — bounded Stage-1-only scan\nof discovered chats; no classifier"]
@@ -56,7 +56,7 @@ flowchart TB
     CONTRACT["contract.py — parse_analysis / AnalysisResult"]
     REVIEW["review.py — cursor advance + alert memory"]
     SURVEY["gmail_survey.py — bounded whitelist survey\n-> generic Gmail taxonomy/rules"]
-    REMINDERS["reminders.py — routine-prep -> morning reminder event\nidempotent on evidence_message_ids; live-mode only (#218)"]
+    REMINDERS["reminders.py — routine-prep -> morning reminder event\nidempotent on evidence_message_ids; live + process only (#218, #394)"]
   end
   CLICMDS --> SCAN
   RUNS --> SCAN

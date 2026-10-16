@@ -11,7 +11,6 @@ from .classifier import (
 )
 from .contract import AnalysisResult, ContractError, parse_analysis
 from .pipeline import ScanOutcome, scan
-from .review import ReviewOutcome, review_monitored_chats
 
 __all__ = [
     "AnalysisResult",
@@ -24,8 +23,6 @@ __all__ = [
     "HubClassifier",
     "build_classifier",
     "build_stage2_classifier",
-    "ReviewOutcome",
-    "review_monitored_chats",
     "ScanOutcome",
     "scan",
 ]

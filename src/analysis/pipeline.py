@@ -6,7 +6,7 @@ every decision is inspectable. A missed important message is a real failure, so
 for any run we can answer: what was synced, what passed the keyword stage, what
 prompt went to the LLM, what it returned, and what was delivered.
 
-Two modes:
+Three modes:
 
 - **live:** sync *all* chats from the connector (monitored and not), then analyze
   only monitored deltas since each cursor, deliver one digest, and advance each
@@ -15,6 +15,12 @@ Two modes:
 - **dry_run:** no connector; replay messages already in SQLite (optionally
   windowed to the last ``days``), ignoring the cursor. Advance no cursor and
   deliver nothing, but still build the would-be digest and record the full trace.
+- **process:** the ``wr review`` verb (#394) — no connector, no sync: analyze
+  monitored deltas since each cursor exactly as ``live`` does (same Stage 1/2
+  gate, same trace, same reminder creation, same cursor advance), skipping only
+  the sync/transcription/tripwire phases a live scan owns. ``deliver=False``
+  (the verb's own ``--dry-run``) still advances cursors — it only withholds the
+  digest, unlike ``dry_run`` mode above which touches no cursor at all.
 
 The pipeline owns Stage 1 itself and calls a Stage-2 :class:`TracedClassifier`
 (stub offline by default; the hub when configured), so the funnel and the trace
@@ -75,7 +81,7 @@ from src.notify.delivery import deliver_digest
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
-Mode = Literal["live", "dry_run"]
+Mode = Literal["live", "dry_run", "process"]
 
 _NOT_ACTIONABLE = AnalysisResult(
     action_required=False,
@@ -98,6 +104,12 @@ class ScanOutcome:
     messages_synced: int = 0
     chats_monitored: int = 0
     chats_with_delta: int = 0
+    # Total messages across every chat whose delta was *successfully* recorded
+    # this run — Stage 1 reject or Stage 2 success, never a contract error or an
+    # aborted chat. A finer grain than ``chats_with_delta`` (#394: the
+    # ``process`` verb's own counter, folded in so it stays available for
+    # every mode).
+    messages_processed: int = 0
     transcriptions: int = 0
     stage1_passed: int = 0
     stage2_llm_calls: int = 0
@@ -189,13 +201,15 @@ def _advance(
     delta: list[StoredMessage],
     summary: str | None,
 ) -> None:
-    """Advance the family's per-member cursors (live mode only) after persistence.
+    """Advance the family's per-member cursors after persistence (live + process).
 
     The merged delta spans the head and any linked children; each keeps its own
     ingestion-id cursor (#37), so advancement is grouped by origin chat rather
-    than a single high-water mark. Dry-run advances nothing.
+    than a single high-water mark. Dry-run advances nothing — it replays the
+    same stored messages on every call, which would otherwise mean the next
+    replay never sees them again.
     """
-    if mode != "live":
+    if mode == "dry_run":
         return
     advance_family_cursors(conn, chat_id, delta, summary)
 
@@ -286,18 +300,22 @@ def _abort_classifier(
     outcome: ScanOutcome,
     exc: ClassifierUnavailable,
     progress: Progress | None,
+    *,
+    chat_id: int = 0,
 ) -> ScanOutcome:
-    """Finalize a live/dry run that aborted because Stage 2 could not reach the hub.
+    """Finalize a live/dry/process run that aborted because Stage 2 could not reach the hub.
 
     The mirror image of :func:`_abort_offline` at the other end of the pipeline:
     a source outage already aborts loudly, alerts, and records the run as
     ``failed``, but a *classifier* outage used to raise straight out of ``scan``
     and strand the run row at ``status='running'`` (#298). The funnel keeps the
     counters earned before the failure — the chats analysed up to that point are
-    real work — and every remaining cursor is held.
+    real work — and every remaining cursor is held. ``chat_id`` names the chat
+    whose classify call actually hit the dead hub — 0 only when no chat was
+    in flight yet.
     """
     outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
-    outcome.errors.append((0, str(exc)))
+    outcome.errors.append((chat_id, str(exc)))
     abort_classifier_offline(
         conn,
         config,
@@ -386,6 +404,7 @@ def scan(
     connectors: list[ConnectorBinding] | None = None,
     classifier: TracedClassifier | None = None,
     calendar_client: CalendarWriteClient | None = None,
+    deliver: bool = True,
     progress: Progress | None = None,
 ) -> ScanOutcome:
     """Run one scan: sync (live) -> analyze monitored deltas -> digest -> deliver.
@@ -399,12 +418,23 @@ def scan(
     when ``config.family.reminder_calendar_id`` is configured — an unset reminder
     calendar or a missing/invalid write token both leave it ``None``, which simply
     means no routine-prep reminder events are created this run (#218). Reminder
-    creation is live-mode only: dry-run replays the same messages on every call,
-    which would otherwise mint a fresh duplicate event each time.
+    creation happens for ``live`` and ``process`` alike: dry-run replays the same
+    messages on every call, which would otherwise mint a fresh duplicate event
+    each time.
+
+    ``deliver=False`` is the ``process`` verb's own ``--dry-run`` (#394): the
+    digest is still built and traced, but withheld rather than sent. It has no
+    effect on ``dry_run`` mode, which already never delivers.
     """
-    emit(progress, f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""))
+    emit(
+        progress,
+        "▶ process starting — analyzing monitored chats since last cursor"
+        if mode == "process"
+        else f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""),
+    )
     run_id = store.start_run(
-        conn, mode=mode, params_json=json.dumps({"days": days}), kind="scan"
+        conn, mode=mode, params_json=json.dumps({"days": days}),
+        kind="process" if mode == "process" else "scan",
     )
     outcome = ScanOutcome(run_id=run_id, mode=mode)
     for source in config.sources:
@@ -412,7 +442,11 @@ def scan(
     stage2 = classifier if classifier is not None else build_stage2_classifier(
         config.classifier, config.hub, config.children
     )
-    if calendar_client is None and mode == "live" and config.family.reminder_calendar_id:
+    if (
+        calendar_client is None
+        and mode in ("live", "process")
+        and config.family.reminder_calendar_id
+    ):
         try:
             calendar_client = build_calendar_client(config.calendar)
         except (FileNotFoundError, RuntimeError) as exc:
@@ -445,8 +479,10 @@ def scan(
         tr = run_transcription_phase(conn, config, progress=progress)
         outcome.transcriptions = tr.done
         _run_tripwire(conn, config, outcome, progress)
-    else:
+    elif mode == "dry_run":
         emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
+    else:
+        emit(progress, "• process: analyzing monitored deltas since last cursor (no sync)")
 
     monitored = store.monitored_chats(conn)
     outcome.chats_monitored = len(monitored)
@@ -459,9 +495,9 @@ def scan(
     for chat in monitored:
         chat_id = int(chat["id"])
         delta = (
-            store.family_delta_since_cursor(conn, chat_id)
-            if mode == "live"
-            else store.family_delta_replay(conn, chat_id, since_days=days)
+            store.family_delta_replay(conn, chat_id, since_days=days)
+            if mode == "dry_run"
+            else store.family_delta_since_cursor(conn, chat_id)
         )
         if mode == "live":
             # A failed source may have older cached messages waiting. Excluding
@@ -482,7 +518,7 @@ def scan(
         # it is never analysed as a placeholder and the cursor never skips it (#36).
         # Gated on the feature flag: disabled → voice notes are ordinary messages.
         delta = hold_back_if_transcribing(
-            delta, mode == "live" and config.transcription.enabled
+            delta, mode != "dry_run" and config.transcription.enabled
         )
         if not delta:
             continue
@@ -512,8 +548,9 @@ def scan(
                 result=_NOT_ACTIONABLE,
                 final_action="not_actionable", telegram_text=None, error=None,
             )
+            outcome.messages_processed += len(delta)
             _advance(conn, mode, chat_id, delta, None)
-            if mode == "live":
+            if mode in ("live", "process"):
                 source_funnel.cursors_advanced += 1
             continue
 
@@ -535,7 +572,7 @@ def scan(
             # Whole-run condition, not a per-chat one: every remaining chat would
             # hit the same dead hub, so stop once instead of looping through a
             # timeout per chat (#298).
-            return _abort_classifier(conn, config, outcome, exc, progress)
+            return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
         if co.llm_called:
             outcome.stage2_llm_calls += 1
             source_funnel.llm_calls += 1
@@ -568,14 +605,15 @@ def scan(
             continue
 
         item_id = persist_analysis_result(conn, run_id, chat_id, result)
+        outcome.messages_processed += len(delta)
 
         # Additive only — never touches the Telegram digest path below (#218).
-        # live-only: dry-run replays the same messages every call, which would
-        # otherwise mint a fresh duplicate event each time. The reminder-calendar
-        # check guards even an injected client (tests) against writing to an
-        # unconfigured (empty-string) calendar id.
+        # live + process only: dry-run replays the same messages every call, which
+        # would otherwise mint a fresh duplicate event each time. The
+        # reminder-calendar check guards even an injected client (tests) against
+        # writing to an unconfigured (empty-string) calendar id.
         if (
-            mode == "live"
+            mode in ("live", "process")
             and calendar_client is not None
             and config.family.reminder_calendar_id
             and is_eligible(result)
@@ -617,7 +655,7 @@ def scan(
             final_action=final_action, telegram_text=telegram_text, error=None,
         )
         _advance(conn, mode, chat_id, delta, result.summary)
-        if mode == "live":
+        if mode in ("live", "process"):
             source_funnel.cursors_advanced += 1
 
     digest = build_digest(conn, run_id)
@@ -625,6 +663,10 @@ def scan(
 
     if mode == "dry_run":
         outcome.notification_status = "dry_run"
+    elif not deliver:
+        # The ``process`` verb's own ``--dry-run``: cursors already advanced
+        # above, but the digest is withheld rather than sent.
+        outcome.notification_status = "dry_run" if digest.has_actionable_items else "none"
     elif digest.has_actionable_items:
         status, _ = deliver_digest(conn, config, run_id, digest)
         outcome.notification_status = status
@@ -662,13 +704,14 @@ def scan(
 def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
     """Serialize a :class:`ScanOutcome` to the structured result payload.
 
-    This is the ``kind: "scan"`` result the Execution tab renders: the full
-    funnel, the would-be / sent Telegram text, and the per-chat error list. Used
-    by the CLI to emit the run's result sentinel.
+    This is the ``kind: "scan"``/``"process"`` result the Execution tab renders
+    (the DB row's own ``kind`` column, set the same way in :func:`scan`): the
+    full funnel, the would-be / sent Telegram text, and the per-chat error list.
+    Used by the CLI to emit the run's result sentinel.
     """
     digest = outcome.digest
     return {
-        "kind": "scan",
+        "kind": "process" if outcome.mode == "process" else "scan",
         "ok": (
             outcome.notification_status
             not in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)

@@ -18,7 +18,7 @@
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
 import {
-  fmtLocalDateTime, fmtNum, fmtRelative, SOURCE_ICON, SOURCE_LABEL,
+  actionRow, fmtLocalDateTime, fmtNum, fmtRelative, SOURCE_ICON, SOURCE_LABEL,
   sourceIcon, statusChip,
 } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
@@ -78,44 +78,29 @@ function glanceRow(source) {
   const c = card(source);
   const live = liveness(source);
   const ran = !!(c && c.kind && c.started_at);
-  const li = document.createElement('li');
-  li.className = 'action-row glance-row';
-  li.dataset.source = source;
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.className = 'action-row-main';
-  main.disabled = !ran;
-  if (ran) {
-    main.setAttribute('aria-haspopup', 'dialog');
-    main.addEventListener('click', function () {
-      openRunInActivity({ kind: c.kind, dbId: c.db_run_id });
-    });
-  }
   const avatar = document.createElement('span');
   avatar.className = 'action-row-avatar';
   avatar.setAttribute('aria-hidden', 'true');
   if (live) avatar.dataset.badge = live;
   // Static sprite markup only — never user content — so innerHTML is safe here.
   avatar.innerHTML = icon(SOURCE_ICON[source].slice(3));
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const title = document.createElement('span');
-  title.className = 'action-row-title';
-  title.textContent = SOURCE_LABEL[source];
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta';
-  if (!state.dashboard) meta.textContent = '—';
-  else meta.textContent = ran ? fmtRelative(c.started_at) + (c.summary ? ' · ' + c.summary : '') : 'no run yet';
-  text.append(title, meta);
-  main.append(avatar, text);
-  li.appendChild(main);
   const chips = glanceChips(source, c, live);
-  if (chips.length) {
-    const trail = document.createElement('span');
-    trail.className = 'action-row-trail run-chips';
-    trail.append(...chips);
-    li.appendChild(trail);
-  }
+  const { li } = actionRow({
+    liClass: 'glance-row',
+    disabled: !ran,
+    haspopup: ran,
+    leading: avatar,
+    title: SOURCE_LABEL[source],
+    meta: !state.dashboard
+      ? '—'
+      : ran ? fmtRelative(c.started_at) + (c.summary ? ' · ' + c.summary : '') : 'no run yet',
+    onClick: ran ? function () {
+      openRunInActivity({ kind: c.kind, dbId: c.db_run_id });
+    } : undefined,
+    trail: chips.length ? chips : undefined,
+    trailClass: 'run-chips',
+  });
+  li.dataset.source = source;
   return li;
 }
 

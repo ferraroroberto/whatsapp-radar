@@ -23,7 +23,7 @@
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum } from './format.js';
+import { actionRow, fmtLocalDateTime, fmtNum } from './format.js';
 
 export function childrenOf(parentId) {
   return state.chats.filter(function (c) { return c.parent_chat_id === parentId; });
@@ -161,23 +161,12 @@ function renderPicker() {
 
   for (const c of shown) {
     // A vendored action-row (#375): a 60px target with the count + last time.
-    const li = document.createElement('li');
-    li.className = 'action-row link-pick-row';
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'action-row-main';
-    const text = document.createElement('span');
-    text.className = 'action-row-text';
-    const nm = document.createElement('span');
-    nm.className = 'action-row-title';
-    nm.textContent = picker.deps.chatLabel(c);
-    const meta = document.createElement('span');
-    meta.className = 'action-row-meta';
-    meta.textContent = fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at);
-    text.append(nm, meta);
-    b.append(text);
-    b.addEventListener('click', function () { doLink(picker.child, c); });
-    li.appendChild(b);
+    const { li } = actionRow({
+      liClass: 'link-pick-row',
+      title: picker.deps.chatLabel(c),
+      meta: fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at),
+      onClick: function () { doLink(picker.child, c); },
+    });
     els.linkPickerList.appendChild(li);
   }
 }

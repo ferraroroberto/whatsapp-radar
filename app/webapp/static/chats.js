@@ -13,7 +13,7 @@
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
 import { jsonApi, readToken, toast } from './api.js';
-import { fmtLocalDateTime, fmtNum, fmtRelative } from './format.js';
+import { actionRow, fmtLocalDateTime, fmtNum, fmtRelative } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { icon } from './_vendored/icons/icons.js';
 import { cancelSummarySpeech, speakSummary } from './tts-playback.js';
@@ -214,26 +214,6 @@ function renderTripwire() {
 
   for (const hit of hits) {
     const chat = state.chats.find(function (candidate) { return candidate.id === hit.id; });
-    const li = document.createElement('li');
-    li.className = 'action-row tripwire-row';
-    const main = document.createElement('button');
-    main.type = 'button';
-    main.className = 'action-row-main';
-    main.disabled = !chat;
-    if (chat) {
-      main.setAttribute('aria-haspopup', 'dialog');
-      main.addEventListener('click', function () { openHistory(chat); });
-    }
-    const text = document.createElement('span');
-    text.className = 'action-row-text';
-    const title = document.createElement('span');
-    title.className = 'action-row-title';
-    title.textContent = hit.name;
-    const reason = document.createElement('span');
-    reason.className = 'action-row-meta tripwire-reason';
-    reason.textContent = 'Matched: ' + hitSignals(hit).join(', ');
-    text.append(title, reason);
-    main.append(avatar(hit.name, hit.source), text);
 
     // The vendored icon-button: a glyph on nothing at rest (COMP-05).
     const promote = document.createElement('button');
@@ -245,7 +225,18 @@ function renderTripwire() {
     promote.addEventListener('click', function () {
       if (chat) setStatus(chat, 'monitored');
     });
-    li.append(main, promote);
+
+    const { li } = actionRow({
+      liClass: 'tripwire-row',
+      disabled: !chat,
+      haspopup: !!chat,
+      leading: avatar(hit.name, hit.source),
+      title: hit.name,
+      metaClass: 'tripwire-reason',
+      meta: 'Matched: ' + hitSignals(hit).join(', '),
+      onClick: chat ? function () { openHistory(chat); } : undefined,
+      trail: promote,
+    });
     els.tripwireList.appendChild(li);
   }
 }
@@ -262,34 +253,6 @@ function toggleWatch(c) {
 // One chat row (vendored action-row, #375): avatar, name, and one muted line of
 // relative time (kept outside the ellipsis) plus the preview, which is cut.
 function row(c) {
-  const li = document.createElement('li');
-  li.className = 'action-row chat-row';
-  if (hist.chatId === c.id) li.classList.add('is-open');
-
-  const body = document.createElement('button');
-  body.type = 'button';
-  body.className = 'action-row-main chat-main';
-  body.setAttribute('aria-haspopup', 'dialog');
-  body.addEventListener('click', function () { openHistory(c); });
-
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const name = document.createElement('span');
-  name.className = 'action-row-title chat-name';
-  name.title = chatLabel(c);
-  name.textContent = chatLabel(c);
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta chat-line';
-  const when = document.createElement('span');
-  when.className = 'chat-when';
-  when.textContent = c.last_message_at ? fmtRelative(c.last_message_at) : '—';
-  const preview = document.createElement('span');
-  preview.className = 'chat-preview';
-  preview.textContent = c.last_message_text ? String(c.last_message_text) : '';
-  meta.append(when, preview);
-  text.append(name, meta);
-  body.append(avatar(chatLabel(c), c.source), text);
-
   // The watch toggle: a plain icon button, accent (pressed) when monitored.
   const monitored = c.status === 'monitored';
   const watch = document.createElement('button');
@@ -301,7 +264,27 @@ function row(c) {
   watch.innerHTML = icon('eye');
   watch.addEventListener('click', function () { toggleWatch(c); });
 
-  li.append(body, watch);
+  const { li, meta } = actionRow({
+    liClass: 'chat-row',
+    mainClass: 'chat-main',
+    haspopup: true,
+    leading: avatar(chatLabel(c), c.source),
+    titleClass: 'chat-name',
+    title: chatLabel(c),
+    titleAttr: chatLabel(c),
+    metaClass: 'chat-line',
+    onClick: function () { openHistory(c); },
+    trail: watch,
+  });
+  const when = document.createElement('span');
+  when.className = 'chat-when';
+  when.textContent = c.last_message_at ? fmtRelative(c.last_message_at) : '—';
+  const preview = document.createElement('span');
+  preview.className = 'chat-preview';
+  preview.textContent = c.last_message_text ? String(c.last_message_text) : '';
+  meta.append(when, preview);
+
+  if (hist.chatId === c.id) li.classList.add('is-open');
   return li;
 }
 

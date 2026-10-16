@@ -190,6 +190,59 @@ export function fmtLocalDateTime(ts, { withYear = true } = {}) {
   return `${date} ${_pad(d.getHours())}:${_pad(d.getMinutes())}`;
 }
 
+/* Shared action-row builder (design.md "action-row" contract): the
+ * `<li class="action-row">` > `.action-row-main` > `.action-row-text` >
+ * title + meta skeleton recurred hand-built at every call site (activity.js,
+ * dashboard.js, chats.js, chat-links.js — audit#394). Builds that skeleton
+ * and returns the live nodes so a caller needing something the options below
+ * don't cover (a tooltip, extra meta children) can still reach in.
+ *
+ * opts: tag ('button' default, or 'div' for a non-interactive main),
+ * liClass/mainClass/titleClass/metaClass/trailClass (extra class(es),
+ * space-joined), mainId, leading (a DOM node — glyph/avatar — prepended in
+ * main), title/meta (text; omit to leave the node empty for the caller to
+ * fill in), titleAttr (a tooltip on the title span), disabled (button only),
+ * haspopup (sets aria-haspopup="dialog"), expanded (sets aria-expanded when
+ * not undefined), onClick, trail (a single DOM node appended as main's
+ * sibling, or an array of nodes wrapped in one `.action-row-trail` span —
+ * omit for no trailing slot). Returns `{li, main, text, title, meta}`. */
+export function actionRow(opts) {
+  const li = document.createElement('li');
+  li.className = opts.liClass ? 'action-row ' + opts.liClass : 'action-row';
+  const main = document.createElement(opts.tag || 'button');
+  if (main.tagName === 'BUTTON') main.type = 'button';
+  if (opts.mainId) main.id = opts.mainId;
+  main.className = opts.mainClass ? 'action-row-main ' + opts.mainClass : 'action-row-main';
+  if (opts.disabled) main.disabled = true;
+  if (opts.haspopup) main.setAttribute('aria-haspopup', 'dialog');
+  if (opts.expanded !== undefined) main.setAttribute('aria-expanded', String(opts.expanded));
+  if (opts.onClick) main.addEventListener('click', opts.onClick);
+  if (opts.leading) main.appendChild(opts.leading);
+  const text = document.createElement('span');
+  text.className = 'action-row-text';
+  const title = document.createElement('span');
+  title.className = opts.titleClass ? 'action-row-title ' + opts.titleClass : 'action-row-title';
+  if (opts.title !== undefined) title.textContent = opts.title;
+  if (opts.titleAttr) title.title = opts.titleAttr;
+  const meta = document.createElement('span');
+  meta.className = opts.metaClass ? 'action-row-meta ' + opts.metaClass : 'action-row-meta';
+  if (opts.meta !== undefined) meta.textContent = opts.meta;
+  text.append(title, meta);
+  main.appendChild(text);
+  li.appendChild(main);
+  if (opts.trail !== undefined) {
+    if (Array.isArray(opts.trail)) {
+      const trail = document.createElement('span');
+      trail.className = opts.trailClass ? 'action-row-trail ' + opts.trailClass : 'action-row-trail';
+      trail.append(...opts.trail);
+      li.appendChild(trail);
+    } else {
+      li.appendChild(opts.trail);
+    }
+  }
+  return { li: li, main: main, text: text, title: title, meta: meta };
+}
+
 // Renders a row of `{label, value}` cells (funnel stats: synced/monitored/
 // stage1/stage2/actionable) into `box` as `.exec-funnel-cell` blocks. One
 // renderer for the run sheet (#373), so the funnel markup can't drift between

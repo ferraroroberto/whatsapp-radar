@@ -14,8 +14,8 @@
 import { els, state } from './state.js';
 import { jsonApi, toast } from './api.js';
 import {
-  fmtLocalDateTime, fmtRelative, kindIcon, kindLabel, legPricing, renderFunnelCells,
-  renderSourceFunnels, statusChip,
+  actionRow, fmtLocalDateTime, fmtRelative, kindIcon, kindLabel, legPricing,
+  renderFunnelCells, renderSourceFunnels, statusChip,
 } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { icon } from './_vendored/icons/icons.js';
@@ -134,136 +134,89 @@ function glyph(name) {
 // One run row (vendored action-row): a kind glyph, the title, one muted line
 // of when plus the funnel's last numbers, and exception chips trailing.
 function runRow(item) {
-  const li = document.createElement('li');
-  li.className = 'action-row run-row';
   const open = ax().open;
+  const chips = rowChips(item);
+  const { li } = actionRow({
+    liClass: 'run-row',
+    leading: glyph(kindIcon(item.kind)),
+    haspopup: true,
+    title: kindLabel(item.kind),
+    meta: [whenLabel(item.started_at), ...item.bits].join(' · '),
+    onClick: function () {
+      (item.onOpen || openRun)({ kind: item.kind, dbId: item.dbId, runId: item.runId });
+    },
+    trail: chips.length ? chips : undefined,
+    trailClass: 'run-chips',
+  });
   if (open && ((item.dbId && open.dbId === item.dbId) || (item.runId && open.runId === item.runId))) {
     li.classList.add('is-open');
-  }
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.className = 'action-row-main';
-  main.setAttribute('aria-haspopup', 'dialog');
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const title = document.createElement('span');
-  title.className = 'action-row-title';
-  title.textContent = kindLabel(item.kind);
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta';
-  meta.textContent = [whenLabel(item.started_at), ...item.bits].join(' · ');
-  text.append(title, meta);
-  main.append(glyph(kindIcon(item.kind)), text);
-  main.addEventListener('click', function () {
-    (item.onOpen || openRun)({ kind: item.kind, dbId: item.dbId, runId: item.runId });
-  });
-  li.appendChild(main);
-  const chips = rowChips(item);
-  if (chips.length) {
-    const trail = document.createElement('span');
-    trail.className = 'action-row-trail run-chips';
-    trail.append(...chips);
-    li.appendChild(trail);
   }
   return li;
 }
 
 // A connector outage collapses its offline scans into one marker (#195).
 function gapRow(gap) {
-  const li = document.createElement('li');
-  li.className = 'action-row audit-gap-li';
-  const box = document.createElement('div');
-  box.className = 'action-row-main';
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const title = document.createElement('span');
-  title.className = 'action-row-title';
-  title.textContent = 'Coverage gap';
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta';
   const dayWord = gap.duration_days === 1 ? 'day' : 'days';
   const scanWord = gap.failed_runs === 1 ? 'scan' : 'scans';
   const recovery = gap.recovered_at
     ? ` · recovered ${fmtLocalDateTime(gap.recovered_at)}`
     : ' · recovery not yet recorded';
-  meta.textContent = `${fmtLocalDateTime(gap.started_at)} to ${fmtLocalDateTime(gap.ended_at)}`
-    + ` · ${gap.duration_days} ${dayWord} · ${gap.failed_runs} ${scanWord} offline${recovery}`;
-  text.append(title, meta);
-  box.append(glyph('triangle-alert'), text);
-  li.appendChild(box);
-  const trail = document.createElement('span');
-  trail.className = 'action-row-trail run-chips';
-  trail.appendChild(statusChip('Offline', 'danger'));
-  li.appendChild(trail);
+  const { li } = actionRow({
+    tag: 'div',
+    liClass: 'audit-gap-li',
+    leading: glyph('triangle-alert'),
+    title: 'Coverage gap',
+    meta: `${fmtLocalDateTime(gap.started_at)} to ${fmtLocalDateTime(gap.ended_at)}`
+      + ` · ${gap.duration_days} ${dayWord} · ${gap.failed_runs} ${scanWord} offline${recovery}`,
+    trail: [statusChip('Offline', 'danger')],
+    trailClass: 'run-chips',
+  });
   return li;
 }
 
 // A day of repetitive traffic checks folds to one row (#373), which expands
 // to the individual checks; a day with an alert says so on the fold itself.
 function foldRow(key, items, label) {
-  const li = document.createElement('li');
-  li.className = 'action-row run-fold';
   const expanded = !!ax().openDays[key];
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.className = 'action-row-main';
-  main.setAttribute('aria-expanded', String(expanded));
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const title = document.createElement('span');
-  title.className = 'action-row-title';
   const alerts = items.reduce(function (n, it) {
     return n + ((it.run && it.run.summary && it.run.summary.alerts) || 0);
   }, 0);
   const failed = items.filter(function (it) { return it.status === 'failed'; }).length;
   const abandoned = items.filter(function (it) { return it.status === 'abandoned'; }).length;
-  title.textContent = `${label} · ${items.length} traffic check${items.length === 1 ? '' : 's'}`;
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta';
-  meta.textContent = (alerts ? `${alerts} alert${alerts === 1 ? '' : 's'}` : 'no alerts')
-    + (failed ? ` · ${failed} failed` : '')
-    + (abandoned ? ` · ${abandoned} abandoned` : '');
-  text.append(title, meta);
-  main.append(glyph('car'), text);
-  main.addEventListener('click', function () {
-    ax().openDays[key] = !expanded;
-    renderList();
-  });
-  li.appendChild(main);
   // One trailing item: the alert chip when the day had one, then the chevron.
-  const trail = document.createElement('span');
-  trail.className = 'action-row-trail run-chips';
-  if (alerts) trail.appendChild(statusChip(alerts + (alerts === 1 ? ' alert' : ' alerts'), 'attention'));
   const chevron = document.createElement('span');
   chevron.className = 'run-fold-chevron';
   chevron.setAttribute('aria-hidden', 'true');
   chevron.textContent = '›';
-  trail.appendChild(chevron);
-  li.appendChild(trail);
+  const { li } = actionRow({
+    liClass: 'run-fold',
+    expanded: expanded,
+    leading: glyph('car'),
+    title: `${label} · ${items.length} traffic check${items.length === 1 ? '' : 's'}`,
+    meta: (alerts ? `${alerts} alert${alerts === 1 ? '' : 's'}` : 'no alerts')
+      + (failed ? ` · ${failed} failed` : '')
+      + (abandoned ? ` · ${abandoned} abandoned` : ''),
+    onClick: function () {
+      ax().openDays[key] = !expanded;
+      renderList();
+    },
+    trail: alerts ? [statusChip(alerts + (alerts === 1 ? ' alert' : ' alerts'), 'attention'), chevron] : [chevron],
+    trailClass: 'run-chips',
+  });
   return li;
 }
 
 function filteredFoldRow() {
   const a = ax();
-  const li = document.createElement('li');
-  li.className = 'action-row run-fold';
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.id = 'activityFilteredOpen';
-  main.className = 'action-row-main';
-  main.setAttribute('aria-haspopup', 'dialog');
-  const text = document.createElement('span');
-  text.className = 'action-row-text';
-  const title = document.createElement('span');
-  title.className = 'action-row-title';
-  title.textContent = 'Filtered out';
-  const meta = document.createElement('span');
-  meta.className = 'action-row-meta';
-  meta.textContent = `${a.filteredTotal} reviewed without an alert · last ${a.filteredDays} days`;
-  text.append(title, meta);
-  main.append(glyph('eye'), text);
-  main.addEventListener('click', openFiltered);
-  li.appendChild(main);
+  const { li } = actionRow({
+    liClass: 'run-fold',
+    mainId: 'activityFilteredOpen',
+    haspopup: true,
+    leading: glyph('eye'),
+    title: 'Filtered out',
+    meta: `${a.filteredTotal} reviewed without an alert · last ${a.filteredDays} days`,
+    onClick: openFiltered,
+  });
   return li;
 }
 

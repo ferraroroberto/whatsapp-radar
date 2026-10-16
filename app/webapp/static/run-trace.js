@@ -16,8 +16,9 @@ const FAMILY_KINDS = ['traffic-check', 'calendar-scan'];
 export function isFamilyKind(kind) { return FAMILY_KINDS.indexOf(kind) !== -1; }
 
 // Live = a real run that synced + (maybe) delivered; dry_run = replay on stored
-// data; review = the legacy process-only verb.
-const MODE_LABEL = { live: 'Live', dry_run: 'Dry run', review: 'Process' };
+// data; process = `wr review`'s own mode (#394); review = that same verb's
+// legacy DB mode value, from before it was expressed as a scan mode.
+const MODE_LABEL = { live: 'Live', dry_run: 'Dry run', process: 'Process', review: 'Process' };
 
 export function modeLabel(mode) { return MODE_LABEL[mode] || mode || '?'; }
 

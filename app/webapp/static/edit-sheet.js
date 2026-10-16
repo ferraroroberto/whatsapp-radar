@@ -15,7 +15,7 @@
  * `doneLabel` / `danger` / `rule` (the footer line) in place of a payload. */
 
 import { toast } from './api.js';
-import { setSwitch } from './_vendored/switch/switch.js';
+import { setSwitch, switchEl } from './_vendored/switch/switch.js';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -127,20 +127,17 @@ export function switchRow(labelText, on, onToggle) {
   return row;
 }
 
+// A sheet draft never re-renders on toggle, so this adapter keeps the
+// optimistic flip the row needs: reflect `next` on the button immediately,
+// then hand it to the caller's draft-mutating `onToggle(next)`.
 export function switchControl(labelText, on, onToggle) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'toggle';
-  btn.setAttribute('role', 'switch');
-  btn.setAttribute('aria-label', labelText);
-  btn.innerHTML = '<span class="knob"></span><span class="toggle-label"></span>';
-  setSwitch(btn, on);
-  btn.addEventListener('click', function () {
-    const next = btn.getAttribute('aria-checked') !== 'true';
-    setSwitch(btn, next);
-    onToggle(next);
+  return switchEl(on, {
+    label: labelText,
+    onToggle: function (next, btn) {
+      setSwitch(btn, next);
+      onToggle(next);
+    },
   });
-  return btn;
 }
 
 export function fieldRow(labelText, control) {

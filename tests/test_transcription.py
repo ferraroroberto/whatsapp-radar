@@ -22,7 +22,6 @@ import pytest
 from src.analysis import transcription as tr
 from src.analysis.classifier import StubClassifier
 from src.analysis.pipeline import scan
-from src.analysis.review import review_monitored_chats
 from src.analysis.transcription import TranscriptionError, run_transcription_phase, transcribe_file
 from src.config import Config, HubConfig, TelegramConfig, TranscriptionConfig
 from src.db import store
@@ -432,21 +431,23 @@ def test_transcribe_file_still_isolates_per_file_400(tmp_path: Path) -> None:
     assert not isinstance(exc_info.value, tr.TranscriptionBackendDown)
 
 
-# --- review_monitored_chats gate (#132) ------------------------------------
+# --- process mode's hold-back gate (#132, #394) ----------------------------
 #
-# `wr review` (review_monitored_chats) must hold back an untranscribed voice
+# `wr review` (``scan(mode="process")``) must hold back an untranscribed voice
 # note exactly like `scan`'s live delta does — otherwise the note is classified
 # on its "[voice note]" placeholder and the cursor advances past it, so the
-# real transcript produced by a later scan is never analysed.
+# real transcript produced by a later scan is never analysed. Unlike the old
+# standalone ``review_monitored_chats``, ``scan`` requires a real ``Config`` —
+# there is no "no config" call shape left to cover.
 
 
-def test_review_monitored_chats_holds_back_untranscribed_note(
+def test_process_mode_holds_back_untranscribed_note(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     cfg = _config(tmp_path)  # transcription enabled
     chat_id, msg_id, audio = _monitor_with_voice(conn, cfg.linked_device_dir)
 
-    outcome = review_monitored_chats(conn, StubClassifier(), config=cfg)
+    outcome = scan(conn, cfg, mode="process", classifier=StubClassifier(), deliver=False)
 
     # The only message is the held-back note — nothing to analyse yet.
     assert outcome.chats_with_delta == 0
@@ -458,27 +459,13 @@ def test_review_monitored_chats_holds_back_untranscribed_note(
     assert row["transcription_status"] == "pending"  # untouched, ready to retry
 
 
-def test_review_monitored_chats_without_config_is_unchanged(
-    conn: sqlite3.Connection, tmp_path: Path
-) -> None:
-    # Existing call sites (and most tests) don't pass `config` — the gate must
-    # stay a no-op for them rather than force transcription awareness everywhere.
-    cfg = _config(tmp_path)
-    chat_id, _, _ = _monitor_with_voice(conn, cfg.linked_device_dir)
-
-    outcome = review_monitored_chats(conn, StubClassifier())
-
-    assert outcome.chats_with_delta == 1
-    assert outcome.messages_processed == 1
-
-
-def test_review_monitored_chats_disabled_transcription_is_unchanged(
+def test_process_mode_disabled_transcription_is_unchanged(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     cfg = _config(tmp_path, enabled=False)
     chat_id, _, _ = _monitor_with_voice(conn, cfg.linked_device_dir)
 
-    outcome = review_monitored_chats(conn, StubClassifier(), config=cfg)
+    outcome = scan(conn, cfg, mode="process", classifier=StubClassifier(), deliver=False)
 
     assert outcome.chats_with_delta == 1
     assert outcome.messages_processed == 1

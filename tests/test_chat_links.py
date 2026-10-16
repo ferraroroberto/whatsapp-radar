@@ -17,7 +17,8 @@ from starlette.testclient import TestClient
 
 from app.webapp.server import create_app
 from src.analysis.classifier import StubClassifier
-from src.analysis.review import review_monitored_chats
+from src.analysis.pipeline import scan
+from src.config import Config, HubConfig, TelegramConfig
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.db.reprocess import reprocess
@@ -27,6 +28,27 @@ from src.webapp_config import WebappConfig
 from tests.helpers import chat_id_by_source
 
 LOOPBACK = ("127.0.0.1", 5555)
+
+
+def _config(tmp_path: Path) -> Config:
+    return Config(
+        db_path=tmp_path / "unused.sqlite3",
+        connector="fixture",
+        classifier="stub",
+        hub=HubConfig(base_url="http://127.0.0.1:8000", model="claude_sonnet"),
+        notifier="none",
+        telegram=TelegramConfig(bot_token="t", chat_id="c"),
+        linked_device_dir=tmp_path / "ld",
+    )
+
+
+def _review(conn: sqlite3.Connection, tmp_path: Path, classifier: object = None):
+    # ``process`` (#394): the ``wr review`` verb expressed as a scan mode that
+    # skips sync and reuses scan's traced loop.
+    return scan(
+        conn, _config(tmp_path), mode="process",
+        classifier=classifier or StubClassifier(), deliver=False,
+    )
 
 
 def _msg_count(conn: sqlite3.Connection, chat_id: int) -> int:
@@ -83,7 +105,9 @@ def test_link_rejects_self_chain_and_parent_with_children(
 
 # --- family-aware review ----------------------------------------------------
 
-def test_family_review_is_one_subject(ingested_conn: sqlite3.Connection) -> None:
+def test_family_review_is_one_subject(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
     parent = chat_id_by_source(ingested_conn, "chat-class-4a")
     child = chat_id_by_source(ingested_conn, "chat-school-parents")
     total = _msg_count(ingested_conn, parent) + _msg_count(ingested_conn, child)
@@ -91,7 +115,7 @@ def test_family_review_is_one_subject(ingested_conn: sqlite3.Connection) -> None
     store.link_chats(ingested_conn, child, parent)
     store.set_chat_status(ingested_conn, parent, "monitored")
 
-    outcome = review_monitored_chats(ingested_conn, StubClassifier())
+    outcome = _review(ingested_conn, tmp_path)
 
     # The family is reviewed once, over the merged backlog of both members.
     assert outcome.chats_with_delta == 1
@@ -109,7 +133,7 @@ def test_family_review_is_one_subject(ingested_conn: sqlite3.Connection) -> None
     assert _has_cursor(ingested_conn, child)
 
     # Second pass is a no-op for the whole family.
-    assert review_monitored_chats(ingested_conn, StubClassifier()).messages_processed == 0
+    assert _review(ingested_conn, tmp_path).messages_processed == 0
 
 
 def test_overview_folds_family_stats_into_parent(tmp_path: Path) -> None:
@@ -131,7 +155,9 @@ def test_overview_folds_family_stats_into_parent(tmp_path: Path) -> None:
         conn.close()
 
 
-def test_linked_child_not_reviewed_standalone(ingested_conn: sqlite3.Connection) -> None:
+def test_linked_child_not_reviewed_standalone(
+    ingested_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
     parent = chat_id_by_source(ingested_conn, "chat-class-4a")
     child = chat_id_by_source(ingested_conn, "chat-school-parents")
     # The child was independently monitored before linking; linking subsumes it.
@@ -143,7 +169,7 @@ def test_linked_child_not_reviewed_standalone(ingested_conn: sqlite3.Connection)
     heads = [int(r["id"]) for r in store.monitored_chats(ingested_conn)]
     assert child not in heads and parent in heads
 
-    outcome = review_monitored_chats(ingested_conn, StubClassifier())
+    outcome = _review(ingested_conn, tmp_path)
     assert outcome.chats_with_delta == 1
 
 

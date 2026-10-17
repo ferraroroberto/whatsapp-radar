@@ -824,11 +824,12 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .activity-list[data-state="error"] { min-height: 50vh; }
 .activity-loading { margin: var(--space-sm) 2px; }
 .run-group { margin: 0 0 var(--gap); }
-.run-group-title {
+/* design.md `overline`: 12px, 600, 0.06em, caps — list group headers only. */
+.overline {
   margin: 0 2px var(--space-xs);
   font-size: var(--font-caption);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }

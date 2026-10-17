@@ -29,6 +29,7 @@ and never terminates anything. Recovery is always *wait/relaunch*, never *kill*.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -42,6 +43,8 @@ from typing import Any
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
 from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP
+
+logger = logging.getLogger(__name__)
 
 # States, ordered roughly worst → best for the UI to colour.
 STATE_STOPPED = "stopped"
@@ -324,6 +327,7 @@ SUPERVISE_INTERVAL_SECONDS = float(os.environ.get("WR_SIDECAR_SUPERVISE_SECONDS"
 # Supervisor tick outcomes (what one check decided).
 ACTION_LIVE = "live"  # already connected — nothing to do
 ACTION_RELAUNCHED = "relaunched"  # process was gone/stale — spawned a fresh one
+ACTION_LAUNCH_FAILED = "launch_failed"  # relaunch was needed but the spawn itself failed
 ACTION_NEEDS_QR = "needs_qr"  # unpaired — a human must scan the QR; do NOT relaunch
 ACTION_LINKING = "linking"  # a process is up and linking — leave it alone
 
@@ -348,9 +352,13 @@ def supervise_once(
     - ``needs_qr``   → :data:`ACTION_NEEDS_QR`: unpaired; relaunching cannot help
       (a human must scan the QR), so we never spawn and let the caller surface it.
 
+    - a relaunch that itself fails (Node missing, ``npm install`` never run) →
+      :data:`ACTION_LAUNCH_FAILED`, so a sidecar that cannot start is told apart
+      from one that was relaunched.
+
     Returns ``{"action": <ACTION_*>, "state": <coarse state>, "detail": <str>}``.
-    Never raises on a failed launch — a transient spawn error is reported in the
-    ``detail`` so the loop keeps trying on the next tick rather than dying.
+    Never raises on a failed launch — the error is reported in the ``detail`` so
+    the loop keeps trying on the next tick rather than dying.
     """
     info = sidecar_state(buffer_dir)
     if info.is_live:
@@ -367,7 +375,11 @@ def supervise_once(
         )
         return {"action": ACTION_RELAUNCHED, "state": info.state, "detail": info.detail}
     except SidecarLaunchError as exc:
-        return {"action": ACTION_RELAUNCHED, "state": info.state, "detail": f"launch failed: {exc}"}
+        return {
+            "action": ACTION_LAUNCH_FAILED,
+            "state": info.state,
+            "detail": f"launch failed: {exc}",
+        }
 
 
 def run_supervisor(
@@ -385,14 +397,32 @@ def run_supervisor(
     Checks immediately on entry, then waits ``interval`` (interruptibly, via
     ``stop_event.wait``) between ticks so a quit returns promptly. ``on_tick``
     receives each tick's result dict — the tray uses it to surface a one-time
-    ``needs_qr`` toast.
+    ``needs_qr`` toast. Every non-live tick is logged, but a repeat of the same
+    (action, state, detail) is skipped so a dead sidecar leaves a trace on each
+    transition without a line every 90 s.
 
     Designed to run in a daemon thread; it owns no resources and never raises.
     """
+    last_logged: tuple[str, str, str] | None = None
     while not stop_event.is_set():
         result = supervise_once(
             buffer_dir, sidecar_root=sidecar_root, node_bin=node_bin, spawner=spawner
         )
+        signature = (str(result["action"]), str(result["state"]), str(result["detail"]))
+        if result["action"] == ACTION_LIVE:
+            if last_logged is not None:
+                logger.info("✅ sidecar live again")
+            last_logged = None
+        elif signature != last_logged:
+            if result["action"] == ACTION_LAUNCH_FAILED:
+                logger.error(
+                    f"❌ sidecar supervisor: {signature[0]} (state={signature[1]}) {signature[2]}"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ sidecar supervisor: {signature[0]} (state={signature[1]}) {signature[2]}"
+                )
+            last_logged = signature
         if on_tick is not None:
             on_tick(result)
         if stop_event.wait(interval):

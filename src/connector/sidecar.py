@@ -41,7 +41,7 @@ from typing import Any
 
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
 from src.paths import PROJECT_ROOT
-from src.subprocess_flags import NO_WINDOW_DETACHED
+from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 
 # States, ordered roughly worst → best for the UI to colour.
 STATE_STOPPED = "stopped"
@@ -256,7 +256,7 @@ def launch_sidecar(
             stdout=log_fh,
             stderr=subprocess.STDOUT,
             env=child_env,
-            creationflags=NO_WINDOW_DETACHED,
+            creationflags=NO_WINDOW_NEW_GROUP,
             close_fds=True,
         )
     except OSError as exc:

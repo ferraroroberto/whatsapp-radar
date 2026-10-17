@@ -34,7 +34,7 @@ from typing import IO, Any
 
 from src.paths import PROJECT_ROOT
 from src.runresult import parse_result, strip_result_line
-from src.subprocess_flags import NO_WINDOW_DETACHED
+from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +383,7 @@ def start_run(
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,
                 env=env,
-                creationflags=NO_WINDOW_DETACHED,
+                creationflags=NO_WINDOW_NEW_GROUP,
                 close_fds=True,
             )
         except OSError as exc:

@@ -50,10 +50,10 @@ def _config(tmp_path: Path) -> Config:
     )
 
 
-def _run_at(conn: sqlite3.Connection, started_at: str) -> int:
+def _run_at(conn: sqlite3.Connection, started_at: str, mode: str = "live") -> int:
     cur = conn.execute(
-        "INSERT INTO review_runs (started_at, status, mode) VALUES (?, 'completed', 'live')",
-        (started_at,),
+        "INSERT INTO review_runs (started_at, status, mode) VALUES (?, 'completed', ?)",
+        (started_at, mode),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -136,6 +136,19 @@ def test_recent_actionable_items_windows_scopes_and_excludes(conn: sqlite3.Conne
     # In-window, family-wide (head + child), chronological, exclusions honoured.
     assert [it["summary"] for it in items] == ["Pay the trip fee", "Bring swimsuit"]
     assert items[0]["deadline"] == "Friday"
+
+
+def test_recent_actionable_items_ignores_dry_run_items(conn: sqlite3.Connection) -> None:
+    """#393: a dry run alerted nobody, so its items are not "already surfaced"."""
+    head = store.upsert_chat(conn, ChatRecord(source_chat_id="head", display_name="Head"))
+    _actionable(conn, _run_at(conn, "2026-06-07T09:00:00+00:00"), head, "Live task")
+    _actionable(
+        conn, _run_at(conn, "2026-06-08T09:00:00+00:00", mode="dry_run"), head, "Dry-run task"
+    )
+
+    items = store.recent_actionable_items(conn, head, since_days=7, now=_NOW)
+
+    assert [it["summary"] for it in items] == ["Live task"]
 
 
 # --- renderer --------------------------------------------------------------

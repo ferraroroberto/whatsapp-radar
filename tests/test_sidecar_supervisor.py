@@ -9,6 +9,7 @@ relaunch-then-poll loop are asserted with a fake clock so there is no real wait.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -263,8 +264,19 @@ def test_supervise_once_reports_launch_failure_without_raising(tmp_path: Path) -
         sidecar_root=_sidecar_root(tmp_path, with_deps=False),
         spawner=lambda *a, **k: _FakeProc(),
     )
-    assert res["action"] == sidecar.ACTION_RELAUNCHED
+    assert res["action"] == sidecar.ACTION_LAUNCH_FAILED
     assert "launch failed" in res["detail"]
+
+
+def test_supervise_once_launch_failure_from_raising_launcher(tmp_path: Path) -> None:
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise sidecar.SidecarLaunchError("node not found")
+
+    res = sidecar.supervise_once(
+        tmp_path / "buf", sidecar_root=_sidecar_root(tmp_path, with_deps=True), spawner=boom
+    )
+    assert res["action"] == sidecar.ACTION_LAUNCH_FAILED
+    assert res["action"] != sidecar.ACTION_RELAUNCHED
 
 
 # --- run_supervisor: the loop ----------------------------------------------
@@ -352,3 +364,27 @@ def test_wait_for_settled_times_out_while_growing(tmp_path: Path) -> None:
         poll_interval=1.0, sleep=sleep, clock=lambda: next(times),
     )
     assert settled is False
+
+
+def test_run_supervisor_logs_failures_once_per_transition(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    buffer_dir = tmp_path / "buf"  # stopped; deps missing → every tick fails to launch
+    stop = threading.Event()
+    ticks = 0
+
+    def on_tick(_result: dict[str, Any]) -> None:
+        nonlocal ticks
+        ticks += 1
+        if ticks >= 3:
+            stop.set()
+
+    with caplog.at_level(logging.INFO, logger=sidecar.logger.name):
+        sidecar.run_supervisor(
+            buffer_dir, stop, interval=0.0,
+            sidecar_root=_sidecar_root(tmp_path, with_deps=False),
+            spawner=lambda *a, **k: _FakeProc(), on_tick=on_tick,
+        )
+    failures = [r for r in caplog.records if "launch_failed" in r.getMessage()]
+    assert len(failures) == 1  # three identical failing ticks → one trace
+    assert failures[0].levelno == logging.ERROR

@@ -41,6 +41,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from playwright.sync_api import Playwright, sync_playwright
 
 from src.subprocess_flags import NO_WINDOW
 from tests.e2e._e2e_live_guard import require_disposable_instance
@@ -355,6 +356,47 @@ def base_url() -> Iterator[str]:
             proc.wait(timeout=5)
         log.close()
         shutil.rmtree(db_dir, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def _neutral_driver_cwd() -> Iterator[str]:
+    """Run the enclosed block with cwd set to the system temp dir (#409).
+
+    Everything Playwright spawns inherits a working directory: the Node driver
+    takes pytest's (`playwright/_impl/_transport.py` passes no `cwd`), each
+    browser takes the driver's, each helper takes the browser's. A run inside
+    `whatsapp-radar-wt-<N>` therefore roots the whole tree in the worktree it
+    is expected to delete afterwards, and a helper wedged inside termination
+    pins that directory for good. Spawning from `%TEMP%` makes a wedge pin a
+    directory nobody wants to delete.
+
+    `gettempdir()`, not `mkdtemp()`: a per-run temp dir would become
+    unremovable the same way. Only the *spawn* needs the neutral cwd, so the
+    original is restored immediately.
+    """
+    original = os.getcwd()
+    neutral = tempfile.gettempdir()
+    os.chdir(neutral)
+    try:
+        yield neutral
+    finally:
+        os.chdir(original)
+
+
+@pytest.fixture(scope="session")
+def playwright() -> Iterator[Playwright]:
+    """pytest-playwright's session `playwright`, started from a neutral cwd (#409).
+
+    Same fixture name as the plugin's own, so the override applies without
+    touching a single test; the plugin's version is these lines minus the
+    `with`.
+    """
+    with _neutral_driver_cwd():
+        pw = sync_playwright().start()
+    try:
+        yield pw
+    finally:
+        pw.stop()
 
 
 @pytest.fixture(scope="session")

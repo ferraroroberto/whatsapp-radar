@@ -65,7 +65,7 @@ def test_gear_opens_settings_with_its_groups(
         "el => el.scrollWidth <= el.clientWidth"
     ), "Settings title truncates beside its status line"
     # The six groups (#377), and no file path or stage number in any label.
-    expect(dialog.locator(".run-group-title")).to_have_text(_GROUPS)
+    expect(dialog.locator(".overline")).to_have_text(_GROUPS)
     labels = dialog.locator(".action-row-title").all_inner_texts()
     assert labels and not [x for x in labels if "/" in x or re.search(r"stage", x, re.I)], labels
     # Counts (#374), health and recent syncs (#373) live in each source's sheet.

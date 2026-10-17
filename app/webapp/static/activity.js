@@ -277,7 +277,7 @@ function groupSection(label) {
   section.className = 'run-group';
   if (label) {
     const h = document.createElement('h3');
-    h.className = 'run-group-title';
+    h.className = 'overline';
     h.textContent = label;
     section.appendChild(h);
   }

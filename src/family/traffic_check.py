@@ -401,11 +401,22 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                             leg.person, leg.event.summary, result, result.delay_min,
                             anchor=anchor,
                         )
-                    send_alert(config, text)
-                    dedup.record_alert(key, now=now)
-                    recent.add(key)
-                entry["alerted"] = True
-                alerts += 1
+                    # Only a delivered alert may suppress the next one (#393): a
+                    # failed/skipped send must stay retryable, so it records no
+                    # dedup key and carries its status into the entry instead.
+                    send_status, send_detail = send_alert(config, text)
+                    if send_status == "sent":
+                        dedup.record_alert(key, now=now)
+                        recent.add(key)
+                        entry["alerted"] = True
+                        alerts += 1
+                    else:
+                        entry["alert_status"] = send_status
+                        if send_detail:
+                            entry["alert_detail"] = send_detail
+                else:
+                    entry["alerted"] = True
+                    alerts += 1
 
             # A distinct dedup key lets a leave-now alert coexist with a delay alert
             # for the same event without either suppressing the other. Sending is
@@ -437,7 +448,16 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             # whoever is furthest out, or it tells the slowest person they have
             # more time than they do.
             eta_min = max(item["eta_min"] for item in items)
-            send_alert(config, _leave_now_text(people, summary, eta_min, event_start))
+            send_status, send_detail = send_alert(
+                config, _leave_now_text(people, summary, eta_min, event_start)
+            )
+            if send_status != "sent":
+                # Not delivered (#393): no dedup key, so the next run retries.
+                for item in items:
+                    item["entry"]["leave_now_status"] = send_status
+                    if send_detail:
+                        item["entry"]["leave_now_detail"] = send_detail
+                continue
             for item in items:
                 dedup.record_alert(item["leave_key"], now=now)
                 recent.add(item["leave_key"])

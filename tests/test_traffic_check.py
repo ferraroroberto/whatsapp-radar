@@ -64,7 +64,10 @@ def _config(*, presence_enabled: bool = True) -> Config:
 @pytest.fixture
 def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Stub the four seams; capture the compute_route calls and sent alerts."""
-    state: dict[str, Any] = {"route_calls": [], "sent": [], "events": {}, "route": None}
+    state: dict[str, Any] = {
+        "route_calls": [], "sent": [], "events": {}, "route": None,
+        "send_result": ("sent", None), "recorded": [],
+    }
 
     def fake_fetch(
         calendar: Any, *, time_min: datetime, time_max: datetime
@@ -83,13 +86,15 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     def fake_send(config: Config, text: str) -> tuple[str, str | None]:
         state["sent"].append(text)
-        return "sent", None
+        return state["send_result"]
 
     monkeypatch.setattr(traffic_check, "fetch_events_by_person", fake_fetch)
     monkeypatch.setattr(traffic_check, "compute_route", fake_route)
     monkeypatch.setattr(traffic_check, "send_alert", fake_send)
     monkeypatch.setattr(traffic_check.dedup, "recent_keys", lambda *a, **kw: set())
-    monkeypatch.setattr(traffic_check.dedup, "record_alert", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        traffic_check.dedup, "record_alert", lambda key, **kw: state["recorded"].append(key)
+    )
     return state
 
 
@@ -212,6 +217,48 @@ def test_feasible_leg_does_not_alert(
     entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
     assert entry["feasible"] is True
     assert entry["alerted"] is False and harness["sent"] == []
+
+
+@pytest.mark.parametrize("status", ["failed", "skipped"])
+def test_failed_delay_alert_is_not_recorded_as_sent(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch, status: str
+) -> None:
+    """#393: an undelivered alert must stay retryable, not suppressed for the window."""
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=600, traffic_s=2400)  # +30 min delay
+    harness["send_result"] = (status, "telegram unreachable")
+    monkeypatch.setattr(
+        traffic_check, "get_location",
+        lambda *a, **kw: PresenceUnavailable("roberto", "disabled"),
+    )
+    payload = traffic_check.run_traffic_check(
+        _config(presence_enabled=False), now=NOW, dry_run=False
+    )
+
+    entry = payload["checked"][0]
+    assert len(harness["sent"]) == 1  # the send was attempted
+    assert harness["recorded"] == []  # ...but not deduped
+    assert entry["alerted"] is False and payload["alerts"] == 0
+    assert entry["alert_status"] == status
+    assert entry["alert_detail"] == "telegram unreachable"
+
+
+def test_failed_leave_now_alert_is_not_recorded_as_sent(
+    harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#393: the leave-now path has the same send-then-record shape."""
+    _single_office_leg(harness)
+    harness["route"] = RouteResult(normal_s=3000, traffic_s=3000)  # overdue, no delay
+    harness["send_result"] = ("failed", "telegram unreachable")
+    monkeypatch.setattr(traffic_check, "get_location", lambda *a, **kw: _fresh_location())
+    payload = traffic_check.run_traffic_check(_config(), now=NOW, dry_run=False)
+
+    entry = payload["checked"][0]
+    assert len(harness["sent"]) == 1
+    assert harness["recorded"] == []
+    assert entry["leave_now_alerted"] is False and payload["alerts"] == 0
+    assert entry["leave_now_status"] == "failed"
+    assert entry["leave_now_detail"] == "telegram unreachable"
 
 
 def test_live_presence_origin_is_not_feasibility_judged(

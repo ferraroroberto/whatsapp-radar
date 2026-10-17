@@ -75,6 +75,7 @@ const RENDERABLE_KEYS = new Set([
   'delay_min', 'normal_min', 'traffic_min', 'gap_min', 'depart_in_min',
   'dedup_key', 'leave_key', 'dedup_window_min', 'leave_margin_min', 'alerted',
   'leave_now_alerted', 'leave_now_suppressed', 'infeasible_suppressed', 'entry',
+  'alert_status', 'alert_detail', 'leave_now_status', 'leave_now_detail',
   'priced', 'unpriced',
   // presence
   'location_source', 'presence_status', 'presence_age_min', 'presence_refreshed',

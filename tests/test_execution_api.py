@@ -214,3 +214,75 @@ def test_health_shows_safe_gmail_account_whitelist_and_status(
     ]
     assert "must-never-return" not in str(source)
     assert str(token) not in str(source)
+
+
+def test_health_probe_does_not_block_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#393: a slow connector probe must not freeze ``/healthz`` or other requests.
+
+    The probe blocks on an event that a timer releases after ``HOLD_S``. If the
+    route runs on the event-loop thread, ``/healthz`` queues behind it and takes
+    about that long; threaded, it answers immediately.
+    """
+    import threading
+    import time
+
+    from src.connector.base import ConnectorStatus
+
+    hold_s = 3.0
+    probing = threading.Event()
+    release = threading.Event()
+
+    class SlowConnector:
+        def connect(self) -> ConnectorStatus:
+            probing.set()
+            release.wait(timeout=10)
+            return ConnectorStatus("slow-fake", True, "ok")
+
+        def status(self) -> ConnectorStatus:
+            return ConnectorStatus("slow-fake", False, "unknown")
+
+        def stop(self) -> None:
+            return None
+
+    cfg = Config(
+        db_path=tmp_path / "slow.sqlite3",
+        connector="fixture",
+        classifier="stub",
+        hub=HubConfig("http://127.0.0.1:8000", "stub"),
+        notifier="none",
+        telegram=TelegramConfig("", ""),
+        linked_device_dir=tmp_path / "buffer",
+    )
+    monkeypatch.setattr(execution_router, "load_config", lambda: cfg)
+    monkeypatch.setattr(
+        execution_router,
+        "build_connectors",
+        lambda _cfg: [ConnectorBinding("whatsapp", SlowConnector())],  # type: ignore[arg-type]
+    )
+    app = create_app()
+    app.state.webapp_config = WebappConfig(auth_token="")
+    app.state.db_path = cfg.db_path
+
+    health: dict[str, Any] = {}
+    with TestClient(app, client=LOOPBACK) as client:
+        worker = threading.Thread(
+            target=lambda: health.update(res=client.get("/api/execution/health"))
+        )
+        worker.start()
+        assert probing.wait(timeout=5), "the slow probe never started"
+        timer = threading.Timer(hold_s, release.set)
+        timer.start()
+        try:
+            started = time.monotonic()
+            healthz = client.get("/healthz")
+            elapsed = time.monotonic() - started
+        finally:
+            worker.join(timeout=15)
+            timer.cancel()
+            release.set()
+
+    assert healthz.status_code == 200
+    assert elapsed < hold_s / 2, f"/healthz waited {elapsed:.1f}s behind the slow probe"
+    assert health["res"].status_code == 200

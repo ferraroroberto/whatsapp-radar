@@ -166,8 +166,14 @@ async def start_execution_run(request: Request) -> dict[str, Any]:
 
 
 @router.get("/api/execution/health")
-async def execution_health(request: Request) -> dict[str, Any]:
-    """Truthful, secret-free status for every configured message source."""
+def execution_health(request: Request) -> dict[str, Any]:
+    """Truthful, secret-free status for every configured message source.
+
+    A plain ``def`` on purpose (#393): the connector probes are blocking network
+    I/O (Gmail token refresh + profile calls), and Starlette runs a sync route in
+    its threadpool, so a slow upstream can't freeze the event loop — and with it
+    ``/healthz`` and every other request.
+    """
     cfg = load_config()
     conn = store.connect(db_path(request))
     try:

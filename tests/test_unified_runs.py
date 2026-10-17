@@ -639,3 +639,27 @@ def test_list_runs_by_kind_bounds_each_kind_not_the_whole_table(tmp_path: Path) 
         assert store.list_runs_by_kind(conn, ()) == []
     finally:
         conn.close()
+
+
+def test_execution_runs_splits_skip_counts_per_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#393: the Activity tab shows a scope only its own kind's skips."""
+    monkeypatch.setattr(webapp_runs, "RUNS_DIR", tmp_path / "runs")
+    db = tmp_path / "exec.sqlite3"
+    _seed_skip(tmp_path / "runs", "20260101T000000", "2026-01-01T00:00:00+00:00")
+    _seed_skip(tmp_path / "runs", "20260101T000500", "2026-01-01T00:05:00+00:00")
+    calendar_dir = webapp_runs.new_run_dir("calendar-scan", "20260101T001000")
+    webapp_runs.write_run_json(
+        calendar_dir,
+        kind="calendar-scan",
+        status="completed",
+        started_at="2026-01-01T00:10:00+00:00",
+        result={"kind": "calendar-scan", "status": "skipped", "reason": "outside run_hour"},
+    )
+
+    with _client(db) as client:
+        body = client.get("/api/execution/runs").json()
+
+    assert body["skipped_count"] == 3  # the cross-kind total is unchanged
+    assert body["skipped_by_kind"] == {"traffic-check": 2, "calendar-scan": 1}

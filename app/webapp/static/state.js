@@ -38,6 +38,7 @@ export const state = {
     days: 7,
     runs: [],              // /api/execution/runs records (both stores, #163)
     skippedCount: 0,       // self-skips hidden from `runs` (#234, #277)
+    skippedByKind: {},     // the same, split per run kind (#393)
     active: null,          // {kind, run_id} of the in-flight run, or null
     queue: [],             // pending chained actions (multi-step run), fired in order
     sidecar: null,         // last /api/sidecar/status snapshot (connection health)

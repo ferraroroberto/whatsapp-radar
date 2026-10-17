@@ -474,6 +474,7 @@ export async function fetchExecution() {
   ex.runs = data.runs || [];
   ex.active = data.active || null;
   ex.skippedCount = data.skipped_count || 0;
+  ex.skippedByKind = data.skipped_by_kind || {};
 
   // Advance a chained run once the current step finishes (server-authoritative).
   if (!firing && !ex.active && ex.queue.length > 0) await pumpQueue();

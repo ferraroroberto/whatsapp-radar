@@ -320,3 +320,39 @@ def test_audit_gated_sweep_is_named_not_zeroed(page: Page, base_url: str) -> Non
     expect(block).not_to_contain_text("0 add")
     expect(page.locator("#runFunnel")).to_contain_text("Blocks")
     expect(page.locator("#runFunnel")).not_to_contain_text("Block adds")
+
+
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_activity_skipped_line_counts_only_the_current_scope(
+    page: Page, base_url: str
+) -> None:
+    """#393: traffic's cadence self-skips must not read as hidden Calendar runs."""
+    page.route(
+        "**/api/execution/runs*",
+        lambda route: route.fulfill(
+            json={"active": None, "runs": [], "skipped_count": 7,
+                  "skipped_by_kind": {"traffic-check": 5, "calendar-scan": 2}}
+        ),
+    )
+    page.route(
+        "**/api/audit/runs?*",
+        lambda route: route.fulfill(json={"runs": [], "coverage_gaps": []}),
+    )
+    page.route(
+        "**/api/audit/filtered?*",
+        lambda route: route.fulfill(
+            json={"days": 30, "limit": 50, "offset": 0, "total": 0,
+                  "has_more": False, "items": []}
+        ),
+    )
+    page.goto(base_url)
+    page.locator("#tabActivity").click()
+
+    skipped = page.locator("#activitySkipped")
+    page.locator('#activityScope [data-scope="calendar"]').click()
+    expect(skipped).to_have_text("2 self-skipped runs hidden")
+    page.locator('#activityScope [data-scope="traffic"]').click()
+    expect(skipped).to_have_text("5 self-skipped runs hidden")
+    page.locator('#activityScope [data-scope="messages"]').click()
+    expect(skipped).to_be_hidden()

@@ -383,18 +383,23 @@ async def list_execution_runs(
     unrelated cap in :func:`app.webapp.runs.prune_runs` — and stay fetchable
     with ``include_skipped=true``; ``skipped_count`` reports how many were
     hidden so the count itself stays visible even when the rows don't.
+    ``skipped_by_kind`` splits that total per run kind (#393), so the Activity
+    tab can show a scope only its own kind's skips.
     """
     limit = max(1, min(limit, 200))
     read_limit = limit if include_skipped else max(limit, _SKIP_FILTER_READ_LIMIT)
     merged: list[dict[str, Any]] = []
     by_db_id: dict[int, dict[str, Any]] = {}
     skipped_count = 0
+    skipped_by_kind: dict[str, int] = {}
     for record in runs.list_runs(read_limit):
         record.setdefault("mode", _fs_mode(record))
         result = record.get("result")
         is_skip = isinstance(result, dict) and result.get("status") == "skipped"
         if is_skip:
             skipped_count += 1
+            kind = str(record.get("kind") or "")
+            skipped_by_kind[kind] = skipped_by_kind.get(kind, 0) + 1
             if not include_skipped:
                 continue
         db_id = record.get("db_run_id")
@@ -417,7 +422,12 @@ async def list_execution_runs(
             continue
         merged.append(_db_run_record(row))
     merged.sort(key=lambda r: str(r.get("started_at") or ""), reverse=True)
-    return {"active": runs.active_run(), "runs": merged[:limit], "skipped_count": skipped_count}
+    return {
+        "active": runs.active_run(),
+        "runs": merged[:limit],
+        "skipped_count": skipped_count,
+        "skipped_by_kind": skipped_by_kind,
+    }
 
 
 @router.get("/api/execution/runs/{kind}/{run_id}")

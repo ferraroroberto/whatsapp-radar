@@ -343,9 +343,14 @@ export function renderList() {
   }
   els.activityEmpty.hidden = items.length > 0;
   els.activityMore.hidden = !a.hasMore;
-  const skipped = state.execution.skippedCount || 0;
   // Self-skips are hidden from the list (#234) but must stay visible in count:
   // traffic-check's cadence window (#170) and calendar-scan's run_hour (#277).
+  // Counted per kind (#393): a scope shows only its own kind's skips, so the
+  // traffic job's frequent cadence skips never read as hidden calendar runs.
+  let skipped = 0;
+  for (const [kind, n] of Object.entries(state.execution.skippedByKind || {})) {
+    if (inScope(kind, a.scope)) skipped += n;
+  }
   els.activitySkipped.hidden = !(skipped && a.scope !== 'messages');
   if (skipped) {
     els.activitySkipped.textContent =

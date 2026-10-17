@@ -217,7 +217,10 @@ def recent_actionable_items(
     the family (head + children, :func:`family_member_ids`), within the window
     measured from each row's run ``started_at``, ordered oldest-first. ``summary``
     is required (it's what we'd re-surface). ``exclude_run_id`` drops the
-    in-progress run so a run can never feed itself. The cutoff is compared as a
+    in-progress run so a run can never feed itself. Dry-run items are excluded
+    (#393): a dry run alerts nobody and never advances the cursor, so telling the
+    next live scan they were "already alerted" would suppress the real alert.
+    The cutoff is compared as a
     UTC-ISO string, matching :func:`_now`, so lexicographic order is chronological.
     """
     members = family_member_ids(conn, head_id)
@@ -237,6 +240,7 @@ def recent_actionable_items(
             WHERE ai.action_required = 1
               AND ai.chat_id IN ({placeholders})
               AND ai.summary IS NOT NULL
+              AND rr.mode != 'dry_run'
               AND rr.started_at >= ?{exclude_clause}
             ORDER BY rr.started_at, ai.id
             """,

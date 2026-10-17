@@ -264,7 +264,7 @@ const SHEETS = {
       body.append(valueRow('Preserved', 'monitored, ignored and alias choices'));
       body.append(valueRow('Backed up first', 'the database'));
       body.append(valueRow('Resets', 'run and analysis history'));
-      body.append(el('p', 'sheet-help', "Activity's Run now → Sync messages is the incremental pull, "
+      body.append(el('p', 'sheet-help', 'Sync messages, under Run now in Activity, is the incremental pull, '
         + 'safe to run often; this is the full rebuild.'));
     },
     action: function () { rebuildCache(); },

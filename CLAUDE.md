@@ -37,11 +37,11 @@ whatsapp-radar/
     presence/client.py     traffic/routes_client.py     task_os/client.py
     fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
-                         #   webapp_config.json / webauthn_devices.json / cloudflared.yml + .env gitignored
+                         #   webapp_config.json / webauthn_devices.json + .env gitignored
   scripts/               # helper CLIs (token/password/icons, tailscale cert, named tunnel, Google
                          #   auth, backtests/smoke) + run-e2e.ps1, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
-  webapp/                # runtime log output + certificates/ (gitignored contents)
+  webapp/                # runtime log output + certificates/ + cloudflared.yml (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
   launcher.py  wr.bat    # CLI entry points
   tray.bat  webapp.bat  webapp_tunnel_named.bat  setup.bat   # webapp entry points

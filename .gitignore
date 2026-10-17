@@ -30,9 +30,10 @@ webapp/last_tunnel_url.txt
 webapp/runs/
 # Real Tailscale-issued HTTPS cert (scripts/gen_tailscale_cert.py) — machine-specific.
 webapp/certificates/
+# Named-tunnel config (tunnel UUID + public hostname) — copied from config/cloudflared.sample.yml.
+webapp/cloudflared.yml
 config/webapp_config.json
 config/webauthn_devices.json
-config/cloudflared.yml
 
 # WhatsApp linked-device credentials and local private data
 auth/

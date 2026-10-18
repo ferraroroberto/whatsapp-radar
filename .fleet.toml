@@ -28,7 +28,7 @@ empty-state = { src = "app/webapp/static/_vendored/empty-state", sha = "4c699636
 card = { src = "app/webapp/static/_vendored/card", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/card" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "7d9b824bfc2dd4f3ec8a9d7424208bb36d42c556", dest = "app/webapp/static/_vendored/icons" }
 usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/usage-log" }
-usage_log = { src = "src/usage_log.py", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "src/usage_log.py" }
+usage_log = { src = "src/usage_log.py", sha = "a457e41cd3004d8b9493408498eb9e3d51cdc9c3", dest = "src/usage_log.py" }
 
 # Diff-proportionate e2e routing (project-scaffolding#180, schema:
 # project-scaffolding/docs/e2e-routing.md). Rules are evaluated top-to-bottom;

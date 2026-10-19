@@ -13,6 +13,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 # Vendored byte-for-byte from project-scaffolding (#409); never reformat locally.
 "tests/e2e/_browser_sweep.py" = ["E501"]
+"tests/e2e/_surface.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's documented idiom evaluates Depends()/Query()/etc. in argument

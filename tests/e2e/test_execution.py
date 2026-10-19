@@ -16,6 +16,8 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 
 # Not @pytest.mark.live_safe (issue #225): clicks #execRunScan, firing the
 # real backend pipeline unmocked — under WR_E2E_LIVE this would run whatever
@@ -40,6 +42,7 @@ def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     page.locator("#execDryRun").click()
     expect(page.locator("#execDryRun")).to_have_attribute("aria-checked", "true")
     expect(page.locator("#execDryOpts")).to_be_visible()
+    surface(page, "activity.run-now-sheet")
     page.locator("#execRunScan").click()
 
     # 2. The Run-now sheet closes and the run sheet follows the run live to a
@@ -57,6 +60,8 @@ def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     page.locator("#runOutputCard summary").click()
     expect(page.locator("#runOutput")).to_contain_text("dry_run")
     expect(page.locator("#runSheetFoot")).to_be_hidden()
+    expect(page.locator("#toast")).to_be_hidden(timeout=scaled(10_000))
+    surface(page, "activity.run-sheet-complete")
     page.locator("#runSheetClose").click()
 
     # 3. The run is in the Messages list with an exception chip for Dry run and
@@ -68,6 +73,7 @@ def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     expect(chips.filter(has_text="actionable")).to_have_attribute("data-tone", "accent")
     expect(row).not_to_contain_text("OK")
     expect(row).not_to_contain_text("Live")
+    surface(page, "activity.run-list-dry-run")
 
     # 4. Drill in: the sheet's funnel and at least one per-chat trace carrying the
     #    seeded monitored chat's name; expanding it reveals the per-message
@@ -84,6 +90,9 @@ def test_activity_dry_run_follows_the_run_and_drills_into_the_trace(
     messages = trace.locator(".audit-msg")
     expect(messages.first).to_be_visible()
     expect(messages.first.locator(".audit-msg-badge").first).to_be_visible()
+    # A toast still fading from the run start would make two captures differ.
+    expect(page.locator("#toast")).to_be_hidden(timeout=scaled(10_000))
+    surface(page, "activity.run-trace-open")
 
 
 @pytest.mark.smoke
@@ -145,3 +154,4 @@ def test_settings_sources_card_offers_reconnect_when_offline(
     expect(whatsapp).to_be_visible()
     expect(whatsapp.locator(".source-status-state")).to_have_text("Not connected")
     expect(page.locator("#execSources use[href='#i-mail']")).to_have_count(1)
+    surface(page, "settings.source-reconnect")

@@ -20,6 +20,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 
@@ -91,6 +93,7 @@ def test_an_all_unpriced_run_never_shows_a_healthy_checked_count(
     expect(row).to_contain_text("0 priced")
     expect(row).to_contain_text("3 not priced")
     expect(row).not_to_contain_text("3 checked")
+    surface(page, "activity.unpriced-run-list")
 
 
 def test_a_mixed_run_names_the_unpriced_half_in_the_list_and_the_funnel(
@@ -120,6 +123,7 @@ def test_a_mixed_run_names_the_unpriced_half_in_the_list_and_the_funnel(
     expect(funnel.locator(".exec-funnel-cell", has_text="Not priced")).to_contain_text("1")
     expect(funnel).to_contain_text("Priced")
     expect(funnel).not_to_contain_text("Checked")
+    surface(page, "activity.traffic-run-sheet")
 
 
 def test_a_fully_priced_run_gains_no_noise(page: Page, base_url: str) -> None:

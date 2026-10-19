@@ -15,6 +15,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, Route, expect
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _TABS = ["Dashboard", "Activity", "Chats", "Family"]
@@ -68,6 +70,8 @@ def test_gear_opens_settings_with_its_groups(
     expect(dialog.locator(".overline")).to_have_text(_GROUPS)
     labels = dialog.locator(".action-row-title").all_inner_texts()
     assert labels and not [x for x in labels if "/" in x or re.search(r"stage", x, re.I)], labels
+    assert dialog.locator("#settingsClose").evaluate_all(_UNPAINTED) == [_CLEAR]
+    surface(page, "settings.dialog")
     # Counts (#374), health and recent syncs (#373) live in each source's sheet.
     dialog.locator('[data-settings-sheet="source-whatsapp"]').click()
     sheet = page.locator("#sourceSheet")
@@ -76,7 +80,6 @@ def test_gear_opens_settings_with_its_groups(
         expect(sheet.locator(part)).to_have_count(1)
     page.keyboard.press("Escape")
     expect(sheet).to_be_hidden()
-    assert dialog.locator("#settingsClose").evaluate_all(_UNPAINTED) == [_CLEAR]
     page.locator("#settingsClose").click()
     expect(dialog).not_to_be_visible()
 
@@ -152,6 +155,7 @@ def test_a_settings_sheet_sends_only_its_own_fields_on_done(page: Page, base_url
     # Close discards.
     page.locator('#settingsDialog [data-settings-sheet="hub"]').click()
     sheet.locator("input").nth(1).fill("e2e-model")
+    surface(page, "settings.hub-sheet")
     page.locator("#settingsSheetClose").click()
     expect(sheet).to_be_hidden()
     assert posted == []
@@ -169,6 +173,7 @@ def test_a_settings_sheet_sends_only_its_own_fields_on_done(page: Page, base_url
     # The bot token is never prefilled, and a blank one is never sent.
     page.locator('#settingsDialog [data-settings-sheet="delivery"]').click()
     expect(sheet.locator("input[type=password]")).to_have_value("")
+    surface(page, "settings.delivery-sheet")
     sheet.locator("input:not([type=password])").fill("12345")
     page.locator("#settingsSheetDone").click()
     expect(sheet).to_be_hidden()
@@ -185,6 +190,7 @@ def test_a_rejected_setting_keeps_its_sheet_open(page: Page, base_url: str) -> N
     expect(page.locator("#settingsSheetError")).to_contain_text("invalid classifier")
     expect(page.locator("#settingsSheet")).to_be_visible()
     expect(page.locator("#settingsSheet")).to_contain_text("Close discards your changes")
+    surface(page, "settings.sheet-error")
 
 
 def test_rebuild_confirms_in_a_sheet_not_a_native_dialog(page: Page, base_url: str) -> None:
@@ -199,6 +205,7 @@ def test_rebuild_confirms_in_a_sheet_not_a_native_dialog(page: Page, base_url: s
     expect(sheet).to_contain_text("run and analysis history")
     expect(page.locator("#settingsSheetDone")).to_have_text("Rebuild cache")
     expect(page.locator("#settingsSheetDone")).to_have_class(re.compile(r"\bdanger\b"))
+    surface(page, "settings.rebuild-confirm")
     # Cancelling queues nothing; nothing native ever opened.
     page.locator("#settingsSheetClose").click()
     expect(sheet).to_be_hidden()
@@ -237,14 +244,17 @@ def test_passkey_enrollment_shows_while_its_window_is_open(
         return
     # The window is announced on Home and in Settings, and Home's line opens it.
     expect(home).to_have_text("Passkey enrollment open")
+    surface(page, "home.passkey-window")
     home.click()
     sheet = page.locator("#settingsSheet")
     expect(sheet).to_be_visible()
     expect(page.locator("#settingsStatus")).to_have_text("Passkey enrollment open")
     expect(page.locator("#enrollDeviceBtn")).to_be_visible()
+    surface(page, "settings.passkeys-sheet")
     # Removal confirms inside the sheet; Cancel puts the row back.
     sheet.locator("#webauthnDevices .icon-button").click()
     expect(sheet.locator("#webauthnDevices")).to_contain_text("Remove \"Test phone\"?")
+    surface(page, "settings.passkey-remove-confirm")
     sheet.locator("#webauthnDevices .button-ghost").click()
     expect(sheet.locator("#webauthnDevices .icon-button")).to_have_count(1)
     assert native == []

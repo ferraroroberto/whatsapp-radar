@@ -13,6 +13,8 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Page
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _SHOW = """async ([message, kind]) => {
@@ -48,6 +50,7 @@ def test_success_toast_is_neutral_frosted(
     # green toast is the pre-#329 `.toast.good` tint.
     assert neutral["border"] != "rgb(26, 127, 55)", neutral["border"]
     assert neutral["border"] != "rgb(63, 185, 80)", neutral["border"]
+    surface(page, "toast.neutral")
 
 
 def test_error_toast_is_the_only_tinted_variant(
@@ -55,6 +58,7 @@ def test_error_toast_is_the_only_tinted_variant(
 ) -> None:
     error = _show(page, base_url, scaled, "error")
     assert error["live"] == "assertive"
+    surface(page, "toast.error")
     neutral = page.evaluate(_SHOW, ["Saved.", None])
     assert error["border"] != neutral["border"]
     assert error["background"] != neutral["background"]

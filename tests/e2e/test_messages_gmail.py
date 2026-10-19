@@ -13,6 +13,8 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 
 # Not @pytest.mark.live_safe (issue #225): clicks the unmocked .chat-watch
 # promote/demote toggle, which would flip a real sender's monitored status
@@ -39,6 +41,7 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
     toggle.click()
     expected = "false" if before == "true" else "true"
     expect(toggle).to_have_attribute("aria-pressed", expected)
+    surface(page, "chats.gmail-source")
 
     # Opening the sender shows its messages with a sender chip identifying the address.
     row.locator(".chat-main").click()
@@ -46,6 +49,7 @@ def test_gmail_source_switches_vocabulary_and_promotes(page: Page, base_url: str
     expect(page.locator("#historySubtitle")).to_contain_text("Gmail")
     # The sender address sits in the sheet's subtitle (#375; was a chip).
     expect(page.locator("#historySubtitle")).to_contain_text("newsletter@example.com")
+    surface(page, "chats.gmail-sender-history")
     page.locator("#historyClose").click()
     expect(page.locator("#historyCard")).to_be_hidden()
 

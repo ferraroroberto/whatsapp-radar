@@ -26,6 +26,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 #: One token per sensitive field, so a leak names the field that leaked rather
@@ -311,3 +313,4 @@ def test_the_redaction_note_conforms_at_phone_width(
         """
     )
     assert overflowing == [], f"redacted dump overflows 390px: {overflowing}"
+    surface(page, "activity.run-sheet-redacted")

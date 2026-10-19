@@ -7,6 +7,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
@@ -34,6 +36,7 @@ def test_tab_switching(page: Page, base_url: str) -> None:
     # Every tab's header line names a fact once its data lands (#374).
     has_words = re.compile(r"\w")
     expect(page.locator("#dashStatus")).to_have_text(has_words)
+    surface(page, "home.dashboard")
     page.locator("#tabActivity").click()
     expect(page.locator("#paneActivity")).to_be_visible()
     expect(page.locator("#paneDashboard")).to_be_hidden()
@@ -42,12 +45,15 @@ def test_tab_switching(page: Page, base_url: str) -> None:
     expect(page.locator('#activityScope [data-scope="messages"]')).to_have_attribute(
         "aria-pressed", "true"
     )
+    surface(page, "activity.messages")
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
     expect(page.locator("#paneActivity")).to_be_hidden()
     expect(page.locator("#chatsStatus")).to_contain_text("monitored")
+    surface(page, "chats.list")
     page.locator("#tabFamily").click()
     expect(page.locator("#familyStatus")).to_have_text(has_words)
+    surface(page, "family.pane")
 
 
 @pytest.mark.smoke
@@ -123,12 +129,14 @@ def test_home_glance_card_links_into_activity(page: Page, base_url: str) -> None
     status = page.locator("#dashStatus")
     expect(status).to_have_text("Gmail scan failed")
     expect(status).to_have_attribute("data-tone", "danger")
+    surface(page, "home.glance-card")
     status.click()
     expect(page.locator("#paneActivity")).to_be_visible()
     expect(page.locator('#activityScope [data-scope="messages"]')).to_have_attribute(
         "aria-pressed", "true")
     expect(page.locator("#runSheetCard")).to_be_visible()
     expect(page.locator("#runSheetTitle")).to_contain_text("#7")
+    surface(page, "activity.run-sheet-failed")
 
     # A glance row lands on its own scope.
     page.locator("#runSheetClose").click()
@@ -191,12 +199,14 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     assert len(targets) >= 2, targets
     for (_, right), (left, _) in zip(targets, targets[1:], strict=False):
         assert right <= left + 0.5, f"overlapping header targets: {targets}"
+    surface(page, "chats.history-sheet")
     # One labelled menu: Rename…, Link chats… and the monitor toggle.
     page.locator("#historyMenu").click()
     menu = page.get_by_role("menu")
     expect(menu.get_by_role("menuitem", name="Rename…")).to_be_visible()
     expect(menu.get_by_role("menuitem", name="Link chats…")).to_be_visible()
     expect(menu.get_by_role("menuitem", name="Monitor")).to_be_visible()
+    surface(page, "chats.history-menu")
     page.keyboard.press("Escape")
     expect(menu).to_have_count(0)
     page.locator("#historyClose").click()
@@ -213,6 +223,7 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     expect(page.locator("#historySubtitle")).to_contain_text("Gmail")
     expect(page.locator("#historyBody")).to_contain_text("Activity schedule")
     expect(page.locator("#historyBody")).to_contain_text("e2e-thread-1")
+    surface(page, "chats.gmail-history")
     page.locator("#historyClose").click()
 
     # How messages are judged: each read-only text opens in its own sheet.
@@ -223,12 +234,15 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     expect(page.locator("#cfgPrompt")).to_contain_text(
         "triage new messages from a named communication channel"
     )
+    surface(page, "settings.instructions-sheet")
     page.keyboard.press("Escape")
     judged.locator('[data-settings-sheet="rules-gmail"]').click()
     expect(page.locator("#cfgGmailRoots")).not_to_be_empty()
+    surface(page, "settings.rules-sheet")
     page.keyboard.press("Escape")
     judged.locator('[data-settings-sheet="taxonomy"]').click()
     expect(page.locator("#cfgGmailTaxonomy")).not_to_be_empty()
+    surface(page, "settings.taxonomy-sheet")
     page.keyboard.press("Escape")
 
 

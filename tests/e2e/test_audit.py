@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
@@ -72,6 +74,7 @@ def test_audit_collapses_offline_window_into_one_gap_marker(
     expect(rows.nth(1).locator(".status-chip")).to_have_count(0)
     expect(page.locator("#activityStatus")).to_have_text("Last scan failed")
     expect(page.locator("#activityStatus")).to_have_attribute("data-tone", "danger")
+    surface(page, "activity.coverage-gap")
 
 
 @pytest.mark.smoke
@@ -144,6 +147,7 @@ def test_audit_filtered_out_list_drills_into_run(page: Page, base_url: str) -> N
     row = page.locator("#auditFiltered .audit-filtered-row")
     expect(row).to_contain_text("School Parents Group")
     expect(row).to_contain_text("Routine pickup acknowledgement")
+    surface(page, "activity.filtered-sheet")
     row.click()
     expect(page.locator("#filteredSheet")).to_be_hidden()
     expect(page.locator("#runSheetCard")).to_be_visible()
@@ -307,6 +311,7 @@ def test_audit_renders_the_travel_block_sweep_readably(page: Page, base_url: str
         """
     )
     assert overflowing == [], f"travel-block audit section overflows 390px: {overflowing}"
+    surface(page, "activity.travel-sweep")
 
 
 @pytest.mark.smoke
@@ -320,6 +325,7 @@ def test_audit_gated_sweep_is_named_not_zeroed(page: Page, base_url: str) -> Non
     expect(block).not_to_contain_text("0 add")
     expect(page.locator("#runFunnel")).to_contain_text("Blocks")
     expect(page.locator("#runFunnel")).not_to_contain_text("Block adds")
+    surface(page, "activity.travel-gated")
 
 
 @pytest.mark.smoke
@@ -354,5 +360,6 @@ def test_activity_skipped_line_counts_only_the_current_scope(
     expect(skipped).to_have_text("2 self-skipped runs hidden")
     page.locator('#activityScope [data-scope="traffic"]').click()
     expect(skipped).to_have_text("5 self-skipped runs hidden")
+    surface(page, "activity.skipped-line")
     page.locator('#activityScope [data-scope="messages"]').click()
     expect(skipped).to_be_hidden()

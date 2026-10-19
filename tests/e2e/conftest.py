@@ -45,6 +45,7 @@ from playwright.sync_api import Playwright, sync_playwright
 
 from src.subprocess_flags import NO_WINDOW
 from tests.e2e._e2e_live_guard import require_disposable_instance
+from tests.e2e._surface import pytest_collection_modifyitems as _surface_collection
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,21 @@ def _autoboot() -> bool:
     return os.environ.get("WR_E2E_AUTOBOOT") == "1"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--e2e-autoboot",
+        action="store_true",
+        default=False,
+        help="Boot a disposable webapp on a free port. Equivalent to WR_E2E_AUTOBOOT=1; "
+        "lets a command line that cannot set env (the design-review capture) opt in.",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if config.getoption("--e2e-autoboot"):
+        os.environ["WR_E2E_AUTOBOOT"] = "1"
+
+
 _E2E_DIR = Path(__file__).resolve().parent
 
 
@@ -119,6 +135,10 @@ def pytest_collection_modifyitems(
     projection stays loud (a Chromium failure is a real product bug). Needs
     pytest-rerunfailures (requirements-dev).
     """
+    # Design capture mode (DESIGN_SURFACE_CAPTURE) keeps only the tests that call
+    # surface(); a no-op otherwise. Runs first so the skip markers below only see
+    # the kept set.
+    _surface_collection(config, items)
     autoboot = _autoboot()
     tray_up = _reachable(TRAY_PORT)
     serve = autoboot or tray_up
@@ -252,6 +272,46 @@ def _seed_e2e_db(db_path: Path) -> None:
         conn.close()
 
 
+def disposable_env(db_dir: Path) -> dict[str, str]:
+    """The environment of a disposable webapp: every runtime path inside *db_dir*.
+
+    Seeds the throwaway DB with sanitized fixtures. Shared by the ``base_url``
+    autoboot and the design-review synthetic launcher, so both drive the same
+    invented state and neither can reach the developer's real data."""
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    # Execution-tab runs spawn the CLI; pin the offline stub classifier + no
+    # notifier so a dry-run scan stays fast and never touches the network/hub.
+    env["WR_CLASSIFIER"] = "stub"
+    env["WR_CONNECTOR"] = "fixture"
+    env["WR_NOTIFIER"] = "none"
+    env["WR_SOURCES"] = "whatsapp"
+    # Never read the developer's real WhatsApp data: point the autobooted app at
+    # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
+    # project's hard privacy rule — e2e runs only against sanitized/empty state.
+    db_path = db_dir / "e2e.sqlite3"
+    env["WR_DB_PATH"] = str(db_path)
+    # The usage log (#386) gets the same disposable directory, never the real one.
+    env["WR_USAGE_DB_PATH"] = str(db_dir / "e2e-usage.sqlite3")
+    # Family rules normally live in the developer's ignored local config. Give
+    # the e2e webapp an explicit sanitized config layer so both reads and any
+    # accidental Family-tab saves stay inside this disposable directory.
+    local_config_path = db_dir / "e2e-local.json"
+    local_config_path.write_text(
+        '{"family": {"enabled": false, "home_address": "", '
+        '"kids_home_time": "17:30", "responsible_by_weekday": {}, '
+        '"childcare_windows": []}}',
+        encoding="utf-8",
+    )
+    env["WR_LOCAL_CONFIG_PATH"] = str(local_config_path)
+    # Never read the developer's real WhatsApp buffer: point the sidecar status /
+    # QR routes at an empty throwaway dir (renders as a 'stopped' connection).
+    env["WR_LINKED_DEVICE_DIR"] = str(db_dir / "linked_device")
+    _seed_e2e_db(db_path)
+    return env
+
+
 @pytest.fixture(scope="session")
 def base_url() -> Iterator[str]:
     if not _autoboot():
@@ -271,38 +331,8 @@ def base_url() -> Iterator[str]:
         return
 
     port = _free_port()
-    env = os.environ.copy()
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONIOENCODING"] = "utf-8"
-    # Execution-tab runs spawn the CLI; pin the offline stub classifier + no
-    # notifier so a dry-run scan stays fast and never touches the network/hub.
-    env["WR_CLASSIFIER"] = "stub"
-    env["WR_CONNECTOR"] = "fixture"
-    env["WR_NOTIFIER"] = "none"
-    env["WR_SOURCES"] = "whatsapp"
-    # Never read the developer's real WhatsApp data: point the autobooted app at
-    # a throwaway empty DB (Dashboard metrics render as zeros). Honors the
-    # project's hard privacy rule — e2e runs only against sanitized/empty state.
-    db_dir = tempfile.mkdtemp(prefix="wr-e2e-")
-    db_path = Path(db_dir) / "e2e.sqlite3"
-    env["WR_DB_PATH"] = str(db_path)
-    # The usage log (#386) gets the same disposable directory, never the real one.
-    env["WR_USAGE_DB_PATH"] = str(Path(db_dir) / "e2e-usage.sqlite3")
-    # Family rules normally live in the developer's ignored local config. Give
-    # the e2e webapp an explicit sanitized config layer so both reads and any
-    # accidental Family-tab saves stay inside this disposable directory.
-    local_config_path = Path(db_dir) / "e2e-local.json"
-    local_config_path.write_text(
-        '{"family": {"enabled": false, "home_address": "", '
-        '"kids_home_time": "17:30", "responsible_by_weekday": {}, '
-        '"childcare_windows": []}}',
-        encoding="utf-8",
-    )
-    env["WR_LOCAL_CONFIG_PATH"] = str(local_config_path)
-    # Never read the developer's real WhatsApp buffer: point the sidecar status /
-    # QR routes at an empty throwaway dir (renders as a 'stopped' connection).
-    env["WR_LINKED_DEVICE_DIR"] = str(Path(db_dir) / "linked_device")
-    _seed_e2e_db(db_path)
+    db_dir = Path(tempfile.mkdtemp(prefix="wr-e2e-"))
+    env = disposable_env(db_dir)
     # Capture the autobooted webapp's output to a gitignored log file (the
     # fleet convention, matching voice-transcriber / app-launcher) rather than
     # discarding it: CI uploads this on failure so a runner-only e2e break is

@@ -7,6 +7,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
@@ -72,5 +74,6 @@ def test_tripwire_card_promotes_candidate_in_one_tap(page: Page, base_url: str) 
     assert promote_bg == "rgba(0, 0, 0, 0)", promote_bg
     expect(suggestion).to_contain_text("School Parents Group")
     expect(suggestion).to_contain_text("urgent")
+    surface(page, "chats.worth-a-look")
     suggestion.get_by_role("button", name="Not monitored — tap to monitor").click()
     expect(card).to_be_hidden()

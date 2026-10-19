@@ -13,6 +13,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._surface import surface
+
 _AUDIO_MOCK = """
 (() => {
   window.__audioLog = { contexts: 0, resumed: 0, buffers: 0, started: 0, closed: 0 };
@@ -79,6 +81,7 @@ def test_summarize_long_message(page: Page, base_url: str) -> None:
     summary = page.locator(".msg-summary")
     expect(summary).to_be_visible()
     expect(summary).to_contain_text("Send the signed form and 12 euros by Thursday.")
+    surface(page, "chats.summary")
 
 
 @pytest.mark.smoke
@@ -133,5 +136,6 @@ def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: 
     assert audio["buffers"] >= 2
     assert audio["started"] >= 2
     assert speak.get_attribute("aria-pressed") == "true"
+    surface(page, "chats.summary-speaking")
     page.evaluate("window.__lastNode.onended()")
     expect(speak).to_have_attribute("aria-pressed", "false")

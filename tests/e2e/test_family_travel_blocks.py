@@ -31,6 +31,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, Route, expect
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _PAYLOAD = {
@@ -243,6 +245,7 @@ def test_unknown_write_capability_is_its_own_visible_state(
     # TOUCH-01 / TOUCH-02 / COMP-02 at phone width: the page and the open sheet.
     offenders = _touch_offenders(page, "#paneFamily", "#familyTravelCard")
     assert offenders == [], f"Family touch targets: {offenders}"
+    surface(page, "family.travel-sheet")
 
 
 def test_dry_run_mode_is_unmistakable(page: Page, base_url: str) -> None:
@@ -359,6 +362,7 @@ def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base
 
     overflowing = _no_overflow(page)
     assert overflowing == [], f"run controls overflow 390px: {overflowing}"
+    surface(page, "family.travel-live-blocked")
 
 
 def test_live_sweep_control_is_available_once_every_gate_clears(
@@ -368,6 +372,7 @@ def test_live_sweep_control_is_available_once_every_gate_clears(
     buttons = page.locator("#familyTravelCard .tb-actions > button")
     expect(buttons.nth(1)).to_be_enabled()
     expect(page.locator("#familyTravelCard")).not_to_contain_text("A live sweep is unavailable")
+    surface(page, "family.travel-live-ready")
 
 
 def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
@@ -393,6 +398,7 @@ def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
 
     assert posted == [{"action": "calendar-scan", "mode": "dry_run"}]
     expect(blocks).to_contain_text("7 leg(s) · 5 add")
+    surface(page, "family.travel-rehearsed")
 
 
 def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) -> None:
@@ -407,6 +413,7 @@ def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) 
     expect(status).not_to_have_class(re.compile("tb-run-status--error"))
     # The control comes back — a busy queue is temporary, not terminal.
     expect(page.locator("#familyTravelCard .tb-actions > button").nth(0)).to_be_enabled()
+    surface(page, "family.travel-already-running")
 
 
 def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:
@@ -426,6 +433,7 @@ def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) 
 
     overflowing = _no_overflow(page)
     assert overflowing == [], f"gated sweep overflows 390px: {overflowing}"
+    surface(page, "family.travel-gated")
 
 
 # ------------------------------------------------ rule sheets (#376)
@@ -467,6 +475,7 @@ def test_week_sheet_commits_on_done_and_close_discards(page: Page, base_url: str
     expect(pickers.nth(0).locator(".segmented-item")).to_have_count(4)
     offenders = _touch_offenders(page, "#familySheet")
     assert offenders == [], f"week sheet touch targets: {offenders}"
+    surface(page, "family.week-sheet")
 
     # Close discards: an edit then the close button posts nothing.
     pickers.nth(0).locator(".segmented-item").nth(1).click()
@@ -508,3 +517,4 @@ def test_a_rejected_value_keeps_the_sheet_open_naming_the_field(
     assert posted == [{"kids_home_time": "06:15"}]
     # The dismissal rule is stated in the sheet itself.
     expect(sheet).to_contain_text("Close discards your changes")
+    surface(page, "family.sheet-error")

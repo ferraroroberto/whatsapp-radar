@@ -16,6 +16,8 @@ from collections.abc import Callable
 import pytest
 from playwright.sync_api import Locator, Page, expect
 
+from tests.e2e._surface import surface
+
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
 
 _LARGE_RATIO = 1.125
@@ -119,6 +121,7 @@ def test_large_scales_every_view(
     track_after = control.bounding_box()
     assert track_before and track_after
     assert track_after["height"] == track_before["height"], "Large reflowed the text-size track"
+    surface(page, "settings.text-size-large")
     page.locator("#settingsClose").click()
     large = _measure_all(page)
 

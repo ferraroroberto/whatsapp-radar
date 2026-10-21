@@ -1,7 +1,7 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, mypy (strict), the offline pytest suite, then the
+# byte-compile, ruff, the static ratchet, mypy (strict), the offline pytest suite, then the
 # Playwright e2e smoke suite (Chromium + WebKit/iPhone) against a disposable
 # webapp the script boots itself on a free port.
 #
@@ -36,6 +36,13 @@ try {
     Write-Host "==> ruff..." -ForegroundColor Cyan
     & $python -m ruff check .
     if ($LASTEXITCODE -ne 0) { Fail "ruff failed." }
+
+    # Whole tree, never path-routed. Calls the wrapper, not the script: the wrapper
+    # fails the script's exit 3 (a detector could not run) as NOT CONFIRMED, never
+    # a pass or a skip (tests/test_static_ratchet_gate.py pins it).
+    Write-Host "==> static ratchet (new duplicate block / unused import or variable)..." -ForegroundColor Cyan
+    & $python -m scripts.static_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "static ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

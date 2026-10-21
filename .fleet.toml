@@ -30,6 +30,19 @@ card = { src = "app/webapp/static/_vendored/card", sha = "4c699636afecd5cae5e966
 icons = { src = "app/webapp/static/_vendored/icons", sha = "7d9b824bfc2dd4f3ec8a9d7424208bb36d42c556", dest = "app/webapp/static/_vendored/icons" }
 usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "app/webapp/static/_vendored/usage-log" }
 usage_log = { src = "src/usage_log.py", sha = "a457e41cd3004d8b9493408498eb9e3d51cdc9c3", dest = "src/usage_log.py" }
+static_ratchet = { src = "scripts/static_ratchet.py", sha = "2f1e2f7c81b9a91a062271881fc87830104808ae", dest = "scripts/static_ratchet.py" }
+
+# [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
+# (scripts/verify-before-ship.ps1) runs scripts/static_ratchet.py, which fails on a
+# duplicate block (jscpd via npx, Python and JS) or an unused import/variable (ruff
+# F401,F841) that is not in .static-ratchet-baseline.json. Needs Node and ruff in
+# the gate's venv; a detector that cannot run exits 3, which fails the gate. Vendored
+# copies are duplicates by design, so they are excluded. Procedure + limits:
+# project-scaffolding docs/static-ratchet.md.
+[static_ratchet]
+enabled  = true
+baseline = ".static-ratchet-baseline.json"
+exclude  = ["**/_vendored/**"]
 
 # /design-review's e2e capture (tests/e2e/_surface.py) flips light/dark in place on an open
 # surface; this app stamps html[data-theme] at load from wa-radar.theme (else the OS
@@ -156,6 +169,9 @@ path = ".fleet.toml"
 [[e2e.rule]]
 tier = "none"
 path = ".gitignore"
+[[e2e.rule]]
+tier = "none"
+path = ".static-ratchet-baseline.json"
 [[e2e.rule]]
 tier = "none"
 path = "LICENSE"

@@ -20,7 +20,7 @@ the CLI persists as the run's ``summary_json`` (#163) and prints.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
 
 from src.config import Config
@@ -33,8 +33,13 @@ from src.presence import PresenceLocation, get_location
 from src.traffic import TrafficReadError, compute_route
 
 
-def _day_bounds(day_start: datetime) -> tuple[datetime, datetime]:
-    return day_start, day_start + timedelta(days=1)
+def _day_bounds(day: date, zone: tzinfo) -> tuple[datetime, datetime]:
+    # Built from `day` + `zone` directly, never `start + timedelta(days=1)`:
+    # with a real (DST-aware) zone, the day after a DST change is 23 or 25
+    # real hours long, so the next midnight isn't exactly 24h after this one.
+    start = datetime.combine(day, time.min, tzinfo=zone)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=zone)
+    return start, end
 
 
 def _fmt_when(iso_start: str) -> str:
@@ -203,21 +208,28 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         )
     ]
 
+    # The zone every day below is judged in — a real ZoneInfo when
+    # `family.timezone` is configured, so each day re-resolves its own correct
+    # offset across a DST change instead of freezing `now`'s (#435); otherwise
+    # the legacy fallback `now.tzinfo` (correct for `now` itself, unchanged for
+    # anyone who hasn't set it).
+    zone = rules.household_zone(family.timezone, now)
+
     conflicts: list[rules.Conflict] = []
     for offset in range(family.assessment_days):
-        # Walk the days off `midnight` rather than re-deriving each one: aware
-        # datetime arithmetic is wall-clock arithmetic in the same zone, so this
-        # is exactly midnight on each successive local day — and it cannot
-        # drift from the fetch window the events above were read over (#280).
-        day_start = midnight + timedelta(days=offset)
-        day = day_start.date()
-        day_min, day_max = _day_bounds(day_start)
+        # Walk the *date* off `midnight`'s — not `midnight + timedelta`'s
+        # frozen offset — and re-anchor it in `zone` for each day via
+        # `_day_bounds`/`find_conflicts`'s own `datetime.combine(day, t,
+        # tzinfo=zone)`, so this cannot drift from the fetch window above
+        # (#280) yet still lands on the correct wall-clock offset per day.
+        day = midnight.date() + timedelta(days=offset)
+        day_min, day_max = _day_bounds(day, zone)
         day_events = {
             person: [e for e in evs if day_min <= e.start < day_max]
             for person, evs in events.items()
         }
         conflicts.extend(
-            rules.find_conflicts(day_events, family, day=day, tz=now.tzinfo or UTC)
+            rules.find_conflicts(day_events, family, day=day, tz=zone)
         )
         conflicts.extend(
             rules.find_overlaps(day_events, home_address=family.home_address)

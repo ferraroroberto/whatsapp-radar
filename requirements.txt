@@ -45,3 +45,8 @@ resvg-py>=0.3.0
 pystray>=0.19
 # Windows toast notifications for tray lifecycle events.
 winotify>=1.1; sys_platform == "win32"
+# IANA tz database for zoneinfo.ZoneInfo (family.timezone, #435) — Windows
+# ships no tz database of its own, so stdlib zoneinfo needs this to resolve a
+# configured zone name; most Linux/macOS hosts already carry one, but this is
+# cheap and harmless there too.
+tzdata>=2024.1

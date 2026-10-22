@@ -12,11 +12,19 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from calendar_readonly.core import CalendarEvent, normalize_event
 
-from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TrafficConfig
+from src.config import (
+    ChildcareWindow,
+    Config,
+    FamilyConfig,
+    HubConfig,
+    TelegramConfig,
+    TrafficConfig,
+)
 from src.family import calendar_scan, rules, travel_blocks
 
 HOME = "Carrer Example 30, Sant Cugat"
@@ -507,3 +515,51 @@ def test_the_scan_window_and_the_travel_block_horizon_still_start_together(
         calendar_scan.run_calendar_scan(config, now=now, dry_run=True)
         horizon_start, _ = travel_blocks.travel_block_horizon(config, now)
         assert seen["min"] == horizon_start
+
+
+def test_a_configured_zone_catches_the_coverage_gap_a_dst_change_would_hide(
+    monkeypatch: pytest.MonkeyPatch, sent: list[str]
+) -> None:
+    """#435: a multi-day scan must judge each day's own DST-correct offset.
+
+    Scan fires Saturday 2026-10-24 evening (CEST, +2); the assessment window
+    reaches into Sunday 2026-10-25, the day Europe/Madrid falls back to CET
+    (+1). Roberto (responsible that Sunday) has an away commitment 17:00-18:00
+    *local* bracketing the 17:30 pickup deadline — a real coverage gap.
+
+    With ``family.timezone`` configured this is correctly flagged. Frozen at
+    Saturday's +2 offset (the pre-#435, still-unconfigured-by-default
+    behaviour), the deadline is misread an hour early (16:30 UTC -> 15:30 UTC)
+    and lands *before* the event starts, so the gap goes unflagged — the
+    silent miss this issue reported.
+    """
+    madrid = ZoneInfo("Europe/Madrid")
+    away = _event(
+        "Away commitment",
+        location=WORK,
+        start=datetime(2026, 10, 25, 17, 0, tzinfo=madrid),
+        end=datetime(2026, 10, 25, 18, 0, tzinfo=madrid),
+    )
+    _with_events(monkeypatch, {"roberto": [away], "ana": []})
+
+    config = _config()
+    config = dataclasses.replace(
+        config,
+        family=dataclasses.replace(
+            config.family,
+            timezone="Europe/Madrid",
+            childcare_windows=(
+                ChildcareWindow(label="Sunday pickup", weekdays=(6,), time="17:30"),
+            ),
+            responsible_by_weekday={6: "roberto"},
+            assessment_days=2,
+        ),
+    )
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone(timedelta(hours=2)))  # Sat, CEST
+
+    result = calendar_scan.run_calendar_scan(config, now=now, dry_run=True)
+
+    assert any(c["kind"] == "coverage_gap" for c in result["conflicts"]), (
+        "the Sunday pickup gap should be flagged once the household zone is "
+        "configured — got no conflicts, the exact silent-miss this issue reported"
+    )

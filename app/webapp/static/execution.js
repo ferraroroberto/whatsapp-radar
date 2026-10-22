@@ -13,7 +13,7 @@
  * Chat names / message text go in via textContent only (privacy). */
 
 import { els, state } from './state.js';
-import { fetchQuiet, jsonApi, toast } from './api.js';
+import { fetchQuiet, jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setSwitch } from './_vendored/switch/switch.js';
@@ -155,9 +155,13 @@ export async function killRun(kind, runId) {
 // is needed — the pairing image, so the connection can be recovered from a
 // phone without a terminal (#29). Refreshed with the poll.
 // Re-stamp the QR src at most every 20s (the pairing code rotates ~that often)
-// so the <img> doesn't flicker on every 1.5s poll.
+// so the <img> doesn't flicker on every 1.5s poll. The token rides as
+// &token= (same as chats.js's audioUrl) since an <img> request can't set an
+// Authorization header, so a phone re-pairing over Tailscale with the bearer
+// gate on still gets the image.
 function qrSrc() {
-  return '/api/sidecar/qr?t=' + Math.floor(Date.now() / 20000);
+  const t = readToken();
+  return '/api/sidecar/qr?t=' + Math.floor(Date.now() / 20000) + (t ? '&token=' + encodeURIComponent(t) : '');
 }
 
 // Compact local timestamp for sync/health lines — the one shared formatter so

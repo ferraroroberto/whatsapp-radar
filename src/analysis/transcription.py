@@ -343,11 +343,16 @@ def run_transcription_phase(
         msg_id = int(row["id"])
         audio = buffer_dir / row["media_path"]
         if not audio.exists():
-            # Audio gone (cleared out of band) — can't transcribe; mark failed so it
-            # isn't retried forever against a phantom file.
+            # Audio gone (cleared out of band) — unrecoverable, not a transient
+            # failure: 'failed' would keep `media_path` set, so this phantom
+            # file gets retried every scan up to `failed_retry_days` *and*
+            # `hold_back_untranscribed` holds the whole chat's cursor on it for
+            # that entire window (#435). 'skipped_old' clears `media_path`
+            # (store.mark_transcription), so the note surfaces as its
+            # "[voice note]" placeholder immediately and the cursor moves on.
             logger.warning("⚠️ voice note %s: audio file missing (%s)", msg_id, audio)
-            store.mark_transcription(conn, msg_id, status="failed")
-            outcome.failed += 1
+            store.mark_transcription(conn, msg_id, status="skipped_old")
+            outcome.skipped_old += 1
             continue
         language = _resolve_language(conn, cfg, int(row["chat_id"]), lang_cache)
         try:

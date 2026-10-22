@@ -351,8 +351,11 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m mypy src app
 .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate   # no new duplicate block or unused import/variable
-powershell -File scripts\verify-before-ship.ps1   # all of the above + Playwright e2e (Chromium + WebKit/iPhone)
+powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
+powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
+
+The gate's e2e stage is routed by `scripts/classify_e2e.py` against the `[e2e]` table in `.fleet.toml`: a docs-only or backend-only diff skips the browser suite (the gate prints the router's reason), inert assets run the smoke target, a single UI surface runs its slice, and anything else runs the full suite. Uncertainty never narrows it: an unclassified path, an empty diff, a router that exits non-zero, prints no verdict or names an unknown tier all run the full suite and say why (`tests/test_gate_e2e_routing.py`).
 
 The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.
 

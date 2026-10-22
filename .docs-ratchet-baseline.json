@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "docs/bootstrapping.md", "markers": 6},
+    {"key": "docs/calendar-bootstrap.md", "markers": 11},
+    {"key": "docs/family-checks.md", "markers": 1},
+    {"key": "docs/gmail-bootstrap.md", "markers": 1},
+    {"key": "docs/linked-device.md", "markers": 3},
+    {"key": "docs/manual.md", "markers": 3},
+    {"key": "docs/voice-and-summaries.md", "markers": 1},
+    {"key": "docs/webapp.md", "markers": 1}
+  ]
+}

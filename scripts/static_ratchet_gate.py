@@ -31,6 +31,7 @@ EXIT_PASS, EXIT_NEW, EXIT_CONFIG, EXIT_NOT_CONFIRMED = 0, 1, 2, 3
 # outlast both so a hung child is reported by the script's own NOT CONFIRMED.
 RUN_TIMEOUT_S = 1300
 
+_PASS_LABEL = "no new duplicate block or unused import/variable"
 _FAIL_LABELS = {
     EXIT_NEW: "NEW finding or missing baseline",
     EXIT_CONFIG: "bad [static_ratchet] table, baseline or arguments",
@@ -41,13 +42,18 @@ _FAIL_LABELS = {
 def classify_exit(code: int) -> tuple[bool, str]:
     """`(ok, label)` for one script exit code. Only 0 passes."""
     if code == EXIT_PASS:
-        return True, "no new duplicate block or unused import/variable"
+        return True, _PASS_LABEL
     return False, _FAIL_LABELS.get(code, f"unexpected exit {code}")
 
 
-def run(script: Path = SCRIPT) -> int:
-    """Run `script` under this interpreter (the venv python, which has ruff),
-    echo its output, then the verdict. Returns the gate's exit code."""
+def run_ratchet(
+    script: Path, name: str, pass_label: str, fail_labels: dict[int, str]
+) -> int:
+    """Run the ratchet `script` under this interpreter (the venv python, which
+    has ruff), echo its output, then the verdict. Returns the gate's exit code.
+
+    Shared with `scripts.docs_ratchet_gate`: both vendored ratchets use the same
+    0/1/2/3 exit contract, so the exit-3-is-NOT-CONFIRMED mapping lives once."""
     try:
         proc = subprocess.run(
             [sys.executable, str(script)],
@@ -62,9 +68,16 @@ def run(script: Path = SCRIPT) -> int:
         code, output = EXIT_NOT_CONFIRMED, f"{script.name} could not start: {exc}\n"
     if output:
         sys.stdout.write(output if output.endswith("\n") else output + "\n")
-    ok, label = classify_exit(code)
-    print(f"{'OK' if ok else 'FAIL'}: static ratchet: {label}")
+    if code == EXIT_PASS:
+        ok, label = True, pass_label
+    else:
+        ok, label = False, fail_labels.get(code, f"unexpected exit {code}")
+    print(f"{'OK' if ok else 'FAIL'}: {name}: {label}")
     return 0 if ok else 1
+
+
+def run(script: Path = SCRIPT) -> int:
+    return run_ratchet(script, "static ratchet", _PASS_LABEL, _FAIL_LABELS)
 
 
 if __name__ == "__main__":

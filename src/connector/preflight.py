@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
-from src.connector.sidecar import ensure_running, wait_for_settled
+from src.connector.sidecar import SidecarLaunchError, ensure_running, wait_for_settled
 from src.progress import Progress, emit
 
 
@@ -70,7 +70,19 @@ def preflight(
 
     if source == "whatsapp" and config.connector == "linked_device" and config.sidecar_autostart:
         emit(progress, f"⚠ source offline: {status.detail} — relaunching the sidecar…")
-        info = ensure_running(config.linked_device_dir)
+        try:
+            info = ensure_running(config.linked_device_dir)
+        except SidecarLaunchError as exc:
+            # A plain RuntimeError, not a ConnectorOffline — uncaught here it
+            # would propagate past the callers' `except ConnectorOffline`
+            # (app/cli/main.py, pipeline.py) and crash a live scheduled run
+            # with its sync_log/run row left dangling instead of a loud,
+            # recorded offline failure (#435).
+            emit(progress, f"✗ sidecar launch failed: {exc}")
+            detail = f"sidecar launch failed: {exc}"
+            raise ConnectorOffline(
+                ConnectorStatus(name=status.name, connected=False, detail=detail)
+            ) from exc
         status = connector.connect()
         if status.connected:
             emit(progress, "✓ sidecar back online")

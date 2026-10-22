@@ -64,6 +64,7 @@
   "family": {
     "enabled": false,
     "run_hour": 7,
+    "timezone": "",
     "home_address": "",
     "kids_home_time": "17:30",
     "responsible_by_weekday": {},

@@ -17,6 +17,7 @@ from src.config import Config, HubConfig, TelegramConfig
 from src.connector import preflight as preflight_mod
 from src.connector.base import ConnectorStatus
 from src.connector.preflight import ConnectorOffline, ensure_connected, preflight
+from src.connector.sidecar import SidecarLaunchError
 
 
 class _ScriptedConnector:
@@ -110,4 +111,21 @@ def test_preflight_raises_when_relaunch_does_not_help(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(preflight_mod, "ensure_running", fake_ensure_running)
     with pytest.raises(ConnectorOffline):
+        preflight(_config(), _ScriptedConnector([_offline(), _offline()]))
+
+
+def test_preflight_turns_a_launch_failure_into_connector_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#435: ``ensure_running`` raising ``SidecarLaunchError`` (Node missing,
+    ``npm install`` never run) must surface as ``ConnectorOffline`` — the only
+    exception callers (``sync_sources``, ``pipeline.scan``) catch — not crash
+    the run with the sync_log row left ``running`` forever and no offline alert.
+    """
+
+    def fake_ensure_running(buffer_dir: Path, **_kw: object) -> object:
+        raise SidecarLaunchError("node not found on PATH")
+
+    monkeypatch.setattr(preflight_mod, "ensure_running", fake_ensure_running)
+    with pytest.raises(ConnectorOffline, match="node not found on PATH"):
         preflight(_config(), _ScriptedConnector([_offline(), _offline()]))

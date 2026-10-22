@@ -92,3 +92,46 @@ def test_send_rejected_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(telegram_mod.urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(NotifierError, match="chat not found"):
         TelegramNotifier("TOKEN", "CHAT").send(_digest())
+
+
+def test_send_text_under_the_limit_is_one_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: int = 0):  # noqa: ANN401
+        sent.append(json.loads(request.data.decode("utf-8"))["text"])
+        return _fake_response({"ok": True})
+
+    monkeypatch.setattr(telegram_mod.urllib.request, "urlopen", fake_urlopen)
+    TelegramNotifier("TOKEN", "CHAT").send_text("short message")
+
+    assert sent == ["short message"]
+
+
+def test_send_text_over_the_limit_is_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#435: Telegram's `sendMessage` rejects text over 4096 characters — an
+    unbounded digest (e.g. the first scan after a multi-day outage) must split
+    rather than fail delivery outright on every retry.
+    """
+    sent: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: int = 0):  # noqa: ANN401
+        sent.append(json.loads(request.data.decode("utf-8"))["text"])
+        return _fake_response({"ok": True})
+
+    monkeypatch.setattr(telegram_mod.urllib.request, "urlopen", fake_urlopen)
+    # One line per item, well past the 4096-char limit.
+    big_text = "\n".join(f"item {i}: " + "x" * 80 for i in range(100))
+    assert len(big_text) > telegram_mod._MAX_MESSAGE_CHARS
+
+    TelegramNotifier("TOKEN", "CHAT").send_text(big_text)
+
+    assert len(sent) > 1
+    assert all(len(chunk) <= telegram_mod._MAX_MESSAGE_CHARS for chunk in sent)
+    assert "".join(sent) == big_text  # no content dropped at a chunk boundary
+
+
+def test_chunk_text_never_splits_a_line_when_one_fits() -> None:
+    text = "line one\n" + "x" * 4090 + "\nline three"
+    chunks = telegram_mod._chunk_text(text, 4096)
+    assert all("line one" not in c or c.startswith("line one") for c in chunks)
+    assert "".join(chunks).count("line three") == 1

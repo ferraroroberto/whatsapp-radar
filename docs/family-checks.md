@@ -111,6 +111,7 @@ An explicitly requested run ignores `run_hour` entirely: `wr calendar-scan --for
 | --- | --- | --- |
 | `enabled` | `false` | master switch (`WR_FAMILY_ENABLED`) |
 | `run_hour` | `7` | earliest local hour an unattended scan acts; `0` disables the gate |
+| `timezone` | `""` | household IANA zone (e.g. `"Europe/Madrid"`) the scan judges deadlines in; `""` falls back to the scan's own per-run offset, which can misjudge a deadline across a DST change in a multi-day scan window |
 | `home_address` | `""` | the household origin used for inferred legs |
 | `kids_home_time` | `"17:30"` | when the coverage requirement starts |
 | `responsible_by_weekday` | `{}` | a person (or "nobody") per weekday |

@@ -6,7 +6,8 @@ origin-chaining, dedup, quiet-hours, and conflict rules against the spec.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from calendar_readonly.core import CalendarEvent
 
@@ -386,3 +387,34 @@ def test_depart_in_min_floors_toward_late():
     assert rules.depart_in_min(now, 55.5, start, 5) == -1
     # Already overdue.
     assert rules.depart_in_min(now, 80.0, start, 5) == -25
+
+
+# ------------------------------------------------------------------- clocks
+
+
+def test_household_zone_unconfigured_falls_back_to_nows_offset():
+    """"" (the shipped default) keeps the legacy, frozen-offset behaviour."""
+    now = datetime(2026, 10, 20, 7, 0, tzinfo=timezone(timedelta(hours=2)))
+    assert rules.household_zone("", now) is now.tzinfo
+
+
+def test_household_zone_configured_resolves_a_real_zone_info():
+    now = datetime(2026, 10, 20, 7, 0, tzinfo=UTC)
+    zone = rules.household_zone("Europe/Madrid", now)
+    assert isinstance(zone, ZoneInfo)
+
+
+def test_household_zone_recomputes_the_offset_across_a_dst_change():
+    """The whole point of #435: a real zone must give Oct 25's *own* offset.
+
+    Europe/Madrid falls back CEST (+2) → CET (+1) at the 2026-10-25 change.
+    ``now.tzinfo``'s frozen +2 snapshot from the Saturday before would still
+    read Sunday's 17:30 kids-home deadline an hour early (16:30 CET) — the
+    bug this test guards against.
+    """
+    now = datetime(2026, 10, 24, 20, 0, tzinfo=timezone(timedelta(hours=2)))  # Sat, CEST
+    zone = rules.household_zone("Europe/Madrid", now)
+    before = datetime(2026, 10, 24, 17, 30, tzinfo=zone)
+    after = datetime(2026, 10, 25, 17, 30, tzinfo=zone)
+    assert before.utcoffset() == timedelta(hours=2)
+    assert after.utcoffset() == timedelta(hours=1)

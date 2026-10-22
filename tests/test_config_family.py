@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
 from src.config import calendar as calendar_config
+from src.config import family as family_config
 from src.config import load_config
 
 _ENV_KEYS = (
@@ -440,3 +442,43 @@ def test_empty_sections_parse_to_the_dataclass_defaults(
 
     assert traffic_config.parse({}) == traffic_config.TrafficConfig()
     assert family_config.parse({}) == family_config.FamilyConfig()
+
+
+# ------------------------------------------------------- family.timezone (#435)
+
+
+@pytest.fixture
+def _forget_timezone_warnings() -> None:
+    """The warn-once dedup is process-global; mirrors `_WARNED_RUN_HOURS`'s fixture."""
+    family_config._WARNED_TIMEZONES.clear()
+
+
+def test_timezone_unconfigured_stays_empty(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        assert family_config.parse({}).timezone == ""
+    assert caplog.records == []
+
+
+def test_a_recognised_iana_zone_is_passed_through() -> None:
+    assert family_config.parse({"timezone": "Europe/Madrid"}).timezone == "Europe/Madrid"
+
+
+def test_an_unresolvable_zone_degrades_to_unconfigured_and_warns(
+    caplog: pytest.LogCaptureFixture, _forget_timezone_warnings: None
+) -> None:
+    """A typo must not 500 the webapp or crash a scheduled scan — same
+    degrade-loudly shape as `_parse_run_hour` (#277)."""
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        cfg = family_config.parse({"timezone": "Europe/Madrdi"})
+    assert cfg.timezone == ""
+    assert len(caplog.records) == 1
+    assert "Europe/Madrdi" in caplog.records[0].getMessage()
+
+
+def test_the_timezone_warning_fires_once_per_process_not_once_per_config_load(
+    caplog: pytest.LogCaptureFixture, _forget_timezone_warnings: None
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="src.config.family"):
+        for _ in range(5):
+            family_config.parse({"timezone": "Nowhere/Fake"})
+    assert len(caplog.records) == 1

@@ -6,6 +6,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.config._shared import _as_bool
 
@@ -24,6 +25,38 @@ _RUN_HOUR_UNGATED = 0
 #: household carrying a typo would get a WARNING line on every poll instead of
 #: once. Mirrors ``src/config/calendar.py``'s duplicate-collapse dedup (#273).
 _WARNED_RUN_HOURS: set[str] = set()
+
+#: Distinct bad ``family.timezone`` values already warned about this process —
+#: same uncached-``load_config()`` reasoning as ``_WARNED_RUN_HOURS``.
+_WARNED_TIMEZONES: set[str] = set()
+
+
+def _parse_timezone(raw: Any) -> str:
+    """Household IANA zone, validated once at load time so a typo never reaches
+    :func:`src.family.rules.household_zone`.
+
+    Degrades to ``""`` (the documented "unconfigured" fallback to the scan's
+    own per-run offset) both when unset and when the name doesn't resolve —
+    same "degrade, warn once, never raise" shape as :func:`_parse_run_hour`,
+    because a config typo must not 500 the webapp or crash a scheduled scan.
+    """
+    name = str(raw or "").strip()
+    if not name:
+        return ""
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        if name not in _WARNED_TIMEZONES:
+            _WARNED_TIMEZONES.add(name)
+            logger.warning(
+                "family.timezone %r is not a recognised IANA zone (%s); "
+                "daily scans fall back to the per-run offset, which can "
+                "misjudge a deadline across a DST change",
+                name,
+                exc,
+            )
+        return ""
+    return name
 
 
 def _weekday_index(value: Any) -> int | None:
@@ -110,6 +143,13 @@ class FamilyConfig:
     # 0..23 by construction — `_parse_run_hour` degrades anything else to 0
     # (no gate) with a warning rather than letting a typo suppress the scan.
     run_hour: int = 7
+    # Household IANA zone (e.g. "Europe/Madrid") the daily scan judges every
+    # childcare deadline in. "" (unconfigured, the default) falls back to the
+    # scan's own per-run offset snapshot — correct for "now" but frozen across
+    # a DST change later in the same multi-day scan window (#435); set this to
+    # fix that. Already validated by `_parse_timezone` — never an unresolvable
+    # name here.
+    timezone: str = ""
     home_address: str = ""
     kids_home_time: str = "17:30"
     responsible_by_weekday: dict[int, str] = field(default_factory=dict)  # 0..6 -> person
@@ -230,6 +270,7 @@ def parse(raw: dict[str, Any]) -> FamilyConfig:
     return FamilyConfig(
         enabled=_as_bool(os.environ.get("WR_FAMILY_ENABLED"), raw.get("enabled", defaults.enabled)),
         run_hour=_parse_run_hour(raw.get("run_hour", defaults.run_hour)),
+        timezone=_parse_timezone(raw.get("timezone", defaults.timezone)),
         home_address=str(raw.get("home_address", defaults.home_address)).strip(),
         kids_home_time=str(raw.get("kids_home_time", defaults.kids_home_time)).strip(),
         responsible_by_weekday=responsible,

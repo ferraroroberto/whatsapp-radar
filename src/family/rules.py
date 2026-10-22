@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from zoneinfo import ZoneInfo
 
 from calendar_readonly.core import CalendarEvent
 
@@ -62,6 +63,24 @@ def local_midnight(now: datetime) -> datetime:
             "to take the local day from. Pass datetime.now().astimezone()."
         )
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def household_zone(timezone_name: str, now: datetime) -> tzinfo:
+    """The zone every day of a multi-day scan should be judged in (#435).
+
+    ``now.tzinfo`` (a fixed-offset snapshot from ``datetime.now().astimezone()``)
+    is exactly right for ``now`` itself, but frozen: re-adding it to a later
+    calendar date via ``timedelta`` keeps *today's* offset even once a DST
+    change has moved the real one. ``timezone_name`` — ``FamilyConfig.timezone``,
+    already validated at config load, so never an unresolvable name here — gets
+    a real :class:`~zoneinfo.ZoneInfo`, which ``datetime.combine(day, t,
+    tzinfo=zone)`` re-resolves correctly for every ``day`` it is combined with.
+    Unconfigured (``""``) keeps the legacy, DST-blind fallback rather than
+    guessing a zone.
+    """
+    if timezone_name:
+        return ZoneInfo(timezone_name)
+    return now.tzinfo or UTC
 
 
 # --------------------------------------------------------------- addresses

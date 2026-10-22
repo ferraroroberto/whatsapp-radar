@@ -25,7 +25,16 @@ echo [2/3] Installing Python requirements...
 "%VENV_PY%" -m pip install -r requirements.txt -r requirements-dev.txt || exit /b 1
 
 echo [3/3] Generating PWA icons...
-"%VENV_PY%" scripts\gen_icons.py || exit /b 1
+set "SCAFFOLD_DIR=%PROJECT_SCAFFOLDING_DIR%"
+if "%SCAFFOLD_DIR%"=="" set "SCAFFOLD_DIR=E:\automation\project-scaffolding"
+if exist "%SCAFFOLD_DIR%\scripts\brand_gen.py" (
+    "%VENV_PY%" scripts\gen_icons.py || exit /b 1
+) else (
+    echo   Skipping: no project-scaffolding checkout at "%SCAFFOLD_DIR%".
+    echo   Icons are already committed, so this is a no-op for a fresh clone;
+    echo   set PROJECT_SCAFFOLDING_DIR and run scripts\gen_icons.py yourself
+    echo   only if the brand changes.
+)
 
 echo.
 echo ============================================================================

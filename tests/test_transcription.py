@@ -25,7 +25,7 @@ from src.analysis.pipeline import scan
 from src.analysis.transcription import TranscriptionError, run_transcription_phase, transcribe_file
 from src.config import Config, HubConfig, TelegramConfig, TranscriptionConfig
 from src.db import store
-from src.models import ChatRecord, MessageRecord
+from src.models import ChatRecord, MessageRecord, StoredMessage
 
 
 def _config(
@@ -289,6 +289,55 @@ def test_old_voice_notes_are_skipped_not_transcribed(
     assert row["transcription_status"] == "skipped_old"
     assert row["media_path"] is None
     assert not old_audio.exists()  # backlog audio cleaned up, not transcribed
+
+
+def test_missing_audio_file_is_skipped_not_marked_failed(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """#435: a phantom ``media_path`` (file cleared out of band) must not wedge
+    the chat forever.
+
+    'failed' keeps ``media_path`` set, so the note both retries every scan
+    against a file that will never reappear *and* — because
+    :func:`hold_back_untranscribed` holds back any 'failed' row that still has
+    a ``media_path`` — freezes the whole chat's cursor for ``failed_retry_days``.
+    This must instead land on 'skipped_old', which clears ``media_path``, so the
+    note surfaces as its placeholder and the cursor moves on.
+    """
+    cfg = _config(tmp_path, failed_retry_days=30)
+    chat_id, msg_id, audio = _monitor_with_voice(conn, cfg.linked_device_dir)
+    audio.unlink()  # audio gone out of band; the DB row still points at it
+
+    calls: list[Path] = []
+
+    def _transcriber(path: Path, _language: str | None) -> str:
+        calls.append(path)
+        return "should never run"
+
+    outcome = run_transcription_phase(conn, cfg, transcriber=_transcriber)
+
+    assert calls == []  # never sent to the transcriber
+    assert (outcome.done, outcome.failed, outcome.skipped_old) == (0, 0, 1)
+    row = conn.execute(
+        "SELECT transcription_status, media_path FROM messages "
+        "WHERE chat_id = ? AND source_message_id = ?",
+        (chat_id, msg_id),
+    ).fetchone()
+    assert row["transcription_status"] == "skipped_old"
+    assert row["media_path"] is None
+
+    # hold_back_untranscribed's barrier is `status in ('pending', 'failed')
+    # and media_path` — 'skipped_old' with a cleared media_path trips neither,
+    # so the note (and anything ingested after it) is free to analyse. Under
+    # the pre-fix 'failed' + kept media_path, this message would have been the
+    # barrier and held back for `failed_retry_days`.
+    note = StoredMessage(
+        id=1, chat_id=chat_id, source_message_id=msg_id,
+        message_timestamp=datetime.now(UTC).isoformat(), text="[voice note]",
+        sender_label="Parent", message_type="voice",
+        transcription_status="skipped_old", media_path=None,
+    )
+    assert tr.hold_back_untranscribed([note]) == [note]
 
 
 def test_disabled_is_a_noop(conn: sqlite3.Connection, tmp_path: Path) -> None:

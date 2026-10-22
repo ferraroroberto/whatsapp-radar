@@ -21,6 +21,33 @@ from src.report.digest import Digest
 _API = "https://api.telegram.org/bot{token}/sendMessage"
 _TIMEOUT_SECONDS = 15
 
+# Telegram's `sendMessage` API doc: "Text of the message to be sent, 1-4096
+# characters" — an unbounded digest (e.g. the first scan after a multi-day
+# outage) exceeds this and every retry fails identically (#435).
+_MAX_MESSAGE_CHARS = 4096
+
+
+def _chunk_text(text: str, limit: int) -> list[str]:
+    """Split ``text`` into pieces of at most ``limit`` characters, exactly.
+
+    Cuts at (and keeps) the last newline at or before ``limit`` so a line is
+    never split mid-word and ``"".join(_chunk_text(text, limit)) == text`` —
+    no content lost at a chunk boundary. A single line longer than ``limit``
+    is hard-cut as a last resort.
+    """
+    if len(text) <= limit:
+        return [text]
+    chunks: list[str] = []
+    remaining = text
+    while len(remaining) > limit:
+        cut = remaining.rfind("\n", 0, limit)
+        cut = cut + 1 if cut > 0 else limit
+        chunks.append(remaining[:cut])
+        remaining = remaining[cut:]
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
 
 class TelegramNotifier:
     """A :class:`Notifier` that delivers the digest text to one Telegram chat."""
@@ -41,8 +68,14 @@ class TelegramNotifier:
 
         Used both for the digest and for out-of-band operational alerts (e.g. a
         scan aborted because the WhatsApp source went offline), so a scheduled
-        run that would otherwise look green still reaches the operator.
+        run that would otherwise look green still reaches the operator. Sent as
+        one or more ``sendMessage`` calls, chunked under Telegram's per-message
+        limit (#435) — a single oversized digest must not fail delivery outright.
         """
+        for chunk in _chunk_text(text, _MAX_MESSAGE_CHARS):
+            self._send_one(chunk)
+
+    def _send_one(self, text: str) -> None:
         payload = json.dumps({"chat_id": self._chat_id, "text": text}).encode("utf-8")
         request = urllib.request.Request(
             _API.format(token=self._token),

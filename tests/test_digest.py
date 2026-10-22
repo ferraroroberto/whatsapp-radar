@@ -7,32 +7,9 @@ from datetime import date
 from pathlib import Path
 
 from src.analysis.classifier import StubClassifier
-from src.analysis.pipeline import scan
-from src.config import Config, HubConfig, TelegramConfig
 from src.db import store
 from src.report.digest import DigestItem, build_digest, render_item
-from tests.helpers import chat_id_by_source
-
-
-def _config(tmp_path: Path) -> Config:
-    return Config(
-        db_path=tmp_path / "unused.sqlite3",
-        connector="fixture",
-        classifier="stub",
-        hub=HubConfig(base_url="http://127.0.0.1:8000", model="claude_sonnet"),
-        notifier="none",
-        telegram=TelegramConfig(bot_token="t", chat_id="c"),
-        linked_device_dir=tmp_path / "ld",
-    )
-
-
-def _review(conn: sqlite3.Connection, tmp_path: Path, classifier: object = None):
-    # ``process`` (#394): the ``wr review`` verb expressed as a scan mode that
-    # skips sync and reuses scan's traced loop.
-    return scan(
-        conn, _config(tmp_path), mode="process",
-        classifier=classifier or StubClassifier(), deliver=False,
-    )
+from tests.helpers import chat_id_by_source, review
 
 
 def _item(**kw: object) -> DigestItem:
@@ -58,7 +35,7 @@ def test_digest_consolidates_actionable_across_chats(
 ) -> None:
     _monitor(ingested_conn, "chat-class-4a")  # has an actionable "permission slip" message
     _monitor(ingested_conn, "chat-school-parents")  # has an "urgent pay" message
-    outcome = _review(ingested_conn, tmp_path)
+    outcome = review(ingested_conn, tmp_path)
 
     digest = build_digest(ingested_conn, outcome.run_id)
     assert digest.has_actionable_items
@@ -73,7 +50,7 @@ def test_noise_only_chat_produces_no_notification(
     ingested_conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     _monitor(ingested_conn, "chat-building")  # only small talk
-    outcome = _review(ingested_conn, tmp_path)
+    outcome = review(ingested_conn, tmp_path)
 
     digest = build_digest(ingested_conn, outcome.run_id)
     assert not digest.has_actionable_items
@@ -90,9 +67,9 @@ def test_second_review_no_new_messages_no_actionable(
 ) -> None:
     _monitor(ingested_conn, "chat-class-4a")
     classifier = StubClassifier()
-    _review(ingested_conn, tmp_path, classifier)  # first run consumes backlog
+    review(ingested_conn, tmp_path, classifier)  # first run consumes backlog
 
-    outcome = _review(ingested_conn, tmp_path, classifier)
+    outcome = review(ingested_conn, tmp_path, classifier)
     digest = build_digest(ingested_conn, outcome.run_id)
     assert not digest.has_actionable_items
 

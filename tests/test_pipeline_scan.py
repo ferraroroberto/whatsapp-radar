@@ -22,12 +22,11 @@ from src.analysis.classifier import (
 )
 from src.analysis.pipeline import scan, scan_outcome_to_dict
 from src.config import Config, FamilyConfig, HubConfig, TelegramConfig, TripwireConfig
-from src.connector.base import ConnectorStatus
 from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.models import ChatRecord, MessageRecord, StoredMessage
 from src.notify import telegram as telegram_mod
-from tests.helpers import chat_id_by_source
+from tests.helpers import OfflineConnector, chat_id_by_source
 
 _ACTIONABLE_JSON = json.dumps(
     {
@@ -119,28 +118,6 @@ class _FakeTraced:
         )
 
 
-class _OfflineConnector:
-    """A connector that reports offline and refuses to be read (the #29 gate)."""
-
-    def connect(self) -> ConnectorStatus:
-        return ConnectorStatus(name="linked_device", connected=False, detail="heartbeat stale")
-
-    def status(self) -> ConnectorStatus:
-        return self.connect()
-
-    def list_chats(self) -> list[ChatRecord]:
-        raise AssertionError("an offline source must never be read")
-
-    def fetch_messages(self, source_chat_id: str) -> list[MessageRecord]:
-        raise AssertionError("an offline source must never be read")
-
-    def canonical_source_id(self, source_chat_id: str) -> str | None:
-        return source_chat_id
-
-    def stop(self) -> None:
-        return None
-
-
 # --- offline preflight gate (#29) -----------------------------------------
 
 def test_live_scan_aborts_offline_without_syncing_or_advancing(
@@ -152,7 +129,7 @@ def test_live_scan_aborts_offline_without_syncing_or_advancing(
         ingested_conn,
         _config(tmp_path),  # connector="fixture" → no relaunch attempt, just abort
         mode="live",
-        connector=_OfflineConnector(),
+        connector=OfflineConnector(),
         classifier=StubClassifier(),
     )
 

@@ -128,7 +128,7 @@ If nothing is actionable, no message is sent — that is correct. See [`manual.m
 
 ## 5 — Bring up the admin PWA + phone access (Tailscale)
 
-The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a real Tailscale-issued HTTPS cert first — see [HTTPS certificate (Tailscale)](../README.md#https-certificate-tailscale) — so the phone gets a trusted padlock with no per-device trust profile.
+The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a real Tailscale-issued HTTPS cert first — see [HTTPS certificate (Tailscale)](webapp.md#https-certificate-tailscale) — so the phone gets a trusted padlock with no per-device trust profile.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py  # provision HTTPS (one-time; auto-renews after)

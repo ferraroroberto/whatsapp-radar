@@ -13,33 +13,22 @@ whatsapp-radar/
   app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|gmail-survey|
                          #   notify|resync|reprocess|calendar-scan|traffic-check|tray)
   app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py, runs.py,
-                         #   routers/ (audit, auth, chats, config, dashboard, execution,
-                         #   family, misc, sidecar, webauthn, _helpers), static/ (vanilla-JS shell)
+                         #   routers/, static/ (vanilla-JS shell)
   app/tray/tray.py       # pystray surface that owns the webapp lifecycle
-  calendar_readonly/     # portable Google Calendar read client (mirrors gmail_readonly/)
-  calendar_write/        # portable Google Calendar write client (family calendar automation)
-  gmail_readonly/        # portable Gmail read client
-  google_oauth_common/   # installed-app OAuth bootstrap the three clients above wrap
+  calendar_readonly/ calendar_write/ gmail_readonly/   # portable Google clients (see Layout & Imports)
+  google_oauth_common/   # installed-app OAuth bootstrap the three clients wrap
   src/                   # logic, imported as `from src.…`
-    config/ (package: __init__.py's load_config aggregates one module per subsystem —
-             hub/transcription/tts/telegram/tripwire/gmail/calendar/traffic/presence/family/task_os)
-    models.py  webapp_config.py  webauthn_gate.py  static_versioning.py
-    paths.py  progress.py  tts_client.py  speech_profile.py  subprocess_flags.py
-    runresult.py  _loopback_http.py  runtime_data.py
+    config/ (load_config aggregates one module per subsystem)   models.py  paths.py  ...
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
-    db/ (store.py facade over the per-table modules, plus sync.py/reprocess.py, schema.sql)
-    analysis/ (classifier, contract, keywords, pipeline, reminders, review, source_funnel,
-               summarize, transcription, tripwire, gmail_survey, prompts/)
+    db/ (store.py facade over per-table modules, sync.py/reprocess.py, schema.sql)
+    analysis/ (classifier, pipeline, tripwire, transcription, prompts/, ...)
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
-    family/ (calendar_scan, calendar_source, dedup, leg_status, rules, traffic_check,
-             travel_blocks, travel_blocks_write — the only path that writes to and
-             deletes from calendars)
-    presence/client.py     traffic/routes_client.py     task_os/client.py
-    fixtures/sample_chats.json
+    family/ (calendar_scan, rules, traffic_check, travel_blocks, travel_blocks_write — the only
+             path that writes to and deletes from calendars)
+    presence/  traffic/  task_os/    fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json + .env gitignored
-  scripts/               # helper CLIs (token/password/icons, tailscale cert, named tunnel, Google
-                         #   auth, backtests/smoke) + run-e2e.ps1, verify-before-ship.ps1
+  scripts/               # helper CLIs + run-e2e.ps1, verify-before-ship.ps1
   sidecar/               # read-only Node/Baileys connector
   webapp/                # runtime log output + certificates/ + cloudflared.yml (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
@@ -57,7 +46,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 ### Admin webapp & tray
 
-- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Four tabs live (named under **UX surface** below; Run and Audit merged into Activity, #373; follow-ups are Telegram-only, #374), plus the Settings dialog from every pane's gear (inset groups: Display, Sources, How messages are judged, Alerts, Maintenance, This install, #377). Family and Settings rows open sheets built on `static/edit-sheet.js` that save on Done; endpoint lists in `docs/webapp.md`.
+- FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Four tabs (named under **UX surface** below; follow-ups are Telegram-only), plus the Settings dialog from every pane's gear. Family and Settings rows open sheets built on `static/edit-sheet.js` that save on Done; endpoint lists in `docs/webapp.md`.
 - Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkey enrollment (Tailscale-only; provisioning state, no passkey sign-in, #353), Tailscale TLS, dormant Cloudflare scaffolding.
 - Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`.
 - **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`.
@@ -120,7 +109,7 @@ Gate, from the repo root, with the project venv:
 .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate
 ```
 
-Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram. The one exception is the **static ratchet** (`scripts/static_ratchet.py`, vendored; `.fleet.toml [static_ratchet]`, baseline `.static-ratchet-baseline.json`): it fails on a duplicate block (jscpd via `npx`, so **Node is a prerequisite** and the first run fetches jscpd) or an unused import/variable (ruff `F401,F841`) that is not in the baseline. It reads the whole tree, so it is never path-routed, and `verify-before-ship.ps1` calls it only through `scripts.static_ratchet_gate`, which fails exit 3 (a detector could not run) as NOT CONFIRMED, never a pass or a skip. Shrink the baseline in the PR that removes debt (`--update-baseline`); adding to it needs `--allow-additions` and shows in review. The **docs ratchet** (`scripts/docs_ratchet.py`, vendored; `.fleet.toml [docs_ratchet]`, baseline `.docs-ratchet-baseline.json`) works the same way for `README.md` size and history markers (issue references, dated or changelog headings) in `README.md` and `docs/**/*.md`; the gate calls it only through `scripts.docs_ratchet_gate`, and docs you touch state the present-tense why with no `#N` citations.
+Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram. The one exception is the **static ratchet** (`scripts/static_ratchet.py`, vendored; `.fleet.toml [static_ratchet]`, baseline `.static-ratchet-baseline.json`): it fails on a duplicate block (jscpd via `npx`, so **Node is a prerequisite**) or an unused import/variable (ruff `F401,F841`) not in the baseline. It reads the whole tree, never path-routed; `verify-before-ship.ps1` calls it only through `scripts.static_ratchet_gate`, which fails exit 3 (a detector could not run) as NOT CONFIRMED, never a pass or skip. Shrink the baseline in the PR that removes debt (`--update-baseline`); adding to it needs `--allow-additions` and shows in review. The **docs ratchet** (`scripts/docs_ratchet.py`, vendored; `.fleet.toml [docs_ratchet]`, baseline `.docs-ratchet-baseline.json`) works the same way for `README.md` size and history markers (issue references, dated or changelog headings) in `README.md` and `docs/**/*.md`; the gate calls it only through `scripts.docs_ratchet_gate`, and docs you touch state the present-tense why with no `#N` citations.
 
 ## CI expectations
 

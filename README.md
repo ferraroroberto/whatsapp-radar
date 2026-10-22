@@ -167,6 +167,7 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m mypy src app
 .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate   # no new duplicate block or unused import/variable
+.\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate     # README under 40 KiB, no new history marker in README or docs
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```

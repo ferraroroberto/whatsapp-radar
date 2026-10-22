@@ -15,6 +15,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/e2e/_browser_sweep.py" = ["E501"]
 "tests/e2e/_surface.py" = ["E501"]
 "scripts/static_ratchet.py" = ["E501"]
+"scripts/docs_ratchet.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's documented idiom evaluates Depends()/Query()/etc. in argument

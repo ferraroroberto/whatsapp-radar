@@ -1,9 +1,9 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, the static ratchet, mypy (strict), the offline pytest suite, then the
-# Playwright e2e suite (Chromium + WebKit/iPhone) against a disposable webapp
-# the script boots itself on a free port. The e2e stage is routed by
+# byte-compile, ruff, the static ratchet, the docs ratchet, mypy (strict), the offline
+# pytest suite, then the Playwright e2e suite (Chromium + WebKit/iPhone) against a
+# disposable webapp the script boots itself on a free port. The e2e stage is routed by
 # scripts/classify_e2e.py against the [e2e] table in .fleet.toml: nothing for a
 # diff with no browser surface, the smoke target for inert assets, a surface
 # slice or the full suite otherwise. An unclassified path, an empty diff or a
@@ -101,6 +101,12 @@ try {
     Write-Host "==> static ratchet (new duplicate block / unused import or variable)..." -ForegroundColor Cyan
     & $python -m scripts.static_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "static ratchet failed or was NOT CONFIRMED." }
+
+    # Whole tree too. Same wrapper contract: the docs ratchet's exit 3 (could not
+    # scan) fails as NOT CONFIRMED (tests/test_docs_ratchet_gate.py pins it).
+    Write-Host "==> docs ratchet (README size / new history marker in README or docs)..." -ForegroundColor Cyan
+    & $python -m scripts.docs_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "docs ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

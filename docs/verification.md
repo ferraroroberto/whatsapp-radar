@@ -12,6 +12,10 @@ The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on
 
 The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.
 
+## Docs ratchet
+
+The docs ratchet compares `README.md` and `docs/**/*.md` with the committed `.docs-ratchet-baseline.json` and fails when the README grows past 40 KiB (or past its baselined size) or a file gains a history marker: an issue reference, a dated heading or a changelog heading. Docs state the present-tense why; history belongs to git, PRs and issues. Existing markers are baselined, not fixed; lower the baseline with `scripts\docs_ratchet.py --update-baseline` in the PR that removes them. It reads the whole tree, so it is never path-routed, and `verify-before-ship.ps1` calls it only through `scripts.docs_ratchet_gate`, which fails exit 3 (the docs could not be scanned) as NOT CONFIRMED, never a pass or a skip. Procedure and limits: project-scaffolding's `docs/docs-ratchet.md`.
+
 ## Design capture
 
 Each e2e test that opens a distinct screen calls the vendored `surface(page, "<tab>.<surface>")` (`tests/e2e/_surface.py`). It is inert in the gate; `/design-review whatsapp-radar measure --e2e` arms it (via `DESIGN_SURFACE_CAPTURE`) to screenshot and measure those states in light and dark on a disposable instance (`scripts/design_review_synthetic.py`, the e2e autoboot's seeded throwaway DB), never the live app. A new test that opens a new surface should call `surface()` directly in its body, after its assertions.

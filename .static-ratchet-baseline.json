@@ -3,7 +3,6 @@
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
     {"key": "dup:39b45ecf2387:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
-    {"key": "dup:4306bb086600:scripts/docs_ratchet.py|scripts/static_ratchet.py", "files": ["scripts/docs_ratchet.py", "scripts/static_ratchet.py"]},
     {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]}
   ]
 }

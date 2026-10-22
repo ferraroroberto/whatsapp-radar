@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._audit_runs import open_audit_activity
 from tests.e2e._surface import surface
 
 
@@ -231,21 +232,7 @@ def _calendar_run(section: dict[str, object] | None) -> dict[str, object]:
 
 def _open_travel_run(page: Page, base_url: str, section: dict[str, object] | None) -> None:
     run = _calendar_run(section)
-    page.route(
-        "**/api/audit/runs?*",
-        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
-    )
-    page.route(
-        "**/api/audit/filtered?*",
-        lambda route: route.fulfill(
-            json={"days": 30, "limit": 50, "offset": 0, "total": 0,
-                  "has_more": False, "items": []}
-        ),
-    )
-    page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
-    page.goto(base_url)
-    page.locator("#tabActivity").click()
-    page.locator('#activityScope [data-scope="calendar"]').click()
+    open_audit_activity(page, base_url, run, "calendar")
     page.locator("#activityList .run-row .action-row-main").first.click()
     expect(page.locator("#runSheetCard")).to_be_visible()
 

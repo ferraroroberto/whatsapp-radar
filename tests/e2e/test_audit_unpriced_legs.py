@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._audit_runs import open_audit_activity
 from tests.e2e._surface import surface
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
@@ -59,21 +60,7 @@ def _traffic_run(*statuses: str, alerts: int = 0) -> dict[str, Any]:
 
 
 def _open_traffic_run(page: Page, base_url: str, run: dict[str, Any]) -> None:
-    page.route(
-        "**/api/audit/runs?*",
-        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
-    )
-    page.route(
-        "**/api/audit/filtered?*",
-        lambda route: route.fulfill(
-            json={"days": 30, "limit": 50, "offset": 0, "total": 0,
-                  "has_more": False, "items": []}
-        ),
-    )
-    page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
-    page.goto(base_url)
-    page.locator("#tabActivity").click()
-    page.locator('#activityScope [data-scope="traffic"]').click()
+    open_audit_activity(page, base_url, run, "traffic")
     # A day of traffic checks folds to one row (#373); open it to the checks.
     page.locator("#activityList .run-fold .action-row-main").first.click()
 

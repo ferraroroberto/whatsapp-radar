@@ -193,10 +193,8 @@ def _cadence_config(tmp_path: Path, *, cadence_min: int) -> Any:
     return dataclasses.replace(base, traffic=traffic)
 
 
-def test_cli_traffic_check_self_skips_within_cadence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A **live** fire within the cadence window self-skips (#170)."""
+def _arm_cadence_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Record a live traffic-check run seconds ago under a 30min cadence; return the DB."""
     db = tmp_path / "cadence.sqlite3"
     monkeypatch.setenv("WR_DB_PATH", str(db))
 
@@ -212,6 +210,14 @@ def test_cli_traffic_check_self_skips_within_cadence(
 
     cfg = _cadence_config(tmp_path, cadence_min=30)
     monkeypatch.setattr(cli, "load_config", lambda: cfg)
+    return db
+
+
+def test_cli_traffic_check_self_skips_within_cadence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A **live** fire within the cadence window self-skips (#170)."""
+    db = _arm_cadence_window(tmp_path, monkeypatch)
 
     def never_called(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
         raise AssertionError("runner must not be called on a cadence self-skip")
@@ -243,21 +249,7 @@ def test_cli_traffic_check_dry_run_never_cadence_skipped(
     ago, well inside the 30min cadence window) but this time the invocation is
     ``--dry-run``: the runner must actually be called, and a run row recorded.
     """
-    db = tmp_path / "cadence.sqlite3"
-    monkeypatch.setenv("WR_DB_PATH", str(db))
-
-    conn = store.connect(db)
-    try:
-        run_id = store.start_run(conn, mode="live", kind="traffic-check")
-        store.finish_run_summary(
-            conn, run_id, "completed",
-            json.dumps({"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}),
-        )
-    finally:
-        conn.close()
-
-    cfg = _cadence_config(tmp_path, cadence_min=30)
-    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+    db = _arm_cadence_window(tmp_path, monkeypatch)
 
     payload = {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
     calls: list[bool] = []

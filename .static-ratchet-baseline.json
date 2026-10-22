@@ -2,14 +2,8 @@
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
-    {"key": "dup:1f059529d96d:tests/test_unified_runs.py|tests/test_unified_runs.py", "files": ["tests/test_unified_runs.py", "tests/test_unified_runs.py"]},
-    {"key": "dup:27fe362a2426:tests/e2e/test_audit.py|tests/e2e/test_audit_payload_redaction.py", "files": ["tests/e2e/test_audit.py", "tests/e2e/test_audit_payload_redaction.py"]},
-    {"key": "dup:2a11a199e1bd:tests/test_pipeline_scan.py|tests/test_resync.py", "files": ["tests/test_pipeline_scan.py", "tests/test_resync.py"]},
     {"key": "dup:39b45ecf2387:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
     {"key": "dup:4306bb086600:scripts/docs_ratchet.py|scripts/static_ratchet.py", "files": ["scripts/docs_ratchet.py", "scripts/static_ratchet.py"]},
-    {"key": "dup:5e2816e58464:tests/e2e/test_audit.py|tests/e2e/test_audit_unpriced_legs.py", "files": ["tests/e2e/test_audit.py", "tests/e2e/test_audit_unpriced_legs.py"]},
-    {"key": "dup:98f2ae47d914:tests/e2e/test_audit.py|tests/e2e/test_audit_payload_redaction.py", "files": ["tests/e2e/test_audit.py", "tests/e2e/test_audit_payload_redaction.py"]},
-    {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
-    {"key": "dup:d7e5205a4d28:tests/test_chat_links.py|tests/test_digest.py", "files": ["tests/test_chat_links.py", "tests/test_digest.py"]}
+    {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]}
   ]
 }

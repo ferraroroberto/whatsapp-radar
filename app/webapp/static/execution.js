@@ -1,5 +1,5 @@
-/* Run queue (#11): run the pipeline — whole or in pieces — from Activity's
- * Run-now sheet (#373).
+/* Run queue: run the pipeline — whole or in pieces — from Activity's
+ * Run-now sheet.
  *
  * Mirrors App Launcher's job-stub model: each action spawns `launcher.py <cmd>`
  * server-side; this module fires the runs, polls /api/execution/runs for the
@@ -9,7 +9,7 @@
  * run list and the live viewer are activity.js's; this module tells it when
  * the run state moved (onExecutionChange). It also owns the source health,
  * recent syncs and Reconnect inside Settings' source sheets, the Sources rows'
- * values (#377) and the traffic group's Check-now rows.
+ * values and the traffic group's Check-now rows.
  * Chat names / message text go in via textContent only (privacy). */
 
 import { els, state } from './state.js';
@@ -128,7 +128,7 @@ export async function runSelection() {
 }
 
 // Destructive: a full rebuild that resets run history. Settings' confirm sheet
-// (#377) is the explicit confirmation, on top of the API's own confirm:true
+// is the explicit confirmation, on top of the API's own confirm:true
 // (defence in depth).
 export function rebuildCache() {
   execState().queue = [{ action: 'reprocess', confirm: true }];
@@ -136,7 +136,7 @@ export function rebuildCache() {
   pumpQueue().then(function () { fetchExecution().catch(function () {}); });
 }
 
-// Stop the live run the run sheet shows (#373: Stop lives in its footer).
+// Stop the live run the run sheet shows (Stop lives in its footer).
 export async function killRun(kind, runId) {
   try {
     await jsonApi(`/api/execution/runs/${kind}/${runId}/kill`, { method: 'POST' });
@@ -153,7 +153,7 @@ export async function killRun(kind, runId) {
 // word — Online / Offline / Connecting / Needs QR — instead of a dot. When the
 // source is down, the card below grows a one-tap relaunch and — if a fresh QR
 // is needed — the pairing image, so the connection can be recovered from a
-// phone without a terminal (#29). Refreshed with the poll.
+// phone without a terminal. Refreshed with the poll.
 // Re-stamp the QR src at most every 20s (the pairing code rotates ~that often)
 // so the <img> doesn't flicker on every 1.5s poll. The token rides as
 // &token= (same as chats.js's audioUrl) since an <img> request can't set an
@@ -165,7 +165,7 @@ function qrSrc() {
 }
 
 // Compact local timestamp for sync/health lines — the one shared formatter so
-// no surface can drift to a different clock or format again (#163).
+// no surface can drift to a different clock or format.
 function fmtSyncWhen(iso) {
   if (!iso) return '';
   return fmtLocalDateTime(iso, { withYear: false });
@@ -173,14 +173,14 @@ function fmtSyncWhen(iso) {
 
 // When the source is live, show what's actually *stored* and the last sync delta
 // (truthful) instead of the sidecar's session counters, which reset on reconnect
-// and misread as "empty" (#31). Abbreviated ("msg") so the line never wraps.
+// and misread as "empty". Abbreviated ("msg") so the line never wraps.
 function addStatusLine(list, label, value) {
   const li = document.createElement('li');
   li.textContent = label + ': ' + (value || '—');
   list.appendChild(li);
 }
 
-// The Calendar row (#164) is a read-only, non-ingesting source: it has no sync
+// The Calendar row is a read-only, non-ingesting source: it has no sync
 // history or stored-message counters, so it renders its own compact detail set.
 function renderCalendarHealth(source) {
   const card = document.createElement('section');
@@ -216,8 +216,8 @@ function isLiveSource(s) {
   return s.source === 'whatsapp' && ex.sidecar ? !!ex.sidecar.is_live : !!s.connected;
 }
 
-// The Settings header line (#374): a source that should be up and is not,
-// else an open passkey enrollment window (#377), else the build the PWA is
+// The Settings header line: a source that should be up and is not,
+// else an open passkey enrollment window, else the build the PWA is
 // running.
 export function renderSettingsStatus() {
   const ex = execState();
@@ -241,7 +241,7 @@ function syncSource(row) {
   return row.connector_source === 'gmail' ? 'gmail' : 'whatsapp';
 }
 
-// The Sources rows (#377): connected or not and when it last synced, Off for a
+// The Sources rows: connected or not and when it last synced, Off for a
 // source that is switched off, a dash until the first health read lands.
 export function renderSourceRows() {
   const ex = execState();
@@ -403,15 +403,15 @@ export function renderSyncs() {
 
 // ----------------------------------------------------- traffic jam insurance
 
-// Traffic checks (#164; Family pane since #373, a group there since #376): the
+// Traffic checks (a group in the Family pane): the
 // enable switch, the cadence sheet and the last-check/last-alert line are
-// family.js's own /api/family concern (#240 — patchFamily and the rendering
+// family.js's own /api/family concern (patchFamily and the rendering
 // live there, since they share nothing with this file's run queue). This is
 // the one piece that does:
 // firing a one-off traffic-check run through the same queue every other
 // pipeline step uses. The App Launcher job (`family-radar-traffic-check`) is
 // armed at a fixed high frequency; `wr traffic-check` self-skips in-process
-// against the cadence config (#170), so editing it takes effect with no re-arm.
+// against the cadence config, so editing it takes effect with no re-arm.
 function runTraffic(mode) {
   const ex = execState();
   if (ex.active || ex.queue.length > 0 || firing) {
@@ -463,7 +463,7 @@ async function reconnectSidecar() {
   fetchHealth().catch(function () {});
 }
 
-// The run poll: the active run and the unified records list (#163), which
+// The run poll: the active run and the unified records list, which
 // Activity merges for the runs the DB store does not hold (a webapp-launched
 // sync or rebuild, a run still in flight). Sources health, syncs and traffic
 // are fetched where their cards live now (Settings, Family), not here.
@@ -487,8 +487,8 @@ export async function fetchExecution() {
   notify();
 }
 
-// Settings holds the source health and recent syncs (#373; in the source
-// sheets since #377); refresh them while it is open so the pairing QR, the
+// Settings holds the source health and recent syncs (in the source
+// sheets); refresh them while it is open so the pairing QR, the
 // connection word and the Sources rows stay current.
 export function fetchSettingsHealth() {
   fetchHealth().catch(function () {});
@@ -590,9 +590,9 @@ export function wireExecution() {
     });
   }
 
-  // Traffic checks (Family pane since #373): the enable switch persists on tap
-  // through the family safe-override path (the cadence is a Family sheet,
-  // #376); the two Check-now rows fire a one-off check through this queue.
+  // Traffic checks (Family pane): the enable switch persists on tap
+  // through the family safe-override path (the cadence is a Family sheet);
+  // the two Check-now rows fire a one-off check through this queue.
   els.execTrafficEnabled.addEventListener('click', function () {
     const next = !stageOn(els.execTrafficEnabled);
     setSwitch(els.execTrafficEnabled, next);  // optimistic; patch confirms

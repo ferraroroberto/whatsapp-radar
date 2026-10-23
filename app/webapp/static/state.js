@@ -19,7 +19,7 @@ export const state = {
   tab: 'dashboard',
   webauthn: { configured: false, enrollment_open: false, devices: [] },
   dashboard: null,
-  // Chats & Config (#10)
+  // Chats & Config
   chats: [],
   chatsFilter: 'monitored',  // 'monitored' | 'all'
   chatsSourceFilter: 'all',  // 'all' | 'whatsapp' | 'gmail'
@@ -31,14 +31,14 @@ export const state = {
     truncated: false,
   },
   config: null,
-  // Run queue + run controls (#11), driven from Activity's Run-now sheet (#373).
+  // Run queue + run controls, driven from Activity's Run-now sheet.
   execution: {
     mode: 'live',          // 'live' | 'dry_run'  (applies to scan + process)
     window: 'new',         // 'new' | 'days'      (dry-run scan only)
     days: 7,
-    runs: [],              // /api/execution/runs records (both stores, #163)
-    skippedCount: 0,       // self-skips hidden from `runs` (#234, #277)
-    skippedByKind: {},     // the same, split per run kind (#393)
+    runs: [],              // /api/execution/runs records (both stores)
+    skippedCount: 0,       // self-skips hidden from `runs`
+    skippedByKind: {},     // the same, split per run kind
     active: null,          // {kind, run_id} of the in-flight run, or null
     queue: [],             // pending chained actions (multi-step run), fired in order
     sidecar: null,         // last /api/sidecar/status snapshot (connection health)
@@ -47,11 +47,11 @@ export const state = {
     sourceHealth: [],      // secret-free per-source status snapshots
     sourceHealthAt: 0,
   },
-  // Activity (#373): one list over the run store, scoped, plus the run sheet.
+  // Activity: one list over the run store, scoped, plus the run sheet.
   activity: {
     scope: 'messages',     // 'messages' | 'calendar' | 'traffic'
     runs: [],              // /api/audit/runs rows for the scope, newest first
-    coverageGaps: [],      // contiguous multi-run connector outages (#195)
+    coverageGaps: [],      // contiguous multi-run connector outages
     hasMore: false,
     request: 0,            // discard out-of-order responses after fast scope changes
     loaded: false,
@@ -60,13 +60,13 @@ export const state = {
     open: null,            // {kind, runId, dbId} the run sheet shows, or null
     exec: null,            // the open run's execution record (output, Telegram, status)
     trace: null,           // the open run's audit detail {run, traces}
-    filtered: [],          // recent cross-run decisions that did not alert (#194)
+    filtered: [],          // recent cross-run decisions that did not alert
     filteredDays: 30,
     filteredTotal: 0,
     filteredHasMore: false,
     filteredRequest: 0,
   },
-  // Family checks (#160): last /api/family snapshot (rules + toggles + runs).
+  // Family checks: last /api/family snapshot (rules + toggles + runs).
   family: null,
 };
 
@@ -79,14 +79,14 @@ export const CHATS_RENDER_CAP = 150;
 // ES modules are deferred — they execute after DOMContentLoaded, so
 // document.getElementById is safe at module top level.
 export const els = {
-  // Page header (home-head on every pane), Settings dialog, Dashboard grid (#9, #165, #337)
+  // Page header (home-head on every pane), Settings dialog, Dashboard grid
   themeToggles: Array.from(document.querySelectorAll('.theme-toggle')),
   settingsButtons: Array.from(document.querySelectorAll('.home-settings')),
   settingsDialog: document.getElementById('settingsDialog'),
   settingsClose: document.getElementById('settingsClose'),
   textSizeControl: document.getElementById('textSizeControl'),
   settingsStatus: document.getElementById('settingsStatus'),
-  // Home (#374): header line, glance card, Latest runs; the source counts card
+  // Home: header line, glance card, Latest runs; the source counts card
   // lives in Settings.
   dashStatus: document.getElementById('dashStatus'),
   dashGlance: document.getElementById('dashGlance'),
@@ -94,7 +94,7 @@ export const els = {
   dashAllActivity: document.getElementById('dashAllActivity'),
   dashSources: document.getElementById('dashSources'),
 
-  // Chats (#10)
+  // Chats
   chatsStatus: document.getElementById('chatsStatus'),
   chatsFilterMonitored: document.getElementById('chatsFilterMonitored'),
   chatsFilterIgnored: document.getElementById('chatsFilterIgnored'),
@@ -110,7 +110,7 @@ export const els = {
   tripwireMeta: document.getElementById('tripwireMeta'),
   tripwireList: document.getElementById('tripwireList'),
 
-  // History overlay (#10)
+  // History overlay
   historyOverlay: document.getElementById('historyOverlay'),
   historyCard: document.getElementById('historyCard'),
   historyAvatar: document.getElementById('historyAvatar'),
@@ -123,7 +123,7 @@ export const els = {
   historyBody: document.getElementById('historyBody'),
   historyEmpty: document.getElementById('historyEmpty'),
 
-  // Link picker overlay (#25)
+  // Link picker overlay
   linkPickerOverlay: document.getElementById('linkPickerOverlay'),
   linkPickerTitle: document.getElementById('linkPickerTitle'),
   linkPickerClose: document.getElementById('linkPickerClose'),
@@ -132,7 +132,7 @@ export const els = {
   linkPickerList: document.getElementById('linkPickerList'),
   linkPickerEmpty: document.getElementById('linkPickerEmpty'),
 
-  // Settings sheets (#377): the rule shell and the per-source shell.
+  // Settings sheets: the rule shell and the per-source shell.
   settingsSheet: document.getElementById('settingsSheet'),
   settingsSheetTitle: document.getElementById('settingsSheetTitle'),
   settingsSheetClose: document.getElementById('settingsSheetClose'),
@@ -148,7 +148,7 @@ export const els = {
   sourceSheetFoot: document.getElementById('sourceSheetFoot'),
   sourceSheetDone: document.getElementById('sourceSheetDone'),
 
-  // Run-now sheet (#11, #373)
+  // Run-now sheet
   runNowSheet: document.getElementById('runNowSheet'),
   runNowClose: document.getElementById('runNowClose'),
   execDryRun: document.getElementById('execDryRun'),
@@ -165,7 +165,7 @@ export const els = {
   execRunScan: document.getElementById('execRunScan'),
   execBusy: document.getElementById('execBusy'),
   execReprocess: document.getElementById('execReprocess'),
-  // Traffic jam insurance card (#164)
+  // Traffic jam insurance card
   execTrafficCard: document.getElementById('execTrafficCard'),
   execTrafficEnabled: document.getElementById('execTrafficEnabled'),
   execTrafficRunLive: document.getElementById('execTrafficRunLive'),
@@ -179,7 +179,7 @@ export const els = {
   execSyncs: document.getElementById('execSyncs'),
   execSyncsEmpty: document.getElementById('execSyncsEmpty'),
 
-  // Activity (#373): header line, scope, run list, run sheet, filtered sheet.
+  // Activity: header line, scope, run list, run sheet, filtered sheet.
   paneActivity: document.getElementById('paneActivity'),
   activityStatus: document.getElementById('activityStatus'),
   activityRunNow: document.getElementById('activityRunNow'),
@@ -213,8 +213,8 @@ export const els = {
   auditFilteredEmpty: document.getElementById('auditFilteredEmpty'),
   auditFilteredMore: document.getElementById('auditFilteredMore'),
 
-  // Family rules (#160, #167) as inset groups with sheets (#376); the traffic
-  // group lives here since #373.
+  // Family rules as inset groups with sheets; the traffic
+  // group lives here.
   paneFamily: document.getElementById('paneFamily'),
   familyStatus: document.getElementById('familyStatus'),
   familySyncSwitch: document.getElementById('familySyncSwitch'),
@@ -226,8 +226,8 @@ export const els = {
   familySheetError: document.getElementById('familySheetError'),
   familySheetFoot: document.getElementById('familySheetFoot'),
   familySheetDone: document.getElementById('familySheetDone'),
-  // Commute travel blocks (#268): knobs + per-calendar write capability, in
-  // their own sheet (#376).
+  // Commute travel blocks: knobs + per-calendar write capability, in
+  // their own sheet.
   familyTravelRow: document.getElementById('familyTravelRow'),
   familyTravelSheet: document.getElementById('familyTravelSheet'),
   familyTravelClose: document.getElementById('familyTravelClose'),

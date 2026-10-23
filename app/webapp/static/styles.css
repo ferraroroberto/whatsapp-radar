@@ -37,7 +37,7 @@
   --input-bg: var(--card-off);
   --control-border: #818b98; /* input/select boundary + switch off-track (WCAG 1.4.11) */
   --toggle-knob: #ffffff;
-  --close-bg: transparent; /* glyph-only controls draw nothing at rest (fleet-config#1259) */
+  --close-bg: transparent; /* glyph-only controls draw nothing at rest */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   /* chip / segmented-track fill; text on it is fg. Mixed from --muted, so the
      dark theme's --muted gives the dark value with no second declaration. */
@@ -183,7 +183,7 @@ html, body {
 
 /* Form controls do not inherit the page font from the user-agent sheet (they
    get Arial / system-ui), so every app-local control style that forgot
-   `font-family` rendered in the wrong face (#343). A type selector is the
+   `font-family` rendered in the wrong face. A type selector is the
    lowest specificity, so any class rule, vendored or local, still wins. */
 button, input, select, textarea { font-family: inherit; }
 
@@ -196,7 +196,7 @@ button, input, select, textarea { font-family: inherit; }
   padding-right: var(--gap);
 }
 /* Top/bottom padding is desktop/wide-only, deliberately split out of the rule
-   above (#188, mirrors app-launcher issue #355): the coarse-pointer + narrow
+   above (mirrors app-launcher): the coarse-pointer + narrow
    breakpoint below is where nav-tabs.css reserves .app's own top (status-bar
    clearance) and bottom (floating tab-bar clearance) padding — a shorthand
    `padding` here has the same specificity and comes later in the cascade
@@ -299,7 +299,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .card-actions { display: inline-flex; align-items: center; gap: var(--space-sm); flex: none; }
 .card-title .icon { color: var(--muted); }
 
-/* ============================================================ home (#374) */
+/* =================================================================== home */
 /* The glance card: one vendored action-row per source, drawn at once with a
    dash while loading, so the poll answering never shifts a row. Latest runs
    reserves its three rows the same way. */
@@ -341,7 +341,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .home-head button.status-link:disabled { cursor: default; }
 .home-head button.status-link:disabled:not([data-tone]) { color: var(--muted); }
 .home-head button.status-link:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
-/* Settings' header line (#374): a source offline, else the build. */
+/* Settings' header line: a source offline, else the build. */
 .detail-status {
   flex: 1 1 auto;
   min-width: 0;
@@ -355,7 +355,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .detail-status[data-tone="danger"] { color: var(--danger-text); }
 .detail-header h2:has(+ .detail-status) { flex: none; }
 
-/* ============================================================ chats (#375) */
+/* =================================================================== chats */
 /* One scope switch and one filter field over one vendored action-row list; the
    chat sheet is a dialog on a phone and a right-hand pane at layout.wide. */
 .chats-toolbar { margin: 0 0 var(--gap); }
@@ -487,7 +487,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   display: flex;
   flex-direction: column;
 }
-/* Settings dialog (#337): wider than the default 440px modal so the prompt
+/* Settings dialog: wider than the default 440px modal so the prompt
    and settings editors have room; the dialog itself scrolls (modal.css). */
 .detail-dialog:has(.settings-card) { width: min(640px, 92vw); }
 .detail-header .detail-close, .detail-header .icon-button { margin-left: var(--space-sm); }
@@ -498,7 +498,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Chat sheet header (#375). */
+/* Chat sheet header. */
 .history-header { gap: var(--space-sm); }
 .history-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .history-heading h2 {
@@ -518,7 +518,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .history-header .history-menu .icon { width: var(--icon-title); height: var(--icon-title); }
 .history-header .detail-close { margin-left: 12px; }
 .history-tripwire { margin: 0 0 var(--space-sm); }
-/* Link panel (#25): collapsible block under the overlay header showing the
+/* Link panel: collapsible block under the overlay header showing the
    chat's link role. */
 .link-panel {
   flex: 0 0 auto;
@@ -563,7 +563,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .hist-thread { margin-top: 4px; overflow-wrap: anywhere; }
 .hist-text { white-space: pre-wrap; word-break: break-word; font-size: var(--font-label); }
 .msg-icon .icon { width: var(--icon-inline); height: var(--icon-inline); color: var(--muted); }
-/* Voice-note play/stop control (#86): a tappable inline pill. */
+/* Voice-note play/stop control: a tappable inline pill. */
 .voice-play {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; margin-right: 2px;
@@ -574,7 +574,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .voice-play .icon { width: var(--icon-inline); height: var(--icon-inline); }
 .voice-play:active { opacity: 0.7; }
 
-/* On-demand summarize control (#86): a small pill under a long message, with
+/* On-demand summarize control: a small pill under a long message, with
    the returned summary in a muted block beneath it. */
 .msg-summary-wrap { margin-top: 6px; }
 .summarize-action, .task-export-action {
@@ -607,7 +607,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .summary-speech-action:active { opacity: 0.7; }
 
-/* Send-to-Task-OS control (#307): same pill styling as Summarize, its own
+/* Send-to-Task-OS control: same pill styling as Summarize, its own
    wrapper so the two sit stacked with consistent spacing. */
 .msg-task-export-wrap { margin-top: 6px; }
 
@@ -664,8 +664,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   font-size: var(--font-caption);
 }
 
-/* ============================================================ execution (#11) */
-/* Traffic card's paired Run-now buttons sit side by side (#164). */
+/* ================================================================== execution */
+/* Traffic card's paired Run-now buttons sit side by side. */
 
 .exec-dry-opts { display: flex; gap: var(--space-sm); align-items: center; margin: 0 0 12px; }
 .exec-dry-opts .segmented { flex: 1; }
@@ -773,7 +773,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .source-funnel-values { margin: 0; color: var(--muted); font-size: var(--font-caption); }
 .source-summary-row + .source-summary-row { border-top: 1px solid var(--line-muted); padding-top: 10px; }
 
-/* Reconnect / re-pair panel: shown under the pill when the source is down (#29). */
+/* Reconnect / re-pair panel: shown under the pill when the source is down. */
 .exec-reconnect {
   display: flex;
   flex-direction: column;
@@ -797,7 +797,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-radius: var(--radius-md);
 }
 
-/* Recent-syncs list: one lean line each — when · +msgs/+chats · source (#31). */
+/* Recent-syncs list: one lean line each — when · +msgs/+chats · source. */
 .exec-syncs { gap: 0; margin: 0; padding: 0; max-height: 195px; overflow-y: auto; }
 .exec-sync-li {
   display: flex;
@@ -811,8 +811,8 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .exec-sync-delta { flex: 1; min-width: 0; font-size: var(--font-label); color: var(--ink); }
 .exec-sync-src { flex: none; }
 
-/* ============================================================ audit (#12) */
-/* ============================================================ activity (#373) */
+/* ================================================================== audit */
+/* =================================================================== activity */
 /* Run and Audit merged into one list. Day groups sit under an overline over a
    full-bleed vendored action-list card; the scope is the vendored segmented
    control; the open run is a sheet on a phone and a right-hand pane on a wide
@@ -901,7 +901,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--danger-text);
 }
 
-/* Cross-run filtered review (#194): a bounded flat list in its own sheet.
+/* Cross-run filtered review: a bounded flat list in its own sheet.
    Each whole row is one >=60px drill-through target; entries use dividers,
    never nested cards, per the fleet list-row contract. */
 #auditFilteredDays { margin-bottom: 12px; }
@@ -939,7 +939,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Run detail: header + funnel (reuses .exec-funnel) + per-chat trace blocks. */
 .audit-traces { display: flex; flex-direction: column; gap: var(--space-sm); }
 .audit-trace { margin: 0; }
-/* Travel-block sweep group (#276): the wrapper is a single item in
+/* Travel-block sweep group: the wrapper is a single item in
    `.audit-traces`' flex column, so it restates the same stack for its own
    fields. Layout only — no colour of its own. */
 .audit-travel { display: flex; flex-direction: column; gap: var(--space-sm); }
@@ -956,7 +956,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--muted);
 }
 .audit-pre { max-height: 240px; margin: 0; white-space: pre-wrap; word-break: break-word; }
-/* Why the dump is not the whole record (#285). Existing tokens only — this is
+/* Why the dump is not the whole record. Existing tokens only — this is
    an explanatory footnote, not a status, so it takes --muted like every other
    secondary line on the tab rather than a warning colour it has not earned. */
 .audit-redaction-note {
@@ -966,7 +966,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   overflow-wrap: anywhere;
 }
 
-/* Per-message trace breakdown (#12). */
+/* Per-message trace breakdown. */
 .audit-msg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .audit-msg {
   border: 1px solid var(--line);
@@ -996,12 +996,12 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .page-foot p { margin: 2px 0; }
 
-/* ------------------------------------ inset groups + editing sheets (#376)
-   Family's and Settings' (#377) shape: the run-group overline over an
+/* ------------------------------------ inset groups + editing sheets
+   Family's and Settings' shape: the run-group overline over an
    action-list card whose rows read glyph + label + current value + chevron at
    the 52px row height; a row that edits something opens a sheet
    (edit-sheet.js). Two-line rows keep the action-row meta line. App-side
-   until the design-system write-back (#370). */
+   until the design-system write-back. */
 .inset-row .action-row-main {
   flex-direction: row;
   align-items: center;
@@ -1071,7 +1071,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .detail-actions[hidden] { display: none; }
 
-/* ----------------------------------------------------------- Family (#160)
+/* ----------------------------------------------------------- Family
    Layout only — colours/typography come from the shared tokens + .toggle /
    button-tint / .muted classes, so this stays theme-aware with no new tokens. */
 /* The travel sheet's sweep controls: outside the draft, so set apart from it. */
@@ -1092,7 +1092,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 .family-rules dt,
 .family-rules dd { margin: 0; }
-/* Missing-credential notices (#209): the leading glyph stays in inline flow so
+/* Missing-credential notices: the leading glyph stays in inline flow so
    the copy wraps naturally under it on a phone — a flex row would centre the
    icon against the whole wrapped block. */
 .family-warn .icon {
@@ -1101,7 +1101,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   margin-right: var(--space-xs);
 }
 
-/* Editable schedule (#167): field-group headings, one childcare-window block
+/* Editable schedule: field-group headings, one childcare-window block
    per row, and a weekday multi-select rendered as a chip row. */
 .field-label {
   margin: var(--space-md) 0 4px;
@@ -1113,7 +1113,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Flat repeating-row list (list-row contract, design.md): each window is
    section content in the vertical flow, not a nested canvas-subtle card —
    separated by a top hairline on every row after the first, same language as
-   .family-control-row above (#187, fixing #175's nested-card regression). */
+   .family-control-row above. */
 .family-windows { display: flex; flex-direction: column; }
 .family-window { padding: var(--space-sm) 0; }
 .family-window + .family-window { border-top: 1px solid var(--line-muted); }
@@ -1122,7 +1122,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 /* Start/End: always a constrained two-column grid (never the adaptive
    .cfg-fields single-column collapse) so the pair stays compact; minmax(0, 1fr)
    plus min-width:0 on the label wrapper stops a wide native time control from
-   forcing the track past the viewport at 390px (#187). */
+   forcing the track past the viewport at 390px. */
 .family-window-times {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1150,7 +1150,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-color: var(--accent-border-strong);
 }
 
-/* ------------------------------------------------- travel blocks (#268)
+/* ------------------------------------------------- travel blocks
    Layout + the three status roles only — every colour is an existing token
    (--on / --deficit / --attention / --muted), so both themes follow for free. */
 
@@ -1213,7 +1213,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   border-style: dashed;
 }
 
-/* Sweep run controls (#276): the paired rehearse/live buttons sit side by side
+/* Sweep run controls: the paired rehearse/live buttons sit side by side
    (the `.exec-traffic-actions` shape), with the run's status line under them.
    Colour comes from the vendored button tiers and the existing status tokens — nothing new. */
 .tb-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }

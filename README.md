@@ -168,12 +168,13 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m mypy src app
 .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate   # no new duplicate block or unused import/variable
 .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate     # README under 40 KiB, no new history marker in README or docs
+.\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate  # no new issue reference in a code comment
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
 
 
-Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static ratchet, design capture and CI: [`docs/verification.md`](docs/verification.md).
+Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs and comment ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
 
 ## Repository Status
 

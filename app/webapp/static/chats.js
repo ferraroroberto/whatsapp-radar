@@ -1,4 +1,4 @@
-/* Inbox (#61, #375): inspect and monitor WhatsApp and Gmail channels.
+/* Inbox: inspect and monitor WhatsApp and Gmail channels.
  *
  * One scope switch (Monitored | Ignored | All) and one filter field (a name
  * search with the source as a chip inside it); "All" is capped at
@@ -33,7 +33,7 @@ function iconMark(name) {
 
 const HISTORY_PAGE = 30;
 
-// Past this many characters a message is worth an on-demand hub summary (#86):
+// Past this many characters a message is worth an on-demand hub summary:
 // the Summarize control shows in the overlay and POSTs to the hub's Haiku. Keep
 // in sync with _SUMMARIZE_MIN_CHARS in app/webapp/routers/chats.py (the server
 // re-checks). Applies to long transcribed voice notes and long typed messages alike.
@@ -49,15 +49,15 @@ function chatLabel(c) {
 // Link role (derived, not stored): a chat is a CHILD when it points at a parent,
 // a PARENT when other chats point at it, else STANDALONE. Depth is capped at 1,
 // so a chat is never both. Children are hidden from the list and folded into the
-// parent's family review (#25).
+// parent's family review.
 function isChild(c) {
   return c.parent_chat_id != null;
 }
 
-// What a row represents (#166): with the Gmail source filter active a row is a
+// What a row represents: with the Gmail source filter active a row is a
 // sender (email address), not a WhatsApp "channel" — this is the one wording
 // difference that survives; the monitored/ignored vocabulary itself is shared
-// across sources (#182).
+// across sources.
 function gmailFilterActive() {
   return state.chatsSourceFilter === 'gmail';
 }
@@ -105,7 +105,7 @@ function visibleChats() {
   const q = state.chatsSearch.trim().toLowerCase();
   return state.chats.filter(function (c) {
     // Linked children never appear as their own row — they are folded into the
-    // parent and managed from the parent's overlay (#25).
+    // parent and managed from the parent's overlay.
     if (isChild(c)) return false;
     // Two states that matter: monitored, or not. A chat is "ignored" by default
     // (never-touched 'discovered' chats included), so the Ignored bucket is
@@ -117,7 +117,7 @@ function visibleChats() {
   });
 }
 
-// Inbox's header line (#374): chats worth a look, else how many are watched.
+// Inbox's header line: chats worth a look, else how many are watched.
 function renderHeader() {
   const worth = state.tripwire.hits.length;
   if (worth) {
@@ -139,8 +139,8 @@ function render() {
   els.chatsList.textContent = '';
   els.chatsEmpty.hidden = all.length > 0;
 
-  // The count shows only while the search or the source chip narrows the list
-  // (#375); the header line carries the monitored count otherwise.
+  // The count shows only while the search or the source chip narrows the list;
+  // the header line carries the monitored count otherwise.
   const narrowed = !!state.chatsSearch.trim() || state.chatsSourceFilter !== 'all';
   let count = '';
   if (narrowed) {
@@ -156,7 +156,7 @@ function render() {
 }
 
 // One action-row avatar: the chat's initial, with its source as a small mark
-// in the corner (#375; the outlined source pill left the row).
+// in the corner.
 function avatar(label, source) {
   const span = document.createElement('span');
   span.className = 'action-row-avatar chat-avatar';
@@ -209,7 +209,7 @@ function renderTripwire() {
     return;
   }
   // The scope note sits behind the section header's tooltip and in the chat
-  // sheet, not as a permanent line (#375).
+  // sheet, not as a permanent line.
   els.tripwireTitle.title = tripwireScopeNote();
 
   for (const hit of hits) {
@@ -243,14 +243,14 @@ function renderTripwire() {
 
 // Monitored, or not; Gmail still demotes to 'discovered' internally (so the
 // 30-day discovery window and retention exemptions keep applying), never
-// 'ignored' — only the UI-facing label is shared with WhatsApp (#182).
+// 'ignored' — only the UI-facing label is shared with WhatsApp.
 function demoteTo(c) { return c.source === 'gmail' ? 'discovered' : 'ignored'; }
 
 function toggleWatch(c) {
   setStatus(c, c.status === 'monitored' ? demoteTo(c) : 'monitored');
 }
 
-// One chat row (vendored action-row, #375): avatar, name, and one muted line of
+// One chat row (vendored action-row): avatar, name, and one muted line of
 // relative time (kept outside the ellipsis) plus the preview, which is cut.
 function row(c) {
   // The watch toggle: a plain icon button, accent (pressed) when monitored.
@@ -335,7 +335,7 @@ function histMsg(m) {
   text.className = 'hist-text';
   if (m.type === 'voice') {
     // A mic glyph marks a voice note; once transcribed, m.text *is* the
-    // transcript (#36). With retained audio (#86) the marker becomes a
+    // transcript. With retained audio the marker becomes a
     // tap-to-play/stop control.
     if (m.has_audio) {
       text.append(voicePlayer(m.id), document.createTextNode(' ' + voiceText(m)));
@@ -354,14 +354,14 @@ function histMsg(m) {
     item.append(thread);
   }
   // A long message (long voice-note transcript or long typed message) gets an
-  // on-demand Summarize control wired to the hub (#86). The server reads the same
-  // messages.text, so gate on m.text length here too. m.summary (#157) is any
+  // on-demand Summarize control wired to the hub. The server reads the same
+  // messages.text, so gate on m.text length here too. m.summary is any
   // summary already persisted for this message, so a reopened overlay renders it
   // straight from the history payload with no extra round trip.
   if (m.text && m.text.length >= SUMMARIZE_MIN_CHARS) {
     item.append(summarizeControl(m.id, m.summary));
   }
-  // Any message with text can be sent to task-os as an Inbox task (#307) — no
+  // Any message with text can be sent to task-os as an Inbox task — no
   // length gate, unlike Summarize (which only pays for a hub call past
   // SUMMARIZE_MIN_CHARS). m.task_exported_at (already-sent state) rides the
   // same history payload as m.summary does, for the same reopened-overlay reason.
@@ -372,8 +372,8 @@ function histMsg(m) {
 }
 
 // An on-demand "Summarize" control for one long message. Tapping it POSTs to the
-// hub-backed summarize endpoint (a cheap read-through once a summary is stored,
-// #157) and renders the returned summary inline beneath the message. A summary
+// hub-backed summarize endpoint (a cheap read-through once a summary is stored)
+// and renders the returned summary inline beneath the message. A summary
 // already present in the history payload (existingSummary) pre-populates the
 // panel with no fetch at all; otherwise the result is cached on first fetch so a
 // second tap just re-shows it (toggling visibility) rather than dialling the hub
@@ -446,7 +446,7 @@ function summarizeControl(id, existingSummary) {
   return wrap;
 }
 
-// A "Send to Task-OS" control for one message (#307). Tapping it POSTs to the
+// A "Send to Task-OS" control for one message. Tapping it POSTs to the
 // task-export endpoint, which persists an export timestamp server-side the
 // first time it succeeds — so an already-exported message (existingExportedAt,
 // from the history payload, or the endpoint's own response) renders as a
@@ -546,8 +546,8 @@ function appendPage(msgs) {
   if (msgs.length) { hist.oldestTs = msgs[0].ts; hist.oldestId = msgs[0].id; }
 }
 
-// The sheet's subtitle (#375): source, message count and monitoring state, and
-// for a Gmail sender the address (filter parity, #166: whose mail this is).
+// The sheet's subtitle: source, message count and monitoring state, and
+// for a Gmail sender the address (whose mail this is).
 function renderSheetHeader(chat) {
   els.historyTitle.textContent = chatLabel(chat);
   fillAvatar(els.historyAvatar, chatLabel(chat), chat.source);
@@ -557,7 +557,7 @@ function renderSheetHeader(chat) {
   const senderAddress = gmailSenderAddress(chat);
   if (senderAddress) bits.push(senderAddress);
   els.historySubtitle.textContent = bits.join(' · ');
-  // A chat the tripwire flagged says why, with the scan's scope (#375).
+  // A chat the tripwire flagged says why, with the scan's scope.
   const hit = tripwireHit(chat.id);
   els.historyTripwire.hidden = !hit;
   els.historyTripwire.textContent = hit
@@ -566,7 +566,7 @@ function renderSheetHeader(chat) {
 }
 
 // A phone opens the chat as a sheet; a wide pointer screen (design.md
-// layout.wide) shows it in the right-hand pane beside the list (#375).
+// layout.wide) shows it in the right-hand pane beside the list.
 const WIDE = window.matchMedia('(min-width: 1100px) and (pointer: fine)');
 
 function placeSheet() {
@@ -656,7 +656,7 @@ function closeHistory() {
   }
 }
 
-// The sheet's one labelled menu (#375; vendored row-menu): Rename…, Link
+// The sheet's one labelled menu (vendored row-menu): Rename…, Link
 // chats… with the linked count, and the monitor toggle.
 const sheetMenu = createRowMenu({ className: 'history-menu-list' });
 
@@ -683,7 +683,7 @@ function wireSheetMenu() {
 }
 
 // ------------------------------------------------------- link management
-// Extracted to chat-links.js (#240): the link/unlink/re-parent picker and the
+// Lives in chat-links.js: the link/unlink/re-parent picker and the
 // rename (alias) control. This section keeps only what genuinely belongs to
 // chats.js — the post-mutation refresh and the `deps` chat-links.js is wired
 // with, since both need chats.js-owned state (`hist`, `render`, `fetchChats`).
@@ -735,8 +735,8 @@ export function wireChats() {
   els.historyOverlay.addEventListener('close', function () {
     if (!WIDE.matches) onHistoryClosed();
   });
-  // Link/rename controls + the parent-picker overlay (#25) are chat-links.js's
-  // own feature (#240) — one call wires everything it owns.
+  // Link/rename controls + the parent-picker overlay are chat-links.js's
+  // own feature — one call wires everything it owns.
   wireChatLinks();
   wireSheetMenu();
   WIDE.addEventListener('change', function () { if (hist.chat) placeSheet(); });

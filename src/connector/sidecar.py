@@ -53,6 +53,15 @@ STATE_STALE = "stale"
 STATE_CONNECTING = "connecting"
 STATE_RUNNING = "running"
 
+# How long an unattended preflight relaunch waits for the sidecar's heartbeat to read
+# live. A stated budget, not a measurement: a resumed paired session reconnects and
+# rewrites status.json well inside the 30 s heartbeat period, so 25 s is slack under it.
+# A session that outlasts it is reported in its current state and the next preflight
+# retries, so raising the value only delays that report.
+RELAUNCH_WAIT_SECONDS = 25.0
+# Heartbeat poll cadence while waiting: each poll is a cheap local status.json read.
+RELAUNCH_POLL_SECONDS = 1.0
+
 # A process spawner with Popen's shape; injected in tests so nothing is launched.
 Spawner = Callable[..., "subprocess.Popen[bytes]"]
 
@@ -285,8 +294,8 @@ def ensure_running(
     sidecar_root: Path | None = None,
     node_bin: str | None = None,
     spawner: Spawner | None = None,
-    wait_seconds: float = 25.0,
-    poll_interval: float = 1.0,
+    wait_seconds: float = RELAUNCH_WAIT_SECONDS,
+    poll_interval: float = RELAUNCH_POLL_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> SidecarStateInfo:

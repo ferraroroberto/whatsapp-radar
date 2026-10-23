@@ -43,6 +43,11 @@ from src.webapp_config import append_auth_token, load_webapp_config
 
 logger = logging.getLogger(__name__)
 
+# Bound on each `tailscale` CLI call the tray makes (`status`, `ip`). A stated guess:
+# these are local IPC to tailscaled and normally return in well under a second, so 12 s
+# tolerates a busy daemon without letting a wedged one freeze tray startup.
+TAILSCALE_CLI_TIMEOUT_SECONDS = 12
+
 TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 
 
@@ -99,7 +104,7 @@ def _run_tailscale(binary: str, args: list[str]) -> subprocess.CompletedProcess[
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
-        timeout=12,
+        timeout=TAILSCALE_CLI_TIMEOUT_SECONDS,
         check=False,
         creationflags=NO_WINDOW,
     )

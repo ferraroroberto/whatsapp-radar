@@ -35,7 +35,7 @@ def _stage(root: Path) -> None:
 
 @pytest.fixture
 def sandbox(tmp_path: Path) -> tuple[Path, Path]:
-    """A baselined throwaway repo: returns (the copied script, a 6-line module over the 5-line limit)."""
+    """A baselined throwaway repo: (the copied script, a 6-line module over the 5-line limit)."""
     assert GIT, "git is a prerequisite of the structure ratchet"
     for folder in ("app", "src", "tests", "scripts"):
         (tmp_path / folder).mkdir()

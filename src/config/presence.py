@@ -47,6 +47,7 @@ class PresenceConfig:
 
 
 def parse(raw: dict[str, Any]) -> PresenceConfig:
+    defaults = PresenceConfig()
     aliases: dict[str, tuple[str, ...]] = {}
     for person, names in (raw.get("person_aliases") or {}).items():
         key = str(person).strip().lower()
@@ -57,13 +58,17 @@ def parse(raw: dict[str, Any]) -> PresenceConfig:
         if cleaned:
             aliases[key] = cleaned
     return PresenceConfig(
-        enabled=_as_bool(os.environ.get("WR_PRESENCE_ENABLED"), raw.get("enabled", False)),
-        base_url=os.environ.get(
-            "WR_PRESENCE_BASE_URL", str(raw.get("base_url", "http://127.0.0.1:8447"))
+        enabled=_as_bool(
+            os.environ.get("WR_PRESENCE_ENABLED"), raw.get("enabled", defaults.enabled)
         ),
-        verify_tls=_as_bool(os.environ.get("WR_PRESENCE_VERIFY_TLS"), raw.get("verify_tls", True)),
-        max_age_min=int(raw.get("max_age_min", 5)),
-        timeout_s=float(raw.get("timeout_s", 6.0)),
-        refresh_timeout_s=float(raw.get("refresh_timeout_s", 12.0)),
+        base_url=os.environ.get(
+            "WR_PRESENCE_BASE_URL", str(raw.get("base_url", defaults.base_url))
+        ),
+        verify_tls=_as_bool(
+            os.environ.get("WR_PRESENCE_VERIFY_TLS"), raw.get("verify_tls", defaults.verify_tls)
+        ),
+        max_age_min=int(raw.get("max_age_min", defaults.max_age_min)),
+        timeout_s=float(raw.get("timeout_s", defaults.timeout_s)),
+        refresh_timeout_s=float(raw.get("refresh_timeout_s", defaults.refresh_timeout_s)),
         person_aliases=aliases,
     )

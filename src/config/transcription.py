@@ -62,28 +62,39 @@ class TranscriptionConfig:
 
 
 def parse(raw: dict[str, Any]) -> TranscriptionConfig:
+    defaults = TranscriptionConfig()
     return TranscriptionConfig(
-        enabled=_as_bool(os.environ.get("WR_TRANSCRIPTION_ENABLED"), raw.get("enabled", False)),
+        enabled=_as_bool(
+            os.environ.get("WR_TRANSCRIPTION_ENABLED"), raw.get("enabled", defaults.enabled)
+        ),
         window_days=int(
-            os.environ.get("WR_TRANSCRIPTION_WINDOW_DAYS", raw.get("window_days", 7))
+            os.environ.get(
+                "WR_TRANSCRIPTION_WINDOW_DAYS", raw.get("window_days", defaults.window_days)
+            )
         ),
         failed_retry_days=int(
             os.environ.get(
-                "WR_TRANSCRIPTION_FAILED_RETRY_DAYS", raw.get("failed_retry_days", 30)
+                "WR_TRANSCRIPTION_FAILED_RETRY_DAYS",
+                raw.get("failed_retry_days", defaults.failed_retry_days),
             )
         ),
         audio_base_url=os.environ.get(
             "WR_TRANSCRIPTION_AUDIO_BASE_URL",
-            raw.get("audio_base_url", "http://127.0.0.1:8000"),
+            raw.get("audio_base_url", defaults.audio_base_url),
         ),
-        model=os.environ.get("WR_TRANSCRIPTION_MODEL", raw.get("model", "whisper-vanilla")),
-        language=os.environ.get("WR_TRANSCRIPTION_LANGUAGE", raw.get("language", "auto")),
+        model=os.environ.get("WR_TRANSCRIPTION_MODEL", raw.get("model", defaults.model)),
+        language=os.environ.get(
+            "WR_TRANSCRIPTION_LANGUAGE", raw.get("language", defaults.language)
+        ),
         timeout_seconds=float(
-            os.environ.get("WR_TRANSCRIPTION_TIMEOUT", raw.get("timeout_seconds", 120.0))
+            os.environ.get(
+                "WR_TRANSCRIPTION_TIMEOUT", raw.get("timeout_seconds", defaults.timeout_seconds)
+            )
         ),
         audio_retention_days=int(
             os.environ.get(
-                "WR_TRANSCRIPTION_RETAIN_DAYS", raw.get("audio_retention_days", 7)
+                "WR_TRANSCRIPTION_RETAIN_DAYS",
+                raw.get("audio_retention_days", defaults.audio_retention_days),
             )
         ),
     )

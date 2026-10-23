@@ -50,23 +50,24 @@ class CalendarConfig:
 
 
 def parse(raw: dict[str, Any], root: Path) -> CalendarConfig:
+    defaults = CalendarConfig()
     creds = Path(
         os.environ.get(
             "WR_CALENDAR_CREDENTIALS_PATH",
-            raw.get("credentials_path", "auth/calendar/credentials.json"),
+            raw.get("credentials_path", defaults.credentials_path),
         )
     )
     if not creds.is_absolute():
         creds = root / creds
     token = Path(
-        os.environ.get("WR_CALENDAR_TOKEN_PATH", raw.get("token_path", "auth/calendar/token.json"))
+        os.environ.get("WR_CALENDAR_TOKEN_PATH", raw.get("token_path", defaults.token_path))
     )
     if not token.is_absolute():
         token = root / token
     write_token = Path(
         os.environ.get(
             "WR_CALENDAR_WRITE_TOKEN_PATH",
-            raw.get("write_token_path", "auth/calendar/write_token.json"),
+            raw.get("write_token_path", defaults.write_token_path),
         )
     )
     if not write_token.is_absolute():

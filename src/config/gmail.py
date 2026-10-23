@@ -51,16 +51,17 @@ class GmailConfig:
 
 
 def parse(raw: dict[str, Any], root: Path) -> GmailConfig:
+    defaults = GmailConfig()
     credentials = Path(
         os.environ.get(
             "WR_GMAIL_CREDENTIALS_PATH",
-            raw.get("credentials_path", "auth/gmail/credentials.json"),
+            raw.get("credentials_path", defaults.credentials_path),
         )
     )
     if not credentials.is_absolute():
         credentials = root / credentials
     token = Path(
-        os.environ.get("WR_GMAIL_TOKEN_PATH", raw.get("token_path", "auth/gmail/token.json"))
+        os.environ.get("WR_GMAIL_TOKEN_PATH", raw.get("token_path", defaults.token_path))
     )
     if not token.is_absolute():
         token = root / token
@@ -68,15 +69,20 @@ def parse(raw: dict[str, Any], root: Path) -> GmailConfig:
         credentials_path=credentials,
         token_path=token,
         discovery_days=int(
-            os.environ.get("WR_GMAIL_DISCOVERY_DAYS", raw.get("discovery_days", 30))
+            os.environ.get(
+                "WR_GMAIL_DISCOVERY_DAYS", raw.get("discovery_days", defaults.discovery_days)
+            )
         ),
         discovery_max_messages=int(
             os.environ.get(
-                "WR_GMAIL_DISCOVERY_MAX_MESSAGES", raw.get("discovery_max_messages", 400)
+                "WR_GMAIL_DISCOVERY_MAX_MESSAGES",
+                raw.get("discovery_max_messages", defaults.discovery_max_messages),
             )
         ),
         retention_days=int(
-            os.environ.get("WR_GMAIL_RETENTION_DAYS", raw.get("retention_days", 30))
+            os.environ.get(
+                "WR_GMAIL_RETENTION_DAYS", raw.get("retention_days", defaults.retention_days)
+            )
         ),
         senders=tuple(
             GmailSender(

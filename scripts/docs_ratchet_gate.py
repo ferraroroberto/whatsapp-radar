@@ -23,7 +23,6 @@ from scripts.static_ratchet_gate import (
     EXIT_CONFIG,
     EXIT_NEW,
     EXIT_NOT_CONFIRMED,
-    EXIT_PASS,
     REPO_ROOT,
     run_ratchet,
 )
@@ -36,13 +35,6 @@ _FAIL_LABELS = {
     EXIT_CONFIG: "bad [docs_ratchet] table, baseline or arguments",
     EXIT_NOT_CONFIRMED: "NOT CONFIRMED -- the docs could not be scanned, so nothing was checked",
 }
-
-
-def classify_exit(code: int) -> tuple[bool, str]:
-    """`(ok, label)` for one script exit code. Only 0 passes."""
-    if code == EXIT_PASS:
-        return True, _PASS_LABEL
-    return False, _FAIL_LABELS.get(code, f"unexpected exit {code}")
 
 
 def run(script: Path = SCRIPT) -> int:

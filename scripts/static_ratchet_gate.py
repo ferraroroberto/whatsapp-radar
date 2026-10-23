@@ -39,11 +39,15 @@ _FAIL_LABELS = {
 }
 
 
-def classify_exit(code: int) -> tuple[bool, str]:
-    """`(ok, label)` for one script exit code. Only 0 passes."""
+def classify_exit(
+    code: int, pass_label: str, fail_labels: dict[int, str]
+) -> tuple[bool, str]:
+    """`(ok, label)` for one script exit code. Only 0 passes.
+
+    Shared with `scripts.docs_ratchet_gate`: each gate supplies its own labels."""
     if code == EXIT_PASS:
-        return True, _PASS_LABEL
-    return False, _FAIL_LABELS.get(code, f"unexpected exit {code}")
+        return True, pass_label
+    return False, fail_labels.get(code, f"unexpected exit {code}")
 
 
 def run_ratchet(
@@ -68,10 +72,7 @@ def run_ratchet(
         code, output = EXIT_NOT_CONFIRMED, f"{script.name} could not start: {exc}\n"
     if output:
         sys.stdout.write(output if output.endswith("\n") else output + "\n")
-    if code == EXIT_PASS:
-        ok, label = True, pass_label
-    else:
-        ok, label = False, fail_labels.get(code, f"unexpected exit {code}")
+    ok, label = classify_exit(code, pass_label, fail_labels)
     print(f"{'OK' if ok else 'FAIL'}: {name}: {label}")
     return 0 if ok else 1
 

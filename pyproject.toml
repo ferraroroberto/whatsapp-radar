@@ -44,7 +44,6 @@ module = [
     "pystray.*",
     "PIL.*",
     "yaml",
-    "psutil",
     "winotify",
     "requests.*",
     "urllib3.*",

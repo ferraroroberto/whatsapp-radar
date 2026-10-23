@@ -4,12 +4,12 @@ Per-chat analysis used to have two implementations — this module's own
 ``review_monitored_chats`` loop (the ``wr review`` verb) and
 :mod:`src.analysis.pipeline`'s traced ``scan`` loop (the ``wr scan`` verb) — that
 had drifted apart (no trace, no reminders, estimated LLM-call counts). The verb
-is now ``scan(mode="process")``; this module keeps only the pieces both the
-``live``/``dry_run``/``process`` modes and ``CascadeClassifier``-style callers
-share: the cursor-advance invariant (advance ONLY after the analysis row is
-committed, never on a contract failure, so a bad run safely retries the same
-delta), the Stage-2-offline abort, the recent-alert prompt memory, and the
-transcription hold-back gate.
+is now ``scan(mode="process")``; this module keeps only the pieces the
+``live``/``dry_run``/``process`` modes share: the cursor-advance invariant
+(advance ONLY after the analysis row is committed, never on a contract failure,
+so a bad run safely retries the same delta), the Stage-2-offline abort, the
+recent-alert prompt memory, and
+the transcription hold-back gate.
 """
 
 from __future__ import annotations

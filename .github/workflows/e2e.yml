@@ -5,8 +5,8 @@
 # the contract — this workflow is supplementary and adapts to the script, never
 # the reverse.
 #
-# windows-2025 is mandatory: this is a Windows-targeted app (winotify, pystray,
-# psutil port reclaim) and `verify-before-ship.ps1` hard-requires
+# windows-2025 is mandatory: this is a Windows-targeted app (winotify, pystray)
+# and `verify-before-ship.ps1` hard-requires
 # `.venv\Scripts\python.exe`, so the workflow creates `.venv` and installs into
 # it — the script is untouched. Pinned explicitly because `windows-latest` is
 # being redirected to windows-2025 and shouldn't drift under us.

@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from scripts import docs_ratchet_gate as gate
+from scripts import static_ratchet_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REAL_SCRIPT = REPO_ROOT / "scripts" / "docs_ratchet.py"
@@ -31,10 +32,14 @@ def _exit_with(tmp_path: Path, code: int) -> Path:
     return script
 
 
+def _classify(code: int) -> tuple[bool, str]:
+    return static_ratchet_gate.classify_exit(code, gate._PASS_LABEL, gate._FAIL_LABELS)
+
+
 def test_only_exit_zero_passes_and_three_is_not_confirmed() -> None:
-    assert gate.classify_exit(0)[0] is True
-    assert all(not gate.classify_exit(code)[0] for code in (1, 2, 3, 4, -1))
-    label = gate.classify_exit(3)[1]
+    assert _classify(0)[0] is True
+    assert all(not _classify(code)[0] for code in (1, 2, 3, 4, -1))
+    label = _classify(3)[1]
     assert "NOT CONFIRMED" in label
     assert "skip" not in label.lower()
 

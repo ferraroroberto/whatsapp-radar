@@ -18,10 +18,10 @@ Routes (split across ``app/webapp/routers/``, one module per area):
     /api/audit/*                    → per-run trace drill-down       (audit)
     /api/sidecar/*                  → WhatsApp connection state/QR   (sidecar)
 
-The app is a single tabbed SPA with five tabs — Dashboard (which also hosts the
-pending follow-ups), Messages, Execution, Audit, Family; Settings is a modal,
-not a tab. The sidecar routes back the Execution health pill's relaunch /
-re-pair affordances.
+The app is a single tabbed SPA with four tabs — Home, Activity, Inbox (the
+messages), Family; Settings is a modal, not a tab, and follow-ups are
+Telegram-only. The sidecar routes back the WhatsApp source sheet's relaunch /
+re-pair affordances in Settings.
 """
 
 from __future__ import annotations

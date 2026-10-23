@@ -1,4 +1,4 @@
-"""Sidecar control (#29): see the WhatsApp connection state, relaunch it, re-pair.
+"""Sidecar control: see the WhatsApp connection state, relaunch it, re-pair.
 
 The phone-first counterpart to the CLI preflight. The WhatsApp source sheet in
 Settings reads :func:`sidecar_status` for the connection state and, when the

@@ -1,4 +1,4 @@
-/* Settings (#337, #377): the home-head gear's dialog on every pane, never a
+/* Settings: the home-head gear's dialog on every pane, never a
  * tab, laid out as inset groups like Family: Display, Sources, How messages
  * are judged, Alerts, Maintenance, This install. Each row shows its current
  * value and opens a sheet (edit-sheet.js) holding the real control at 44px.
@@ -300,7 +300,7 @@ export function openPasskeys() {
 }
 
 // ------------------------------------------------------------ settings view
-// The gear opens this dialog on every pane (#337).
+// The gear opens this dialog on every pane.
 function openSettings() {
   if (!els.settingsDialog.open) els.settingsDialog.showModal();
   if (!state.config) fetchConfig().catch(function () {});

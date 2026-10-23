@@ -19,7 +19,7 @@ class HubConfig:
     # whole-history scan so a single request can't blow the model's context.
     max_prompt_chars: int = 24000
     # How many days of already-surfaced actionable alerts to feed Stage 2 as
-    # short-term memory, so a repeated to-do isn't re-alerted every run (#66).
+    # short-term memory, so a repeated to-do isn't re-alerted every run.
     recent_alert_days: int = 7
 
 

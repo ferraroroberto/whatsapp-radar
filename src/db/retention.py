@@ -1,4 +1,4 @@
-"""Gmail sender-level retention (#166): bound the store for unmonitored senders.
+"""Gmail sender-level retention: bound the store for unmonitored senders.
 
 Sender discovery lists every Gmail sender active in the last N days, which would
 grow the store without bound. Retention keeps it bounded: messages from
@@ -56,7 +56,7 @@ def prune_gmail_unmonitored(
     cutoff = ((now or datetime.now(UTC)) - timedelta(days=retention_days)).isoformat()
     # A sender that was monitored and later demoted still holds a review cursor whose
     # ``last_processed_message_id`` REFERENCES messages(id) with no ON DELETE clause, so
-    # deleting that message would raise an FK error (#348). Drop only the cursors that
+    # deleting that message would raise an FK error. Drop only the cursors that
     # point at a message about to be pruned: the sender is unmonitored, and re-monitoring
     # it re-baselines past the backlog (``baseline_cursor``) like any first-monitored chat.
     conn.execute(

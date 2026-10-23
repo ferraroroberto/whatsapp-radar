@@ -15,7 +15,7 @@ Three modes:
 - **dry_run:** no connector; replay messages already in SQLite (optionally
   windowed to the last ``days``), ignoring the cursor. Advance no cursor and
   deliver nothing, but still build the would-be digest and record the full trace.
-- **process:** the ``wr review`` verb (#394) — no connector, no sync: analyze
+- **process:** the ``wr review`` verb — no connector, no sync: analyze
   monitored deltas since each cursor exactly as ``live`` does (same Stage 1/2
   gate, same trace, same reminder creation, same cursor advance), skipping only
   the sync/transcription/tripwire phases a live scan owns. ``deliver=False``
@@ -106,9 +106,8 @@ class ScanOutcome:
     chats_with_delta: int = 0
     # Total messages across every chat whose delta was *successfully* recorded
     # this run — Stage 1 reject or Stage 2 success, never a contract error or an
-    # aborted chat. A finer grain than ``chats_with_delta`` (#394: the
-    # ``process`` verb's own counter, folded in so it stays available for
-    # every mode).
+    # aborted chat. A finer grain than ``chats_with_delta``, available for
+    # every mode.
     messages_processed: int = 0
     transcriptions: int = 0
     stage1_passed: int = 0
@@ -137,7 +136,7 @@ def _messages_record(delta: list[StoredMessage], source: str) -> str:
     Captured at run time (not recomputed on read) so the trace stays faithful to
     the keyword roots that actually ran, even if ``keyword_roots.txt`` changes
     later. The LLM's per-message verdict is *not* stored here — it is derived on
-    read from the parsed result's ``evidence_message_ids`` (issue #12).
+    read from the parsed result's ``evidence_message_ids``.
     """
     records: list[dict[str, Any]] = []
     for message in delta:
@@ -204,7 +203,7 @@ def _advance(
     """Advance the family's per-member cursors after persistence (live + process).
 
     The merged delta spans the head and any linked children; each keeps its own
-    ingestion-id cursor (#37), so advancement is grouped by origin chat rather
+    ingestion-id cursor, so advancement is grouped by origin chat rather
     than a single high-water mark. Dry-run advances nothing — it replays the
     same stored messages on every call, which would otherwise mean the next
     replay never sees them again.
@@ -306,9 +305,9 @@ def _abort_classifier(
     """Finalize a live/dry/process run that aborted because Stage 2 could not reach the hub.
 
     The mirror image of :func:`_abort_offline` at the other end of the pipeline:
-    a source outage already aborts loudly, alerts, and records the run as
-    ``failed``, but a *classifier* outage used to raise straight out of ``scan``
-    and strand the run row at ``status='running'`` (#298). The funnel keeps the
+    a source outage aborts loudly, alerts, and records the run as ``failed``,
+    and a *classifier* outage does the same instead of raising straight out of
+    ``scan`` and stranding the run row at ``status='running'``. The funnel keeps the
     counters earned before the failure — the chats analysed up to that point are
     real work — and every remaining cursor is held. ``chat_id`` names the chat
     whose classify call actually hit the dead hub — 0 only when no chat was
@@ -417,12 +416,12 @@ def scan(
     from ``config.calendar.write_token_path`` the first time it's needed, and only
     when ``config.family.reminder_calendar_id`` is configured — an unset reminder
     calendar or a missing/invalid write token both leave it ``None``, which simply
-    means no routine-prep reminder events are created this run (#218). Reminder
+    means no routine-prep reminder events are created this run. Reminder
     creation happens for ``live`` and ``process`` alike: dry-run replays the same
     messages on every call, which would otherwise mint a fresh duplicate event
     each time.
 
-    ``deliver=False`` is the ``process`` verb's own ``--dry-run`` (#394): the
+    ``deliver=False`` is the ``process`` verb's own ``--dry-run``: the
     digest is still built and traced, but withheld rather than sent. It has no
     effect on ``dry_run`` mode, which already never delivers.
     """
@@ -473,7 +472,7 @@ def scan(
             return _abort_offline(conn, config, outcome, exc, progress)
         # Transcribe downloaded voice notes BEFORE analysis so a voice note is never
         # classified as its "[voice note]" placeholder and the cursor never skips
-        # real content (#36). No-op unless transcription is enabled; failures are
+        # real content. No-op unless transcription is enabled; failures are
         # isolated per note and never block the analysis that follows. Dry-run skips
         # this — it replays stored messages with no network and no side effects.
         tr = run_transcription_phase(conn, config, progress=progress)
@@ -515,7 +514,7 @@ def scan(
                     filtered_delta.append(message)
             delta = filtered_delta
         # Hold the live delta before any voice note still awaiting transcription so
-        # it is never analysed as a placeholder and the cursor never skips it (#36).
+        # it is never analysed as a placeholder and the cursor never skips it.
         # Gated on the feature flag: disabled → voice notes are ordinary messages.
         delta = hold_back_if_transcribing(
             delta, mode != "dry_run" and config.transcription.enabled
@@ -571,7 +570,7 @@ def scan(
         except ClassifierUnavailable as exc:
             # Whole-run condition, not a per-chat one: every remaining chat would
             # hit the same dead hub, so stop once instead of looping through a
-            # timeout per chat (#298).
+            # timeout per chat.
             return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
         if co.llm_called:
             outcome.stage2_llm_calls += 1
@@ -585,7 +584,7 @@ def scan(
             # A budget overrun (stop_reason == 'max_tokens') is recorded as a
             # distinct, self-explanatory state rather than a generic contract
             # error, so a model swap that silently zeroes out classification is
-            # obvious in the trace (issue #17).
+            # obvious in the trace.
             if co.stop_reason == "max_tokens":
                 final_action = "llm_truncated"
                 error = (
@@ -607,7 +606,7 @@ def scan(
         item_id = persist_analysis_result(conn, run_id, chat_id, result)
         outcome.messages_processed += len(delta)
 
-        # Additive only — never touches the Telegram digest path below (#218).
+        # Additive only — never touches the Telegram digest path below.
         # live + process only: dry-run replays the same messages every call, which
         # would otherwise mint a fresh duplicate event each time. The
         # reminder-calendar check guards even an injected client (tests) against

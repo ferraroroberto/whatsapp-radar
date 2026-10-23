@@ -1,8 +1,8 @@
-"""Read-only historical backtest of Gmail school-sender classification (Step 2/5 of #206).
+"""Read-only historical backtest of Gmail school-sender classification.
 
 Fetches an arbitrary past date window of whitelisted school sender/label email and
-runs each message through the live Step-1-extended classification contract
-(``child``/``task_category``/``prep_complexity``, #215) so prompt/contract changes
+runs each message through the live classification contract
+(``child``/``task_category``/``prep_complexity``) so prompt/contract changes
 can be validated against a full year of real historical school email *now*,
 without waiting for new mail. Precedent: ``scripts/gmail_survey.py`` (bounded
 sample survey) and ``scripts/traffic_smoke.py`` (standalone live smoke check).

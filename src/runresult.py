@@ -57,8 +57,8 @@ def strip_result_line(text: str) -> str:
     The sentinel line is how the webapp *parses* a run's structured result
     (:func:`parse_result`) — but it is that whole result payload serialised
     verbatim, including fields (a calendar's id, a travel leg's street
-    address) no operator-facing surface is allowed to paint into the DOM
-    (#292). A caller that needs the structured result reads the untouched log
+    address) no operator-facing surface is allowed to paint into the DOM.
+    A caller that needs the structured result reads the untouched log
     via :func:`parse_result`; this is only for text a human will see.
     """
     lines = text.splitlines()

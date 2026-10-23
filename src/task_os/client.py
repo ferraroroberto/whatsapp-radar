@@ -1,13 +1,13 @@
-"""Export a radar-marked WhatsApp message to task-os's Inbox (#307).
+"""Export a radar-marked WhatsApp message to task-os's Inbox.
 
 One public seam, :func:`export_message`, over task-os's ``POST /api/tasks``
-(task-os#98's "WhatsApp side"). Mirrors ``src/analysis/summarize.py``'s shape —
+(the "WhatsApp side" of task-os's task creation). Mirrors ``src/analysis/summarize.py``'s shape —
 same shared :mod:`src._loopback_http` plumbing (a same-host sibling service, per
 that module's own docstring), same "typed error the router re-raises as its own
 HTTP status" contract — rather than reinventing it.
 
 task-os's ``POST /api/tasks`` does not yet dedupe on ``external_id`` (its own
-``TaskCreate`` model has no such field today, task-os#98) — it is sent anyway so
+``TaskCreate`` model has no such field today) — it is sent anyway so
 a future task-os release picks it up for free with no radar-side change. Until
 then, idempotency is enforced entirely on this side: the router never re-posts a
 message whose ``messages.task_exported_at`` is already set (see
@@ -67,7 +67,7 @@ def build_task_payload(context: TaskExportContext) -> dict[str, Any]:
         "title": build_title(context),
         "description": build_description(context),
         # Forward-compatible: silently ignored by task-os's TaskCreate model
-        # today (extra fields aren't rejected), honoured once task-os#98 lands.
+        # today (extra fields aren't rejected), honoured once task-os adds the field.
         "external_id": context.source_message_id,
         "actor": ACTOR,
     }

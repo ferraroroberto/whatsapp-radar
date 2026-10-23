@@ -22,12 +22,12 @@ class DigestItem:
     deadline: str | None
     confidence: float | None
     evidence_message_ids: list[str]
-    # The model-resolved absolute date 'YYYY-MM-DD' (#71), or None. Rendered with a
+    # The model-resolved absolute date 'YYYY-MM-DD', or None. Rendered with a
     # deterministic today/overdue flag so the human never re-interprets a relative
     # word at reading time. Defaulted so existing call sites stay backward-compatible.
     deadline_date: str | None = None
-    # 'routine' | 'non_routine' | None (#215). A non_routine item additionally
-    # gets a distinct acknowledgeable follow-up in the webapp (#219) — the
+    # 'routine' | 'non_routine' | None. A non_routine item additionally
+    # gets a distinct acknowledgeable follow-up in the webapp — the
     # rendered text says so, so the reader knows a reminder alone isn't enough.
     prep_complexity: str | None = None
 
@@ -65,7 +65,7 @@ class Digest:
 
 
 def _render_deadline_line(item: DigestItem, today: date) -> str | None:
-    """The ``⏰`` line for an item, preferring the resolved absolute date (#71).
+    """The ``⏰`` line for an item, preferring the resolved absolute date.
 
     When ``deadline_date`` parses as an ISO date, render it with a deterministic
     today/overdue/tomorrow/in-N-days flag computed against ``today`` — so a stale
@@ -114,8 +114,8 @@ def render_item(item: DigestItem, *, today: date | None = None) -> str:
     if deadline_line:
         lines.append(deadline_line)
     if item.prep_complexity == "non_routine":
-        # Follow-ups are Telegram-only since #374: the line flags the item, it
-        # no longer sends the reader to an in-app Acknowledge.
+        # Follow-ups are Telegram-only: the line flags the item, it does
+        # not send the reader to an in-app Acknowledge.
         lines.append("  📋 Needs your own follow-up — not a routine reminder")
     return "\n".join(lines)
 

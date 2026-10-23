@@ -1,4 +1,4 @@
-"""Throwaway webapp for the design-review walk's synthetic run (fleet-config#1383).
+"""Throwaway webapp for the design-review walk's synthetic run.
 
 ``/design-review whatsapp-radar --synthetic`` (and ``measure --e2e``) runs this
 (``[design.review.synthetic]`` in ``.fleet.toml``) with the repo's venv python,

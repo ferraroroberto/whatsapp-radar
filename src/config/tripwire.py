@@ -1,4 +1,4 @@
-"""Bounds and optional notification cadence for unmonitored-chat signals (#196)."""
+"""Bounds and optional notification cadence for unmonitored-chat signals."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.config._shared import _as_bool
 
 @dataclass(frozen=True)
 class TripwireConfig:
-    """Bounds and optional notification cadence for unmonitored-chat signals (#196)."""
+    """Bounds and optional notification cadence for unmonitored-chat signals."""
 
     window_days: int = 7
     max_messages: int = 500

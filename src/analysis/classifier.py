@@ -52,7 +52,7 @@ def _source_label(source: str) -> str:
 
 
 def _format_clock(iso_or_now: str | datetime) -> str:
-    """Render a timestamp as ``YYYY-MM-DD Ddd HH:MM`` for the LLM date anchor (#71).
+    """Render a timestamp as ``YYYY-MM-DD Ddd HH:MM`` for the LLM date anchor.
 
     A compact, locale-stable form carrying the weekday so the model can resolve
     relative words ("this Friday", "tomorrow") against it. ISO strings are parsed
@@ -72,7 +72,7 @@ def _format_clock(iso_or_now: str | datetime) -> str:
 
 
 def _format_children_hint(children: tuple[ChildProfile, ...]) -> str:
-    """Render the registered-children block injected into the Gmail user prompt (#215).
+    """Render the registered-children block injected into the Gmail user prompt.
 
     Household-identifying data, so this only ever appears in the per-request
     prompt built here — never in the committed system prompt file.
@@ -157,8 +157,7 @@ class ClassifierUnavailable(RuntimeError):
     per-chat failure the run isolates, traces, and retries next time. An
     unreachable hub is a whole-run condition: every remaining monitored chat
     would fail identically, so the callers abort the run as ``failed``, alert,
-    and hold every cursor rather than looping through one timeout per chat
-    (#298).
+    and hold every cursor rather than looping through one timeout per chat.
     """
 
 
@@ -232,7 +231,7 @@ class HubClassifier:
 
     def __init__(self, hub: HubConfig, children: tuple[ChildProfile, ...] = ()) -> None:
         self._hub = hub
-        # Household child registry (#206/#215) — injected into the Gmail user
+        # Household child registry — injected into the Gmail user
         # prompt only, never the shared system prompt. Empty by default.
         self._children = children
 
@@ -245,7 +244,7 @@ class HubClassifier:
         source: str = "whatsapp",
         now: datetime | None = None,
     ) -> str:
-        # The "now" anchor (#71): the scan time the model resolves relative dates
+        # The "now" anchor: the scan time the model resolves relative dates
         # *to*. Injectable so tests are deterministic; defaults to the real clock.
         anchor = _format_clock(now if now is not None else datetime.now().astimezone())
         source_label = _source_label(source)
@@ -256,7 +255,7 @@ class HubClassifier:
             f"Current time (this scan runs now): {anchor}",
         ]
         if prior_context:
-            # A self-describing block (the recent-alert memory, #66) — appended
+            # A self-describing block (the recent-alert memory) — appended
             # verbatim rather than inline-labelled so its own heading carries the
             # "don't repeat unless new/escalated" instruction to the model.
             header.append(prior_context)
@@ -266,7 +265,7 @@ class HubClassifier:
 
         # Each line carries the message's send time so the model can anchor any
         # relative date word ("tomorrow") to *when that message was sent*, not to
-        # the scan time — a stale message's "tomorrow" may already be today (#71).
+        # the scan time — a stale message's "tomorrow" may already be today.
         formatted = [
             f"- [{msg.source_message_id}] {_format_clock(msg.message_timestamp)} "
             f"{msg.sender_label or 'unknown'}: {msg.text or ''}"
@@ -324,9 +323,9 @@ class HubClassifier:
                 messages=[{"role": "user", "content": user_prompt}],
             )
         except AnthropicError as exc:
-            # A down/timing-out/erroring hub used to raise straight out of the
-            # scan, stranding the run row at status='running' with no alert
-            # (#298). Translated here so the callers never import the SDK.
+            # A down/timing-out/erroring hub must not raise straight out of the
+            # scan, which would strand the run row at status='running' with no
+            # alert. Translated here so the callers never import the SDK.
             raise ClassifierUnavailable(
                 f"hub unreachable at {self._hub.base_url} "
                 f"(model {self._hub.model}): {exc}"

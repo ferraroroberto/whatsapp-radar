@@ -1,4 +1,4 @@
-"""Live write smoke check for the Calendar write OAuth token (#217).
+"""Live write smoke check for the Calendar write OAuth token.
 
 Non-interactive: given a minted write-scope token, insert one throwaway test
 event a few minutes out on the target calendar, confirm it round-trips with an

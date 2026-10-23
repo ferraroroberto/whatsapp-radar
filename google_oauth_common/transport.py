@@ -3,9 +3,8 @@
 ``googleapiclient.discovery.build(..., credentials=...)`` leaves the service on
 httplib2's default transport, and httplib2's default is *no timeout at all*: a
 dropped connection blocks a scheduled sync forever instead of failing after a
-bounded wait. Gmail found and fixed that in #180; the two Calendar clients were
-written afterwards and never inherited it (#298). The bound lives here so all
-three builders share one definition instead of three drifting copies.
+bounded wait. The bound lives here so all three builders (Gmail and the two
+Calendar clients) share one definition instead of three drifting copies.
 """
 
 from __future__ import annotations
@@ -43,8 +42,8 @@ def build_service(
     The single definition of the construction the three clients share. With no
     ``service_builder`` the real ``googleapiclient.discovery.build`` runs over
     :func:`bounded_authorized_http` (httplib2's default is *no* timeout, so a
-    stalled connection would otherwise hang a scheduled job forever — #180,
-    #298). An injected builder is the legacy test seam: it receives
+    stalled connection would otherwise hang a scheduled job forever).
+    An injected builder is the legacy test seam: it receives
     ``credentials=`` and owns its transport entirely.
     """
     if service_builder is not None:

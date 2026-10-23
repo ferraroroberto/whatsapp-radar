@@ -1,4 +1,4 @@
-"""Live smoke check for the Google Routes API key (issue #160).
+"""Live smoke check for the Google Routes API key.
 
     .\\.venv\\Scripts\\python.exe -m scripts.traffic_smoke --origin "..." --dest "..."
 

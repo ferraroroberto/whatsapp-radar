@@ -45,7 +45,7 @@ class GmailConnector:
         self._client = client
         self._mailbox: GmailMailbox | None = None
         self._sources: dict[str, GmailSource] = {}
-        # One run's discovery window, grouped by discovered source id (#180):
+        # One run's discovery window, grouped by discovered source id:
         # both the discovered-sender list and each sender's messages are served
         # from this single retrieval instead of per-sender API searches.
         self._window: dict[str, list[NormalizedEmail]] = {}
@@ -64,7 +64,7 @@ class GmailConnector:
                 GmailLabel(label.name, label.display_name)
                 for label in self._config.labels
             )
-            # An empty whitelist is now valid (#166): senders are discovered from the
+            # An empty whitelist is valid: senders are discovered from the
             # last N days instead of being pre-listed. Only resolve/validate the
             # whitelist when one is configured (a missing label still fails closed).
             if senders or labels:
@@ -92,7 +92,7 @@ class GmailConnector:
         return self._require_connected().profile()
 
     def list_chats(self) -> list[ChatRecord]:
-        """Whitelisted chats plus senders discovered in the last N days (#166).
+        """Whitelisted chats plus senders discovered in the last N days.
 
         Whitelist sources (senders + labels) keep their full-history behaviour; each
         distinct sender seen in the last ``discovery_days`` is added as an ``email``
@@ -100,11 +100,10 @@ class GmailConnector:
         non-fatal — it logs and falls back to the whitelist so a hiccup never drops
         the monitored senders' ingest.
 
-        Single-pass window (#180): the window's metadata is retrieved once and
+        Single-pass window: the window's metadata is retrieved once and
         kept for this run; discovered senders' message ids come from it instead
         of one API search per sender, and full bodies are downloaded only for
-        ids the store doesn't already hold (:meth:`fetch_messages_new`) — the
-        old shape re-downloaded the entire window on every sync.
+        ids the store doesn't already hold (:meth:`fetch_messages_new`).
         """
         mailbox = self._require_connected()
         records = [
@@ -157,7 +156,7 @@ class GmailConnector:
     def fetch_messages_new(
         self, source_chat_id: str, known_ids: frozenset[str] | set[str]
     ) -> list[MessageRecord]:
-        """New messages for a chat, skipping ids the caller already stores (#180).
+        """New messages for a chat, skipping ids the caller already stores.
 
         The optional-capability twin of :meth:`fetch_messages` (the ingest loop
         uses it when present): resolve the chat's candidate message ids cheaply —

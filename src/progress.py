@@ -9,7 +9,7 @@ string-in/``None``-out: a sink can never affect control flow, and omitting one
 This lives at the top of ``src`` rather than inside ``src/analysis`` because all
 three layers emit progress — ``src.analysis`` (pipeline, review, transcription),
 ``src.connector`` (preflight) and ``src.db`` (sync) — and the lower two must not
-import the analysis package to say so (#294). Dependency-free by design, exactly
+import the analysis package to say so. Dependency-free by design, exactly
 like :mod:`src.paths`.
 """
 

@@ -1,4 +1,4 @@
-"""Speech-profile resolution for on-demand summary read-aloud (#157).
+"""Speech-profile resolution for on-demand summary read-aloud.
 
 Picks one of four logical voice profiles — ``{en,es}_{female,male}`` — for a
 message's summary. Language is detected deterministically from the message's

@@ -78,8 +78,8 @@ def now_iso() -> str:
     """The one clock every run record is stamped with.
 
     UTC with an explicit offset — the same discipline as the DB store, so the
-    same run can never show two different times across surfaces (#163). Public
-    because the CLI writes records of its own (:mod:`app.cli.runlog`, #233) and
+    same run can never show two different times across surfaces. Public
+    because the CLI writes records of its own (:mod:`app.cli.runlog`) and
     must share this clock rather than pick a second one.
     """
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -102,10 +102,9 @@ def new_run_id() -> str:
 def new_run_dir(kind: str, run_id: str) -> Path:
     """Create ``webapp/runs/<kind>/<run_id>/``, disambiguating same-second ids.
 
-    ``mkdir`` *is* the claim: a check-then-create would race, and since #233 two
+    ``mkdir`` *is* the claim: a check-then-create would race, and two
     processes really can land in the same second (a scheduled App Launcher Job
-    firing while the operator launches from the webapp), where before only the
-    single-flight webapp created these.
+    firing while the operator launches from the webapp).
     """
     base = RUNS_DIR / kind
     base.mkdir(parents=True, exist_ok=True)
@@ -176,7 +175,7 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
     webapp itself parses (:func:`~src.runresult.parse_result`) carries the
     whole result payload verbatim — calendar ids and street addresses for a
     family check — and this is the only surface that echoed it raw into the
-    DOM (#292). Stripped here, not in :func:`read_output_tail`, which
+    DOM. Stripped here, not in :func:`read_output_tail`, which
     :func:`finalize_record` still reads unfiltered to recover the result.
     """
     run_dir = _run_dir_for(kind, run_id)
@@ -193,7 +192,7 @@ def get_run(kind: str, run_id: str, *, with_output: bool = True) -> dict[str, An
 def find_by_db_run_id(kind: str, db_run_id: int) -> dict[str, Any] | None:
     """The record of ``kind`` that finalized with ``db_run_id``, with its output.
 
-    The Activity run sheet opens runs by their DB id (#373); this finds the
+    The Activity run sheet opens runs by their DB id; this finds the
     captured output a webapp- or CLI-launched run left behind. Scans the kind's
     newest :data:`RETENTION_PER_KIND` records at most, which is everything
     retention keeps; None when no record carries that id.
@@ -215,12 +214,12 @@ def list_runs(limit: int = 50) -> list[dict[str, Any]]:
     newest ``limit`` names of each kind are the only candidates that can survive
     the final cross-kind truncation — reading the rest would be wasted I/O.
 
-    This matters since #233, because the CLI now writes a record too, and the
+    This matters because the CLI writes a record too, and the
     volume is real: App Launcher fires ``traffic-check`` every 5 minutes against
     a 30-minute in-process cadence, so ~288 records a day land here (~240 of them
     self-skips) and this function runs on every Execution-tab poll. Deliberately
     a read bound and not a cleanup — this function never deletes a run; the
-    retention cap lives in :func:`prune_runs` (#234).
+    retention cap lives in :func:`prune_runs`.
     """
     if not RUNS_DIR.is_dir():
         return []
@@ -269,7 +268,7 @@ def _is_stale_running(run_dir: Path, record: dict[str, Any]) -> bool:
 
 
 def prune_runs() -> None:
-    """Cap each kind directory at the newest :data:`RETENTION_PER_KIND` records (#234).
+    """Cap each kind directory at the newest :data:`RETENTION_PER_KIND` records.
 
     Called after every run finishes (webapp- and CLI-launched alike) and once at
     webapp startup to sweep any backlog. Names are timestamp-sortable, so this is
@@ -405,14 +404,14 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
     """Write a finished run's terminal ``run.json`` fields.
 
     The one definition of what "finished" looks like on disk, shared by the
-    webapp's watcher thread and the CLI's own capture (:mod:`app.cli.runlog`,
-    #233) — two writers of the same record must not drift in shape.
+    webapp's watcher thread and the CLI's own capture (:mod:`app.cli.runlog`)
+    — two writers of the same record must not drift in shape.
 
     ``exit_code`` is ``None`` when the process died without yielding one (an
     exception escaping the CLI); that is a failure, and the field is simply
     omitted rather than guessed at.
 
-    Also prunes (#234) — every finished run is exactly the moment volume grows,
+    Also prunes — every finished run is exactly the moment volume grows,
     so this is the one place both writers' post-run pruning needs to happen.
     """
     result = parse_result(read_output_tail(run_dir))

@@ -100,7 +100,7 @@ def ingest_chats(
                 store.upsert_chat(conn, chat)
                 delta.chats_updated += 1
         delta.chats_seen += 1
-        # Incremental capability (#180): a connector exposing fetch_messages_new
+        # Incremental capability: a connector exposing fetch_messages_new
         # is given the ids already stored so it can skip re-downloading them.
         # The store's INSERT OR IGNORE keeps either path idempotent.
         fetch_new = getattr(connector, "fetch_messages_new", None)
@@ -170,7 +170,7 @@ def sync_sources(
     """Ingest every binding independently and record a truthful per-source row.
 
     After a successful Gmail ingest, unmonitored senders' messages past
-    ``gmail_retention_days`` are pruned (#166) so a discovered mailbox never floods
+    ``gmail_retention_days`` are pruned so a discovered mailbox never floods
     the store; monitored senders and all WhatsApp data are untouched. The pruned
     counts are logged and folded into that source's sync-log detail.
     ``gmail_retention_days=0`` skips the prune entirely — used by the destructive
@@ -179,7 +179,7 @@ def sync_sources(
 
     ``progress`` streams one line per source stage (counts only, never message
     content or sender addresses) so a long ingest is distinguishable from a hang
-    in the Run tab's output.log (#180).
+    in the Run tab's output.log.
     """
     outcome = MultiSourceSyncOutcome()
     prepare_source = prepare or (lambda _source, connector: ensure_connected(connector))

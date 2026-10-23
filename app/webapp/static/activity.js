@@ -1,7 +1,6 @@
-/* Activity tab (#373): one list over the one run store, the run sheet, and the
- * header line. Run and Audit used to be two views of the same runs; this is
- * both, built for the owner's actual question when an alert looks odd: what
- * ran, and why did it decide what it decided.
+/* Activity tab: one list over the one run store, the run sheet, and the
+ * header line, built for the owner's actual question when an alert looks odd:
+ * what ran, and why did it decide what it decided.
  *
  * The list is the DB run store (/api/audit/runs, scoped in SQL), plus what only
  * the run poll knows: the run in flight and webapp-launched runs the DB does not
@@ -74,7 +73,7 @@ function summaryBits(item) {
   const s = r.summary || {};
   if (item.kind === 'traffic-check') {
     // Priced first, and the unpriced half named only when there is one, so a
-    // run where nothing was priced cannot read as a healthy count (#283).
+    // run where nothing was priced cannot read as a healthy count.
     const pricing = legPricing(s.checked);
     return [pricing.priced + ' priced', ...(pricing.unpriced ? [pricing.unpriced + ' not priced'] : [])];
   }
@@ -96,11 +95,11 @@ function execSummaryBits(rec) {
   return [];
 }
 
-// Exception chips only (#373): no OK, no Live.
+// Exception chips only: no OK, no Live.
 function rowChips(item) {
   const chips = [];
   if (item.status === 'failed') chips.push(statusChip('Failed', 'danger'));
-  // Its own chip (#371): the process ended without recording a result — not
+  // Its own chip: the process ended without recording a result — not
   // in progress, and not a failure anyone observed.
   else if (item.status === 'abandoned') chips.push(statusChip('Abandoned', 'attention'));
   else if (isRunning(item.status)) chips.push(statusChip('Running', 'neutral'));
@@ -154,7 +153,7 @@ function runRow(item) {
   return li;
 }
 
-// A connector outage collapses its offline scans into one marker (#195).
+// A connector outage collapses its offline scans into one marker.
 function gapRow(gap) {
   const dayWord = gap.duration_days === 1 ? 'day' : 'days';
   const scanWord = gap.failed_runs === 1 ? 'scan' : 'scans';
@@ -174,7 +173,7 @@ function gapRow(gap) {
   return li;
 }
 
-// A day of repetitive traffic checks folds to one row (#373), which expands
+// A day of repetitive traffic checks folds to one row, which expands
 // to the individual checks; a day with an alert says so on the fold itself.
 function foldRow(key, items, label) {
   const expanded = !!ax().openDays[key];
@@ -229,7 +228,7 @@ function auditItem(run) {
   };
 }
 
-// Runs only the poll knows (#373): the run in flight, and webapp-launched runs
+// Runs only the poll knows: the run in flight, and webapp-launched runs
 // the DB store does not record (a sync, a rebuild). A DB row the active run
 // already wrote (same kind, still running, started with it) is the same run.
 function liveItems(scope) {
@@ -343,9 +342,9 @@ export function renderList() {
   }
   els.activityEmpty.hidden = items.length > 0;
   els.activityMore.hidden = !a.hasMore;
-  // Self-skips are hidden from the list (#234) but must stay visible in count:
-  // traffic-check's cadence window (#170) and calendar-scan's run_hour (#277).
-  // Counted per kind (#393): a scope shows only its own kind's skips, so the
+  // Self-skips are hidden from the list but must stay visible in count:
+  // traffic-check's cadence window and calendar-scan's run_hour.
+  // Counted per kind: a scope shows only its own kind's skips, so the
   // traffic job's frequent cadence skips never read as hidden calendar runs.
   let skipped = 0;
   for (const [kind, n] of Object.entries(state.execution.skippedByKind || {})) {
@@ -360,7 +359,7 @@ export function renderList() {
 
 // ----------------------------------------------------------- header line
 
-// The most severe exception, else one muted fact (#373).
+// The most severe exception, else one muted fact.
 function renderHeader() {
   const busy = busyLine();
   if (busy) { renderHeadStatus(els.activityStatus, [], busy); return; }
@@ -452,7 +451,7 @@ function scopeOf(kind) {
   return 'messages';
 }
 
-/* From another tab (Home's glance rows, header line and Latest runs, #374):
+/* From another tab (Home's glance rows, header line and Latest runs):
  * open Activity at the run's scope with its sheet open. */
 export function openRunInActivity(ref) {
   const here = state.tab === 'activity';
@@ -462,7 +461,7 @@ export function openRunInActivity(ref) {
   openRun(ref);
 }
 
-// Activity's run row for another tab's list (Home's Latest runs, #374).
+// Activity's run row for another tab's list (Home's Latest runs).
 export function runRowFor(run, onOpen) {
   return runRow({ ...auditItem(run), onOpen: onOpen });
 }
@@ -539,7 +538,7 @@ function renderSheet() {
   els.runPreview.hidden = !tg;
   if (tg) els.runPreviewText.textContent = tg;
   els.runOutput.textContent = (exec && exec.output_tail) || '(no output)';
-  // Stop only for the live run (#373: in the footer, never in a summary).
+  // Stop only for the live run (in the footer, never in a summary).
   els.runSheetFoot.hidden = !isLive(exec);
 }
 
@@ -767,7 +766,7 @@ export function wireActivity() {
     }
   });
 
-  // Run now (#373): one header tap; Run starts the queue and follows the run.
+  // Run now: one header tap; Run starts the queue and follows the run.
   els.activityRunNow.addEventListener('click', function () { els.runNowSheet.showModal(); });
   wireDialog(els.runNowSheet, els.runNowClose);
   els.execRunScan.addEventListener('click', async function () {

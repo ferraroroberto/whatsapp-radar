@@ -1,6 +1,6 @@
-"""On-demand message summarization via the local-llm-hub chat endpoint (#86).
+"""On-demand message summarization via the local-llm-hub chat endpoint.
 
-Part B of the voice-note work: the Chats overlay offers a **Summarize** control on
+The Chats overlay offers a **Summarize** control on
 any long message (a long transcribed voice note or a long typed message). Tapping
 it condenses the message text to its essence — and any concrete action the reader
 must take — through the hub's cheap ``claude_haiku``.
@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "claude_haiku"
 
 # The reader wants the point quickly, plus anything they must act on. The prompt
-# must NOT bind the model to a content type — an earlier "WhatsApp message for a
-# busy inbox" framing made Haiku refuse to summarize anything it judged not to be
+# must NOT bind the model to a content type — a "WhatsApp message for a busy
+# inbox" framing makes Haiku refuse to summarize anything it judges not to be
 # one (e.g. a forwarded essay), explaining its role instead. So: summarize ANY
 # text, treat action items as optional, and never refuse or ask questions.
 SUMMARY_SYSTEM_PROMPT = (

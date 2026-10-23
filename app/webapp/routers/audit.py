@@ -1,8 +1,8 @@
-"""Run trace (#12; Activity since #373): per-run drill-down — the surface that makes the radar
+"""Run trace (Activity tab): per-run drill-down — the surface that makes the radar
 trustworthy.
 
 A missed important message is a real failure, so for any run the operator must be
-able to answer *why* each message was or wasn't promoted. After #7 every run
+able to answer *why* each message was or wasn't promoted. Every run
 persists to ``review_runs`` (mode, params, funnel counters) and one
 ``analysis_trace`` row per (run, chat) capturing the full decision record — input
 delta, Stage-1 keyword roots, the exact LLM system+user prompts, the raw model
@@ -11,7 +11,7 @@ response, the parsed verdict, the final action, and the Telegram text.
 This router is **read-only** (SELECT only, no writes, no cursor changes) so it is
 safe on the request path. It exposes a run list (with the funnel), a bounded
 cross-run list of filtered decisions, and a per-run drill-down (the per-chat
-trace). It never triggers scans — that is the execution router (#11).
+trace). It never triggers scans — that is the execution router.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ router = APIRouter()
 def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
     """Shape a run row for the run list: identity + parsed params + funnel.
 
-    Since #163 the table holds every run kind; family checks (traffic-check /
+    The table holds every run kind; family checks (traffic-check /
     calendar-scan) carry their structured payload in ``summary`` instead of a
     meaningful funnel.
     """
@@ -140,7 +140,7 @@ def _filtered_trace_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-#: The Activity tab's scopes (#373). Messages is every kind that is not a
+#: The Activity tab's scopes. Messages is every kind that is not a
 #: family check, so a new message-pipeline kind lands there without an edit.
 _FAMILY_KINDS = ("traffic-check", "calendar-scan")
 _SCOPES: dict[str, dict[str, tuple[str, ...]]] = {
@@ -161,8 +161,8 @@ async def list_runs(
     """Recent runs (with funnel/summary) plus connector coverage gaps.
 
     ``runs`` are the inspectable runs, newest first — message scans, process
-    runs, and the family checks alike (#163). ``scope`` (messages / calendar /
-    traffic) or ``kind`` narrows the query in SQL before the limit (#373), and
+    runs, and the family checks alike. ``scope`` (messages / calendar /
+    traffic) or ``kind`` narrows the query in SQL before the limit, and
     ``before`` pages older runs by id; ``has_more`` says whether another page
     exists.
     """

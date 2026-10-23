@@ -1,4 +1,4 @@
-"""Config tab (#10): inspect the classifier, edit the safe settings subset.
+"""Config tab: inspect the classifier, edit the safe settings subset.
 
 Read-only views of the LLM system prompt and the keyword roots — both are
 edited in their source files by design, never from the app. Editable: the safe

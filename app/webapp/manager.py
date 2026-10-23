@@ -75,7 +75,7 @@ def cert_paths(project_root: Path | None = None) -> tuple[Path, Path] | None:
 
 def check_tailscale_cert() -> None:
     """Auto-renew a Tailscale cert expiring within 30 days, before uvicorn
-    binds (project-scaffolding#89). No-op on a self-signed cert or when no
+    binds. No-op on a self-signed cert or when no
     cert exists; best-effort — a cert problem must never block startup.
     """
     script = PROJECT_ROOT / "scripts" / "gen_tailscale_cert.py"
@@ -170,7 +170,7 @@ class WebappManager:
             logger.info("ℹ️  Webapp is disabled in config (webapp.enabled=false)")
             return self.status()
 
-        # Race-safe adopt-or-spawn (project-scaffolding#39): serialize the
+        # Race-safe adopt-or-spawn: serialize the
         # status()-then-Popen critical section across processes so two trays
         # starting at once cannot both spawn uvicorn. The loser blocks, then
         # re-checks below and adopts the now-listening webapp. The lock is held

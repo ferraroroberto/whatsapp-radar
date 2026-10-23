@@ -1,5 +1,5 @@
 """Cross-table, read-only aggregates powering the Dashboard and Chats & Config
-tabs (#9, #10). Every function here only ever SELECTs — no writes, no cursor
+tabs. Every function here only ever SELECTs — no writes, no cursor
 changes — so all are safe to call from the webapp request path. Single-table
 reads/counts (chat, message, run, notification) live with their owning entity
 module instead; this module is only for the genuinely cross-table assemblies.

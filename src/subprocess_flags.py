@@ -5,8 +5,7 @@ any of its descendants — the webapp uvicorn process, a background
 ``launcher.py`` run, ...) gets a **new, visible** console window from Windows
 unless the child's creation flags say otherwise. These constants are the one
 place that combination lives, so a call site reuses it instead of re-deriving
-it (and risking forgetting it — the exact gap that let stray cmd windows
-through, see #207).
+it (and risking forgetting it, which lets stray cmd windows through).
 
 Safe to pass even when the parent *does* have a console, as long as the
 child's output is captured (piped/redirected) rather than read from a console

@@ -153,7 +153,7 @@ def _notify(title: str, message: str) -> None:
 
 def run_tray() -> int:
     """Run the tray icon. Returns when the user picks Quit."""
-    # pythonw has no console, so without this every tray breadcrumb is lost (#351).
+    # pythonw has no console, so without this every tray breadcrumb is lost.
     configure_file_logging("tray")
     try:
         import pystray
@@ -162,7 +162,7 @@ def run_tray() -> int:
         logger.error(f"❌ pystray not installed ({exc}); pip install -r requirements.txt")
         return 1
 
-    # In-process single-instance guard (project-scaffolding#39): the tray.bat CIM
+    # In-process single-instance guard: the tray.bat CIM
     # pre-check can let two near-simultaneous launches through, so the guarantee
     # must live in the process. Held for the tray's lifetime; the OS frees the
     # named mutex on exit. `instance` is intentionally kept referenced below.
@@ -231,7 +231,7 @@ def run_tray() -> int:
     if tunnel_hostname is not None:
         threading.Thread(target=_start_tunnel, daemon=True).start()
 
-    # Keep-alive supervisor (#73): while the tray is open, keep the read-only
+    # Keep-alive supervisor: while the tray is open, keep the read-only
     # WhatsApp sidecar running so the buffer stays warm and a scan never reads a
     # cold/half-loaded source. Linked-device only (the fixture has no process),
     # and gated on the same self-heal flag as the scan preflight.

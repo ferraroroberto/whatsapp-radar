@@ -1,4 +1,4 @@
-"""Read-only Gmail API credentials, whitelist, and sender-discovery bounds (#166)."""
+"""Read-only Gmail API credentials, whitelist, and sender-discovery bounds."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ class GmailLabel:
 
 @dataclass(frozen=True)
 class GmailConfig:
-    """Read-only Gmail API credentials, whitelist, and sender-discovery bounds (#166).
+    """Read-only Gmail API credentials, whitelist, and sender-discovery bounds.
 
-    ``senders``/``labels`` are the explicit whitelist (full-history ingest, as
-    before). Sender-level monitoring (#166) additionally *discovers* senders active
+    ``senders``/``labels`` are the explicit whitelist (full-history ingest).
+    Sender-level monitoring additionally *discovers* senders active
     in the last ``discovery_days`` and ingests only that bounded window for them, so
     the mailbox never floods the store. ``retention_days`` prunes messages from
     **unmonitored** Gmail senders past that window — monitored senders are exempt and

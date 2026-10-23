@@ -1,7 +1,6 @@
 """Review runs, analysis items/trace, and notification persistence.
 
-Also owns the read-only run/analysis/notification counters that originated
-under the old "dashboard aggregates" and "chats & config tab" banners
+Also owns the read-only run/analysis/notification counters
 (:func:`count_runs`, :func:`last_run`, :func:`list_review_runs`,
 :func:`list_runs_by_kind`, :func:`review_run`, :func:`count_actionable_items`,
 :func:`count_notifications_sent`) — grouped here because they all read the
@@ -20,13 +19,13 @@ from src.db.connection import _now, _rowid
 
 logger = logging.getLogger(__name__)
 
-#: A run whose process ended before it recorded a result (#371). Its own terminal
+#: A run whose process ended before it recorded a result. Its own terminal
 #: state — neither ``failed`` (no error was observed) nor ``completed`` (no result
 #: was recorded) — so the Run list stops showing it as in progress without
 #: claiming an outcome nobody saw.
 STATUS_ABANDONED = "abandoned"
 
-#: How long a run of each kind may legitimately stay at ``running`` (#371). Only
+#: How long a run of each kind may legitimately stay at ``running``. Only
 #: kinds with a known, short bound are listed: a one-shot family check records
 #: its result within seconds (slowest observed ~160 s, a Routes call per leg), so
 #: a row still ``running`` long past that has no process behind it. A kind absent
@@ -63,7 +62,7 @@ def finish_run_summary(
     """Finalize a run whose outcome is a structured payload, not a funnel.
 
     The family checks (traffic-check / calendar-scan) record their whole result
-    here so a scheduled run is as inspectable as a webapp-launched one (#163).
+    here so a scheduled run is as inspectable as a webapp-launched one.
     """
     conn.execute(
         "UPDATE review_runs SET completed_at = ?, status = ?, summary_json = ?, error = ? "
@@ -74,7 +73,7 @@ def finish_run_summary(
 
 
 def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
-    """Mark a still-``running`` run abandoned (#371); True if this call changed it.
+    """Mark a still-``running`` run abandoned; True if this call changed it.
 
     Guarded on ``status = 'running'`` so a run that finalized itself between the
     caller's read and this write is never overwritten. ``completed_at`` stays NULL:
@@ -89,7 +88,7 @@ def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
 
 
 def reconcile_stale_runs(conn: sqlite3.Connection, *, now: datetime | None = None) -> list[int]:
-    """Move runs that can no longer be running to ``abandoned`` (#371); returns their ids.
+    """Move runs that can no longer be running to ``abandoned``; returns their ids.
 
     The rule is age: a ``running`` row of a kind in :data:`STALE_RUNNING_AFTER`
     older than that kind's bound. Anything the rule cannot establish is left
@@ -167,7 +166,7 @@ def record_run_funnel(
     conn.commit()
 
 
-# The kinds that carry a message-pipeline digest/funnel. Family checks (#163)
+# The kinds that carry a message-pipeline digest/funnel. Family checks
 # share the table but must never be picked up as "the latest digest to deliver"
 # or counted as a message scan.
 _MESSAGE_KINDS = ("scan", "process")
@@ -185,17 +184,17 @@ def latest_run_id(conn: sqlite3.Connection) -> int | None:
 def last_run_started_at(conn: sqlite3.Connection, kind: str) -> str | None:
     """Return the ``started_at`` of the most recent **live** run of one ``kind``, or None.
 
-    Backs the CLI's traffic-check cadence self-skip (#170): the Windows job is
+    Backs the CLI's traffic-check cadence self-skip: the Windows job is
     armed at a fixed high frequency and ``wr traffic-check`` compares this
     timestamp against ``traffic.cadence_min`` on every fire, so a cadence edit
     in the UI takes effect without re-arming Task Scheduler. A skipped fire
     never calls :func:`start_run`, so it never shows up here — only real
     checks count as "the last run".
 
-    Excludes ``mode='dry_run'`` rows (#186) — a dry run is an explicit,
+    Excludes ``mode='dry_run'`` rows — a dry run is an explicit,
     on-demand human test pass and must never advance or be counted towards
     the live cadence clock, even though it is recorded in ``review_runs`` like
-    any other run (#163/#170).
+    any other run.
     """
     row = conn.execute(
         "SELECT started_at FROM review_runs WHERE kind = ? AND mode != 'dry_run' "
@@ -270,7 +269,7 @@ def insert_analysis_item(
 
 
 def set_calendar_event_id(conn: sqlite3.Connection, item_id: int, calendar_event_id: str) -> None:
-    """Record the created reminder event id on an already-persisted item (#218)."""
+    """Record the created reminder event id on an already-persisted item."""
     conn.execute(
         "UPDATE analysis_items SET calendar_event_id = ? WHERE id = ?",
         (calendar_event_id, item_id),
@@ -286,7 +285,7 @@ def find_calendar_event_for_evidence(
     Identity is the evidence-message-id set, not ``run_id`` — a run is created
     fresh on every scan (including a reprocess replay), but the same underlying
     messages classifying to the same item must never mint a second calendar
-    event (#218). An empty evidence list can't be matched, so it always misses
+    event. An empty evidence list can't be matched, so it always misses
     (the caller creates a fresh event with no dedup guarantee in that rare case).
     """
     if not evidence_message_ids:
@@ -475,8 +474,8 @@ def list_review_runs(
     Activity tab's run list where each run is shown with its mode, parameters, and
     funnel counters before drilling into the per-chat trace.
 
-    ``kinds`` / ``exclude_kinds`` narrow the query in SQL *before* the ``LIMIT``
-    (#373): traffic checks are ~94% of runs, so filtering the newest ``limit``
+    ``kinds`` / ``exclude_kinds`` narrow the query in SQL *before* the ``LIMIT``:
+    traffic checks are ~94% of runs, so filtering the newest ``limit``
     rows afterwards would leave a Messages list nearly empty. ``before_id`` is an
     exclusive id cursor for paging older rows.
     """

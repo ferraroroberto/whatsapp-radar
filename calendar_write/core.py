@@ -1,4 +1,4 @@
-"""Framework-neutral write-scope Google Calendar constants (#217).
+"""Framework-neutral write-scope Google Calendar constants.
 
 Sibling of ``calendar_readonly`` (see ``docs/calendar-bootstrap.md``) — but a
 genuinely separate credential/scope boundary, since Google Calendar OAuth
@@ -18,7 +18,7 @@ CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 
 
 class CalendarWriteClient(Protocol):
-    """Minimal write surface — insert + delete only (#217; keep minimal)."""
+    """Minimal write surface — insert + delete only (keep minimal)."""
 
     def insert_event(self, *, calendar_id: str, event: dict[str, Any]) -> dict[str, Any]: ...
 

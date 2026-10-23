@@ -3,7 +3,7 @@
 This is the HTTPS-provisioning path for the webapp: a real Let's Encrypt leaf
 issued for the tailnet MagicDNS name, so every device already on the tailnet
 trusts it with **zero** per-device steps — no CA install, no mobileconfig, no
-Certificate Trust toggle. It replaces the old self-signed-CA dance.
+Certificate Trust toggle.
 
 Output goes to ``webapp/certificates/`` (the dir uvicorn already reads):
 

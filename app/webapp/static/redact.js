@@ -1,4 +1,4 @@
-/* Whitelist redaction for the Audit tab's raw run-payload dump (#285).
+/* Whitelist redaction for the Audit tab's raw run-payload dump.
  *
  * The dump exists so an operator can see exactly what a run recorded, and
  * deleting it would cost real diagnostic value the structured blocks above it
@@ -6,14 +6,14 @@
  * *whitelist*, not by blacklist, so a payload field nobody has thought about
  * yet is withheld by default instead of exposed by default.
  *
- * The problem it solves: since #263 a `calendar-scan` payload carries a
+ * The problem it solves: a `calendar-scan` payload carries a
  * `travel_blocks` section whose `adds[]` / `deletes[]` / `failures[]` entries
  * each hold a `calendar_id`, and in a real household those are **email
  * addresses**. A travel leg's `origin` / `destination` and an event's
  * `raw_location` are literal street addresses. Every purpose-built surface on
- * this page already honours the no-calendar-id rule — the #268 capability rows
- * render `label || person`, and #276's audit block is keyed on person and leg —
- * and the generic dump immediately beneath them did not.
+ * this page already honours the no-calendar-id rule — the capability rows
+ * render `label || person`, and the audit block is keyed on person and leg —
+ * so the generic dump immediately beneath them must too.
  *
  * That matters more than a loopback-only admin panel would, because this webapp
  * is deliberately reachable beyond localhost (Tailscale TLS is live). Anything
@@ -54,13 +54,13 @@ export const WITHHELD = '⟨withheld⟩';
  * not already show, and it is how you answer "why did this not re-alert?".
  *
  * `detail` is the one whitelisted key carrying **free-form text from an
- * exception**, and it is renderable only because #285 also fixed it at source:
- * `src/family/travel_blocks_write.py` used to build it from raw `str(exc)`,
- * where `MarkerGuardError` prints two calendar ids verbatim and a propagated
- * googleapiclient `HttpError` prints the request URI with the URL-encoded id.
- * Those sites now go through `calendar_readonly.safe_error_detail`, as the read
- * path already did — and the raw text still reaches the log, so nothing is lost
- * that a local log cannot hold. Withholding `detail` instead would have cost the
+ * exception**, and it is renderable only because it is sanitised at source:
+ * `src/family/travel_blocks_write.py` builds it through
+ * `calendar_readonly.safe_error_detail`, as the read path does, never from raw
+ * `str(exc)` — `MarkerGuardError` prints two calendar ids verbatim and a
+ * propagated googleapiclient `HttpError` prints the request URI with the
+ * URL-encoded id. The raw text still reaches the log, so nothing is lost
+ * that a local log cannot hold. Withholding `detail` instead would cost the
  * dump its most useful field for exactly the runs you open it to diagnose. */
 const RENDERABLE_KEYS = new Set([
   // envelope

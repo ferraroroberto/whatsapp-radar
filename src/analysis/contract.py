@@ -28,12 +28,12 @@ class AnalysisResult:
     deadline: str | None
     confidence: float | None
     evidence_message_ids: list[str]
-    # The relative date the model resolved to an absolute ``YYYY-MM-DD`` (#71), or
+    # The relative date the model resolved to an absolute ``YYYY-MM-DD``, or
     # null when no date applies. Lets the digest flag today/overdue deterministically
     # instead of re-interpreting a relative word ("tomorrow") at reading time. The
     # free-text ``deadline`` above stays for prose; this is the machine-readable form.
     deadline_date: str | None = None
-    # Gmail-school-source fields (#206/#215) — null for every other source and null
+    # Gmail-school-source fields — null for every other source and null
     # whenever the model isn't confident. ``child`` is a resolved registry name (see
     # ``src.config.ChildProfile``), never a guess when no registry entry matches.
     child: str | None = None

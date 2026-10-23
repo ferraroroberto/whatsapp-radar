@@ -1,4 +1,4 @@
-/* Home (#9, #165, #374): is the radar working, and does anything need me?
+/* Home: is the radar working, and does anything need me?
  *
  * One glance card (WhatsApp · Gmail · Calendar · Traffic): a row per source
  * with a liveness badge on its glyph, the last run as a relative time, and
@@ -10,9 +10,9 @@
  * Liveness comes from the source-health poll (execution.js, also feeding
  * Settings' source sheets) and runs from /api/dashboard; each lands on its
  * own, so neither delays the first paint. The per-source counts live in each
- * Settings source sheet since #374/#377 and are still rendered here from the
+ * Settings source sheet and are still rendered here from the
  * same answer. While the tray's passkey enrollment window is open the header
- * says so and opens the Passkeys sheet (#377: the card left Home). Chat names go in
+ * says so and opens the Passkeys sheet (the card lives in Settings). Chat names go in
  * via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
@@ -59,7 +59,7 @@ function liveness(source) {
   return connected ? 'up' : 'down';
 }
 
-// Exceptions only (#374): no OK, and success is never a chip.
+// Exceptions only: no OK, and success is never a chip.
 function glanceChips(source, c, live) {
   const chips = [];
   if (live === 'down') chips.push(statusChip('Offline', 'danger'));
@@ -175,7 +175,7 @@ function renderSourceCounts(d) {
       fmtNum(source.messages) + ' stored · ' + fmtNum(source.monitored) +
       ' monitored · latest ' + fmtLocalDateTime(source.latest_message_at)));
   }
-  // Calendar is a read-only, non-ingesting source (#164/#165): no stored/
+  // Calendar is a read-only, non-ingesting source: no stored/
   // monitored counts, so its row shows provenance + freshness of the last scan.
   const cal = card('calendar');
   if (cal) {
@@ -202,7 +202,7 @@ function sourceRow(sourceKey, detailText) {
 }
 
 export function wireDashboard() {
-  // Draw the rows at once, a dash for every value still loading (#374).
+  // Draw the rows at once, a dash for every value still loading.
   renderGlance();
   onWebauthnChange(renderHeader);
   els.dashAllActivity.addEventListener('click', function () { setTab('activity'); });

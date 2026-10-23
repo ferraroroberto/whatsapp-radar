@@ -1,7 +1,7 @@
-"""task-os Inbox export knobs (#307). Disabled by default.
+"""task-os Inbox export knobs. Disabled by default.
 
 A radar-marked WhatsApp message is POSTed to task-os's ``POST /api/tasks`` so it
-lands in the Inbox alongside flagged emails (task-os#98). ``token`` is a secret
+lands in the Inbox alongside flagged emails. ``token`` is a secret
 and lives only in the gitignored ``.env`` (``WR_TASK_OS_TOKEN``), never the
 committed defaults.
 """

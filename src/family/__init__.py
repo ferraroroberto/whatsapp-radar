@@ -1,4 +1,4 @@
-"""Deterministic family-coordination checks (issue #160).
+"""Deterministic family-coordination checks.
 
 Two one-shot scheduled checks living alongside the WhatsApp/Gmail message
 pipeline, reusing this app's run store, notify, config, and UI — but not its

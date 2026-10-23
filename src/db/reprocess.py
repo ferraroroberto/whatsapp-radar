@@ -3,10 +3,10 @@
 Unlike :func:`src.db.sync.resync` (incremental upsert), reprocess is the *full
 rebuild*: it wipes the derived SQLite cache and re-ingests from the buffer with
 the current reader logic. It exists for the rare case where the reader logic
-itself changed — e.g. the #22/#23 fix that re-keys messages to canonical JIDs,
-folds ``@lid`` aliases, and re-resolves display names. An incremental resync
-can't fix already-stored rows that were keyed/named by the *old* reader; only a
-rebuild can.
+itself changed — e.g. a fix that re-keys messages to canonical JIDs, folds
+``@lid`` aliases, and re-resolves display names. An incremental resync can't fix
+already-stored rows that were keyed/named by an *earlier* reader; only a rebuild
+can.
 
 Because re-keying changes ``source_chat_id`` for some chats, the operator's
 hand-set state (monitored/ignored status and aliases) would be stranded on the

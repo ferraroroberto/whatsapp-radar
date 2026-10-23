@@ -2,9 +2,8 @@ r"""Generate PWA/tray/Stream-Deck icons from the shared fleet icon-brand generat
 
 Thin caller onto ``project-scaffolding``'s ``brand_gen.render_set()`` — the
 master art is whatsapp-radar's vendored Lucide ``radar.svg``, not a bespoke
-Pillow-drawn silhouette (app-launcher#65: a coherent icon family across the
-fleet). Drops the previous WhatsApp-green blip tint in favor of the fleet's
-monochrome white-on-`#0A0A0A` look.
+Pillow-drawn silhouette, so the icon is part of a coherent family across the
+fleet, in the fleet's monochrome white-on-`#0A0A0A` look.
 
 Writes into ``app/webapp/static/``: ``icon-512.png``, ``icon-512-maskable.png``,
 ``icon-180.png``, ``icon-192.png``, ``favicon.ico``. Into ``assets/tray/``:

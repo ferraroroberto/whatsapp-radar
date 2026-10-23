@@ -25,7 +25,7 @@ _BATCH_SIZE = 50
 
 # Gmail's per-user rate budget is ~250 quota units/second and a message GET costs
 # 5 units, so one 50-GET batch consumes a full second of budget. Firing batches
-# back-to-back trips the limiter mid-window (observed live while building #180),
+# back-to-back trips the limiter mid-window (observed live),
 # hence one pause between batches and bounded backoff for items that still 429.
 _BATCH_PAUSE_S = 1.0
 _RETRY_ATTEMPTS = 3
@@ -93,7 +93,7 @@ class GoogleGmailReadClient:
         """Fetch many messages via the API batch endpoint (≤50 per round-trip).
 
         Sequential per-message GETs are latency-dominated — a 30-day window costs
-        hundreds of round-trips (#180); batching collapses that to a handful.
+        hundreds of round-trips; batching collapses that to a handful.
         Batches are paced against the per-user rate budget and rate-limited items
         retry with exponential backoff; results come back in ``message_ids``
         order, and the first non-retryable (or retry-exhausted) failure aborts

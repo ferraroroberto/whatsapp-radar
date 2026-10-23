@@ -1,4 +1,4 @@
-"""Deterministic decision logic for the family checks (issue #160).
+"""Deterministic decision logic for the family checks.
 
 Pure functions over :class:`calendar_readonly.core.CalendarEvent` and the typed
 config — no I/O, no network, no LLM. This is the evidence-backed core: the
@@ -26,7 +26,7 @@ _VIDEO_HINTS = ("meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live
 
 
 def local_midnight(now: datetime) -> datetime:
-    """Midnight starting the day ``now`` falls in, in ``now``'s own zone (#280).
+    """Midnight starting the day ``now`` falls in, in ``now``'s own zone.
 
     The one expression every window start in this subsystem is built from —
     :func:`src.family.calendar_scan.run_calendar_scan`'s fetch window, its
@@ -41,17 +41,16 @@ def local_midnight(now: datetime) -> datetime:
     So the day is read off ``now`` and midnight is attached in that same zone,
     and the two can never disagree.
 
-    The expression this replaced —
-    ``datetime.combine(now.date(), time.min).astimezone(now.tzinfo)`` — mixed
+    Building it as
+    ``datetime.combine(now.date(), time.min).astimezone(now.tzinfo)`` would mix
     two zones in one line: ``now.date()`` is the date in ``now``'s zone, while
     ``.astimezone()`` on a **naive** value does not attach a zone, it reads the
-    value as *system local* and converts. It therefore meant "local midnight"
-    only while ``now``'s offset happened to equal the machine's. Given a ``now``
-    in any other zone it silently returned a window anchored to the wrong
-    instant — for a UTC ``now`` in the small hours, a full day early — with no
-    error and no log line. It also made every caller's result depend on the
-    machine's own timezone, so this suite and a UTC CI runner computed different
-    windows from identical inputs.
+    value as *system local* and converts. That means "local midnight" only while
+    ``now``'s offset happens to equal the machine's; for a ``now`` in any other
+    zone it silently anchors the window to the wrong instant — for a UTC ``now``
+    in the small hours, a full day early — and makes results depend on the
+    machine's own timezone, so a dev box and a UTC CI runner would compute
+    different windows from identical inputs.
 
     A **naive** ``now`` is refused rather than guessed at: it is the one input
     for which no zone is knowable, and guessing is the failure mode this
@@ -66,7 +65,7 @@ def local_midnight(now: datetime) -> datetime:
 
 
 def household_zone(timezone_name: str, now: datetime) -> tzinfo:
-    """The zone every day of a multi-day scan should be judged in (#435).
+    """The zone every day of a multi-day scan should be judged in.
 
     ``now.tzinfo`` (a fixed-offset snapshot from ``datetime.now().astimezone()``)
     is exactly right for ``now`` itself, but frozen: re-adding it to a later
@@ -75,7 +74,7 @@ def household_zone(timezone_name: str, now: datetime) -> tzinfo:
     already validated at config load, so never an unresolvable name here — gets
     a real :class:`~zoneinfo.ZoneInfo`, which ``datetime.combine(day, t,
     tzinfo=zone)`` re-resolves correctly for every ``day`` it is combined with.
-    Unconfigured (``""``) keeps the legacy, DST-blind fallback rather than
+    Unconfigured (``""``) falls back to the DST-blind ``now.tzinfo`` rather than
     guessing a zone.
     """
     if timezone_name:
@@ -126,13 +125,13 @@ def is_en_casa(event: CalendarEvent) -> bool:
 
 
 def is_train_commute(event: CalendarEvent, keywords: tuple[str, ...]) -> bool:
-    """True when the event's title marks the commute as taken by train (#227).
+    """True when the event's title marks the commute as taken by train.
 
     Same title-keyword shape as :func:`is_en_casa`, but with the vocabulary
     configurable (``traffic.train_keywords``) since the marker is written by
     hand in whichever language the calendar uses (e.g. the Spanish ``(en
     tren)``). Used to suppress both alerts that reason from a driving ETA — the
-    leave-now nudge and the infeasible-hop "tight schedule" warning (#252) —
+    leave-now nudge and the infeasible-hop "tight schedule" warning —
     since a Routes DRIVE result says nothing about a train departure. The delay
     alert is deliberately not suppressed.
     """
@@ -157,13 +156,12 @@ def requires_commute(event: CalendarEvent, home_address: str) -> bool:
 
 @dataclass(frozen=True)
 class LocationDecision:
-    """Where an event places its person, and *why* — the traceable unit (#168).
+    """Where an event places its person, and *why* — the traceable unit.
 
     ``assumed`` marks the missing-location fallback: no address, no video link,
     no ``(en casa)`` marker ⇒ treated as home for the conflict math, but flagged
-    so the daily summary can ask for the location to be filled in. This
-    replaces the earlier Unknown-never-home semantics: the assumption is now
-    explicit and visible instead of a silent third state.
+    so the daily summary can ask for the location to be filled in. The
+    assumption is explicit and visible instead of a silent third state.
     """
 
     kind: str  # 'home' | 'away'
@@ -189,8 +187,8 @@ def decide_location(event: CalendarEvent, home_address: str) -> LocationDecision
 def location_kind(event: CalendarEvent, home_address: str) -> str:
     """Daily-scan location class: ``'home'`` | ``'away'``.
 
-    At-home if ``(en casa)``, a video link with no physical address, or — since
-    #168 — no location at all (assumed home; :func:`decide_location` carries the
+    At-home if ``(en casa)``, a video link with no physical address, or
+    no location at all (assumed home; :func:`decide_location` carries the
     ``assumed`` flag so the assumption is surfaced, never silent). A physical
     address is 'away' unless it is the home address.
     """
@@ -254,8 +252,7 @@ class CommuteLeg:
     ``origin_event_end`` is the end time of the preceding event when the origin
     was chained off it (a back-to-back leg), else ``None`` (origin is home). It
     lets the traffic check judge whether the hop is *feasible at all* — travel
-    time vs. the gap between the two events (#169, completing #168's deferred
-    back-to-back adjacency judging).
+    time vs. the gap between the two events (back-to-back adjacency judging).
     """
 
     person: str
@@ -309,7 +306,7 @@ def dedup_key(person: str, event_summary: str) -> str:
 
 
 def leave_now_dedup_key(person: str, event_summary: str) -> str:
-    """Dedup key for the leave-now alert (#185) — distinct suffix on :func:`dedup_key`.
+    """Dedup key for the leave-now alert — distinct suffix on :func:`dedup_key`.
 
     A delay alert and a leave-now alert can both be relevant for one event, so
     they must not dedup against each other; the ``::leave-now`` suffix keeps them
@@ -358,7 +355,7 @@ def _person_away_between(
 
     A point-in-time deadline (no configured end) is the degenerate case
     ``start == end`` — identical to the original single-moment containment
-    check this generalizes (#167).
+    check this generalizes.
     """
     return any(
         not event.all_day
@@ -375,7 +372,7 @@ def day_windows(family: FamilyConfig, day: date) -> list[tuple[str, time, time]]
     Explicit childcare windows filtered to the weekday (a missing/invalid end
     degrades to the point-in-time deadline), plus the daily kids-home pickup on
     school weekdays. Shared by the calendar coverage check and the live
-    presence-ETA assessment (#177) so both judge the same windows.
+    presence-ETA assessment so both judge the same windows.
     """
     weekday = day.weekday()
     windows: list[tuple[str, time, time]] = []
@@ -399,7 +396,7 @@ def day_windows(family: FamilyConfig, day: date) -> list[tuple[str, time, time]]
 def arrival_margin_min(now: datetime, eta_min: float, window_start: datetime) -> int:
     """Minutes of slack if the person leaves *now*: negative ⇒ they arrive late.
 
-    The deterministic core of the live coverage judgment (#177):
+    The deterministic core of the live coverage judgment:
     ``window_start - (now + eta)``, floored to whole minutes so a 30-second
     shortfall already reads as ``-1`` rather than rounding up to "just fine".
     """
@@ -412,7 +409,7 @@ def depart_in_min(
 ) -> int:
     """Minutes until the person must leave for ``event_start``: ``<= 0`` ⇒ leave now.
 
-    The deterministic core of the leave-now alert (#185):
+    The deterministic core of the leave-now alert:
     ``event_start - (now + eta + leave_margin_min)``, floored to whole minutes
     (same floor-toward-late convention as :func:`arrival_margin_min`) so a
     30-second shortfall already reads as ``-1`` — a nudge to leave, not a
@@ -503,8 +500,8 @@ def find_overlaps(
     events without a physical address (home, video, assumed home) never pair
     into an overlap, and exact back-to-back adjacency (``b.start == a.end``) is
     not an overlap. Judging whether the *travel* between two adjacent events is
-    feasible needs live routing — that now lives in the traffic check, which
-    routes each chained leg and flags it when travel time exceeds the gap (#169).
+    feasible needs live routing — that lives in the traffic check, which
+    routes each chained leg and flags it when travel time exceeds the gap.
     """
     conflicts: list[Conflict] = []
     for person, events in events_by_person.items():
@@ -538,7 +535,7 @@ def event_decisions(
     *,
     home_address: str,
 ) -> list[dict[str, object]]:
-    """Per-event decision trace: every event in the window, with the why (#168).
+    """Per-event decision trace: every event in the window, with the why.
 
     One record per event — person, raw location text, resolved kind, the source
     rule that decided it, and whether the home assumption was applied. All-day

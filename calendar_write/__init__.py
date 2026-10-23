@@ -1,4 +1,4 @@
-"""Portable write-scope Google Calendar component (#217).
+"""Portable write-scope Google Calendar component.
 
 Sibling of ``calendar_readonly``: a separate credential/scope boundary, since
 Google Calendar OAuth scopes cannot be upgraded in place on an existing token.

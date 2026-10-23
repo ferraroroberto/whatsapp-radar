@@ -9,7 +9,7 @@ each streams human-readable progress to stdout and prints one final structured
 ``__WR_RESULT__`` sentinel line the webapp parses for the funnel/counts. They run
 identically whether fired here, from App Launcher Jobs, or spawned by the webapp.
 
-Since #233 a launchable verb fired *here* also writes its own filesystem run
+A launchable verb fired *here* also writes its own filesystem run
 record — see :mod:`app.cli.runlog` — so the Execution tab shows a scheduled
 run's output, not merely its outcome.
 """
@@ -119,7 +119,7 @@ def _cmd_set_status(conn: sqlite3.Connection, chat_id: int, status: str) -> int:
 
 
 def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
-    """The process verb: scan's traced analysis loop with no sync stage (#394).
+    """The process verb: scan's traced analysis loop with no sync stage.
 
     ``--dry-run`` here only withholds the digest — unlike ``scan``'s own
     ``--dry-run``, cursors still advance (``scan(mode="process")`` always does,
@@ -173,7 +173,7 @@ def _cmd_resync(conn: sqlite3.Connection, config: Config) -> int:
     connectors = _build_connectors(config)
     _progress("▶ resync starting — pulling latest from the connector buffer")
     try:
-        # Liveness gate (#29): self-heal the sidecar if it merely stopped, else
+        # Liveness gate: self-heal the sidecar if it merely stopped, else
         # abort loudly instead of silently upserting nothing from a dead source.
         outcome = resync(
             conn,
@@ -383,7 +383,7 @@ def _local_now() -> datetime:
 
 
 def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str | None:
-    """Cadence self-skip (#170) — the reason to skip a **live** ``traffic-check`` fire, or None.
+    """Cadence self-skip — the reason to skip a **live** ``traffic-check`` fire, or None.
 
     The Windows job is armed at a fixed high frequency (every few minutes) so a
     ``traffic.cadence_min`` edit in the Run tab takes effect immediately, with no
@@ -394,7 +394,7 @@ def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> st
     prints a log line, so `output.log` on the App Launcher side is the skip's
     audit trail.
 
-    Callers must only invoke this for **live** fires (#186) — a ``--dry-run`` is
+    Callers must only invoke this for **live** fires — a ``--dry-run`` is
     an explicit human-requested test pass and must always execute, never be
     cadence-skipped. :func:`store.last_run_started_at` already excludes dry-run
     rows from the "last run" lookup, so a dry run can't distort this either way.
@@ -416,14 +416,11 @@ def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> st
 
 
 def _calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | None:
-    """Hour self-skip (#277) — the reason to skip an unforced ``calendar-scan``, or None.
+    """Hour self-skip — the reason to skip an unforced ``calendar-scan``, or None.
 
-    ``family.run_hour`` was parsed, defaulted, exposed on ``/api/family`` and
-    editable there from #160 until #277 while being read by no scheduling code
-    at all: the app displayed an editable schedule it did not honour, and its
-    own comment named an hour (7) that was not the App Launcher job's (18:05).
-    This is the gate that makes the knob mean what it says — a scan fired
-    before ``run_hour`` local time does nothing and says so.
+    ``family.run_hour`` is exposed and editable on ``/api/family``, so this gate
+    is what makes the knob mean what it says — a scan fired before ``run_hour``
+    local time does nothing and says so.
 
     Deliberately mirrors :func:`_traffic_cadence_skip_reason`: the external job
     is armed generously and the *effective* schedule follows the config, so an
@@ -457,7 +454,7 @@ def _calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | No
 
 
 def _progress_travel_blocks(section: dict[str, Any]) -> None:
-    """Print the travel-block plan and what was applied (#266/#267).
+    """Print the travel-block plan and what was applied.
 
     One line per block to add with its origin, destination, time box and
     minutes, one per block to delete *with the reason it is stale*, then every
@@ -465,7 +462,7 @@ def _progress_travel_blocks(section: dict[str, Any]) -> None:
     commute was needed", then a counted summary carrying the Routes call count
     and, when the feature is live, what the apply actually did.
 
-    The delete lines are the rehearsal #263 requires before any live write is
+    The delete lines are the rehearsal required before any live write is
     allowed: read them on a dry run and confirm nothing outside the plan is
     listed for deletion.
     """
@@ -550,15 +547,15 @@ def _fmt_block_when(iso: str, *, time_only: bool = False) -> str:
 def _cmd_family_check(
     conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool, force: bool = False
 ) -> int:
-    """Run one family check, recording it as a run row like any other kind (#163).
+    """Run one family check, recording it as a run row like any other kind.
 
     The run record is what makes a scheduled (App Launcher) execution visible in
     the Audit tab — the check itself never touches the message store.
 
     Two self-skips guard the two verbs, both before any run row is opened and
     both reported as their own ``skipped`` state — never as a success, never as
-    an error: ``traffic-check``'s cadence window (#170) and ``calendar-scan``'s
-    ``family.run_hour`` (#277). ``force`` exempts the latter and is set by every
+    an error: ``traffic-check``'s cadence window and ``calendar-scan``'s
+    ``family.run_hour``. ``force`` exempts the latter and is set by every
     explicitly human-requested fire.
     """
     import json
@@ -579,7 +576,7 @@ def _cmd_family_check(
 
     # A check killed before it could finalize its row (Job timeout, restart,
     # reboot) cannot clean up after itself, so each fire first sweeps the rows
-    # earlier fires left at `running` (#371).
+    # earlier fires left at `running`.
     store.reconcile_stale_runs(conn)
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
     runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check
@@ -591,9 +588,9 @@ def _cmd_family_check(
         _emit_result({"kind": kind, "status": "error", "error": str(exc), "run_id": run_id})
         return 1
     except Exception as exc:
-        # Anything else (a network error, a malformed payload) used to escape with
-        # the row still `running` (#371). Record it, then let it propagate so the
-        # process still exits non-zero with its traceback.
+        # Anything else (a network error, a malformed payload) must not leave the
+        # row `running`. Record it, then let it propagate so the process still
+        # exits non-zero with its traceback.
         logger.error("❌ %s run %s failed unexpectedly: %r", kind, run_id, exc)
         store.finish_run_summary(
             conn, run_id, "failed", None, error=f"{type(exc).__name__}: {exc}"
@@ -601,7 +598,7 @@ def _cmd_family_check(
         raise
     except BaseException as exc:
         # Interrupt / termination: nobody observed an outcome, so neither `failed`
-        # nor `completed` is true (#371).
+        # nor `completed` is true.
         logger.warning(
             "⚠️ %s run %s interrupted (%s); recording it abandoned",
             kind, run_id, type(exc).__name__,
@@ -617,15 +614,14 @@ def _cmd_family_check(
             + (" [dry-run]" if dry_run else "")
         )
         # This repo configures no logging handlers, so `run_travel_blocks`'
-        # INFO lines are dropped — without this the reconciled plan (#267)
+        # INFO lines are dropped — without this the reconciled plan
         # would only ever be visible by opening the persisted run payload.
         _progress_travel_blocks(payload.get("travel_blocks") or {})
     else:
-        # "N route(s) checked" used to count every leg, including the ones that
-        # established nothing about the road (#283). A coverage number that
-        # silently counts non-coverage is how you end up trusting a check that
-        # has not been running, so the two are now reported separately and the
-        # unpriced half is named only when there is one.
+        # "N route(s) checked" counts only priced legs: a coverage number that
+        # silently counted legs that established nothing about the road is how
+        # you end up trusting a check that has not been running. The unpriced
+        # half is reported separately and named only when there is one.
         priced, unpriced = count_legs(payload.get("checked"))
         _progress(
             f"🚗 traffic-check: {payload['status']} — "
@@ -665,7 +661,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Everything below is wrapped so a run launched here — a terminal, or an App
     # Launcher Job — writes the same output-bearing run record the webapp writes
-    # for the runs it spawns (#233). A no-op for verbs that record no run, and
+    # for the runs it spawns. A no-op for verbs that record no run, and
     # for a process the webapp is already capturing. Installed after the UTF-8
     # reconfigure above so the tee wraps streams that are already UTF-8.
     return runlog.run_captured(args.command, raw_argv, lambda: _run_command(args))
@@ -690,11 +686,11 @@ def _run_command(args: argparse.Namespace) -> int:
 
     conn = store.connect(config.db_path)
     try:
-        # Family checks (#160) never touch the message store, but since #163 they
+        # Family checks never touch the message store, but they
         # record a run row so scheduled executions are visible in the Audit tab.
         if args.command in ("calendar-scan", "traffic-check"):
             # `--force` exists only on `calendar-scan`; traffic-check's own
-            # self-skip is exempted by `--dry-run` instead (#186).
+            # self-skip is exempted by `--dry-run` instead.
             return _cmd_family_check(
                 conn, config, args.command, args.dry_run, getattr(args, "force", False)
             )

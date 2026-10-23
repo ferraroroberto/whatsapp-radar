@@ -1,4 +1,4 @@
-"""Portable read-only Google Calendar component (issue #160).
+"""Portable read-only Google Calendar component.
 
 Sibling of ``gmail_readonly``: installed-app OAuth refresh-token flow scoped to
 ``calendar.readonly`` only, plus a narrow read client and provider-neutral event

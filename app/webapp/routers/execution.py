@@ -1,4 +1,4 @@
-"""Run queue (#11; Activity's Run now since #373): run the end-to-end
+"""Run queue (Activity's Run now): run the end-to-end
 pipeline — or a single stage — and watch it live.
 
 This router is a thin launcher over the CLI verbs. Every action maps to a
@@ -95,7 +95,7 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         return ["reprocess", "--confirm"]
 
     if action in {"calendar-scan", "traffic-check"}:
-        # Family checks (#160): the same verb App Launcher Jobs schedule. A live
+        # Family checks: the same verb App Launcher Jobs schedule. A live
         # run honours the enable toggle and may send an alert; dry-run never does.
         argv = [action]
         if mode == "dry_run":
@@ -103,9 +103,9 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         if action == "calendar-scan":
             # Every run this router spawns is a button press: Activity's Run-now
             # Calendar-sync step and the Family tab's Rehearse / Run sweep
-            # controls (#276). The webapp schedules nothing of its own, so an
+            # controls. The webapp schedules nothing of its own, so an
             # explicit human request must never be eaten by `family.run_hour`'s
-            # self-skip (#277) — a "Run sweep" at 22:00 has to sweep. The gate
+            # self-skip — a "Run sweep" at 22:00 has to sweep. The gate
             # governs the unattended App Launcher fire, which passes no --force.
             argv.append("--force")
         return argv
@@ -114,11 +114,11 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
 
 
 def _calendar_source(cfg: Any, recent_runs: list[sqlite3.Row]) -> dict[str, Any]:
-    """A read-only Calendar row for Sources health (#164).
+    """A read-only Calendar row for Sources health.
 
     Calendar is not a message connector — it feeds the family daily scan — so it
     is described from :class:`CalendarConfig` plus the last successful
-    ``calendar-scan`` run in the unified store (#163) as its "last fetch".
+    ``calendar-scan`` run in the unified store as its "last fetch".
     """
     calendar = cfg.calendar
     token_present = calendar.token_path.is_file()
@@ -169,7 +169,7 @@ async def start_execution_run(request: Request) -> dict[str, Any]:
 def execution_health(request: Request) -> dict[str, Any]:
     """Truthful, secret-free status for every configured message source.
 
-    A plain ``def`` on purpose (#393): the connector probes are blocking network
+    A plain ``def`` on purpose: the connector probes are blocking network
     I/O (Gmail token refresh + profile calls), and Starlette runs a sync route in
     its threadpool, so a slow upstream can't freeze the event loop — and with it
     ``/healthz`` and every other request.
@@ -247,7 +247,7 @@ def execution_health(request: Request) -> dict[str, Any]:
                 )
             statuses.append(item)
         # Overall health reflects the *message* sources only; the calendar row is
-        # a read-only, non-ingesting source appended for visibility (#164).
+        # a read-only, non-ingesting source appended for visibility.
         connected = bool(statuses) and all(item["connected"] for item in statuses)
         detail = "; ".join(
             f"{item['source']}: {item['detail']}" for item in statuses
@@ -308,7 +308,7 @@ def _fs_mode(record: dict[str, Any]) -> str:
 
 
 def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
-    """Shape a DB run row as a run record for the unified runs list/viewer (#163).
+    """Shape a DB run row as a run record for the unified runs list/viewer.
 
     Covers runs launched outside the webapp (CLI, App Launcher Jobs) which have
     no filesystem record: family checks carry their summary payload as the
@@ -351,7 +351,7 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
 
 
 #: Self-skips are almost all of a full-rate ``traffic-check`` kind's newest
-#: records (#170/#234), and of a generously-armed ``calendar-scan``'s (#277)
+#: records, and of a generously-armed ``calendar-scan``'s
 #: — reading only the caller's requested `limit`
 #: from :func:`app.webapp.runs.list_runs` before filtering them out could
 #: starve the result of real runs entirely. Widen the read to the retention
@@ -368,22 +368,22 @@ async def list_execution_runs(
     include_skipped: bool = False,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Unified recent runs: one entry per execution across both stores (#163).
+    """Unified recent runs: one entry per execution across both stores.
 
     Filesystem records (webapp-launched, carry live output) are merged with DB
     run rows (every launch) by the DB run id; DB-only rows — scheduled scans and
     family checks — synthesize a record so nothing that ran is invisible here.
 
     Self-skips (``result.status == "skipped"``) are excluded from the default
-    response — at full fire rate ``traffic-check``'s cadence skips (#170) are
+    response — at full fire rate ``traffic-check``'s cadence skips are
     ~11 of every 12 of that kind's records, and ``calendar-scan``'s
-    ``family.run_hour`` skips (#277) scale the same way with how generously the
+    ``family.run_hour`` skips scale the same way with how generously the
     App Launcher job is armed. Both would otherwise drown the real runs in
-    "Recent runs" (#234). They are never deleted — retention is the separate,
+    "Recent runs". They are never deleted — retention is the separate,
     unrelated cap in :func:`app.webapp.runs.prune_runs` — and stay fetchable
     with ``include_skipped=true``; ``skipped_count`` reports how many were
     hidden so the count itself stays visible even when the rows don't.
-    ``skipped_by_kind`` splits that total per run kind (#393), so the Activity
+    ``skipped_by_kind`` splits that total per run kind, so the Activity
     tab can show a scope only its own kind's skips.
     """
     limit = max(1, min(limit, 200))
@@ -446,7 +446,7 @@ async def get_execution_run(
         if row is None or row["kind"] != kind:
             raise HTTPException(status_code=404, detail="run not found")
         # A run launched from the webapp or the CLI left a record with its
-        # captured output (#373): serve that, with the DB row's timing and mode.
+        # captured output: serve that, with the DB row's timing and mode.
         captured = runs.find_by_db_run_id(kind, rid)
         if captured is None:
             return {"run": _db_run_record(row)}

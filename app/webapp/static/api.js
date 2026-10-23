@@ -52,7 +52,7 @@ export async function jsonApi(path, opts) {
 }
 
 // Every tab's "load my data" entry point repeated the same
-// try/jsonApi/catch-and-return-undefined scaffold (#237): a 401 already flips
+// try/jsonApi/catch-and-return-undefined scaffold: a 401 already flips
 // the login overlay open above in api(), so the catch here just needs to stay
 // quiet and skip the render. `onOk` runs only on a successful fetch, and may
 // itself be async — awaited so a caller that needs the whole thing settled

@@ -1,30 +1,30 @@
-"""Traffic-jam insurance check (issues #160, #169, #185) — deterministic, one-shot.
+"""Traffic-jam insurance check — deterministic, one-shot.
 
 Pipeline: quiet-hours gate → fetch upcoming events → classify commutes →
 resolve each leg's origin → one Routes call per leg → dedup → alert on a
 significant delay, an infeasible back-to-back hop, or the moment a live-tracked
-person must leave to make an event on time (#185). Returns a schema-stable
+person must leave to make an event on time. Returns a schema-stable
 result payload (one entry per route checked, always-present ``dedup_key``, one
 timestamp format, real API output only) that the CLI persists as the run's
-``summary_json`` (#163) and prints.
+``summary_json`` and prints.
 
-The leave-now alert (#185) closes the loop from *detection* to *action*: when a
+The leave-now alert closes the loop from *detection* to *action*: when a
 live phone fix puts the person far enough out that ``event.start - (now + eta +
 leave_margin_min) <= 0``, one Telegram nudge fires, deduped independently of the
 delay alert so both can coexist for one event. A calendar-inference origin never
 triggers it — no real position, no claim about where the person is. When more
-than one person's leave-now lands on the same event (#213), they are combined
+than one person's leave-now lands on the same event, they are combined
 into one message naming everyone instead of one redundant message per person.
 Grouping is by event alone — summary and start. The ETA deliberately is *not*
 part of that key: it is derived from each person's own phone fix, so including
-it (as #213 originally did) split two people sharing one car into separate
-messages over a one-minute difference. The merged text quotes the group's
-largest ETA, since the nudge has to be right for whoever is furthest out (#252).
+it would split two people sharing one car into separate messages over a
+one-minute difference. The merged text quotes the group's largest ETA, since
+the nudge has to be right for whoever is furthest out.
 
-A commute whose title marks it as taken by train (#227) is exempt from *both*
+A commute whose title marks it as taken by train is exempt from *both*
 driving-ETA judgments while ``traffic.skip_leave_now_for_train`` is on: the
 leave-now nudge and the infeasible-hop "tight schedule" alert both reason from
-a Routes DRIVE result, which says nothing about a train departure (#252).
+a Routes DRIVE result, which says nothing about a train departure.
 Recorded per leg as ``leave_now_suppressed`` / ``infeasible_suppressed``. The
 *delay* alert stays untouched — congestion on the road is a real-world signal
 regardless of who is driving.
@@ -40,7 +40,7 @@ reported as the ``anchor_in_the_past`` state when the thing being judged is over
 ended ten minutes ago has not left yet, so their honest anchor is ``now``, and
 the tight-schedule warning they are about to need still fires.
 
-Origin resolution (#169): the responsible person's *live phone position* when
+Origin resolution: the responsible person's *live phone position* when
 home-automation reports a fresh fix, else the calendar-inference chain (home, or
 a preceding back-to-back commute's destination) — recorded per leg as
 ``location_source`` so the Audit trace shows which was used for every decision.
@@ -106,13 +106,11 @@ def _alert_text(
     person: str, leg_summary: str, result: RouteResult, delay: int,
     *, anchor: datetime | None,
 ) -> str:
-    """The delay alert, stamped with the moment it was priced for (#270).
+    """The delay alert, stamped with the moment it was priced for.
 
-    Before #270 this always opened with "Now", which was true of the estimate
-    (Routes silently priced every leg depart-now) but not of the claim. Now that
-    a leg can genuinely be priced for a future departure the message has to say
-    which: "Now ~40 min" about a 17:30 drive is the same silent wrongness in
-    words instead of in a request body.
+    A leg can be priced for a future departure, so the message has to say which:
+    "Now ~40 min" about a 17:30 drive would be a silent wrongness in words
+    instead of in a request body.
     """
     when = "Now" if anchor is None else f"At {anchor.strftime('%H:%M')}"
     return (
@@ -172,7 +170,7 @@ def _resolve_origin_for_leg(
 def _departure_anchor(
     leg: rules.CommuteLeg, location_source: str, *, now: datetime
 ) -> tuple[datetime | None, str]:
-    """The moment this leg must be priced as a *departure*, and why (#270).
+    """The moment this leg must be priced as a *departure*, and why.
 
     The anchor *is* the estimate: Routes honours only ``departureTime`` (see
     :func:`~src.traffic.routes_client.compute_route`). ``None`` means *send no
@@ -183,7 +181,7 @@ def _departure_anchor(
     that needs a departure moment, so one anchor per leg is enough:
 
     * **Live phone fix** → ``None`` (depart now). The judgment this leg exists
-      for is the leave-now nudge (#185), which asks "if they set off *now*, do
+      for is the leave-now nudge, which asks "if they set off *now*, do
       they still make it?" — that is a departure at ``now``, and sending no time
       field is how Routes is asked for exactly that. The delay alert riding the
       same call therefore reads the traffic on the road right now, which is the
@@ -192,19 +190,19 @@ def _departure_anchor(
       for a drive starting hours later, and the nudge is the actionable half.
     * **Chained off a preceding event** → that event's ``end``, or ``None``
       (depart now) once that end has passed. The judgment is the infeasible-hop
-      check (#169, #252): can the gap between two events absorb the drive? The
+      check: can the gap between two events absorb the drive? The
       person sets off when the first event ends, so that is the departure being
       priced. Once it has passed they have *not* left — they are late — and the
       honest anchor is ``now``: an office event ending at 13:00, lunch elsewhere
       at 13:15 and a sweep at 13:10 is precisely the window where a 25-minute
       drive most needs the "you may not make it" warning, and reporting that leg
-      as unpriceable silently dropped it (review of #282). ``gap_min`` is
+      as unpriceable would silently drop it. ``gap_min`` is
       measured from the preceding event's end either way, so the feasibility
       verdict is unaffected by which of the two anchors priced the drive.
     * **From home, no live fix** → the event's ``start``. Only the delay alert
       applies, and the true departure is one drive-length *earlier* — which is
       the number the call is about to return, so it cannot be known first. Same
-      trade-off ``travel_blocks._departure_anchor`` already reasons out for an
+      trade-off ``travel_blocks._departure_anchor`` reasons out for an
       outbound leg: wrong by at most the drive's own length (10-30 min) against
       being wrong by the whole sweep-to-event distance (hours) if the moment
       were effectively dropped, and refining it would cost a second call per leg.

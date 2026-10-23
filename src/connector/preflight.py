@@ -1,10 +1,10 @@
 """Connector liveness preflight — the first step of any live run.
 
 A live ``scan`` / ``resync`` must never proceed against a dead message source.
-Before #29 the pipeline called ``connector.connect()`` and *ignored* the result,
-so a scan against a stopped/stale sidecar read the stale buffer, found no new
-messages, advanced cursors over a no-op, and reported success — a scheduled job
-would look green while completely blind.
+Ignoring the ``connector.connect()`` result would let a scan against a
+stopped/stale sidecar read the stale buffer, find no new messages, advance
+cursors over a no-op, and report success — a scheduled job would look green
+while completely blind.
 
 This module is the gate. :func:`ensure_connected` is the hard check any caller
 can use; :func:`preflight` adds the self-heal: for the linked-device connector it
@@ -58,7 +58,7 @@ def preflight(
     needs a fresh QR) raises :class:`ConnectorOffline`.
 
     Before returning a live linked-device status it also waits for the buffer to
-    *settle* (#73): a (re)connect streams history in asynchronously, so reading
+    *settle*: a (re)connect streams history in asynchronously, so reading
     immediately would under-report — and a live scan advances cursors over what it
     read, permanently skipping the un-synced tail. The gate is a fast no-op once
     the buffer is quiet (the steady state with the tray keep-alive running).
@@ -77,7 +77,7 @@ def preflight(
             # would propagate past the callers' `except ConnectorOffline`
             # (app/cli/main.py, pipeline.py) and crash a live scheduled run
             # with its sync_log/run row left dangling instead of a loud,
-            # recorded offline failure (#435).
+            # recorded offline failure.
             emit(progress, f"✗ sidecar launch failed: {exc}")
             detail = f"sidecar launch failed: {exc}"
             raise ConnectorOffline(

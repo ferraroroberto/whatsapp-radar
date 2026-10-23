@@ -1,9 +1,9 @@
-"""Routine-prep -> calendar reminder creation (#218, Step 4/5 of #206).
+"""Routine-prep -> calendar reminder creation.
 
-Additive side effect alongside the existing Telegram digest: once a Stage-2
+Additive side effect alongside the Telegram digest: once a Stage-2
 item resolves as action-required, routine-complexity, with a known child and
 deadline date, this creates one morning-of-deadline calendar event via the
-Step 3 write adapter (``calendar_write``) and returns the created event id to
+write adapter (``calendar_write``) and returns the created event id to
 persist on the item's ``analysis_items`` row. Never raises — a missing/invalid
 write token, an unconfigured reminder calendar, or a Google API failure all
 degrade to "no calendar event created"; the Telegram digest path is untouched.
@@ -33,7 +33,7 @@ def is_eligible(result: AnalysisResult) -> bool:
     """Whether ``result`` qualifies for a routine-prep reminder event.
 
     Never guesses: a non-routine item, an unresolved child, or a missing
-    deadline date all fall back to today's Telegram-only behavior (#218).
+    deadline date all fall back to Telegram-only behavior.
     """
     return (
         result.action_required
@@ -48,7 +48,7 @@ def build_client(calendar: CalendarConfig) -> CalendarWriteClient:
 
     Raises ``FileNotFoundError``/``RuntimeError`` (token not yet minted, or
     invalid/revoked) for the caller to catch and degrade gracefully — see
-    ``scripts/auth_calendar_write.py`` (#217).
+    ``scripts/auth_calendar_write.py``.
     """
     return build_google_calendar_write_client(calendar.write_token_path)
 
@@ -92,7 +92,7 @@ def create_reminder_event(
 
     Idempotent across reprocessing/replays: identity is the evidence-message-id
     set, not the run, so the same underlying item never mints a second event
-    even if it is reclassified in a later run (#218).
+    even if it is reclassified in a later run.
     """
     existing = store.find_calendar_event_for_evidence(conn, chat_id, result.evidence_message_ids)
     if existing is not None:
@@ -102,7 +102,7 @@ def create_reminder_event(
     try:
         # Built inside the guard: ``deadline_date`` is a model-supplied string that
         # ``contract.py`` validates for type only, so a non-ISO date (or a malformed
-        # configured ``reminder_time``) must degrade here, not crash the scan (#348).
+        # configured ``reminder_time``) must degrade here, not crash the scan.
         event = build_reminder_event(family, result, chat_display_name)
         created = client.insert_event(calendar_id=calendar_id, event=event)
     except Exception as exc:  # noqa: BLE001 — a calendar failure must never break the scan

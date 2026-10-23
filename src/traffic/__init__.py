@@ -1,4 +1,4 @@
-"""Google Routes API v2 traffic client for the family traffic-jam check (#160).
+"""Google Routes API v2 traffic client for the family traffic-jam check.
 
 API-key auth over REST (a different credential path from the Calendar OAuth
 flow). Deterministic: returns normal vs. traffic-aware duration, the delay in

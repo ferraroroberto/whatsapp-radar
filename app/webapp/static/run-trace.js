@@ -1,8 +1,8 @@
-/* Run trace (#12): the per-run decision record — the reason the radar is
- * trustworthy. Pure renderers for Activity's run sheet (#373), which shows every
+/* Run trace: the per-run decision record — the reason the radar is
+ * trustworthy. Pure renderers for Activity's run sheet, which shows every
  * run kind through one detail.
  *
- * Read-only view over the persisted trace (#7): for a message run, the per-chat
+ * Read-only view over the persisted trace: for a message run, the per-chat
  * decision record (the input delta, the Stage-1 roots, the exact LLM prompts,
  * the raw response, the parsed verdict, the final action, and the Telegram
  * text); for a family check, its structured payload. All chat names / message
@@ -16,8 +16,8 @@ const FAMILY_KINDS = ['traffic-check', 'calendar-scan'];
 export function isFamilyKind(kind) { return FAMILY_KINDS.indexOf(kind) !== -1; }
 
 // Live = a real run that synced + (maybe) delivered; dry_run = replay on stored
-// data; process = `wr review`'s own mode (#394); review = that same verb's
-// legacy DB mode value, from before it was expressed as a scan mode.
+// data; process = `wr review`'s own mode; review = that same verb's
+// legacy DB mode value, shown as Process.
 const MODE_LABEL = { live: 'Live', dry_run: 'Dry run', process: 'Process', review: 'Process' };
 
 export function modeLabel(mode) { return MODE_LABEL[mode] || mode || '?'; }
@@ -41,7 +41,7 @@ export function paramsSummary(params) {
   return bits.join(' ');
 }
 
-/* The one funnel (#373): Run and Audit each had their own. `data` is either a
+/* The one funnel for every run kind. `data` is either a
  * DB run (a `funnel` from the run's columns plus `notification_status`) or a
  * live run's parsed `result`, which carries the same funnel keys for the
  * message runs and its own counters for the maintenance verbs. Null when the
@@ -100,7 +100,7 @@ function traceField(title, text) {
 // Stage-1 shows the exact keyword roots that message matched (or "no keyword");
 // the LLM column is shown only when the LLM ran, marking whether the model
 // flagged this message as evidence. Eliminates the "which ones triggered?" black
-// box (#12). All content via textContent (privacy + no markup eval).
+// box. All content via textContent (privacy + no markup eval).
 function messageRow(m, llmCalled, evidence) {
   const li = document.createElement('li');
   li.className = 'audit-msg';
@@ -114,7 +114,7 @@ function messageRow(m, llmCalled, evidence) {
   head.appendChild(sender);
 
   // A voice badge marks a note whose text is the transcription fed into
-  // analysis (#36).
+  // analysis.
   if (m.type === 'voice') {
     const voice = document.createElement('span');
     voice.className = 'audit-msg-badge muted';
@@ -205,7 +205,7 @@ function traceBlock(t) {
   stages.textContent = `${source} · ${s1} · ${s2}`;
   body.appendChild(stages);
 
-  // Per-message breakdown when the trace carries it (#12); older rows fall back
+  // Per-message breakdown when the trace carries it; older rows fall back
   // to the rendered input blob so historical traces still render.
   const perMessage = messagesList(t);
   const roots = Array.isArray(t.stage1_roots) ? t.stage1_roots.join(', ') : t.stage1_roots;
@@ -240,7 +240,7 @@ function appendTravelList(wrap, title, lines) {
   wrap.appendChild(traceField(title + ' (' + lines.length + ')', lines.join('\n')));
 }
 
-/* Travel-block sweep (#276), readable above the raw payload dump.
+/* Travel-block sweep, readable above the raw payload dump.
  *
  * Person, leg kind, event title, time box and minutes for each planned block;
  * every removal and every left-alone block with the reason that put it there;
@@ -305,7 +305,7 @@ function travelBlockSection(section) {
   return wrap;
 }
 
-/* Family-check drill-down (#163): the run's structured payload IS the trace —
+/* Family-check drill-down: the run's structured payload IS the trace —
  * the headline counts as funnel cells and the payload readably, then redacted.
  * `t` holds the sheet's target elements: {funnel, sources, traces, empty}. */
 export function renderFamilyTrace(t, run) {
@@ -314,7 +314,7 @@ export function renderFamilyTrace(t, run) {
   renderSourceFunnels(t.sources, {});
   t.traces.textContent = '';
   // Calendar-sync runs carry a per-event decision trace + the sent summary
-  // (#168) — render those readably above the raw payload.
+  // — render those readably above the raw payload.
   const summaryMsg = s.summary && s.summary.text
     ? traceField(`Summary message (${s.summary.status || 'unknown'})`, s.summary.text)
     : null;
@@ -331,7 +331,7 @@ export function renderFamilyTrace(t, run) {
     ? traceField(`Event decisions (${decisions.length})`, decisions.join('\n'))
     : null;
   if (decisionsBlock) t.traces.appendChild(decisionsBlock);
-  // Live phone-position coverage judgment (#177) — derived values only, the
+  // Live phone-position coverage judgment — derived values only, the
   // payload never carries coordinates.
   const live = (s.live_coverage || []).map((c) => {
     if (!c.assessed) {
@@ -347,12 +347,12 @@ export function renderFamilyTrace(t, run) {
     ? traceField(`Live coverage (${live.length})`, live.join('\n'))
     : null;
   if (liveBlock) t.traces.appendChild(liveBlock);
-  // The commute travel-block sweep (#276) — above the dump, since the dump is
-  // where this record was previously only technically visible.
+  // The commute travel-block sweep — above the dump, which is only a raw
+  // technical view of this record.
   const travel = travelBlockSection(s.travel_blocks);
   if (travel) t.traces.appendChild(travel);
-  // The dump is redacted by whitelist (#285): it used to serialise the whole
-  // payload verbatim, calendar ids and street addresses included, immediately
+  // The dump is redacted by whitelist: serialising the whole
+  // payload verbatim would show calendar ids and street addresses, immediately
   // beneath the purpose-built blocks that carefully do not show them.
   const withheld = withheldKeys(run.summary);
   const payload = traceField('Run payload', redactPayload(run.summary));
@@ -372,7 +372,7 @@ export function renderFamilyTrace(t, run) {
   if (!payload) t.empty.textContent = 'No payload recorded for this run.';
 }
 
-/* Message-run drill-down (#12): the funnel, the per-source split and one
+/* Message-run drill-down: the funnel, the per-source split and one
  * disclosure per traced chat. Same `t` targets as renderFamilyTrace. */
 export function renderMessageTrace(t, run, traces) {
   renderFunnelCells(t.funnel, funnelCells(run.kind, run) || []);
@@ -383,7 +383,7 @@ export function renderMessageTrace(t, run, traces) {
   // Reconcile the funnel when there's nothing to drill into: a live scan can sync
   // messages yet trace nothing because none landed in a monitored chat. Say so
   // explicitly rather than a bare "no trace" — without surfacing the unmonitored
-  // chats' content (scope stays monitored-only, #12).
+  // chats' content (scope stays monitored-only).
   if (!list.length) {
     const synced = (run.funnel && run.funnel.messages_synced) || 0;
     t.empty.textContent = synced

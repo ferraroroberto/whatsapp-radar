@@ -1,4 +1,4 @@
-/* Family-chat linking (#25): merge two chats onto one canonical parent so a
+/* Family-chat linking: merge two chats onto one canonical parent so a
  * person reachable from multiple numbers/senders is reviewed as one thread.
  *
  * All link maintenance happens inside a chat's history overlay. The link
@@ -13,7 +13,7 @@
  *
  * chats.js is the only importer and stays the aggregator: this module never
  * imports chats.js back. `wireChatLinks()` wires the parent picker's DOM
- * listeners; the chat sheet's menu (#375) calls `renameCurrentChat` and
+ * listeners; the chat sheet's menu calls `renameCurrentChat` and
  * `openLinkPanel`. Anything this needs from chats.js at click time — the
  * currently open chat, alias-aware label
  * formatting, refreshing the chat list + overlay after a mutation — is
@@ -160,7 +160,7 @@ function renderPicker() {
     : (all.length ? fmtNum(all.length) + ' chat' + (all.length === 1 ? '' : 's') : '');
 
   for (const c of shown) {
-    // A vendored action-row (#375): a 60px target with the count + last time.
+    // A vendored action-row: a 60px target with the count + last time.
     const { li } = actionRow({
       liClass: 'link-pick-row',
       title: picker.deps.chatLabel(c),
@@ -213,7 +213,7 @@ async function doLink(child, parent) {
 // in the DB (and the parenthesized label); the alias is the human-friendly
 // override that shows first — useful when the connector could only resolve a
 // bare number (e.g. an unsaved contact).
-// The chat sheet's menu items (#375) — Rename… and Link chats… — call these.
+// The chat sheet's menu items — Rename… and Link chats… — call these.
 export function renameCurrentChat(deps) {
   renameChat(deps.getCurrentChat(), deps).catch(function () {});
 }

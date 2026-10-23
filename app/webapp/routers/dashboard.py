@@ -114,7 +114,7 @@ def _calendar_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
     conflicts = len(result.get("conflicts") or [])
-    # Renamed unknown_locations -> missing_locations in #168; old rows persist.
+    # Stored rows may carry the legacy key unknown_locations; read both.
     missing = len(result.get("missing_locations") or result.get("unknown_locations") or [])
     alerts = conflicts + missing
     if result.get("status") == "disabled":
@@ -138,7 +138,7 @@ def _last_activity(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """One "last activity" card per kind (WhatsApp · Gmail · Traffic · Calendar).
 
     Each answers "when did this last run and what did it find" from the unified
-    run store (#163), so a CLI- or Jobs-launched run is as visible here as a
+    run store, so a CLI- or Jobs-launched run is as visible here as a
     webapp one. ``db_run_id`` lets Home deep-link to the run's sheet in Activity.
     """
     runs = store.list_runs_by_kind(conn, (*_MESSAGE_KINDS, "traffic-check", "calendar-scan"))

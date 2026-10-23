@@ -270,7 +270,7 @@
     <section id="paneDashboard" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
       <!-- Page header (vendored home-head): the tab's name, a context line naming
            the most severe exception (a link into its run in Activity), else one
-           muted fact (#374), theme toggle and Settings gear. -->
+           muted fact, theme toggle and Settings gear. -->
       <div class="card home-head">
         <span class="home-title">
           <svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>
@@ -283,7 +283,7 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <!-- Glance card (#374): is the radar working, and does anything need me?
+      <!-- Glance card: is the radar working, and does anything need me?
            One row per source, drawn at once with a dash for a value still
            loading so nothing shifts; each row opens its last run in Activity. -->
       <section class="card action-list glance-card" aria-label="Sources at a glance">
@@ -312,7 +312,7 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <!-- One scope switch and one filter field over one fleet row (#375): the
+      <!-- One scope switch and one filter field over one fleet row: the
            source filter is a chip inside the field, never a second row. -->
       <div class="chats-layout">
         <div class="chats-main">
@@ -333,7 +333,7 @@
               <option value="gmail">Gmail</option>
             </select>
           </label>
-          <!-- Worth a look (#375): chats whose recent messages match their source's
+          <!-- Worth a look: chats whose recent messages match their source's
                Stage-1 rules, shown above the list only when there is something. -->
           <section id="tripwireCard" class="run-group worth-look" aria-live="polite" hidden>
             <h3 id="tripwireTitle" class="overline">Worth a look</h3>
@@ -359,7 +359,7 @@
       <!-- Page header (vendored home-head): the tab's name, a status line naming
            the most severe exception (else one muted fact), the Run-now action,
            theme toggle and Settings gear. The status span is always present so
-           its text arriving never shifts the row (#373). -->
+           its text arriving never shifts the row. -->
       <div class="card home-head">
         <span class="home-title">
           <svg class="icon" aria-hidden="true"><use href="#i-activity"></use></svg>
@@ -374,9 +374,8 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <!-- One list over the one run store (#373): Run and Audit were two views of
-           it. A wide screen shows the open run in the right-hand pane; a phone
-           opens it as a sheet (#runSheet). -->
+      <!-- One list over the one run store. A wide screen shows the open run in the
+           right-hand pane; a phone opens it as a sheet (#runSheet). -->
       <div class="activity-layout">
         <div class="activity-main">
           <div id="activityScope" class="segmented activity-scope" data-track="activity.scope" role="group" aria-label="Activity scope">
@@ -412,7 +411,7 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <!-- Family (#376): the household rules as inset groups, each row showing
+      <!-- Family: the household rules as inset groups, each row showing
            its rule's current value (filled by family.js from /api/family). A
            row that edits something opens a sheet (#familySheet, or the travel
            sheet) holding the real control; the sheet commits on Done. The two
@@ -515,7 +514,7 @@
         </div>
       </section>
 
-      <!-- Traffic checks (#164; moved here from Run in #373, a group in #376).
+      <!-- Traffic checks, a group in the Family pane.
            The switch and the two check rows keep their execTraffic* ids, which
            execution.js wires to its run queue. -->
       <section id="execTrafficCard" class="run-group inset-group" aria-labelledby="familyTrafficTitle">
@@ -601,7 +600,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </main>
 
-  <!-- Settings (#337): opened by the home-head gear on every pane. Settings is
+  <!-- Settings: opened by the home-head gear on every pane. Settings is
        never a tab (fleet nav contract). The cards keep their ids, so
        config.js / execution.js wire them unchanged. -->
   <dialog id="settingsDialog" class="detail-dialog">
@@ -612,7 +611,7 @@
         <button id="settingsClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
-      <!-- Settings (#377): inset groups, as Family. Each row shows its current
+      <!-- Settings: inset groups, as Family. Each row shows its current
            value (filled by config.js / execution.js / webauthn.js) and opens a
            sheet — #settingsSheet, or #sourceSheet for a source — that commits
            on Done; Text size applies inline. -->
@@ -782,7 +781,7 @@
     </div>
   </dialog>
 
-  <!-- Settings sheets (#377): one shell filled per row by config.js. Done
+  <!-- Settings sheets: one shell filled per row by config.js. Done
        commits a partial POST /api/config; the close button, the backdrop and
        Esc discard the sheet's edits. -->
   <dialog id="settingsSheet" class="detail-dialog edit-sheet">
@@ -801,10 +800,10 @@
     </div>
   </dialog>
 
-  <!-- A source's sheet (#377): its switch and connector (the draft), then the
+  <!-- A source's sheet: its switch and connector (the draft), then the
        counts, health, Reconnect + pairing QR and recent syncs that
-       execution.js and dashboard.js keep writing in place (ids from #373 and
-       #374). `data-source` picks whose entries show. -->
+       execution.js and dashboard.js keep writing in place. `data-source` picks
+       whose entries show. -->
   <dialog id="sourceSheet" class="detail-dialog edit-sheet" data-source="whatsapp">
     <div class="detail-card" aria-labelledby="sourceSheetTitle">
       <div class="detail-header">
@@ -835,7 +834,7 @@
     </div>
   </dialog>
 
-  <!-- Run sheet (#373): one detail for every run, opened from an Activity row.
+  <!-- Run sheet: one detail for every run, opened from an Activity row.
        A phone shows it as this sheet; a wide screen moves #runSheetCard into
        the Activity pane's right-hand column instead (activity.js). -->
   <dialog id="runSheet" class="detail-dialog run-sheet-dialog">
@@ -872,7 +871,7 @@
     </div>
   </dialog>
 
-  <!-- Run now (#373): manual runs are rare, so the controls fold behind the
+  <!-- Run now: manual runs are rare, so the controls fold behind the
        Activity header action. Behaviour is execution.js's queue, unchanged. -->
   <dialog id="runNowSheet" class="detail-dialog">
     <div class="detail-card run-now-card" aria-labelledby="runNowTitle">
@@ -932,7 +931,7 @@
     </div>
   </dialog>
 
-  <!-- Family sheets (#376). One shell filled per rule by family.js, plus the
+  <!-- Family sheets. One shell filled per rule by family.js, plus the
        travel-block sheet (its sweep controls poll in place, so it keeps its
        own nodes). Done commits through POST /api/family; the close button,
        the backdrop and Esc discard the sheet's edits. -->
@@ -969,7 +968,7 @@
     </div>
   </dialog>
 
-  <!-- Filtered out (#194, #373): opened from the fold row at the end of
+  <!-- Filtered out: opened from the fold row at the end of
        Activity's Messages list. -->
   <dialog id="filteredSheet" class="detail-dialog">
     <div class="detail-card filtered-card" aria-labelledby="filteredTitle">
@@ -998,7 +997,7 @@
 
   <dialog id="historyOverlay" class="detail-dialog">
     <div id="historyCard" class="detail-card history-card" aria-labelledby="historyTitle">
-      <!-- One labelled menu and the close (#375): no overlapping hit areas. -->
+      <!-- One labelled menu and the close: no overlapping hit areas. -->
       <div class="detail-header history-header">
         <span id="historyAvatar" class="action-row-avatar chat-avatar" aria-hidden="true"></span>
         <span class="history-heading">

@@ -1,11 +1,11 @@
-"""Presence client — the responsible parent's live phone location (issue #169).
+"""Presence client — the responsible parent's live phone location.
 
 One public seam, :func:`get_location`, over home-automation's read-only presence
 API (``GET /api/presence`` cached snapshot + ``POST /api/presence/refresh`` forced
 locate; loopback bypasses its bearer token). It resolves a whatsapp-radar person
 key to a tracked entity, derives the fix's freshness *from ``last_seen``* — never
 from the API's own ``stale`` field, which is hard-coded ``false`` for iCloud
-entities (home-automation#483) — and:
+entities — and:
 
 - returns a :class:`PresenceLocation` when the fix is fresh (≤ ``max_age_min``);
 - forces one bounded refresh and re-reads when it is stale, returning the fresh
@@ -105,8 +105,8 @@ def _match_entities(
     (per-device rows across two accounts plus derived role/"shortcut" people
     entries that carry ``at_home`` but no coordinates) — the caller picks the
     best usable fix rather than trusting whichever happens to be listed first
-    (#177: first-match shadowed the real device fix behind a coordinate-less
-    role entry on the very first live run).
+    (a first-match would shadow the real device fix behind a coordinate-less
+    role entry).
     """
     wanted = {_fold(person), *(_fold(a) for a in aliases)}
     wanted.discard("")
@@ -127,7 +127,7 @@ def _match_entities(
 @contextmanager
 def _tls_warning_guard(verify: bool) -> Iterator[None]:
     """Silence urllib3's per-request insecure warning only when ``verify_tls``
-    was deliberately turned off (the loopback Tailscale-cert case, #177) —
+    was deliberately turned off (the loopback Tailscale-cert case) —
     a verified deployment keeps every warning."""
     if verify:
         yield
@@ -172,7 +172,7 @@ def _evaluate(
 
     # Among all of the person's entities, use the freshest one that actually
     # carries a fix — coordinate-less rows (role/"shortcut" entries, offline
-    # accessories) must never shadow a live device (#177).
+    # accessories) must never shadow a live device.
     usable: list[tuple[datetime, float, float, dict[str, Any]]] = []
     for candidate in matched:
         cand_lat, cand_lon = candidate.get("latitude"), candidate.get("longitude")
@@ -190,7 +190,8 @@ def _evaluate(
         return PresenceUnavailable(person, "no_fix")
     last_seen, lat, lon, entity = max(usable, key=lambda pair: pair[0])
 
-    # Freshness is derived here, never read from entity["stale"] (home-automation#483).
+    # Freshness is derived here, never read from entity["stale"], which is always
+    # false for iCloud entities.
     age_min = (now - last_seen).total_seconds() / 60.0
     if age_min > config.max_age_min:
         return PresenceUnavailable(person, "stale", f"age {age_min:.1f}m")

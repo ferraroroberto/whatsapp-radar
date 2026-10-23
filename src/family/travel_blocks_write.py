@@ -1,4 +1,4 @@
-"""The write side of auto-written commute travel blocks (#267, umbrella #263).
+"""The write side of auto-written commute travel blocks.
 
 This is the only module in the repo that can create or remove a calendar event
 for this feature, and it is deliberately the smallest possible surface for it.
@@ -530,11 +530,11 @@ def run_travel_blocks(
     ``force_dry_run`` tightens the configured mode for this one call and can
     only ever tighten it — ``settings.dry_run or force_dry_run``, never the
     other way round, so no caller can talk a dry-run install into writing. It
-    exists because ``calendar-scan --dry-run`` used to suppress only the
-    *summary alert*: the sweep riding along inside it still wrote to real
-    calendars whenever ``travel_blocks.dry_run`` was off, which made "dry run"
+    exists because ``calendar-scan --dry-run`` must not suppress only the
+    *summary alert*: the sweep riding along inside it would otherwise write to
+    real calendars whenever ``travel_blocks.dry_run`` was off, making "dry run"
     a lie for the one part of the verb that mutates anything outside this
-    process. The Family tab's rehearse control (#276) depends on that being
+    process. The Family tab's rehearse control depends on that being
     server-enforced, not merely a disabled button.
     """
     settings = config.family.travel_blocks
@@ -547,7 +547,7 @@ def run_travel_blocks(
 
     horizon_start, horizon_end = travel_block_horizon(config, now)
     _warn_if_horizon_clamped(config)
-    # The read is padded past the horizon, the plan is not (#272). See
+    # The read is padded past the horizon, the plan is not. See
     # `travel_block_listing_end` for the bound and `reconcile` for why a block
     # found out there is left alone rather than judged an orphan.
     marked = _read_marked(

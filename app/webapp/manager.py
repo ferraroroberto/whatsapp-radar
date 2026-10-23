@@ -27,6 +27,12 @@ from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
 
+# Outer bound on the boot-time `gen_tailscale_cert.py --check`. A stated guess, not a
+# measurement: a no-op check returns at once and a renewal is one `tailscale cert`
+# round-trip to Let's Encrypt, so 90 s leaves slack for a slow link while a hung
+# tailscaled cannot stall an unattended tray/webapp boot (the check is best-effort).
+TAILSCALE_CERT_CHECK_TIMEOUT_SECONDS = 90
+
 OWNERSHIP_NONE = "none"
 OWNERSHIP_OURS = "ours"
 OWNERSHIP_EXTERNAL = "external"
@@ -81,7 +87,7 @@ def check_tailscale_cert() -> None:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=TAILSCALE_CERT_CHECK_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
             creationflags=NO_WINDOW,
         )

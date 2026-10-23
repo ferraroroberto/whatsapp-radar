@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 _LIVE_PRESENCE = "live_presence"
 _CALENDAR_INFERENCE = "calendar_inference"
 
-#: Which departure moment a leg was priced for (#270), carried on every checked
+#: Which departure moment a leg was priced for, carried on every checked
 #: leg so the Audit trace shows the anchor behind the number, not just the number.
 ANCHOR_DEPART_NOW = "depart_now"
 #: Depart-now, reached the other way: a chained hop whose preceding event has
@@ -88,7 +88,7 @@ ANCHOR_EVENT_START = "event_start"
 #: drive that is already decided. Mirrors ``travel_blocks.FAILURE_ANCHOR_IN_THE_PAST``.
 #:
 #: A merely *elapsed* anchor is deliberately not this state: a driver whose
-#: previous event ended is late, not finished, and #282's first cut wrongly went
+#: previous event ended is late, not finished; treating it as over would go
 #: silent on exactly the tight-schedule window where the warning matters most.
 #: :func:`_departure_anchor` folds that case to depart-now instead, so this state
 #: is reached only through the guard in :func:`run_traffic_check` — which
@@ -96,7 +96,7 @@ ANCHOR_EVENT_START = "event_start"
 #: event has started). It is kept as a hard guarantee that no past timestamp can
 #: reach the wire however a future anchor comes to be derived.
 #:
-#: Defined in :mod:`src.family.leg_status` and re-exported here (#283): the
+#: Defined in :mod:`src.family.leg_status` and re-exported here: the
 #: webapp counts legs by this status too, and cannot import this module
 #: without pulling the Google client libraries into its startup.
 STATUS_ANCHOR_IN_THE_PAST = leg_status.STATUS_ANCHOR_IN_THE_PAST
@@ -235,7 +235,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     lookahead = timedelta(hours=traffic.lookahead_hours)
     # Google's ``timeMin`` is an exclusive lower bound on an event's *end*, so an
     # origin event that finished a few minutes ago is only returned when the window
-    # reaches back past it (#348). `upcoming_commutes` drops every leg whose own
+    # reaches back past it. `upcoming_commutes` drops every leg whose own
     # event has already started, so widening the fetch adds origins, not legs.
     events = fetch_events_by_person(
         config.calendar,
@@ -249,7 +249,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         lookahead=lookahead,
         origin_lookback_min=traffic.origin_lookback_min,
     )
-    # Never shorter than the lookahead (#252) — see `effective_dedup_window_min`.
+    # Never shorter than the lookahead — see `effective_dedup_window_min`.
     # The window actually applied rides the run payload below, so a
     # configured-but-overridden value is visible in the Audit tab: this repo
     # configures no logging handlers, so the log line alone would be dropped.
@@ -265,7 +265,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     checked: list[dict[str, Any]] = []
     alerts = 0
     # Leave-now candidates ready to fire, grouped by the parts of the message
-    # that would otherwise be identical (#213) — merged into one send per group
+    # that would otherwise be identical — merged into one send per group
     # once every leg has been checked.
     pending_leave_now: dict[tuple[str, datetime], list[dict[str, Any]]] = {}
     with requests.Session() as session:
@@ -313,9 +313,9 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 continue
             status = delay_status(result.delay_min, significant_min=traffic.significant_delay_min)
 
-            # Back-to-back adjacency feasibility (#169, completing #168's deferral):
-            # only meaningful for a calendar-chained origin, where the gap between the
-            # preceding event's end and this event's start is a real departure budget.
+            # Back-to-back adjacency feasibility: only meaningful for a
+            # calendar-chained origin, where the gap between the preceding event's
+            # end and this event's start is a real departure budget.
             # A live-presence origin has no such fixed departure moment, so it is not
             # feasibility-judged — only its delay is.
             gap_min: int | None = None
@@ -327,19 +327,19 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
                 feasible = (result.traffic_s / 60.0) <= gap_min
 
-            # Leave-now judgment (#185): the loop from detection to action. Only a
+            # Leave-now judgment: the loop from detection to action. Only a
             # live phone fix supports it — a calendar-inference origin makes no claim
             # about where the person actually is, so it never triggers a leave-now.
-            # Timeliness is bounded by the check cadence (#170): the alert lands on
+            # Timeliness is bounded by the check cadence: the alert lands on
             # the first fire after the departure moment, so `traffic.cadence_min`
             # should be low when relying on leave-now.
-            # A train-titled commute (#227) is exempt: the ETA above is a *driving*
+            # A train-titled commute is exempt: the ETA above is a *driving*
             # ETA, so its departure moment is meaningless for a train ride. The
             # computed `depart_in` is still recorded — it stays informative — and the
             # suppression is recorded explicitly rather than silently dropping the
             # alert. The *delay* alert is deliberately unaffected.
             #
-            # Both driving-ETA judgments below share this one train check (#252):
+            # Both driving-ETA judgments below share this one train check:
             # a "the drive is ~10 min" claim is meaningless for a train ride,
             # whether it is phrased as leave-now or as an infeasible hop.
             skip_driving = traffic.skip_leave_now_for_train and rules.is_train_commute(
@@ -359,7 +359,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                     leave_now_suppressed = True
 
             # The infeasible-hop alert is the same driving claim in different
-            # words, so it takes the same exemption (#252). Recorded explicitly
+            # words, so it takes the same exemption. Recorded explicitly
             # rather than silently dropped, mirroring `leave_now_suppressed`.
             infeasible_alert = feasible is False
             infeasible_suppressed = False
@@ -396,7 +396,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                             leg.person, leg.event.summary, result, result.delay_min,
                             anchor=anchor,
                         )
-                    # Only a delivered alert may suppress the next one (#393): a
+                    # Only a delivered alert may suppress the next one: a
                     # failed/skipped send must stay retryable, so it records no
                     # dedup key and carries its status into the entry instead.
                     send_status, send_detail = send_alert(config, text)
@@ -416,15 +416,14 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             # A distinct dedup key lets a leave-now alert coexist with a delay alert
             # for the same event without either suppressing the other. Sending is
             # deferred until every leg is checked, so people sharing one event with
-            # identical resulting text (#213) can be merged into one message.
+            # identical resulting text can be merged into one message.
             leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
             if leave_now and leave_key not in recent:
-                # Group by the event alone (#252). The ETA used to be part of
-                # this key, but it is computed per person from their own live
-                # phone fix, so two people heading to the same event almost
-                # never matched — "~1 min" vs "~0 min" for two people in one
-                # car produced two identical-looking messages, which is exactly
-                # what #213's merge was meant to prevent.
+                # Group by the event alone, not the ETA: the ETA is computed per
+                # person from their own live phone fix, so two people heading to
+                # the same event almost never match — "~1 min" vs "~0 min" for
+                # two people in one car would send two identical-looking
+                # messages, which is exactly what the merge exists to prevent.
                 group_key = (leg.event.summary, leg.event.start)
                 pending_leave_now.setdefault(group_key, []).append(
                     {
@@ -447,7 +446,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
                 config, _leave_now_text(people, summary, eta_min, event_start)
             )
             if send_status != "sent":
-                # Not delivered (#393): no dedup key, so the next run retries.
+                # Not delivered: no dedup key, so the next run retries.
                 for item in items:
                     item["entry"]["leave_now_status"] = send_status
                     if send_detail:
@@ -463,6 +462,6 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     return {
         "kind": "traffic-check", "status": "ok",
         "checked": checked, "alerts": alerts, "dry_run": dry_run,
-        # The window actually applied, which may be higher than configured (#252).
+        # The window actually applied, which may be higher than configured.
         "dedup_window_min": dedup_window_min,
     }

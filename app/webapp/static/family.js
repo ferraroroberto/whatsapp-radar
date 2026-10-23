@@ -1,9 +1,9 @@
-/* Family tab (#160, #167, #376): the exact household schedule the two
+/* Family tab: the exact household schedule the two
  * deterministic scheduled checks — the daily calendar-conflict scan and the
  * traffic-jam alert — run against, editable from the phone.
  *
- * Recent runs live in Activity (#373); this tab holds the rules themselves as
- * inset groups (#376): Household, Schedule, Calendar scan, Traffic checks and
+ * Recent runs live in Activity; this tab holds the rules themselves as
+ * inset groups: Household, Schedule, Calendar scan, Traffic checks and
  * Travel blocks. Each row shows its rule's current value; a row that edits
  * something opens a sheet holding the real control. A sheet keeps one draft
  * and commits it on Done through POST /api/family: a toast on success, the
@@ -48,7 +48,7 @@ const RULE_SHELL = {
   done: els.familySheetDone,
 };
 // The travel sheet keeps its own nodes: its sweep controls update in place
-// while a run polls, under whatever the operator is typing (#276).
+// while a run polls, under whatever the operator is typing.
 const TRAVEL_SHELL = {
   dialog: els.familyTravelSheet,
   title: null,
@@ -77,7 +77,7 @@ function adopt(data) {
   renderTraffic();
 }
 
-// Family's header line (#374): a missing calendar token (nothing can be
+// Family's header line: a missing calendar token (nothing can be
 // checked), else a missing Routes API key while something needs it, else the
 // last calendar run's missing locations, else the rules.
 function renderHeader(d) {
@@ -172,7 +172,7 @@ function renderValues() {
 
 // A missing-credential notice inside a sheet. The glyph is the sprite's
 // triangle-alert, not an emoji, so the tab carries one icon set (design.md
-// Icons contract, #209).
+// Icons contract).
 function warnNote(text) {
   const p = el('p', 'muted small family-warn');
   // Static sprite markup only — never user content — so innerHTML is safe here.
@@ -191,7 +191,7 @@ async function postFamily(payload) {
   });
 }
 
-// A switch on the page applies on tap (#376 keeps the immediate patch).
+// A switch on the page applies on tap, with an immediate patch.
 export async function patchFamily(body) {
   try {
     adopt(await postFamily(body));
@@ -243,7 +243,7 @@ function numberInput(value, min, max, onChange) {
   return input;
 }
 
-// ---------------------------------------------------- on-duty week (#376)
+// ---------------------------------------------------- on-duty week
 
 /* One picker per day: a segmented control while the people fit in 2-5
  * options, otherwise (or for a stored value no calendar matches) a select. */
@@ -442,7 +442,7 @@ const SHEETS = {
   },
   ask: {
     title: 'Ask for missing locations',
-    // #253: events with no location are always *assumed home* and always kept
+    // Events with no location are always *assumed home* and always kept
     // in the decision trace — this only controls whether the summary nags.
     help: 'Off hides the "No location set" list from the summary; those events are still assumed to be at home and still recorded in Activity.',
     where: LOCAL_CONFIG,
@@ -468,7 +468,7 @@ const SHEETS = {
   cadence: {
     title: 'Check every',
     help: 'How often the scheduled traffic check runs, in minutes.',
-    // #170: the job is armed at a fixed high frequency and skips itself
+    // The job is armed at a fixed high frequency and skips itself
     // in-process against this cadence, so a change needs no re-arm.
     where: 'config/local.json. App Launcher fires the job; it skips itself between checks.',
     draft: function () {
@@ -491,7 +491,7 @@ const SHEETS = {
   },
   train: {
     title: 'Skip train commutes',
-    // #227: the leave-now nudge is a driving judgment, so a train-titled
+    // The leave-now nudge is a driving judgment, so a train-titled
     // commute has no use for it. The keywords stay file-edited.
     help: 'The leave-now alert is a driving judgment, so it is skipped for a commute whose title names a train.',
     where: 'config/local.json, which is also where the keywords are edited.',
@@ -505,7 +505,7 @@ const SHEETS = {
   },
 };
 
-// ------------------------------------------------- travel blocks (#268)
+// ------------------------------------------------- travel blocks
 
 /* Three states, three shapes. `unknown` is never a quieter `writable` and
  * never a softer `not_writable`: the probe did not resolve, so nothing was
@@ -698,11 +698,11 @@ const TRAVEL = {
   after: function () { renderSweepControls(els.familyTravelSweep, lastData.travel_blocks || {}); },
 };
 
-// --------------------------------------------- sweep run controls (#276)
+// --------------------------------------------- sweep run controls
 
 /* Firing a sweep reuses the one execution pipeline every other run goes
  * through: POST /api/execution/run with the existing `calendar-scan` verb, then
- * poll /api/execution/runs until it leaves the active slot. #266 rejected a
+ * poll /api/execution/runs until it leaves the active slot. There is no
  * travel-blocks-only verb (it would need either a second calendar read seam or
  * a re-run of the whole scan), so the sweep rides along inside the scan
  * exactly as the scheduled job runs it.
@@ -715,7 +715,7 @@ const TRAVEL = {
  *
  * Neither button is a safety mechanism. `run_travel_blocks` re-checks the gate,
  * the dry-run short-circuit and the write token on every invocation, and
- * `calendar-scan --dry-run` now forces the sweep dry server-side (#276), so a
+ * `calendar-scan --dry-run` forces the sweep dry server-side, so a
  * rehearsal cannot write even if this file were wrong about what to disable. */
 const SWEEP_POLL_MS = 2500;
 // A run that never shows up in the list (killed before it registered, a record
@@ -891,11 +891,11 @@ async function refreshAfterSweep() {
   });
 }
 
-// ------------------------------------------------ traffic checks (#164, #373)
+// ------------------------------------------------ traffic checks
 // The enable switch (`els.execTrafficEnabled`, id kept from the Run tab) and
-// the last-check line sit in this pane since #373 and edit this module's own
+// the last-check line sit in this pane and edit this module's own
 // /api/family — the traffic-jam insurance feature is a family/traffic domain
-// concern (#240). execution.js keeps only `runTraffic`, the one piece that
+// concern. execution.js keeps only `runTraffic`, the one piece that
 // genuinely belongs to its run queue (firing a one-off traffic-check run).
 function trafficWhen(iso) {
   return iso ? fmtLocalDateTime(iso, { withYear: false }) : 'never';

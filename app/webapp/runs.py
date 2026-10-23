@@ -41,12 +41,12 @@ logger = logging.getLogger(__name__)
 RUNS_DIR = PROJECT_ROOT / "webapp" / "runs"
 _LAUNCHER = PROJECT_ROOT / "launcher.py"
 
-#: Retention cap (#234): each kind directory keeps at most this many run
+#: Retention cap: each kind directory keeps at most this many run
 #: records, newest first. A hard count bound, not an age cap — it directly
 #: guarantees "cannot grow without bound" regardless of fire rate.
 RETENTION_PER_KIND = 200
 
-#: A "running" record older than this is presumed dead, not in-flight (#234).
+#: A "running" record older than this is presumed dead, not in-flight.
 #: Only a CLI/Jobs-launched run can be stuck here — the webapp's own runs are
 #: always tracked by :func:`active_run` and excluded from pruning directly.
 #: Without this escape a crashed CLI run (killed before it could finalize its
@@ -55,7 +55,7 @@ RETENTION_PER_KIND = 200
 _STALE_RUNNING_HOURS = 24
 
 #: Set on a child this module captures, so a CLI that would otherwise open its
-#: own run record (:mod:`app.cli.runlog`, #233) knows to stand down — one
+#: own run record (:mod:`app.cli.runlog`) knows to stand down — one
 #: process must never be captured twice.
 CAPTURED_ENV_VAR = "WR_RUN_CAPTURED"
 # Cap the tail we scan for the result sentinel + return to the UI. Generous —
@@ -364,7 +364,7 @@ def start_run(
 
         # CAPTURED_ENV_VAR tells the child's own capture layer to stand down:
         # this run's output is already being written to output.log below, and a
-        # second record for the same process would double-list it (#233).
+        # second record for the same process would double-list it.
         env = {
             **os.environ,
             "PYTHONUTF8": "1",
@@ -424,7 +424,7 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
     if result is not None:
         fields["result"] = result
         # The CLI's DB run id, when the verb records one — the merge key that
-        # lets the runs list show one entry per execution across stores (#163).
+        # lets the runs list show one entry per execution across stores.
         if isinstance(result.get("run_id"), int):
             fields["db_run_id"] = result["run_id"]
     write_run_json(run_dir, **fields)

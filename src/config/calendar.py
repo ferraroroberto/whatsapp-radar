@@ -1,4 +1,4 @@
-"""Read-only Google Calendar credentials + the household calendars (#160)."""
+"""Read-only Google Calendar credentials + the household calendars."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Distinct collapsed pairs already warned about this process (#273 review
-# finding #1): `load_config()` is uncached and runs on essentially every
+# Distinct collapsed pairs already warned about this process:
+# `load_config()` is uncached and runs on essentially every
 # webapp request, so without this a household carrying the duplicate would
 # get a WARNING line on every poll instead of once. Keyed on the casefolded
 # calendar id plus both labels, so a config edit that changes which entry
@@ -30,9 +30,9 @@ class CalendarAccount:
 
 @dataclass(frozen=True)
 class CalendarConfig:
-    """Read-only Google Calendar credentials + the household calendars (#160).
+    """Read-only Google Calendar credentials + the household calendars.
 
-    ``write_token_path`` (#217) is a separate credential for the write-scope
+    ``write_token_path`` is a separate credential for the write-scope
     adapter (``calendar_write``) — Google Calendar OAuth scopes cannot be
     upgraded in place on an existing token, so event creation needs its own
     grant and its own token file, distinct from ``token_path`` above.
@@ -42,7 +42,7 @@ class CalendarConfig:
     token_path: Path = Path("auth/calendar/token.json")
     write_token_path: Path = Path("auth/calendar/write_token.json")
     accounts: tuple[CalendarAccount, ...] = ()
-    # Duplicate `calendar_id` entries collapsed at parse time (#273): one entry
+    # Duplicate `calendar_id` entries collapsed at parse time: one entry
     # per dropped duplicate, named by its *label* (falling back to its person)
     # — never the raw calendar id, so this stays safe to render on the Family
     # tab. Empty on every config that has no such collision.
@@ -94,7 +94,7 @@ def parse(raw: dict[str, Any], root: Path) -> CalendarConfig:
 def _collapse_duplicate_calendar_ids(
     accounts: list[CalendarAccount],
 ) -> tuple[tuple[CalendarAccount, ...], tuple[str, ...]]:
-    """Keep the first ``calendar.accounts`` entry for a given calendar id (#273).
+    """Keep the first ``calendar.accounts`` entry for a given calendar id.
 
     A calendar belongs to one person by construction, so two entries sharing a
     ``calendar_id`` is not a configuration the rest of the family logic (in

@@ -38,7 +38,7 @@ async function fetchVersion() {
   } catch (exc) {
     els.buildReadout.textContent = '';
     // An auth failure must reach boot(): it stops there, before any poll timer is
-    // armed that would keep 401-ing and re-clearing the password field (#348).
+    // armed that would keep 401-ing and re-clearing the password field.
     if (String(exc.message) === 'auth required') throw exc;
   }
 }
@@ -71,7 +71,7 @@ function refreshHome() {
 }
 
 // boot() re-runs after a successful password login (wireLoginForm); the poll
-// timers must be registered exactly once across both runs (#348).
+// timers must be registered exactly once across both runs.
 let pollsArmed = false;
 
 async function boot() {

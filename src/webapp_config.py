@@ -52,10 +52,10 @@ class WebappConfig:
     webauthn_rp_id: str = ""
     webauthn_rp_name: str = "Family Radar"
     webauthn_origin: str = ""
-    # Telegram delivery secrets, migrated here from .env in Step 3.
+    # Telegram delivery secrets.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
-    # Per-sender voice-gender preference for summary read-aloud (#157), keyed by
+    # Per-sender voice-gender preference for summary read-aloud, keyed by
     # the normalized sender label (src.speech_profile.normalize_sender) with a
     # value of "female" or "male". An unmapped sender falls back to
     # default_voice_gender. Never inferred from a name — explicit mappings only.

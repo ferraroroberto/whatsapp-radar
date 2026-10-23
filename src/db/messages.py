@@ -1,11 +1,9 @@
 """Message ingestion, cursoring, voice-note transcription, and message reads.
 
 Covers the messages table end to end: idempotent ingest, the per-chat/per-family
-review cursor and delta, the #36 voice-note transcription lifecycle, and the
-message-table read helpers (paging, counts) that originated under the old
-"chats & config tab" and "dashboard aggregates" banners in the pre-split
-``store.py`` — grouped here because they all read the same table, not the tab
-that first consumed them.
+review cursor and delta, the voice-note transcription lifecycle, and the
+message-table read helpers (paging, counts) — grouped here because they all
+read the same table, not the tab that consumes them.
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ from src.models import MessageRecord, StoredMessage, TaskExportContext
 def message_source_ids(conn: sqlite3.Connection, chat_id: int) -> set[str]:
     """Source message ids already stored for a chat.
 
-    The known-ids oracle for incremental ingest (#180): a connector that can
+    The known-ids oracle for incremental ingest: a connector that can
     diff against these downloads full content only for genuinely new messages.
     """
     rows = conn.execute(
@@ -93,7 +91,7 @@ def messages_since_cursor(conn: sqlite3.Connection, chat_id: int) -> list[Stored
     in send-time: a resync can backfill history whose ``message_timestamp``
     predates messages already past the cursor. Keying the delta on send-time
     would filter those out forever; keying on ``id`` guarantees nothing ingested
-    after the cursor is ever skipped (#37). The rows are still *ordered* by
+    after the cursor is ever skipped. The rows are still *ordered* by
     ``(message_timestamp, id)`` so the delta reads in send-time order for the
     classifier and digest — only the cursor predicate uses ``id``.
     """
@@ -158,7 +156,7 @@ def _merge_by_send_order(deltas: list[list[StoredMessage]]) -> list[StoredMessag
 def family_delta_since_cursor(conn: sqlite3.Connection, head_id: int) -> list[StoredMessage]:
     """The live review delta for a whole family: each member's messages past *its
     own* cursor, merged in send-time order. For a standalone chat this is exactly
-    :func:`messages_since_cursor`. Members keep independent cursors (#37), so the
+    :func:`messages_since_cursor`. Members keep independent cursors, so the
     caller must advance each member it consumed — not just the head.
     """
     members = family_member_ids(conn, head_id)
@@ -186,7 +184,7 @@ def baseline_cursor(conn: sqlite3.Connection, chat_id: int) -> bool:
     the chat already has a cursor or has no messages yet. Baselines by the max
     ingestion ``id`` (not max send-time) to match the cursor key — so a chat whose
     backlog includes backfilled, out-of-send-order history is still fully skipped
-    rather than replaying any message ingested before monitoring began (#37).
+    rather than replaying any message ingested before monitoring began.
     """
     if conn.execute(
         "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_id,)
@@ -213,12 +211,12 @@ def recent_actionable_items(
 ) -> list[sqlite3.Row]:
     """Actionable items already surfaced for a family within the last ``since_days``.
 
-    The short-term alert memory (#66): every actionable ``analysis_items`` row for
+    The short-term alert memory: every actionable ``analysis_items`` row for
     the family (head + children, :func:`family_member_ids`), within the window
     measured from each row's run ``started_at``, ordered oldest-first. ``summary``
     is required (it's what we'd re-surface). ``exclude_run_id`` drops the
-    in-progress run so a run can never feed itself. Dry-run items are excluded
-    (#393): a dry run alerts nobody and never advances the cursor, so telling the
+    in-progress run so a run can never feed itself. Dry-run items are excluded:
+    a dry run alerts nobody and never advances the cursor, so telling the
     next live scan they were "already alerted" would suppress the real alert.
     The cutoff is compared as a
     UTC-ISO string, matching :func:`_now`, so lexicographic order is chronological.
@@ -274,7 +272,7 @@ def advance_cursor(
     conn.commit()
 
 
-# --- voice-note transcription (#36) ----------------------------------------
+# --- voice-note transcription ----------------------------------------
 
 def pending_transcriptions(
     conn: sqlite3.Connection,
@@ -286,7 +284,7 @@ def pending_transcriptions(
     """Voice notes awaiting transcription, oldest-first.
 
     Rows whose audio was downloaded (``media_path`` set) and that still need a
-    transcript, split by status so a transient failure isn't treated as backlog (#104):
+    transcript, split by status so a transient failure isn't treated as backlog:
 
     - 'pending' (never attempted) is gated by ``within_days`` — the first-pairing
       backlog guard, so a fresh device never transcribes years of notes.
@@ -323,7 +321,7 @@ def stale_voice_notes(
 ) -> list[sqlite3.Row]:
     """Voice notes too old to (keep) transcribing — to skip and drop audio for.
 
-    Two backlog guards, by status (#104):
+    Two backlog guards, by status:
 
     - 'pending' (never attempted) older than ``within_days`` — the first-run guard so
       a freshly paired device doesn't transcribe years of notes.
@@ -354,7 +352,7 @@ def expired_retained_audio(
 ) -> list[sqlite3.Row]:
     """Transcribed voice notes whose retained audio is past the retention window.
 
-    The retention sweep (#86): rows already transcribed ('done') whose audio is
+    The retention sweep: rows already transcribed ('done') whose audio is
     still on disk (``media_path`` set) and whose send time is older than
     ``retain_days``. The caller deletes each file and calls :func:`clear_media_path`
     so the audio leaves disk while the transcript and 'done' status remain. Status
@@ -372,7 +370,7 @@ def expired_retained_audio(
 
 
 def clear_media_path(conn: sqlite3.Connection, message_id: int) -> None:
-    """Forget a message's retained audio path (after its file is swept). #86.
+    """Forget a message's retained audio path (after its file is swept).
 
     Only clears ``media_path``; ``transcription_status`` and ``text`` are left as
     they are, so a swept 'done' note keeps its transcript and simply loses playback.
@@ -385,7 +383,7 @@ def voice_audio_path(conn: sqlite3.Connection, message_id: int) -> str | None:
     """Relative audio path for a voice message, or ``None`` if there is no audio.
 
     Returns the retained ``media_path`` only for a ``message_type = 'voice'`` row
-    whose audio is still on disk (#86 playback endpoint). ``None`` for a missing
+    whose audio is still on disk (playback endpoint). ``None`` for a missing
     message, a non-voice message, or a note whose audio was never downloaded or has
     been swept — the caller maps that to a clean 404.
     """
@@ -402,8 +400,8 @@ def voice_audio_path(conn: sqlite3.Connection, message_id: int) -> str | None:
 def message_summary_context(
     conn: sqlite3.Connection, message_id: int
 ) -> tuple[str, str | None, str | None] | None:
-    """``(text, sender_label, stored_summary)`` for the summarize/speak endpoints
-    (#86, #157), or ``None`` if the message is missing or has no (non-blank) text
+    """``(text, sender_label, stored_summary)`` for the summarize/speak endpoints,
+    or ``None`` if the message is missing or has no (non-blank) text
     (e.g. an untranscribed voice note) — the caller maps that to a clean 404.
 
     One query for both endpoints: the summarize endpoint reads through
@@ -423,7 +421,7 @@ def message_summary_context(
 
 
 def set_message_summary(conn: sqlite3.Connection, message_id: int, summary: str) -> None:
-    """Persist the on-demand summary for a message (#157, read-through cache)."""
+    """Persist the on-demand summary for a message (read-through cache)."""
     conn.execute("UPDATE messages SET summary = ? WHERE id = ?", (summary, message_id))
     conn.commit()
 
@@ -431,7 +429,7 @@ def set_message_summary(conn: sqlite3.Connection, message_id: int, summary: str)
 def message_task_export_context(
     conn: sqlite3.Connection, message_id: int
 ) -> TaskExportContext | None:
-    """Everything the task-export endpoint needs for one message (#307), or
+    """Everything the task-export endpoint needs for one message, or
     ``None`` if the message is missing or has no (non-blank) text (e.g. an
     untranscribed voice note) — the caller maps that to a clean 404.
 
@@ -463,7 +461,7 @@ def message_task_export_context(
 
 
 def set_task_exported(conn: sqlite3.Connection, message_id: int) -> str:
-    """Persist the export timestamp for a message just sent to task-os (#307).
+    """Persist the export timestamp for a message just sent to task-os.
 
     Returns the timestamp so the caller can echo it straight back to the phone
     without a second read.
@@ -505,11 +503,11 @@ def mark_transcription(
     ``status='done'`` overwrites ``messages.text`` with ``transcript`` in place (the
     original placeholder is preserved under ``raw_json.placeholder_text``) so the
     analysis pipeline — which reads only ``text`` — treats it as a normal message.
-    Also clears any persisted ``summary`` (#157): once the underlying text changes
+    Also clears any persisted ``summary``: once the underlying text changes
     a prior summary is stale and must never be shown or spoken again. With
     ``keep_media=False`` (the default) it also clears the transient ``media_path``
-    and the caller deletes the audio (#36). With ``keep_media=True`` the audio is
-    retained for playback (#86): ``media_path`` keeps pointing at the file and a
+    and the caller deletes the audio. With ``keep_media=True`` the audio is
+    retained for playback: ``media_path`` keeps pointing at the file and a
     later retention sweep deletes it. A retained ``done`` row never trips the
     cursor barrier, which only holds 'pending'/'failed' notes. ``'failed'`` leaves
     ``text`` and ``media_path`` intact so the next live scan retries. ``'skipped_old'``
@@ -542,8 +540,7 @@ def mark_transcription(
 
 
 # --- message reads (paging + counts) ----------------------------------------
-# Originated under the old "chats & config tab" / "dashboard aggregates"
-# banners — grouped here because they read only the messages table.
+# Grouped here because they read only the messages table.
 
 def message_count_total(conn: sqlite3.Connection) -> int:
     """Total stored messages across every chat (monitored or not)."""

@@ -1,4 +1,4 @@
-/* The editing sheet (#376, #377): a native <dialog> holding one draft for one
+/* The editing sheet: a native <dialog> holding one draft for one
  * rule, opened from a Family or Settings row.
  *
  * Done commits the spec's payload (a straight close when nothing changed): on
@@ -111,7 +111,7 @@ export function sheetHost(shell, commit, saved) {
 
 export { el };
 
-// An inset row's value (Family #376, Settings #377): every `[data-value=key]`
+// An inset row's value (Family, Settings): every `[data-value=key]`
 // under `scope` reads `text`, toned by the status tone map when it needs
 // attention.
 export function setRowValue(scope, key, text, tone) {

@@ -1,8 +1,8 @@
-"""Persistent dedup log for traffic alerts (issue #160).
+"""Persistent dedup log for traffic alerts.
 
-The #1 production failure of the OpenClaw version was a silently-failing dedup
-(6 duplicate alerts in 8 minutes for one route). This is the deterministic
-replacement: an append-only JSONL under the ignored ``data/`` path recording
+A silently-failing dedup (6 duplicate alerts in 8 minutes for one route) was the
+worst production failure of the OpenClaw version. This is the deterministic
+design: an append-only JSONL under the ignored ``data/`` path recording
 ``{key, ts}`` for every alert actually sent, and a bounded read of keys still
 inside the dedup window. One canonical key schema (:func:`rules.dedup_key`)
 removes the failure mode rather than needing to be "more careful".

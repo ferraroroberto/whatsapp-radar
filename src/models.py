@@ -18,7 +18,7 @@ class ChatRecord:
     display_name: str
     chat_type: str = "group"
     # Which connector produced this chat. Connectors keep the default; a second
-    # source (Gmail, #46) sets its own so identity is (source, source_chat_id).
+    # source (Gmail) sets its own so identity is (source, source_chat_id).
     source: str = "whatsapp"
 
 
@@ -36,7 +36,7 @@ class MessageRecord:
     text: str | None = None
     sender_label: str | None = None
     message_type: str = "text"
-    # Voice-note transcription (#36): the sidecar sets these on a voice note —
+    # Voice-note transcription: the sidecar sets these on a voice note —
     # ``transcription_status`` ('pending'|'failed'|…) and ``media_path`` (relative
     # path to the downloaded audio). Both stay ``None`` for typed messages and the
     # fixture, so the rest of the pipeline is unaffected.
@@ -56,17 +56,17 @@ class StoredMessage:
     text: str | None
     sender_label: str | None
     message_type: str
-    # Voice-note transcription state (#36); ``None`` for non-voice messages.
+    # Voice-note transcription state; ``None`` for non-voice messages.
     transcription_status: str | None = None
     # Relative path to the downloaded audio while it awaits transcription; ``None``
     # once transcribed/skipped or when the download never succeeded. Distinguishes a
     # recoverable not-yet-transcribed note (audio on disk) from an unrecoverable one.
     media_path: str | None = None
-    # On-demand summary text (#157), persisted the first time the operator taps
+    # On-demand summary text, persisted the first time the operator taps
     # Summarize. ``None`` until requested, or after ``text`` is replaced (voice-note
     # retranscription clears it so a stale summary can never be shown or spoken).
     summary: str | None = None
-    # When this message was sent to task-os's Inbox (#307). ``None`` until the
+    # When this message was sent to task-os's Inbox. ``None`` until the
     # operator taps Send to Task-OS; set once, never cleared — a task, once real,
     # stays real even if the message is later retranscribed.
     task_exported_at: str | None = None
@@ -77,12 +77,12 @@ class StoredMessage:
 
 @dataclass(frozen=True)
 class TaskExportContext:
-    """Everything needed to export one message to task-os's Inbox (#307).
+    """Everything needed to export one message to task-os's Inbox.
 
     Read once by the export endpoint: ``task_exported_at`` non-``None`` means the
     message was already sent, so the endpoint returns it read-through instead of
     posting again — task-os's own ``POST /api/tasks`` does not yet dedupe on
-    ``external_id`` (task-os#98), so this is what actually protects a retry from
+    ``external_id``, so this is what actually protects a retry from
     creating a duplicate Inbox task today.
     """
 

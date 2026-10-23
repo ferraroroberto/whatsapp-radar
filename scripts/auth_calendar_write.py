@@ -1,4 +1,4 @@
-"""Interactive one-time OAuth bootstrap for the write-scope Calendar events grant (#217).
+"""Interactive one-time OAuth bootstrap for the write-scope Calendar events grant.
 
 Thin WhatsApp Radar wrapper around ``calendar_write.oauth`` using the paths from
 ``load_config().calendar`` (so a ``WR_CALENDAR_*`` env or ``local.json`` override
@@ -10,7 +10,7 @@ interactively, from the repository root:
 It opens a loopback browser consent for ``calendar.events`` only — separate
 from the read-only ``calendar.readonly`` grant minted by
 ``scripts.auth_calendar`` — and writes the configured write token (default
-``auth/calendar/write_token.json``). Event creation (Step 4/5 of #206) refreshes
+``auth/calendar/write_token.json``). Event creation refreshes
 access tokens from that file automatically and never launches a browser.
 """
 

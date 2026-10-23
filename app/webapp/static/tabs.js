@@ -12,7 +12,7 @@ import { initUsageLog } from './_vendored/usage-log/usage-log.js';
 
 let nav = null;
 
-// Local-only view/tap log (#386): same-origin, ids only, never content. The bearer
+// Local-only view/tap log: same-origin, ids only, never content. The bearer
 // token is read per send so a rotated one is picked up.
 const usage = initUsageLog({
   headers: function () {
@@ -27,7 +27,7 @@ export function setTab(tab) {
 
 const STORAGE_KEY = 'wa-radar.tab';
 
-// Run and Audit merged into Activity (#373): an installed PWA that last had
+// Run and Audit merged into Activity: an installed PWA that last had
 // one of them open must reopen on Activity, not on nothing.
 function migrateStoredTab() {
   try {

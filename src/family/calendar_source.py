@@ -1,13 +1,13 @@
-"""Fetch upcoming events per person from the configured household calendars (#160).
+"""Fetch upcoming events per person from the configured household calendars.
 
 The one I/O seam the two deterministic checks share: build the read-only
 Calendar client once, list each configured calendar over a window, and return
 normalized events keyed by person. Everything downstream is pure.
 
 Being the *only* place ``normalize_event`` is called for the family flows, it
-is also where the travel-block feedback-loop guard belongs (#265).
+is also where the travel-block feedback-loop guard belongs.
 
-:func:`fetch_marked_events` (#267) is the deliberately *separate* seam the
+:func:`fetch_marked_events` is the deliberately *separate* seam the
 travel-block reconcile reads through: it lists only the events carrying a given
 ``extendedProperties.private`` marker, so it never sees a human's event at all
 and never needs that guard.
@@ -66,7 +66,7 @@ def fetch_events_by_person(
 
 @dataclass(frozen=True)
 class MarkedEvents:
-    """One marker-scoped read pass over the household calendars (#267).
+    """One marker-scoped read pass over the household calendars.
 
     Three separate facts, kept separate on purpose:
 

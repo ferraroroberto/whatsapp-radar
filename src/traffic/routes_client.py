@@ -1,4 +1,4 @@
-"""Google Routes API v2 ``computeRoutes`` client (issue #160).
+"""Google Routes API v2 ``computeRoutes`` client.
 
 Thin, deterministic wrapper: one POST returning the free-flow (``staticDuration``)
 and traffic-aware (``duration``) driving times between two addresses, plus the
@@ -81,7 +81,7 @@ def compute_route(
 
     ``departure_time`` (aware datetime) requests a traffic estimate for leaving
     at that moment — the one time field Routes v2 actually honours for
-    ``DRIVE`` + ``TRAFFIC_AWARE``, verified live against the API (#266): the
+    ``DRIVE`` + ``TRAFFIC_AWARE``, verified live against the API: the
     same pair of addresses returns 983 s for a 04:00 departure and 930 s for an
     08:00 one, while every ``arrivalTime`` variant returns the depart-now
     baseline unchanged. It must be **in the future** — Routes rejects a past
@@ -89,7 +89,7 @@ def compute_route(
     callers pricing a schedule have to drop past anchors rather than send them.
 
     ``origin_latlng`` (a ``(lat, lng)`` pair) routes from an exact position —
-    the live phone fix (#169) — instead of the ``origin`` address string, which
+    the live phone fix — instead of the ``origin`` address string, which
     is then unused. Raises :class:`TrafficReadError` on any transport/API
     failure.
     """

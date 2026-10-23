@@ -93,19 +93,19 @@ class Config:
     linked_device_dir: Path
     tripwire: TripwireConfig = field(default_factory=TripwireConfig)
     # When the live source is the linked-device sidecar, a preflight may relaunch
-    # it automatically if it has stopped (issue #29). Off skips the self-heal and
+    # it automatically if it has stopped. Off skips the self-heal and
     # simply aborts the run loudly when the source is offline.
     sidecar_autostart: bool = True
-    # Settled-buffer gate (#73): before a cursor-advancing scan reads the buffer,
+    # Settled-buffer gate: before a cursor-advancing scan reads the buffer,
     # wait until it has stopped growing for ``sync_settle_seconds`` (history
     # backfill done), hard-capped at ``sync_settle_timeout``. ``0`` disables the
     # gate. Linked-device only; the fixture has no streaming buffer.
     sync_settle_seconds: float = 12.0
     sync_settle_timeout: float = 90.0
-    # Voice-note transcription (#36). Defaulted (disabled) so library/test callers
+    # Voice-note transcription. Defaulted (disabled) so library/test callers
     # that build a Config without it get the offline-safe no-op behaviour.
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
-    # Summary read-aloud voice profiles (#157). Defaulted so library/test callers
+    # Summary read-aloud voice profiles. Defaulted so library/test callers
     # that build a Config without it still get sane model/voice pairs.
     tts: TtsConfig = field(default_factory=TtsConfig)
     # Enabled logical message sources. ``connector`` remains the WhatsApp reader
@@ -113,18 +113,18 @@ class Config:
     # compatibility; additional sources own their own connector configuration.
     sources: tuple[str, ...] = ("whatsapp",)
     gmail: GmailConfig = field(default_factory=GmailConfig)
-    # Family calendar-conflict + traffic-jam checks (#160). Independent of the
+    # Family calendar-conflict + traffic-jam checks. Independent of the
     # message pipeline above; both default disabled until creds are provisioned.
     calendar: CalendarConfig = field(default_factory=CalendarConfig)
     traffic: TrafficConfig = field(default_factory=TrafficConfig)
     family: FamilyConfig = field(default_factory=FamilyConfig)
-    # Live phone-location lookup (#169). Defaulted (disabled) so library/test
+    # Live phone-location lookup. Defaulted (disabled) so library/test
     # callers that build a Config without it get the offline-safe no-op behaviour.
     presence: PresenceConfig = field(default_factory=PresenceConfig)
-    # task-os Inbox export (#307). Defaulted (disabled) so library/test callers
+    # task-os Inbox export. Defaulted (disabled) so library/test callers
     # that build a Config without it get the offline-safe no-op behaviour.
     task_os: TaskOsConfig = field(default_factory=TaskOsConfig)
-    # Household child registry (#206/#215). Empty by default — ``default.json``
+    # Household child registry. Empty by default — ``default.json``
     # ships an empty placeholder; real entries only ever live in the gitignored
     # ``config/local.json``. Used to resolve which child a Gmail school-source
     # email concerns (Stage-2 hint injection, HubClassifier._build_user_prompt).
@@ -149,10 +149,8 @@ def load_config(root: Path | None = None) -> Config:
 
     # Three layers, highest first: WR_DB_PATH (harnesses and the webapp's
     # per-run child env) -> an explicit `db_path` in config -> the fleet
-    # runtime-data root. The last used to be a repo-relative
-    # "data/whatsapp-radar.sqlite3", which put an always-on service's writes on
-    # whichever drive this repo was cloned onto — a spinning HDD here
-    # (project-scaffolding#243).
+    # runtime-data root, so an always-on service's writes never land on
+    # whichever drive this repo happens to be cloned onto (possibly a spinning HDD).
     db_path = (
         os.environ.get("WR_DB_PATH")
         or merged.get("db_path")

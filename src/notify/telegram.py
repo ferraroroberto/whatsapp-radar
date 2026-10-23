@@ -23,7 +23,7 @@ _TIMEOUT_SECONDS = 15
 
 # Telegram's `sendMessage` API doc: "Text of the message to be sent, 1-4096
 # characters" — an unbounded digest (e.g. the first scan after a multi-day
-# outage) exceeds this and every retry fails identically (#435).
+# outage) exceeds this and every retry fails identically.
 _MAX_MESSAGE_CHARS = 4096
 
 
@@ -70,7 +70,7 @@ class TelegramNotifier:
         scan aborted because the WhatsApp source went offline), so a scheduled
         run that would otherwise look green still reaches the operator. Sent as
         one or more ``sendMessage`` calls, chunked under Telegram's per-message
-        limit (#435) — a single oversized digest must not fail delivery outright.
+        limit — a single oversized digest must not fail delivery outright.
         """
         for chunk in _chunk_text(text, _MAX_MESSAGE_CHARS):
             self._send_one(chunk)

@@ -1,7 +1,7 @@
 """Out-of-band operational alerts (not digests).
 
 A digest tells the operator *what's actionable*; an alert tells them *the system
-couldn't do its job*. The motivating case (issue #29): a scheduled live scan
+couldn't do its job*. The motivating case: a scheduled live scan
 aborts because the WhatsApp sidecar is offline — without an alert that failure is
 invisible (a green-looking job that checked nothing). This sends a one-line text
 through the same configured channel as the digest, best-effort: it never raises,

@@ -56,7 +56,7 @@ const chatsFile = join(bufferDir, "chats.ndjson");
 const messagesFile = join(bufferDir, "messages.ndjson");
 const statusFile = join(bufferDir, "status.json");
 const qrPngFile = join(bufferDir, "qr.png");
-// Voice-note audio is downloaded here so the Python core can transcribe it (#36);
+// Voice-note audio is downloaded here so the Python core can transcribe it;
 // the transcription phase deletes each file once transcribed. Under the ignored
 // buffer dir — audio, like every other buffered payload, is never committed.
 const mediaDir = join(bufferDir, "media");
@@ -159,8 +159,8 @@ function normalizeMessage(m) {
     return { text: `[document: ${name}]`, type: "document" };
   }
   if (inner.audioMessage) {
-    // Carry the audio node so appendMessage can download it for transcription
-    // (#36). The placeholder text is kept until the Python core overwrites it
+    // Carry the audio node so appendMessage can download it for transcription.
+    // The placeholder text is kept until the Python core overwrites it
     // with the real transcript, so a never-downloaded note still reads sanely.
     return { text: "[voice note]", type: "voice", audio: inner.audioMessage };
   }
@@ -183,7 +183,7 @@ function normalizeMessage(m) {
 
 /**
  * Download a voice note's encrypted audio to the ignored media dir so the Python
- * core can transcribe it (#36). Read-only: a media fetch is not a send/reaction/
+ * core can transcribe it. Read-only: a media fetch is not a send/reaction/
  * read-receipt, so the read-only guarantee holds. ``reuploadRequest`` lets Baileys
  * re-request the media from WhatsApp's servers if the cached download has expired.
  * Returns the relative path (forward-slashed, joined under the buffer dir by the

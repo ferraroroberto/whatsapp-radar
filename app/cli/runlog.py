@@ -1,15 +1,14 @@
-"""Run-output capture for CLI- and Jobs-launched runs (#233).
+"""Run-output capture for CLI- and Jobs-launched runs.
 
-The Execution tab's run viewer only ever showed output for runs the *webapp*
-spawned: :func:`app.webapp.runs.start_run` opens ``output.log`` and hands it to
-the child as stdout/stderr. A run fired from a terminal — or by an App Launcher
-Job, which is how the scheduled ``traffic-check`` / ``calendar-scan`` / ``scan``
-actually run — left the viewer showing a "no captured output" placeholder. The
-*outcome* was recorded; the *reason* was not, so a check reporting
-``0 checked · 0 alerts`` was unexplainable from the radar's own admin UI.
+The Execution tab's run viewer shows output for runs the *webapp* spawns:
+:func:`app.webapp.runs.start_run` opens ``output.log`` and hands it to the child
+as stdout/stderr. A run fired from a terminal — or by an App Launcher Job, which
+is how the scheduled ``traffic-check`` / ``calendar-scan`` / ``scan`` actually
+run — would otherwise record its *outcome* but not its *reason*, leaving a check
+reporting ``0 checked · 0 alerts`` unexplainable from the radar's own admin UI.
 
-This closes the gap from the other side: the CLI writes the same filesystem run
-record the webapp does, teeing its own output into it. Because the record
+So the CLI writes the same filesystem run record the webapp does, teeing its own
+output into it. Because the record
 carries the DB run id parsed from the ``__WR_RESULT__`` sentinel, the merge in
 :func:`app.webapp.routers.execution.list_execution_runs` unifies it with the DB
 row into one entry — no new viewer path and no client-side change.

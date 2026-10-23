@@ -124,15 +124,15 @@ class _VersionedStatic(StaticFiles):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Sweep any pre-existing backlog once at startup (#234) — post-run pruning
-    # only fires as new runs finish, so a directory grown before this shipped
-    # (or during downtime) needs one catch-up pass. Best-effort: a prune failure
+    # Sweep any pre-existing backlog once at startup — post-run pruning
+    # only fires as new runs finish, so a directory grown during downtime
+    # needs one catch-up pass. Best-effort: a prune failure
     # must never block startup.
     try:
         runs.prune_runs()
     except OSError as exc:
         _log.warning(f"⚠️ startup run-prune failed: {exc}")
-    # Runs a restart or kill left at `running` can never finish now (#371).
+    # Runs a restart or kill left at `running` can never finish, so reconcile them.
     # Best-effort for the same reason as the prune above.
     try:
         conn = store.connect(Path(app.state.db_path))
@@ -193,7 +193,7 @@ def create_app() -> FastAPI:
     app.include_router(family.router)
     app.include_router(audit.router)
     app.include_router(sidecar.router)
-    # Local-only view/tap log (#386). No `dependencies`: BearerTokenMiddleware above
+    # Local-only view/tap log. No `dependencies`: BearerTokenMiddleware above
     # already gates every /api path, loopback bypass included.
     app.include_router(usage_router(
         runtime_db_path("whatsapp-radar", "usage.sqlite3", env_var="WR_USAGE_DB_PATH", create=True),

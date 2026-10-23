@@ -1,4 +1,4 @@
-"""Live read-only smoke check for the Calendar OAuth token (issue #160).
+"""Live read-only smoke check for the Calendar OAuth token.
 
 Non-interactive: given a minted token, probe each calendar and count upcoming
 events over a short window, printing only privacy-safe aggregates (a masked

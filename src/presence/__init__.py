@@ -1,4 +1,4 @@
-"""Live phone-location lookup via home-automation's presence API (issue #169).
+"""Live phone-location lookup via home-automation's presence API.
 
 Read-only cross-repo dependency: this package asks home-automation "where is the
 responsible parent right now" so the family traffic check can route from the

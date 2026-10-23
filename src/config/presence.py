@@ -1,4 +1,4 @@
-"""Live phone-location lookup via home-automation's presence API (#169)."""
+"""Live phone-location lookup via home-automation's presence API."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.config._shared import _as_bool
 
 @dataclass(frozen=True)
 class PresenceConfig:
-    """Live phone-location lookup via home-automation's presence API (#169).
+    """Live phone-location lookup via home-automation's presence API.
 
     Read-only cross-repo dependency: ``GET {base_url}/api/presence`` returns each
     tracked device's ``last_seen``/``latitude``/``longitude``/``at_home``, and
@@ -21,7 +21,7 @@ class PresenceConfig:
     running (the calendar-inference chain is the documented fallback).
 
     Freshness is always derived client-side from ``last_seen`` — the API's own
-    ``stale`` flag is hard-coded ``false`` for iCloud entities (home-automation#483)
+    ``stale`` flag is hard-coded ``false`` for iCloud entities
     and must never be trusted. ``person_aliases`` maps a whatsapp-radar person key
     (e.g. ``"roberto"``) to extra names/roles the presence API might carry for the
     same person (e.g. ``["dad"]``); the person key itself already matches the
@@ -35,7 +35,7 @@ class PresenceConfig:
     # certificate, whose ts.net hostname can never match ``127.0.0.1`` — and the
     # hostname-verified path (https://<host>.ts.net:8447) forfeits the loopback
     # auth bypass (401 without a bearer token). False is safe only because the
-    # loopback hop never leaves the machine (#177).
+    # loopback hop never leaves the machine.
     verify_tls: bool = True
     # A fix older than this many minutes is stale and triggers a forced refresh.
     max_age_min: int = 5

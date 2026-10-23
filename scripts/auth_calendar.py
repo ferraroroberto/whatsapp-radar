@@ -1,4 +1,4 @@
-"""Interactive one-time OAuth bootstrap for the read-only Calendar source (#160).
+"""Interactive one-time OAuth bootstrap for the read-only Calendar source.
 
 Thin WhatsApp Radar wrapper around ``calendar_readonly.oauth`` using the paths
 from ``load_config().calendar`` (so a ``WR_CALENDAR_*`` env or ``local.json``

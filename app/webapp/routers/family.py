@@ -1,24 +1,24 @@
-"""Family rules surface (issues #160, #167): the resolved schedule, editable.
+"""Family rules surface: the resolved schedule, editable.
 
-Recent runs come from the unified DB run store (#163) so a scheduled App
-Launcher execution is exactly as visible as a webapp-launched one; the Run tab
-(#164) is where a check is actually fired and where recent runs now live. This
+Recent runs come from the unified DB run store so a scheduled App
+Launcher execution is exactly as visible as a webapp-launched one; Activity's
+Run now is where a check is actually fired. This
 endpoint exposes the resolved rules/config (non-secret) and lets the webapp
 edit the household schedule in place — on-duty weekday pattern, kids-home time,
 childcare windows, quiet hours, significant delay, the daily-scan enable toggle,
-the train-commute leave-now exemption (#227), the commute travel-block knobs
-(#268) — straight into the gitignored
+the train-commute leave-now exemption, the commute travel-block knobs
+— straight into the gitignored
 ``config/local.json``. Calendar accounts stay read-only (provisioned by the
 calendar-bootstrap flow, not the UI). This gives
 the operator full transparency and control over the exact rules in force
 instead of a black box or a file edit.
 
-The travel-block section (#268, closing umbrella #263) is *reported*, never
+The travel-block section is *reported*, never
 recomputed here: its per-calendar write capability and last-sweep counts are
 read off the newest ``calendar-scan`` run already being listed for the
 recent-runs card. Rendering this tab must never trigger a sweep — a sweep
 spends Routes quota and, out of dry run, writes to real calendars. That still
-holds with the run controls added in #276: the buttons post to
+holds with the run controls: the buttons post to
 ``/api/execution/run`` (``calendar-scan``, the existing verb — no second
 calendar read path), and this endpoint stays a pure read. What it does add is
 ``travel_blocks.live_sweep_blockers``: the reasons a live sweep would write
@@ -56,7 +56,7 @@ router = APIRouter()
 
 
 class ChildcareWindowIn(BaseModel):
-    """A childcare window as edited from the Family tab (#167).
+    """A childcare window as edited from the Family tab.
 
     ``end_time`` is optional — blank keeps the original point-in-time deadline
     semantics (e.g. a pickup); set it to describe a genuine coverage range.
@@ -71,7 +71,7 @@ class ChildcareWindowIn(BaseModel):
 class FamilyUpdate(BaseModel):
     """The UI-editable subset of the family-check settings (safe, non-secret).
 
-    Extended in #167 to cover the household schedule itself — it is schedule
+    It covers the household schedule itself — it is schedule
     data, not a secret, and belongs in ``config/local.json`` like the rest of
     this safe-override subset.
     """
@@ -88,7 +88,7 @@ class FamilyUpdate(BaseModel):
     kids_home_time: str | None = None
     responsible_by_weekday: dict[str, str] | None = None
     childcare_windows: list[ChildcareWindowIn] | None = None
-    # Commute travel blocks (#268). `horizon_days` is deliberately *not* here:
+    # Commute travel blocks. `horizon_days` is deliberately *not* here:
     # widening it past the days the daily scan fetches is silently clamped
     # (see `_warn_if_horizon_clamped`), so it stays a file edit made with the
     # neighbouring `family.unknown_scan_days` in view rather than a phone tap.
@@ -109,7 +109,7 @@ _WEEKDAY_LOOKUP = {name.lower(): name.lower() for name in _WEEKDAY_NAMES}
 
 
 def _hhmm(value: str, *, what: str) -> tuple[int, int]:
-    """Parse ``"HH:MM"``, raising a clear 400 on anything else (#167)."""
+    """Parse ``"HH:MM"``, raising a clear 400 on anything else."""
     text = (value or "").strip()
     parts = text.split(":")
     if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
@@ -144,7 +144,7 @@ def _summary_json(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
-    """One family run row (#163) distilled for the recent-runs list."""
+    """One family run row distilled for the recent-runs list."""
     result = _summary_json(row)
     kind = row["kind"]
     summary: dict[str, Any] = {
@@ -157,10 +157,10 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         "result_status": result.get("status"),
     }
     if kind == "traffic-check":
-        # `checked` counted every leg, priced or not (#283). It stays, because
-        # older run rows are rendered by clients that read it and a coverage
+        # `checked` counts every leg, priced or not. It stays, because
+        # stored run rows are rendered by clients that read it and a coverage
         # number vanishing is worse than one that is merely coarse — but it is
-        # now accompanied by the split, so no reader has to infer that some of
+        # accompanied by the split, so no reader has to infer that some of
         # those legs established nothing about the road.
         priced, unpriced = count_legs(result.get("checked"))
         summary["checked"] = priced + unpriced
@@ -169,7 +169,7 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         summary["alerts"] = result.get("alerts")
     else:
         summary["conflicts"] = len(result.get("conflicts") or [])
-        # Renamed unknown_locations -> missing_locations in #168; old rows persist.
+        # Stored rows may carry the legacy key unknown_locations; read both.
         summary["missing_locations"] = len(
             result.get("missing_locations") or result.get("unknown_locations") or []
         )
@@ -177,7 +177,7 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def _traffic_alerts(row: sqlite3.Row) -> int:
-    """Alert count from a traffic-check run's persisted summary (#164)."""
+    """Alert count from a traffic-check run's persisted summary."""
     return _int(_summary_json(row).get("alerts"))
 
 
@@ -218,7 +218,7 @@ def _last_travel_sweep(
 ) -> tuple[sqlite3.Row, dict[str, Any]] | None:
     """Newest ``calendar-scan`` run that actually carries a travel-block section.
 
-    Runs recorded before #266 have no such section at all; skipping them shows
+    Older runs have no such section at all; skipping them shows
     the last sweep there really was instead of an empty one. ``started_at``
     rides along in the summary so a stale answer is visibly stale.
     """
@@ -298,7 +298,7 @@ _LIVE_SWEEP_BLOCKER_TEXT = {
 
 
 def _live_sweep_blockers(config: Config) -> list[dict[str, str]]:
-    """Every reason a live sweep would write nothing, for the run control (#276).
+    """Every reason a live sweep would write nothing, for the run control.
 
     Reported, not enforced. The authoritative refusals live where the writing
     happens — :func:`~src.family.travel_blocks.gate_status` for the three gates
@@ -364,13 +364,13 @@ def _travel_blocks_payload(
             for account in calendar.accounts
         ],
         # Duplicate `calendar_id` entries collapsed at config-parse time
-        # (#273), by label — never the raw calendar id. Empty on every
-        # household config that has no such collision. No dedicated UI card
-        # yet (deferred, see PR body); this is the reportable state itself.
+        # by label — never the raw calendar id. Empty on every
+        # household config that has no such collision. No dedicated UI card;
+        # this is the reportable state itself.
         "duplicate_calendars": list(calendar.collapsed_duplicate_labels),
         "last_sweep": _sweep_summary(found[0], section) if found else None,
         # What the Family tab's live-sweep control says when it is unavailable
-        # (#276). Empty means "nothing here would stop a write" — which is a
+        # Empty means "nothing here would stop a write" — which is a
         # statement about configuration, not a promise: the sweep re-checks.
         "live_sweep_blockers": _live_sweep_blockers(config),
     }
@@ -426,15 +426,15 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         }
         for window in family.childcare_windows
     ]
-    # One newest-first, per-kind-bounded read of the unified run store (#163) feeds
-    # the recent-runs list, the traffic card's status line (#164) and the
+    # One newest-first, per-kind-bounded read of the unified run store feeds
+    # the recent-runs list, the traffic card's status line and the
     # last travel sweep — a chatty traffic-check can't crowd out calendar-scan.
     recent_runs = store.list_runs_by_kind(conn, tuple(_FAMILY_KINDS))
     family_runs = [
         _run_summary(row) for row in recent_runs if row["kind"] in _FAMILY_KINDS
     ][:15]
     # The daily calendar run, by itself: a day of traffic checks pushes it out of
-    # the 15 above, and the Family header names its missing locations (#374).
+    # the 15 above, and the Family header names its missing locations.
     last_calendar = next(
         (_run_summary(row) for row in recent_runs if row["kind"] == "calendar-scan"), None
     )
@@ -454,7 +454,7 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             "quiet_end_hour": traffic.quiet_end_hour,
             "dedup_window_min": traffic.dedup_window_min,
             # What the check actually applies — may be higher than configured,
-            # since the window is floored at the lookahead (#252). Reporting only
+            # since the window is floored at the lookahead. Reporting only
             # the configured value would advertise a window that is not in force.
             "effective_dedup_window_min": traffic.effective_dedup_window_min,
             "origin_lookback_min": traffic.origin_lookback_min,
@@ -481,7 +481,7 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         ],
         "token_present": calendar.token_path.is_file(),
         # Reuses `recent_runs` above — the tab is rendered from one store read
-        # and never fires a sweep of its own (#268).
+        # and never fires a sweep of its own.
         "travel_blocks": _travel_blocks_payload(config, recent_runs),
         "runs": family_runs,
         "last_calendar": last_calendar,
@@ -501,7 +501,7 @@ async def update_family(
 
     Toggles/thresholds plus the household schedule (on-duty weekday pattern,
     kids-home time, childcare windows, quiet hours) and the travel-block knobs
-    (#268) are all writable here — home address and calendar accounts stay
+    are all writable here — home address and calendar accounts stay
     file-edited, shown read-only in the UI. Validation: every time value must
     parse as HH:MM, a submitted on-duty pattern must name exactly the 7
     weekdays (a day can map to "" for "nobody scheduled"), a childcare window's

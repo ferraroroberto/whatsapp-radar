@@ -1,10 +1,9 @@
 """Chat CRUD, status, aliasing, and parent↔child linking.
 
 Also owns the two basic chat-entity reads (:func:`get_chat`, :func:`count_chats`)
-that originated under the old "chats & config tab" banner in the pre-split
-``store.py`` — they're chat primitives other modules (``dashboard``,
-``sync_log``, :func:`link_chats` below) need, so they live with the entity
-rather than with the tab that first consumed them.
+— they're chat primitives other modules (``dashboard``, ``sync_log``,
+:func:`link_chats` below) need, so they live with the entity rather than with
+a tab.
 """
 
 from __future__ import annotations
@@ -162,7 +161,7 @@ def chat_id_for_source(
 ) -> int | None:
     """Return the internal id for a chat's ``(source, source_chat_id)``, or None.
 
-    Chat identity is the composite ``(source, source_chat_id)`` (#57); ``source``
+    Chat identity is the composite ``(source, source_chat_id)``; ``source``
     defaults to ``'whatsapp'`` so existing single-source callers are unchanged.
     The resync path uses this to classify an incoming chat as new (insert) vs
     existing (compare-then-maybe-update) without an upsert that would always

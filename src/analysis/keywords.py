@@ -60,7 +60,7 @@ class KeywordSignal:
 def load_keyword_rules(source: str = "whatsapp") -> tuple[KeywordRule, ...]:
     """Load normalized rules, ignoring comments and blank lines.
 
-    WhatsApp's historical asset remains one root per line and is assigned to the
+    WhatsApp's asset is one root per line and is assigned to the
     generic ``actionable`` bucket. Gmail uses ``bucket | root`` so Audit can show
     both the deterministic category and the exact matching root.
     """

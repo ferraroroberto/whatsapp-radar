@@ -1,9 +1,9 @@
-"""Desired-state planner + reconcile for auto-written commute travel blocks (#263).
+"""Desired-state planner + reconcile for auto-written commute travel blocks.
 
 Everything above the "Routes pricing" divider is **pure**, like
 :mod:`src.family.rules`: no I/O, no network, no Google client, no filesystem.
 It is a function of the events already fetched plus a mapping of leg durations
-supplied by the caller — so the calendar reconcile (step 3 of #263) can be
+supplied by the caller — so the calendar reconcile can be
 tested and reasoned about separately from *which blocks should exist*.
 
 The computation is deliberately split in four:
@@ -13,16 +13,16 @@ The computation is deliberately split in four:
 2. :func:`build_planned_legs` — pure — turns those requests into concrete
    time-boxed blocks once the durations are known, and resolves the one
    decision that genuinely needs them (the home-dwell chaining threshold).
-3. :func:`price_legs` / :func:`plan_travel_blocks` (#266) — the module's only
+3. :func:`price_legs` / :func:`plan_travel_blocks` — the module's only
    I/O — supply those durations from the live Routes API, with the route
    function injected so the whole sweep stays testable offline with a stub.
-4. :func:`reconcile` (#267) — pure again — diffs the desired legs against the
+4. :func:`reconcile` — pure again — diffs the desired legs against the
    blocks *already* on the calendar and produces the add/delete decision. It is
    told which leg keys are **protected** — the ones whose desired shape could
    not be established this sweep — and leaves their blocks strictly alone. It is
    also told where the plan *stops* (``plan_end``), because the listing that
-   fetched those blocks deliberately reads further than the plan does (#272,
-   :func:`travel_block_listing_end`); a block out in that padded region is left
+   fetched those blocks deliberately reads further than the plan does
+   (:func:`travel_block_listing_end`); a block out in that padded region is left
    alone too, for the same reason and reported the same way.
 
 A failure to establish a fact must never be applied as a decision, so a leg that
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------- marker vocabulary
 
 #: ``extendedProperties.private`` keys stamped on every block we write, and the
-#: `privateExtendedProperty` filter the reconcile step (step 3 of #263) queries with.
+#: `privateExtendedProperty` filter the reconcile step queries with.
 MARKER_KEY = "wr_travel_block"
 MARKER_VALUE = "1"
 SOURCE_EVENT_KEY = "wr_source_event_id"
@@ -196,7 +196,7 @@ def content_hash(
 ) -> str:
     """Stable digest of everything a written block encodes.
 
-    Lets the reconcile step (step 3 of #263) tell "unchanged" from "needs rewrite" by
+    Lets the reconcile step tell "unchanged" from "needs rewrite" by
     comparing against the hash stamped on the existing block, without
     re-deriving the plan. ``sha256`` rather than :func:`hash` because it must be
     stable *across processes* — Python's string hashing is salted per run.
@@ -391,8 +391,8 @@ def build_planned_legs(
 
     ``durations`` maps :attr:`LegRequest.key` to minutes. A request with no
     entry, or a non-positive one, is **dropped** rather than emitted with a
-    zero or guessed length: an unpriceable leg is an unknown, and #266 owns
-    reporting *why* the price is missing. Silently writing a zero-length block
+    zero or guessed length: an unpriceable leg is an unknown, and the pricing
+    step owns reporting *why* the price is missing. Silently writing a zero-length block
     would be indistinguishable from correctly deciding no block was needed.
     """
     planned: list[PlannedLeg] = []
@@ -480,7 +480,7 @@ DELETE_REASON_DUPLICATE = "duplicate"  # a second block for a leg already satisf
 #: why is as unaccountable as "deleted" without one, and the three cases are
 #: genuinely different facts about what this sweep managed to establish.
 PROTECT_REASON_UNPLANNED_LEG = "leg_not_planned"  # its leg could not be planned this sweep
-PROTECT_REASON_BEYOND_HORIZON = "beyond_planning_horizon"  # seen only via the padded read (#272)
+PROTECT_REASON_BEYOND_HORIZON = "beyond_planning_horizon"  # seen only via the padded read
 PROTECT_REASON_START_UNKNOWN = "start_not_established"  # cannot tell which side of the plan it is
 
 _PROTECT_DETAIL = {
@@ -673,7 +673,7 @@ def _protect_reason_beyond_plan(block: ExistingBlock, plan_end: datetime) -> str
     Only ever consulted for a block with **no desired counterpart**. Inside the
     planning window that means "nothing wants this any more"; at or after
     ``plan_end`` it means nothing was ever computed about it, because the
-    listing deliberately reads further than the plan does (#272). The two must
+    listing deliberately reads further than the plan does. The two must
     not produce the same decision.
     """
     moment = block_start_moment(block)
@@ -710,13 +710,13 @@ def reconcile(
     ``plan_end`` is where the *desired* state stops being computed — the
     planning horizon's end — and it is required, with no default, for the same
     reason ``existing`` is required one layer up. The listing that produced
-    ``existing`` deliberately reads **past** that moment (#272: Calendar's
+    ``existing`` deliberately reads **past** that moment (Calendar's
     ``timeMax`` is exclusive on an event's *start*, so a return block for an
     event ending after the horizon is otherwise never returned and gets
     re-inserted on every sweep). Widening the read must not widen the plan: a
     block found in that padded region has no desired counterpart simply because
     nothing was computed out there, and reading that absence as "orphaned"
-    would turn a fix for duplicates into a delete of correct blocks. Defaulting
+    would delete correct blocks. Defaulting
     ``plan_end`` to "no window" would default that guard off, which is the one
     direction this feature may never fail in.
 
@@ -839,7 +839,7 @@ FAILURE_ROUTES_ERROR = "routes_error"
 #: delete reason to turn it back into a delete.
 FAILURE_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
 #: A leg was priced but *not* planned as an add, because the blocks already on
-#: its calendar could not be listed (#267). The current state being unknown, an
+#: its calendar could not be listed. The current state being unknown, an
 #: add would risk duplicating a block that is already there — so the calendar is
 #: left untouched for this run and the leg says so out loud.
 FAILURE_BLOCKS_UNREADABLE = "existing_blocks_unreadable"
@@ -922,7 +922,7 @@ def _departure_anchor(request: LegRequest) -> datetime:
     departure at the arrival moment costs one call and is wrong by at most the
     drive's own length (typically 10-30 min), against being wrong by the whole
     sweep-to-event distance (hours) if the moment were dropped. Refining it
-    would take a second call per leg, which #266 explicitly rules out.
+    would take a second call per leg, which the pricing design rules out.
     """
     return request.anchor
 
@@ -1024,7 +1024,7 @@ class TravelBlockPlan:
 
     ``legs`` is the desired state; ``adds`` / ``deletes`` / ``keeps`` /
     ``protected`` are the reconcile decision against what is already on the
-    calendars (#267). ``adds`` is a subset of ``legs``: a leg on a calendar whose
+    calendars. ``adds`` is a subset of ``legs``: a leg on a calendar whose
     current contents could not be read is deliberately *not* an add, and appears
     in ``failures`` instead.
 
@@ -1035,7 +1035,7 @@ class TravelBlockPlan:
     know whether it is right", which is neither a keep nor a delete. A
     :data:`PROTECT_REASON_BEYOND_HORIZON` entry has no failure — nothing failed;
     the block simply lies past the window the plan covers, and was only seen
-    because the listing reads further than the plan does (#272).
+    because the listing reads further than the plan does.
 
     ``event_summaries`` maps ``(calendar_id, event_id)`` to the source event's
     title. It is carried for reporting only, and is deliberately *not* a field of
@@ -1060,7 +1060,7 @@ class TravelBlockPlan:
         return self.event_summaries.get((calendar_id, source_event_id), "")
 
     def to_payload(self) -> dict[str, Any]:
-        """JSON-ready plan for the run payload — the rehearsal surface of #263.
+        """JSON-ready plan for the run payload — the rehearsal surface.
 
         A non-``ok`` status carries the marker alone: there is no plan to report,
         and empty ``adds``/``failures`` lists next to ``"disabled"`` would read
@@ -1183,8 +1183,8 @@ def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datet
     """The window the sweep maintains — the one expression, shared by both callers.
 
     Starts at :func:`src.family.rules.local_midnight` — literally the same
-    function ``run_calendar_scan`` builds its own fetch window from since #280,
-    rather than a second copy of the same line — so the horizon can never start
+    function ``run_calendar_scan`` builds its own fetch window from, rather
+    than a second copy of the same line — so the horizon can never start
     outside the events the planner was handed, nor outside the blocks the
     reconcile listed, for any ``now`` either of them is given.
 
@@ -1204,9 +1204,9 @@ def travel_block_horizon(config: Config, now: datetime) -> tuple[datetime, datet
 
 
 #: How far past the last block it could possibly have written the marker-scoped
-#: listing still reads (#272). Slack on top of the exact bound below, for blocks
+#: listing still reads. Slack on top of the exact bound below, for blocks
 #: written by an *earlier* sweep against a source event that has since moved
-#: earlier — their start is derived from an event end nothing can recompute now.
+#: earlier — their start is derived from an event end nothing can recompute.
 #: A day is generous against every real commute and costs only a wider read: a
 #: block seen out there is never planned for and never deleted, only reported.
 LISTING_PAD = timedelta(days=1)
@@ -1220,12 +1220,12 @@ def travel_block_listing_end(
 ) -> datetime:
     """The ``timeMax`` the marker-scoped listing must use to see every block we wrote.
 
-    Calendar's ``timeMax`` is **exclusive on an event's start**, and the listing
-    used to stop exactly at ``horizon_end``. A return block starts at its source
-    event's *end*, so an evening event on the last horizon day that runs past
-    local midnight has a block starting at or after ``horizon_end`` — never
-    returned, never matched, re-inserted on every sweep until the horizon rolled
-    forward (#272).
+    Calendar's ``timeMax`` is **exclusive on an event's start**, so a listing
+    that stopped exactly at ``horizon_end`` would miss blocks. A return block
+    starts at its source event's *end*, so an evening event on the last horizon
+    day that runs past local midnight has a block starting at or after
+    ``horizon_end`` — never returned, never matched, re-inserted on every sweep
+    until the horizon rolled forward.
 
     The bound is exact rather than a round number. Every block this sweep could
     have written for an in-horizon event starts either at ``event.start`` minus
@@ -1396,7 +1396,7 @@ def empty_plan(status: str, dry_run: bool) -> TravelBlockPlan:
 def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> None:
     """Log the complete plan at INFO — one line per leg, plus a counted summary.
 
-    The per-leg lines are the rehearsal #263 asks for before any live write is
+    The per-leg lines are the rehearsal required before any live write is
     allowed: origins, destinations, minutes and time boxes, readable straight
     from the run's output log. Unpriced legs are logged at WARNING with their
     reason so they can never be mistaken for legs that needed no block.

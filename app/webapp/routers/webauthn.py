@@ -1,4 +1,4 @@
-"""Passkey enrollment for the admin webapp gate (no sign-in ceremony, #353).
+"""Passkey enrollment for the admin webapp gate (no sign-in ceremony).
 
 The enrollment window can only be opened from the PC (loopback) — opening it
 deliberately from the tray menu is what makes adding a new device a conscious

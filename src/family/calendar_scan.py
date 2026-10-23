@@ -1,21 +1,21 @@
-"""Daily calendar-conflict scan (issue #160) — deterministic, one-shot.
+"""Daily calendar-conflict scan — deterministic, one-shot.
 
 Pipeline: fetch the next few days for both calendars → per-event decision trace
-(#168: every event gets a recorded location verdict with its reason; a missing
+(every event gets a recorded location verdict with its reason; a missing
 location is *assumed home* and flagged, never silently dropped) → apply the
 fixed weekly responsibility pattern plus two-places-at-once detection over the
 assessment window → live phone-position ETA judgment for today's imminent
-windows when presence is enabled (#177; additive signal, calendar inference
+windows when presence is enabled (additive signal, calendar inference
 stays authoritative for intent and for anything beyond the lookahead) → a priced
 commute travel-block plan reconciled against the blocks already on the
 calendars, and (only when explicitly enabled *and* taken out of dry run)
-applied to them (#267; off and dry-run by default, reusing the same fetched
+applied to them (off and dry-run by default, reusing the same fetched
 events) → always
 send one summary on a live run: coverage issues and missing-location asks, or
 an explicit all-clear. Coverage gaps and overlaps are
 hard alerts and bypass quiet hours; a clean summary inside quiet hours is
 suppressed until the next daytime run. Returns a schema-stable result payload
-the CLI persists as the run's ``summary_json`` (#163) and prints.
+the CLI persists as the run's ``summary_json`` and prints.
 """
 
 from __future__ import annotations
@@ -62,9 +62,9 @@ def build_summary_text(
 
     Per-person coverage issues come first (they are the hard alerts), then the
     missing-location asks grouped by person, then the explicit all-clear when
-    there is nothing at all — silence is never a result (#168).
+    there is nothing at all — silence is never a result.
 
-    ``ask_missing_locations=False`` drops the asks section (#253) for a
+    ``ask_missing_locations=False`` drops the asks section for a
     household where some events will never get a location, so the recurring
     nag stops drowning the coverage alerts it shares a message with. It changes
     only this text: ``missing`` is still computed and still persisted in the
@@ -100,7 +100,7 @@ def build_summary_text(
 def _assess_live_coverage(
     config: Config, *, now: datetime
 ) -> tuple[list[rules.Conflict], list[dict[str, Any]]]:
-    """Judge today's imminent childcare windows by phone → home ETA (#177).
+    """Judge today's imminent childcare windows by phone → home ETA.
 
     Only windows starting within the traffic lookahead are judged — a phone fix
     *now* says nothing about tomorrow. The verdict is additive: it never
@@ -210,9 +210,8 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
 
     # The zone every day below is judged in — a real ZoneInfo when
     # `family.timezone` is configured, so each day re-resolves its own correct
-    # offset across a DST change instead of freezing `now`'s (#435); otherwise
-    # the legacy fallback `now.tzinfo` (correct for `now` itself, unchanged for
-    # anyone who hasn't set it).
+    # offset across a DST change instead of freezing `now`'s; otherwise the
+    # fallback is `now.tzinfo` (correct for `now` itself).
     zone = rules.household_zone(family.timezone, now)
 
     conflicts: list[rules.Conflict] = []
@@ -221,7 +220,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         # frozen offset — and re-anchor it in `zone` for each day via
         # `_day_bounds`/`find_conflicts`'s own `datetime.combine(day, t,
         # tzinfo=zone)`, so this cannot drift from the fetch window above
-        # (#280) yet still lands on the correct wall-clock offset per day.
+        # yet still lands on the correct wall-clock offset per day.
         day = midnight.date() + timedelta(days=offset)
         day_min, day_max = _day_bounds(day, zone)
         day_events = {
@@ -235,20 +234,20 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             rules.find_overlaps(day_events, home_address=family.home_address)
         )
 
-    # Commute travel blocks (#267, umbrella #263) — reuses the events fetched
+    # Commute travel blocks — reuses the events fetched
     # above rather than re-reading them (the reconcile's own marker-scoped read
     # is a separate, narrower query). Off by default, and dry-run by default even
     # once enabled: a dry run computes and logs the whole add/delete plan and
     # touches no calendar. Never raises — a write failure is a recorded status.
     #
-    # `force_dry_run=dry_run` (#276): this verb's own --dry-run must mean "this
+    # `force_dry_run=dry_run`: this verb's own --dry-run must mean "this
     # invocation changes nothing outside the process", not merely "send no
     # alert". Without it a `calendar-scan --dry-run` on a live-configured
-    # install still inserted and deleted real calendar events — and the Family
-    # tab's rehearse button would have been a write dressed as a rehearsal.
+    # install would insert and delete real calendar events — and the Family
+    # tab's rehearse button would be a write dressed as a rehearsal.
     travel_block_plan = run_travel_blocks(config, events, now=now, force_dry_run=dry_run)
 
-    # Live phone-position judgment for today's imminent windows (#177) —
+    # Live phone-position judgment for today's imminent windows —
     # additive to the calendar-based gaps, never a replacement for them.
     live_conflicts, live_coverage = _assess_live_coverage(config, now=now)
     conflicts.extend(live_conflicts)
@@ -262,7 +261,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         ask_missing_locations=family.ask_missing_locations,
     )
 
-    # Always-send contract (#168): a live run produces exactly one summary —
+    # Always-send contract: a live run produces exactly one summary —
     # findings or the explicit all-clear. Hard alerts (any conflict) bypass
     # quiet hours; a clean/asks-only summary inside quiet hours is suppressed.
     quiet = rules.in_quiet_hours(
@@ -287,6 +286,6 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         "live_coverage": live_coverage,
         "summary": summary,
         "dry_run": dry_run,
-        # Additive (#266): every pre-existing key above keeps its shape.
+        # Additive: every key above keeps its shape when this one is added.
         "travel_blocks": travel_block_plan,
     }

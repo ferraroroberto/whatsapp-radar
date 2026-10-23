@@ -1,4 +1,4 @@
-"""The traffic-check per-leg status vocabulary, in one importable place (#283).
+"""The traffic-check per-leg status vocabulary, in one importable place.
 
 A commute leg in a ``traffic-check`` payload's ``checked`` list either got a
 Routes answer or it did not, and the two statuses that mean *it did not* —
@@ -6,16 +6,15 @@ Routes answer or it did not, and the two statuses that mean *it did not* —
 reason this module exists. Every surface that counts legs has to know them, or
 it reports a coverage number that silently counts non-coverage: "3 routes
 checked" for a run in which nothing was priced is real, plausible and wrong, and
-that is how you end up trusting a check that has not been running (#283).
+that is how you end up trusting a check that has not been running.
 
 **Why a module of its own rather than a constant in**
 :mod:`src.family.traffic_check`. Three of the four Python readers live in
 ``app/webapp/``, and importing ``traffic_check`` there would drag the Google
 client libraries into webapp startup through its
-:mod:`src.family.calendar_source` import. :mod:`app.webapp.routers.dashboard`
-worked around that by spelling the statuses as literals with a comment
-explaining why; #283 adds three more readers, and a vocabulary copied five times
-is a vocabulary that will eventually disagree with itself.
+:mod:`src.family.calendar_source` import. Spelling the statuses as literals in
+each reader is no answer: a vocabulary copied five times is a vocabulary that
+will eventually disagree with itself.
 
 So this module imports **nothing but the standard library**, and
 ``src/family/__init__.py`` is (and must stay) import-free, which is what makes
@@ -36,8 +35,8 @@ from collections.abc import Iterable
 from typing import Any
 
 #: The drive is over — never priced, and no Routes call was spent on it, because
-#: the API rejects a past ``departureTime`` outright (#270). Mirrors
-#: ``src.family.traffic_check.STATUS_ANCHOR_IN_THE_PAST``, which is now defined
+#: the API rejects a past ``departureTime`` outright. Mirrors
+#: ``src.family.traffic_check.STATUS_ANCHOR_IN_THE_PAST``, which is defined
 #: from this one.
 STATUS_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
 
@@ -59,8 +58,8 @@ def count_legs(legs: Iterable[Any] | None) -> tuple[int, int]:
     Tolerant of whatever the persisted payload actually holds, because these
     counts are rendered from run rows written by older versions: a non-mapping
     entry, or one with no ``status`` at all, counts as **priced**. That is the
-    conservative direction for a legacy row — a payload from before #270 has no
-    ``status`` field and every one of its legs genuinely was priced, so calling
+    conservative direction for a legacy row — a payload from an older version has
+    no ``status`` field and every one of its legs genuinely was priced, so calling
     those unpriced would invent a coverage gap that never existed.
     """
     priced = unpriced = 0

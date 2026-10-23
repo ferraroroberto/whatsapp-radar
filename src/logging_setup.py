@@ -1,4 +1,4 @@
-"""Rotating file logging for the always-on processes (#351).
+"""Rotating file logging for the always-on processes.
 
 The tray runs under ``pythonw`` and spawns the webapp with stdout/stderr on
 ``DEVNULL``, and nothing in this repo configured a handler, so every

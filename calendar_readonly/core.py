@@ -32,9 +32,9 @@ class CalendarEvent:
     verbatim. It is deliberately generic — this package stays product-neutral
     and liftable, so it transports whatever keys the writer stored without
     knowing what any of them mean. A consumer that writes its own events uses
-    it to recognize them again on the next read (whatsapp-radar#265): matching
+    it to recognize them again on the next read: matching
     on the title instead would be unsound, since a human can type the same
-    title. Defaulted so every existing construction site is untouched.
+    title. Defaulted so construction sites that don't set it keep working.
     """
 
     event_id: str

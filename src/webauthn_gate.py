@@ -10,7 +10,7 @@ endpoints themselves — **not** by anything in this module. This module owns:
   be added deliberately.
 
 Enrollment is provisioning state only: there is no passkey sign-in (assertion)
-ceremony, and no unlock token is minted or tracked (#353).
+ceremony, and no unlock token is minted or tracked.
 
 Single-user by design: one logical user, a small whitelist of devices.
 """

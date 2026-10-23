@@ -1,11 +1,9 @@
-"""Review-engine primitives shared by the scan pipeline (#394).
+"""Review-engine primitives shared by the scan pipeline.
 
-Per-chat analysis used to have two implementations — this module's own
-``review_monitored_chats`` loop (the ``wr review`` verb) and
-:mod:`src.analysis.pipeline`'s traced ``scan`` loop (the ``wr scan`` verb) — that
-had drifted apart (no trace, no reminders, estimated LLM-call counts). The verb
-is now ``scan(mode="process")``; this module keeps only the pieces the
-``live``/``dry_run``/``process`` modes share: the cursor-advance invariant
+Per-chat analysis has a single implementation: :mod:`src.analysis.pipeline`'s
+traced ``scan`` loop (the ``wr review`` verb is ``scan(mode="process")``). This
+module holds only the pieces the ``live``/``dry_run``/``process`` modes
+share: the cursor-advance invariant
 (advance ONLY after the analysis row is committed, never on a contract failure,
 so a bad run safely retries the same delta), the Stage-2-offline abort, the
 recent-alert prompt memory, and
@@ -47,10 +45,10 @@ def abort_classifier_offline(
 
     Shared by every ``scan`` mode: each calls the hub inside a loop over
     monitored chats, and an unreachable hub fails identically for every
-    remaining one. Before this existed the SDK error raised straight out of
-    the command, leaving the ``review_runs`` row at ``status='running'``
-    forever, firing no alert, and leaving every later chat unanalysed (#298).
-    Cursors are untouched, so the held deltas are retried on the next run.
+    remaining one. Finalizing here keeps the SDK error from raising straight out
+    of the command, which would leave the ``review_runs`` row at
+    ``status='running'`` forever, fire no alert, and leave every later chat
+    unanalysed. Cursors are untouched, so the held deltas are retried on the next run.
 
     Returns the alert status for the caller's funnel/progress line. ``config``
     is ``None`` only where no notification channel is configured (tests), in
@@ -78,7 +76,7 @@ _RECENT_ALERT_HEADER = (
 
 
 def format_recent_alerts(items: list[sqlite3.Row]) -> str | None:
-    """Render already-surfaced actionable items as a Stage-2 memory block (#66).
+    """Render already-surfaced actionable items as a Stage-2 memory block.
 
     Returns ``None`` for an empty window so the prompt simply omits the section.
     Each line carries the run date and the stated deadline (when present) so the
@@ -105,10 +103,10 @@ def recent_alert_context(
     now: datetime | None = None,
     exclude_run_id: int | None = None,
 ) -> str | None:
-    """Short-term alert memory for a family's Stage-2 prompt (#66).
+    """Short-term alert memory for a family's Stage-2 prompt.
 
     Built fresh from ``analysis_items`` every run rather than the single, easily
-    null-wiped ``rolling_context`` summary, so a noise delta no longer erases the
+    null-wiped ``rolling_context`` summary, so a noise delta never erases the
     memory of a still-relevant earlier alert.
     """
     return format_recent_alerts(
@@ -127,7 +125,7 @@ def advance_family_cursors(
     """Advance each consumed member's cursor after the family analysis is persisted.
 
     A family review folds the head and its linked children into one merged delta;
-    each member keeps its own cursor (#37). Group the delta by origin chat and
+    each member keeps its own cursor. Group the delta by origin chat and
     advance every member by *its own* max ingestion id — not ``delta[-1]`` — so a
     backfilled out-of-send-order message is never skipped next run. Only the head
     carries the rolling summary; folded children, which are never reviewed
@@ -151,10 +149,10 @@ def advance_family_cursors(
 def hold_back_if_transcribing(
     delta: list[StoredMessage], transcription_enabled: bool
 ) -> list[StoredMessage]:
-    """Apply the untranscribed-voice-note hold-back gate (#36/#132) when enabled.
+    """Apply the untranscribed-voice-note hold-back gate when enabled.
 
     Shared by every ``scan`` mode that analyses live deltas so the gate can
-    only be added/changed in one place (issue #129).
+    only be added/changed in one place.
     """
     return hold_back_untranscribed(delta) if transcription_enabled else delta
 
@@ -175,7 +173,7 @@ def persist_analysis_result(
     """Insert a parsed :class:`AnalysisResult`; shared by every scan mode.
 
     Returns the new ``analysis_items`` row id — the scan pipeline needs it to
-    record a routine-prep reminder's ``calendar_event_id`` after the fact (#218).
+    record a routine-prep reminder's ``calendar_event_id`` after the fact.
     """
     return store.insert_analysis_item(
         conn,

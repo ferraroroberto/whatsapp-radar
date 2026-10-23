@@ -48,7 +48,7 @@ async def get_conn(request: Request) -> AsyncIterator[sqlite3.Connection]:
     """FastAPI dependency yielding a store connection scoped to the request.
 
     The single home for the open/close lifecycle that the read/write handlers
-    used to repeat as ``conn = store.connect(db_path(request))`` / ``try: …
+    would otherwise repeat as ``conn = store.connect(db_path(request))`` / ``try: …
     finally: conn.close()``.  The connection *setup* itself (row factory, WAL
     pragmas, schema + migrate) already lives in :func:`src.db.store.connect`;
     this dependency owns only the lifecycle, so handlers inject it with
@@ -70,7 +70,7 @@ async def get_conn(request: Request) -> AsyncIterator[sqlite3.Connection]:
 
 @contextmanager
 def short_lived_conn(request: Request) -> Iterator[sqlite3.Connection]:
-    """A store connection scoped to one call, not the whole request (#240).
+    """A store connection scoped to one call, not the whole request.
 
     ``get_conn`` above deliberately holds its connection open across the
     *entire* request — right for a plain read/write handler, wrong for one
@@ -101,7 +101,7 @@ def buffer_dir(request: Request) -> Path:
 
 
 def hub_base_url(request: Request) -> str:
-    """Return the local-llm-hub base URL for this request (#86 summarize).
+    """Return the local-llm-hub base URL for this request.
 
     Tests inject an override via ``app.state.hub_base_url`` (and the summarize
     endpoint also injects a fake summarizer, so the URL is never dialled in the
@@ -113,7 +113,7 @@ def hub_base_url(request: Request) -> str:
 
 
 def task_os_config(request: Request) -> TaskOsConfig:
-    """Return the task-os export config for this request (#307).
+    """Return the task-os export config for this request.
 
     Tests inject an override via ``app.state.task_os_config``; production falls
     back to the loaded config's ``task_os`` block. Same override pattern as
@@ -139,7 +139,7 @@ def loads_json_column(value: Any) -> Any:
 
 
 def tts_profiles(request: Request) -> TtsConfig:
-    """Return the four summary-speech voice profiles for this request (#157).
+    """Return the four summary-speech voice profiles for this request.
 
     Tests inject an override via ``app.state.tts_profiles``; production falls
     back to the loaded config's ``tts`` block. Same override pattern as

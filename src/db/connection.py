@@ -41,7 +41,7 @@ def _to_stored(row: sqlite3.Row) -> StoredMessage:
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
-# Columns added to review_runs after the initial spike schema (#7's funnel).
+# Columns added to review_runs after the initial spike schema (the run funnel).
 # `CREATE TABLE IF NOT EXISTS` never backfills columns on a pre-existing table,
 # so an older on-disk DB is missing them. These additive, non-destructive ALTERs
 # bring it up to date — each has a constant default, which SQLite allows.
@@ -65,7 +65,7 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
 def _now() -> str:
     # Seconds precision, explicit +00:00 offset: unambiguous AND parseable by
     # every browser Date() (6-digit microsecond fractions are not — the UI's
-    # fallback then rendered raw UTC digits as if local, #163).
+    # fallback then renders raw UTC digits as if local).
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
@@ -99,7 +99,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
         if name not in existing:
             conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
-    # One-time backfill when `kind` (#163) first lands on an older DB: rows the
+    # One-time backfill when `kind` first lands on an older DB: rows the
     # legacy review verb wrote (mode='review') are process runs, not scans.
     # Idempotent — new process runs are written with kind='process' directly.
     if "kind" not in existing:
@@ -115,14 +115,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE chats ADD COLUMN parent_chat_id INTEGER "
             "REFERENCES chats(id) ON DELETE SET NULL"
         )
-    # `chats.source` (#57) lets a second connector (Gmail, #46) share these tables:
+    # `chats.source` lets a second connector (Gmail) share these tables:
     # chat identity becomes (source, source_chat_id). Existing rows backfill to
     # 'whatsapp' via the column default. SQLite can't add a composite table
     # constraint or drop the legacy column-level UNIQUE(source_chat_id) after the
     # fact without a full table rebuild, so composite uniqueness is enforced by a
     # unique *index* instead. The legacy single-column UNIQUE stays — harmless for
-    # whatsapp-only rows (the only source until #46 lands) and dropped only if a
-    # future rebuild is ever warranted. The fresh schema (schema.sql) declares the
+    # whatsapp-only rows and dropped only if a future rebuild is ever warranted.
+    # The fresh schema (schema.sql) declares the
     # composite as a table constraint; both forms back the same ON CONFLICT target.
     if "source" not in chat_cols:
         conn.execute("ALTER TABLE chats ADD COLUMN source TEXT NOT NULL DEFAULT 'whatsapp'")
@@ -132,20 +132,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     # `analysis_trace.messages_json` (per-message audit record: id/sender/text and
     # the Stage-1 keyword roots each message matched) was added after the initial
-    # trace schema (#12). Additive, non-destructive; old rows stay NULL and the
+    # trace schema. Additive, non-destructive; old rows stay NULL and the
     # audit view falls back to the rendered `input_text` blob for them.
     trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
     if "stage1_buckets_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN stage1_buckets_json TEXT")
-    # `analysis_items.deadline_date` (#71): the model-resolved absolute date that
+    # `analysis_items.deadline_date`: the model-resolved absolute date that
     # sits beside the free-text `deadline`, letting the digest flag today/overdue
     # deterministically. Additive, non-destructive; old rows stay NULL.
     item_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
     if "deadline_date" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN deadline_date TEXT")
-    # `analysis_items.child`/`.task_category`/`.prep_complexity` (#215): resolved
+    # `analysis_items.child`/`.task_category`/`.prep_complexity`: resolved
     # Gmail-school classification fields. Additive, non-destructive; old rows and
     # every non-Gmail-school row stay NULL.
     if "child" not in item_cols:
@@ -154,12 +154,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN task_category TEXT")
     if "prep_complexity" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN prep_complexity TEXT")
-    # `analysis_items.calendar_event_id` (#218): the created Google Calendar
+    # `analysis_items.calendar_event_id`: the created Google Calendar
     # reminder event id for a routine-prep item. Additive, non-destructive; old
     # rows and every item that never got a reminder stay NULL.
     if "calendar_event_id" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN calendar_event_id TEXT")
-    # `messages.transcription_status` + `messages.media_path` (#36): the voice-note
+    # `messages.transcription_status` + `messages.media_path`: the voice-note
     # transcription lifecycle and a transient ref to the downloaded audio. Additive,
     # non-destructive; old rows (and every non-voice message) stay NULL, so the
     # analysis pipeline — which reads only `messages.text` — is untouched.
@@ -168,19 +168,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE messages ADD COLUMN transcription_status TEXT")
     if "media_path" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN media_path TEXT")
-    # `messages.summary` (#157): the persisted on-demand summary, read-through
+    # `messages.summary`: the persisted on-demand summary, read-through
     # cached so a reopened overlay never re-pays the hub call. Additive,
     # non-destructive; old rows stay NULL until the operator taps Summarize.
     if "summary" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN summary TEXT")
-    # `messages.task_exported_at` (#307): when a message was sent to task-os's
+    # `messages.task_exported_at`: when a message was sent to task-os's
     # Inbox. Additive, non-destructive; old rows stay NULL until the operator
     # taps Send to Task-OS.
     if "task_exported_at" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN task_exported_at TEXT")
-    # Multi-source sync visibility (#58): keep the historical ``source``
-    # operation tag (scan/resync/reprocess) and add which connector ran plus its
-    # outcome. Defaults make every pre-#58 row a successful WhatsApp sync.
+    # Multi-source sync visibility: keep the ``source`` operation tag
+    # (scan/resync/reprocess) and add which connector ran plus its outcome.
+    # Defaults make every older row a successful WhatsApp sync.
     sync_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sync_log)")}
     if "connector_source" not in sync_cols:
         conn.execute(

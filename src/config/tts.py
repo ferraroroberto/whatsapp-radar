@@ -1,4 +1,4 @@
-"""Model/voice pairs behind the four summary read-aloud profiles (#157)."""
+"""Model/voice pairs behind the four summary read-aloud profiles."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ class VoiceProfile:
 
 @dataclass(frozen=True)
 class TtsConfig:
-    """Model/voice pairs behind the four summary read-aloud profiles (#157).
+    """Model/voice pairs behind the four summary read-aloud profiles.
 
     Keyed by ``"{language}_{gender}"``; :func:`src.speech_profile.resolve_profile_key`
-    picks which one applies to a given message. English keeps the existing
-    expressive ``orpheus-tts`` voices App Launcher established; Spanish uses the
+    picks which one applies to a given message. English uses the
+    expressive ``orpheus-tts`` voices shared with App Launcher; Spanish uses the
     hub's ``kokoro-tts`` model, whose bundled voice pack ships a stable
     Spanish-capable female/male pair (``ef_dora`` / ``em_alex``) — no second TTS
     runtime and no prerequisite local-llm-hub change needed.

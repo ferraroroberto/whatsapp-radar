@@ -466,7 +466,7 @@ async function reconnectSidecar() {
 // The run poll: the active run and the unified records list, which
 // Activity merges for the runs the DB store does not hold (a webapp-launched
 // sync or rebuild, a run still in flight). Sources health, syncs and traffic
-// are fetched where their cards live now (Settings, Family), not here.
+// are fetched where their cards live (Settings, Family), not here.
 export async function fetchExecution() {
   let data;
   try {

@@ -9,7 +9,7 @@
 function _pad(n) { return String(n).padStart(2, '0'); }
 
 // Per-kind display label and row glyph, so a run is named and drawn
-// identically wherever it appears (#163, #373).
+// identically wherever it appears.
 const KIND_META = {
   scan: { label: 'Message scan', icon: 'message-circle' },
   process: { label: 'Process', icon: 'play' },
@@ -20,7 +20,7 @@ const KIND_META = {
   'traffic-check': { label: 'Traffic check', icon: 'car' },
 };
 
-/* Priced vs unpriced commute legs (#283), in one place because two surfaces
+/* Priced vs unpriced commute legs, in one place because two surfaces
  * count them: the run sheet's funnel cells and the Activity row's summary line.
  *
  * `anchor_in_the_past` (the drive is over, no Routes call spent) and `error`
@@ -33,7 +33,7 @@ const KIND_META = {
  * owns on the Python side. It has to be spelled twice because a browser cannot
  * import a Python module; it does not have to be spelled twice *per language*.
  *
- * A leg with no `status` counts as priced: payloads written before #270 carry no
+ * A leg with no `status` counts as priced: older payloads carry no
  * status field and every one of their legs genuinely was priced, so the other
  * default would invent a coverage gap that never existed. */
 const UNPRICED_LEG_STATUSES = ['anchor_in_the_past', 'error'];
@@ -51,7 +51,7 @@ export function kindLabel(kind) { return (KIND_META[kind] || { label: kind }).la
 
 export function kindIcon(kind) { return (KIND_META[kind] || { icon: 'play' }).icon; }
 
-/* Status chip (design.md "status chip", #373): one class, one tone map, for
+/* Status chip (design.md "status chip"): one class, one tone map, for
  * exceptions only — a normal state (OK, live, connected) gets no chip at all.
  * Tones: danger (failed, offline), accent (actionable, worth a look),
  * attention (a pending item, a missing location, a conflict, a traffic alert),
@@ -67,14 +67,14 @@ export function statusChip(text, tone) {
 // Funnel-cell mapping for the two family-check kinds (calendar-scan ·
 // traffic-check), shared by run-trace.js's funnelCells() and its
 // renderFamilyTrace() so a label/field change can't render differently for a
-// live run vs a stored one (#237). `payload` is a flat object carrying the fields below
+// live run vs a stored one. `payload` is a flat object carrying the fields below
 // — either a live run's `result` or a persisted run's `summary`, both shaped
 // the same way.
 export function familyKindCells(kind, payload) {
   const p = payload || {};
   if (kind === 'traffic-check') {
     // Two cells, not one: 'Priced' is the coverage number and 'Not priced' is
-    // the gap in it. A single 'Checked' count folded the two together (#283).
+    // the gap in it. A single 'Checked' count folds the two together.
     const pricing = legPricing(p.checked);
     return [
       { label: 'Priced', value: pricing.priced },
@@ -91,7 +91,7 @@ export function familyKindCells(kind, payload) {
   return cells.concat(travelBlockCells(p.travel_blocks));
 }
 
-/* Travel-block vocabulary (#276), in one place because three surfaces say it:
+/* Travel-block vocabulary, in one place because three surfaces say it:
  * the Family tab's last-sweep line, the run sheet's funnel cells and its
  * drill-down. `short` fits a funnel cell, `label` reads as a sentence fragment.
  *
@@ -113,8 +113,8 @@ function travelStatus(status) {
 function travelStatusShort(status) { return travelStatus(status).short; }
 export function travelStatusLabel(status) { return travelStatus(status).label; }
 
-// Headline travel-block numbers for a calendar-scan funnel row (#276). A run
-// recorded before the sweep existed carries no section at all and gets no
+// Headline travel-block numbers for a calendar-scan funnel row. A run
+// with no sweep section gets no
 // cells — an absent feature must not render as a feature that did nothing.
 // A gated sweep gets one cell naming its gate, never a row of zeros.
 function travelBlockCells(section) {
@@ -130,7 +130,7 @@ function travelBlockCells(section) {
 
 // Per-source sprite icon + label, shared by Settings' source-health cards
 // and the Dashboard's last-activity grid + source list so a source is drawn
-// identically wherever it appears (#165). `traffic` reuses the car glyph (#164).
+// identically wherever it appears. `traffic` reuses the car glyph.
 export const SOURCE_ICON = {
   gmail: '#i-mail',
   calendar: '#i-calendar-days',
@@ -151,7 +151,7 @@ export function sourceIcon(source) {
   return svg;
 }
 
-// Coarse relative time for at-a-glance "when did this last run" cards (#165):
+// Coarse relative time for at-a-glance "when did this last run" cards:
 // "just now" / "5m ago" / "2h ago" / "3d ago", falling back to the absolute
 // local date past a week. A non-parseable value renders as an em-dash.
 export function fmtRelative(ts) {
@@ -179,7 +179,7 @@ export function fmtNum(n) {
 
 // "2026-06-07T09:43:00Z" → "2026-06-07 11:43" (local). With `withYear:false` the
 // year is dropped ("06-07 11:43") for compact columns. A non-parseable value
-// falls back to the old UTC slice rather than rendering "Invalid Date".
+// falls back to a UTC slice rather than rendering "Invalid Date".
 export function fmtLocalDateTime(ts, { withYear = true } = {}) {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -192,8 +192,8 @@ export function fmtLocalDateTime(ts, { withYear = true } = {}) {
 
 /* Shared action-row builder (design.md "action-row" contract): the
  * `<li class="action-row">` > `.action-row-main` > `.action-row-text` >
- * title + meta skeleton recurred hand-built at every call site (activity.js,
- * dashboard.js, chats.js, chat-links.js — audit#394). Builds that skeleton
+ * title + meta skeleton shared by every call site (activity.js,
+ * dashboard.js, chats.js, chat-links.js). Builds that skeleton
  * and returns the live nodes so a caller needing something the options below
  * don't cover (a tooltip, extra meta children) can still reach in.
  *
@@ -245,7 +245,7 @@ export function actionRow(opts) {
 
 // Renders a row of `{label, value}` cells (funnel stats: synced/monitored/
 // stage1/stage2/actionable) into `box` as `.exec-funnel-cell` blocks. One
-// renderer for the run sheet (#373), so the funnel markup can't drift between
+// renderer for the run sheet, so the funnel markup can't drift between
 // the live-run viewer and the historical trace view. Missing values render
 // as an em-dash rather than "undefined"/"null".
 export function renderFunnelCells(box, cells) {

@@ -1,8 +1,8 @@
-/* Passkey enrollment for the admin webapp (no sign-in ceremony, #353).
+/* Passkey enrollment for the admin webapp (no sign-in ceremony).
  *
  * Enrollment is provisioning state only. Route access is gated by the
  * bearer-token middleware; loopback callers bypass that gate entirely on the
- * server side. Since #377 the devices and enrollment live in Settings' This
+ * server side. The devices and enrollment live in Settings' This
  * install -> Passkeys sheet, and the header lines say when the tray's
  * enrollment window is open. */
 
@@ -51,7 +51,7 @@ function serializeReg(c) {
 
 // ----------------------------------------------------------- status
 // Settings' Passkeys row and sheet and both header lines (Home, Settings)
-// re-render from here when the status poll moves (#377).
+// re-render from here when the status poll moves.
 const listeners = [];
 export function onWebauthnChange(fn) { listeners.push(fn); }
 
@@ -100,7 +100,7 @@ let deviceName = 'iPhone';
 let confirming = null;   // the device whose removal waits on the in-sheet confirm
 let redraw = function () {};
 
-/* The Passkeys sheet (#377): the enrolled devices, each removable behind an
+/* The Passkeys sheet: the enrolled devices, each removable behind an
  * in-sheet confirm (no native dialog), and — only while the tray's enrollment
  * window is open — a name field and "Enroll this device". */
 export function renderPasskeys(body, rerender) {

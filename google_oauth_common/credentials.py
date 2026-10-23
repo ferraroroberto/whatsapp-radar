@@ -11,7 +11,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # The token endpoint is one HTTPS call a scheduled job makes every few minutes, so
-# a dropped connection (TLS EOF, reset, timeout) is a matter of when, not if (#384).
+# a dropped connection (TLS EOF, reset, timeout) is a matter of when, not if.
 # Three attempts with a 2 s then 4 s pause ride out a blip without stalling a job.
 REFRESH_ATTEMPTS = 3
 REFRESH_BACKOFF_S = 2.0

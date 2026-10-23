@@ -702,7 +702,7 @@ async function refreshAfterLink() {
 // deps chat-links.js's link/rename/picker controls are wired with once, in
 // wireChats() below. getCurrentChat reads the live `hist.chat` (not a snapshot
 // taken at wiring time) so every click always acts on whichever chat's overlay
-// is currently open; onRenamed mirrors what a rename used to do inline here.
+// is currently open; onRenamed refreshes the sheet header and the chat list.
 function onChatRenamed(chat) {
   renderSheetHeader(chat);
   render();

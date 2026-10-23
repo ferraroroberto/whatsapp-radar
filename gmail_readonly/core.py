@@ -237,7 +237,7 @@ class GmailMailbox:
 
         Callers that already hold some messages can diff these ids against their
         store and download full content for the genuinely new ones via
-        :meth:`messages_by_ids` (#180), instead of re-fetching every body.
+        :meth:`messages_by_ids`, instead of re-fetching every body.
         """
         return self._message_ids(search)
 
@@ -300,7 +300,7 @@ class GmailMailbox:
         ``get_messages`` is an optional acceleration, not part of the minimal
         :class:`GmailReadClient` protocol — portable implementations and test
         fakes stay one-method simple, while the official adapter collapses a
-        window of sequential GETs into a few batch round-trips (#180).
+        window of sequential GETs into a few batch round-trips.
         """
         bulk = getattr(self._client, "get_messages", None)
         if callable(bulk):
@@ -349,8 +349,8 @@ def masked_email_address(address: str) -> str:
 
 def _safe_error_detail(exc: Exception) -> str:
     if isinstance(exc, TimeoutError):
-        # Distinct from a generic failure: the transport-level timeout replaced
-        # what used to be an unbounded hang (#180).
+        # Distinct from a generic failure: the transport-level timeout bounds
+        # what would otherwise be an unbounded hang.
         return "Gmail API request timed out — network stalled or Google unreachable"
     status = getattr(getattr(exc, "resp", None), "status", None)
     if status == 401:

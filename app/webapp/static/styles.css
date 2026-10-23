@@ -813,7 +813,7 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 
 /* ================================================================== audit */
 /* =================================================================== activity */
-/* Run and Audit merged into one list. Day groups sit under an overline over a
+/* One list over every run. Day groups sit under an overline over a
    full-bleed vendored action-list card; the scope is the vendored segmented
    control; the open run is a sheet on a phone and a right-hand pane on a wide
    pointer screen (design.md layout.wide). */

@@ -1,4 +1,4 @@
-/* Manual summary read-aloud (#94): stream hub PCM16 through Web Audio.
+/* Manual summary read-aloud: stream hub PCM16 through Web Audio.
  *
  * The AudioContext is created, resumed, and fed one silent sample synchronously
  * inside the button gesture. That activation window is essential on iOS Safari:
@@ -133,7 +133,7 @@ async function pumpPcm(ctx, response, abort) {
 }
 
 // messageId identifies the already-summarized message to read aloud; the
-// server resolves language + voice from that message's own context (#157) —
+// server resolves language + voice from that message's own context —
 // the client sends no text or voice choice of its own.
 export async function speakSummary(messageId, onState) {
   if (messageId == null) return false;

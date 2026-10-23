@@ -1,4 +1,4 @@
-"""Thin local-llm-hub text-to-speech client for summary playback (#94).
+"""Thin local-llm-hub text-to-speech client for summary playback.
 
 The Chats overlay sends an ephemeral summary to the hub's OpenAI-shape
 ``POST /v1/audio/speech`` endpoint. The router streams headerless PCM16 to the
@@ -24,7 +24,7 @@ DEFAULT_VOICE = "tara"
 
 # Known voices per hub TTS model, so an unrecognized voice falls back to a
 # valid voice *for the requested model* rather than silently substituting a
-# different model's default (#157: Spanish requests use "kokoro-tts", whose
+# different model's default (Spanish requests use "kokoro-tts", whose
 # voices aren't valid Orpheus voices and vice versa).
 VOICES_BY_MODEL: dict[str, tuple[str, ...]] = {
     DEFAULT_MODEL: ("tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"),

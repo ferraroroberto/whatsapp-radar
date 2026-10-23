@@ -1,4 +1,4 @@
-"""Chats tab (#10): chat selection, history overlay, monitor/ignore toggle.
+"""Chats tab: chat selection, history overlay, monitor/ignore toggle.
 
 Listing and history are read-only SELECTs over the local store. The only writes
 are status changes, which go through ``store.set_chat_status`` — and marking a
@@ -54,7 +54,7 @@ _AUDIO_MEDIA_TYPES = {".ogg": "audio/ogg", ".opus": "audio/ogg", ".wav": "audio/
 
 
 def _transcode_to_mp3(src: Path) -> bytes:
-    """Transcode an audio file to mono 24 kHz MP3 bytes via ffmpeg (#86).
+    """Transcode an audio file to mono 24 kHz MP3 bytes via ffmpeg.
 
     WhatsApp voice notes are OGG/Opus, which iOS Safari's ``<audio>`` element can't
     play; MP3 plays on every target browser. Raises ``FileNotFoundError`` when
@@ -91,9 +91,9 @@ class LinkUpdate(BaseModel):
 
 
 class SpeechRequest(BaseModel):
-    # The message whose stored summary should be read aloud (#157). The voice
+    # The message whose stored summary should be read aloud. The voice
     # profile is resolved server-side from the message's own context — the
-    # client no longer picks text or a voice.
+    # client never picks text or a voice.
     message_id: int
     speed: float | None = None
 
@@ -206,18 +206,18 @@ async def chat_history(
                 "text": m.text,
                 "type": m.message_type,
                 "source": source_by_chat.get(m.chat_id, str(chat["source"])),
-                # A summary already generated for this message (#157), so a
+                # A summary already generated for this message, so a
                 # reopened overlay can render it without re-dialling the hub.
                 "summary": m.summary,
-                # When this message was sent to task-os's Inbox (#307); null
+                # When this message was sent to task-os's Inbox; null
                 # until the operator taps Send to Task-OS.
                 "task_exported_at": m.task_exported_at,
-                # Voice-note transcription state (#36) so the UI can mark a voice
+                # Voice-note transcription state so the UI can mark a voice
                 # note and label it when it isn't (yet) transcribed.
                 "transcription_status": m.transcription_status,
                 # True when this voice note still has retained audio on disk, so
-                # the overlay can offer a play control wired to the audio endpoint
-                # (#86). False once the audio is swept past the retention window.
+                # the overlay can offer a play control wired to the audio endpoint.
+                # False once the audio is swept past the retention window.
                 "has_audio": m.message_type == "voice" and m.media_path is not None,
                 # Only on a merged family view (>1 member); absent for a lone chat.
                 **({"origin": origin.get(m.chat_id)} if multi else {}),
@@ -308,7 +308,7 @@ async def message_audio(
     message_id: int,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> Response:
-    """Stream a voice note's retained audio for playback in the Chats overlay (#86).
+    """Stream a voice note's retained audio for playback in the Chats overlay.
 
     Read-only and gated by the same bearer-token middleware as the rest of the API
     (the ``<audio>`` element passes the token via ``?token=``; loopback bypasses).
@@ -348,7 +348,7 @@ async def message_audio(
 
 @router.post("/api/messages/{message_id}/summarize")
 async def summarize_message(request: Request, message_id: int) -> dict[str, Any]:
-    """Summarize one long message's text on demand via the hub's Haiku (#86, #157).
+    """Summarize one long message's text on demand via the hub's Haiku.
 
     Read-through: the first successful summarization persists to
     ``messages.summary``, so a re-tap, a reopened overlay, or a process restart
@@ -388,13 +388,13 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
 
 @router.post("/api/messages/{message_id}/task-export")
 async def export_message_task(request: Request, message_id: int) -> dict[str, Any]:
-    """Send one message to task-os's Inbox as a task (#307, task-os#98).
+    """Send one message to task-os's Inbox as a task.
 
     Read-through and idempotent client-side: once a message is exported, the
     timestamp persists on ``messages.task_exported_at`` and a re-tap returns it
-    without posting again — task-os's own ``POST /api/tasks`` doesn't yet dedupe
-    on ``external_id`` (task-os#98), so this repo is what actually protects a
-    retry from creating a duplicate Inbox task today.
+    without posting again — task-os's own ``POST /api/tasks`` doesn't dedupe
+    on ``external_id``, so this repo is what actually protects a
+    retry from creating a duplicate Inbox task.
 
     404 when the message is missing or has no text (e.g. an untranscribed voice
     note); 400 when task-os export isn't configured (disabled, or no bearer
@@ -425,7 +425,7 @@ async def export_message_task(request: Request, message_id: int) -> dict[str, An
 
 @router.get("/api/tts/health")
 async def tts_health(request: Request) -> dict[str, bool]:
-    """Report whether the hub is reachable for manual summary playback (#94)."""
+    """Report whether the hub is reachable for manual summary playback."""
     probe = getattr(request.app.state, "tts_health", None) or tts_client.health
     try:
         available = await asyncio.to_thread(probe, hub_base_url(request))
@@ -437,8 +437,7 @@ async def tts_health(request: Request) -> dict[str, bool]:
 
 @router.post("/api/tts/speak")
 async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingResponse:
-    """Proxy one message's stored summary to the hub as a headerless PCM16 stream
-    (#94, #157).
+    """Proxy one message's stored summary to the hub as a headerless PCM16 stream.
 
     The voice profile is resolved server-side from the message's own context —
     never the client: language is detected deterministically from the

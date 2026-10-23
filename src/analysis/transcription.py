@@ -1,4 +1,4 @@
-"""Voice-note transcription via the local-llm-hub audio endpoint (#36).
+"""Voice-note transcription via the local-llm-hub audio endpoint.
 
 Between sync and analysis, the scan turns each downloaded voice note into real
 text so the existing pipeline — which reads only ``messages.text`` — picks it up
@@ -9,8 +9,8 @@ unchanged. The flow per note:
       -> failure: mark 'failed' (audio kept) so the next live scan retries
 
 On success the audio is retained for ``transcription.audio_retention_days`` so it
-can be played back in the Chats overlay (#86); a sweep at the start of each phase
-deletes audio past that window. Set ``audio_retention_days = 0`` to revert to #36's
+can be played back in the Chats overlay; a sweep at the start of each phase
+deletes audio past that window. Set ``audio_retention_days = 0`` for
 delete-immediately behaviour. A retained 'done' note never trips the cursor barrier
 (which only holds 'pending'/'failed' notes), so retention doesn't change gating.
 
@@ -19,7 +19,7 @@ A never-attempted voice note older than ``transcription.window_days`` is marked
 A note that already *failed* (a transient backend outage, not backlog) keeps retrying
 on every full sync up to the longer ``transcription.failed_retry_days``, so an outage
 that outlasts the transcribe window still recovers; only past that does it give up
-(marked 'skipped_old', audio deleted) so sensitive audio isn't kept forever (#104).
+(marked 'skipped_old', audio deleted) so sensitive audio isn't kept forever.
 Transcription runs
 *before* analysis and advances no cursor, so a voice note is never analysed as a
 placeholder and the cursor never skips real content. Each note is isolated: one
@@ -79,8 +79,8 @@ class TranscriptionBackendDown(TranscriptionError):
     502/503/504 gateway error means every *other* pending note will fail for the
     identical reason — as opposed to a per-file error (e.g. a genuinely corrupt
     recording), which stays a plain :class:`TranscriptionError` and is isolated
-    as before. The batch loop in :func:`run_transcription_phase` short-circuits
-    on this subtype instead of grinding through the rest of the batch (#99).
+    on its own. The batch loop in :func:`run_transcription_phase` short-circuits
+    on this subtype instead of grinding through the rest of the batch.
     """
 
 
@@ -91,8 +91,8 @@ class TranscriptionOutcome:
     done: int = 0
     failed: int = 0
     skipped_old: int = 0
-    swept: int = 0  # retained audio files deleted past the retention window (#86)
-    backend_down: bool = False  # batch short-circuited on a whole-backend outage (#99)
+    swept: int = 0  # retained audio files deleted past the retention window
+    backend_down: bool = False  # batch short-circuited on a whole-backend outage
 
 
 def _flatten(text: str) -> str:
@@ -107,7 +107,7 @@ def hold_back_untranscribed(messages: list[StoredMessage]) -> list[StoredMessage
     errored this run but whose audio is still on disk ('failed' + ``media_path``)
     must not be analysed as its "[voice note]" placeholder — and the cursor must not
     advance past it, or the real transcript produced on a later run would never be
-    analysed (#36). So the delta is cut before the earliest such note *by ingestion
+    analysed. So the delta is cut before the earliest such note *by ingestion
     id* (the cursor key); that note and anything ingested after it wait for a run
     where it has transcribed. Messages ingested before it are analysed normally and
     the cursor advances only up to them.
@@ -135,7 +135,7 @@ def _read_as_wav(path: Path) -> tuple[bytes, str]:
 
     The hub raw-passes audio to whisper-server, which only decodes **WAV** — it
     400s on the OGG/Opus container WhatsApp voice notes arrive in (verified against
-    the live hub, #36). So any non-WAV input is transcoded to 16 kHz mono PCM WAV
+    the live hub). So any non-WAV input is transcoded to 16 kHz mono PCM WAV
     with ffmpeg first. Raises :class:`TranscriptionError` if ffmpeg is needed but
     not on PATH, with a clear remediation message.
     """
@@ -233,7 +233,7 @@ def detect_chat_language(conn: sqlite3.Connection, chat_id: int) -> str | None:
     Chats are single-language in practice, so the chat's own typed text is a strong
     prior for the language of a voice note in it — used as the Whisper ``language``
     hint so a note transcribes in its real language regardless of any backend
-    auto-detect bias (#36). Placeholder rows (``[voice note]``, ``[image]``, …) are
+    auto-detect bias. Placeholder rows (``[voice note]``, ``[image]``, …) are
     excluded; below :data:`_MIN_DETECT_CHARS` of text we return ``None`` (too little
     to be sure) and let the backend auto-detect.
     """
@@ -304,7 +304,7 @@ def run_transcription_phase(
     failed_window = cfg.failed_retry_days
     retain_days = cfg.audio_retention_days
 
-    # 0) Retention sweep (#86): drop audio for notes transcribed more than
+    # 0) Retention sweep: drop audio for notes transcribed more than
     # `retain_days` ago. The transcript and 'done' status stay; only the file and
     # `media_path` go, so playback expires cleanly. Skipped when retention is off
     # (then no audio is ever retained in the first place).
@@ -316,7 +316,7 @@ def run_transcription_phase(
 
     # 1) Backlog guard: never-attempted notes older than the window are skipped; a
     # note that already *failed* is given a longer leash (it's a transient outage, not
-    # backlog) and only skipped once it's older than `failed_window` (#104).
+    # backlog) and only skipped once it's older than `failed_window`.
     for row in store.stale_voice_notes(
         conn, within_days=window, failed_within_days=failed_window, now=now
     ):
@@ -347,7 +347,7 @@ def run_transcription_phase(
             # failure: 'failed' would keep `media_path` set, so this phantom
             # file gets retried every scan up to `failed_retry_days` *and*
             # `hold_back_untranscribed` holds the whole chat's cursor on it for
-            # that entire window (#435). 'skipped_old' clears `media_path`
+            # that entire window. 'skipped_old' clears `media_path`
             # (store.mark_transcription), so the note surfaces as its
             # "[voice note]" placeholder immediately and the cursor moves on.
             logger.warning("⚠️ voice note %s: audio file missing (%s)", msg_id, audio)
@@ -361,7 +361,7 @@ def run_transcription_phase(
             # The whole backend is down — every remaining note would fail identically.
             # Stop now, one clear line, and leave them exactly as they are (still
             # 'pending'/'failed') so the next scan retries them; don't churn N doomed
-            # POSTs or log N copies of the same error (#99).
+            # POSTs or log N copies of the same error.
             remaining = len(pending) - idx
             logger.warning("⚠️ transcription backend unreachable, aborting batch: %s", exc)
             outcome.backend_down = True

@@ -149,7 +149,7 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
     else:
         # The sidecar's own counters are per-session (they reset on reconnect), so
         # don't present them as buffer totals — the UI shows the truthful *stored*
-        # totals + last-sync delta instead (#31).
+        # totals + last-sync delta instead.
         state, detail = STATE_RUNNING, "connected — receiving live updates"
 
     return SidecarStateInfo(
@@ -322,7 +322,7 @@ def ensure_running(
     return sidecar_state(buffer_dir)
 
 
-# --- continuous supervision (the tray keep-alive, #73) ---------------------
+# --- continuous supervision (the tray keep-alive) ---------------------
 
 # How often the tray's keep-alive thread re-checks the sidecar. Frequent and
 # cheap: a fresh buffer means a scan reads an already-warm source rather than a
@@ -434,7 +434,7 @@ def run_supervisor(
             break
 
 
-# --- settled-buffer gate (don't read a buffer that is still filling, #73) ---
+# --- settled-buffer gate (don't read a buffer that is still filling) ---
 
 
 def _buffer_signature(buffer_dir: Path) -> tuple[int, int]:

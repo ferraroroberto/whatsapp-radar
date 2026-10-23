@@ -1,4 +1,4 @@
-"""Daily calendar-conflict scan knobs + the household child registry (#160/#206/#215)."""
+"""Daily calendar-conflict scan knobs + the household child registry."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 _WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
-#: ``family.run_hour`` gates the daily scan since #277, so an unusable value is
-#: no longer inert — it decides whether the household's conflict scan, traffic
+#: ``family.run_hour`` gates the daily scan, so an unusable value is
+#: not inert — it decides whether the household's conflict scan, traffic
 #: alerts and travel blocks happen at all. Unusable degrades to *no gate*, never
 #: to a restrictive hour: see :func:`_parse_run_hour`.
 _RUN_HOUR_UNGATED = 0
@@ -23,7 +23,7 @@ _RUN_HOUR_UNGATED = 0
 #: Distinct bad values already warned about this process. ``load_config()`` is
 #: uncached and runs on essentially every webapp request, so without this a
 #: household carrying a typo would get a WARNING line on every poll instead of
-#: once. Mirrors ``src/config/calendar.py``'s duplicate-collapse dedup (#273).
+#: once. Mirrors ``src/config/calendar.py``'s duplicate-collapse dedup.
 _WARNED_RUN_HOURS: set[str] = set()
 
 #: Distinct bad ``family.timezone`` values already warned about this process —
@@ -76,12 +76,12 @@ class ChildcareWindow:
     label: str
     weekdays: tuple[int, ...]  # 0=Mon .. 6=Sun
     time: str  # "HH:MM" start / deadline (pickup / departure)
-    end_time: str = ""  # "HH:MM" end; blank = a point-in-time deadline (#167)
+    end_time: str = ""  # "HH:MM" end; blank = a point-in-time deadline
 
 
 @dataclass(frozen=True)
 class ChildProfile:
-    """One registered household child a Gmail school email might be about (#206/#215).
+    """One registered household child a Gmail school email might be about.
 
     Personal, household-identifying detail — real entries live only in the
     gitignored ``config/local.json``, mirroring ``GmailConfig.senders``/``.labels``.
@@ -97,7 +97,7 @@ class ChildProfile:
 
 @dataclass(frozen=True)
 class TravelBlocksConfig:
-    """Auto-written commute travel blocks (#265, umbrella #263). Off by default.
+    """Auto-written commute travel blocks. Off by default.
 
     ``dry_run`` defaults **on** even once ``enabled`` is flipped: the first live
     days should log the plan and touch nothing, because this feature writes to
@@ -128,7 +128,7 @@ class TravelBlocksConfig:
 
 @dataclass(frozen=True)
 class FamilyConfig:
-    """Daily calendar-conflict scan knobs + the fixed household schedule (#160).
+    """Daily calendar-conflict scan knobs + the fixed household schedule.
 
     Personal household detail (home address, the who-is-home pattern, childcare
     windows) lives only in the gitignored ``config/local.json``; the committed
@@ -136,7 +136,7 @@ class FamilyConfig:
     """
 
     enabled: bool = False
-    # Local hour before which `wr calendar-scan` self-skips (#277). It is a
+    # Local hour before which `wr calendar-scan` self-skips. It is a
     # *floor*, not a fire time: the App Launcher job decides when the verb is
     # invoked, this decides whether an unforced invocation does anything. An
     # explicit `--force` (every webapp button) ignores it entirely. Always
@@ -146,7 +146,7 @@ class FamilyConfig:
     # Household IANA zone (e.g. "Europe/Madrid") the daily scan judges every
     # childcare deadline in. "" (unconfigured, the default) falls back to the
     # scan's own per-run offset snapshot — correct for "now" but frozen across
-    # a DST change later in the same multi-day scan window (#435); set this to
+    # a DST change later in the same multi-day scan window; set this to
     # fix that. Already validated by `_parse_timezone` — never an unresolvable
     # name here.
     timezone: str = ""
@@ -157,19 +157,19 @@ class FamilyConfig:
     unknown_scan_days: int = 7
     assessment_days: int = 2
     # Whether the daily summary asks for locations on events that have none
-    # (#253). Off means the "📍 No location set" section is left out of the
+    # Off means the "📍 No location set" section is left out of the
     # Telegram message — nothing else changes: the events are still assumed
     # home, still flagged `assumed` in the decision trace, and still listed in
     # the run's `missing_locations`. The setting silences the nag, it does not
-    # make the assumption invisible (the whole point of #168).
+    # make the assumption invisible.
     ask_missing_locations: bool = True
-    # Routine-prep calendar reminders (#218, Step 4/5 of #206). An empty
+    # Routine-prep calendar reminders. An empty
     # `reminder_calendar_id` means the feature is off: the pipeline never builds
     # a calendar_write client and no event is ever created. `reminder_time` is
     # the local "HH:MM" morning slot each reminder event is created at.
     reminder_calendar_id: str = ""
     reminder_time: str = "07:30"
-    # Auto-written commute travel blocks (#265). Defaulted (disabled, dry-run)
+    # Auto-written commute travel blocks. Defaulted (disabled, dry-run)
     # so library/test callers that build a FamilyConfig without it get the
     # write-nothing behaviour.
     travel_blocks: TravelBlocksConfig = field(default_factory=TravelBlocksConfig)
@@ -178,7 +178,7 @@ class FamilyConfig:
 def _parse_run_hour(raw: Any) -> int:
     """``family.run_hour`` coerced to 0..23, degrading to *no gate* on anything else.
 
-    Since #277 this knob gates ``wr calendar-scan``, so a value the app cannot
+    This knob gates ``wr calendar-scan``, so a value the app cannot
     read is not a cosmetic problem: ``25`` would make ``now.hour >= run_hour``
     false forever and silently stop the household's conflict scan, traffic
     alerts and travel blocks; ``"seven"`` would raise out of ``load_config``
@@ -193,10 +193,10 @@ def _parse_run_hour(raw: Any) -> int:
     safety check must fail towards not suppressing it. The operator is told, so
     "it silently ran anyway" is not the outcome either.
 
-    Rejecting the config outright was considered and rejected, following the
-    duplicate-calendar collapse in ``src/config/calendar.py`` (#273): refusing
-    to load would take down a live app for a household whose config already has
-    the mistake, which is a worse failure than running with the gate off.
+    The config is not rejected outright, following the duplicate-calendar
+    collapse in ``src/config/calendar.py``: refusing to load would take down a
+    live app for a household whose config already has the mistake, which is a
+    worse failure than running with the gate off.
     """
     hour: int | None = None
     # `bool` is an `int` in Python and `run_hour: true` is not hour 1 — the same
@@ -234,7 +234,7 @@ def parse_travel_blocks(raw: dict[str, Any]) -> TravelBlocksConfig:
 
     Deliberately plain ``raw.get``: unlike ``family.enabled`` these knobs are
     never toggled from a scheduler environment — they are edited in
-    ``config/local.json`` (or, from step 4 of #263, the webapp Family tab).
+    ``config/local.json`` (or the webapp Family tab).
     """
     defaults = TravelBlocksConfig()
     return TravelBlocksConfig(

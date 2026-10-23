@@ -73,7 +73,6 @@ def compute_route(
     destination: str,
     *,
     api_key: str,
-    arrival_time: datetime | None = None,
     departure_time: datetime | None = None,
     origin_latlng: tuple[float, float] | None = None,
     session: requests.Session | None = None,
@@ -89,14 +88,6 @@ def compute_route(
     timestamp with ``HTTP 400 "Timestamp must be set to a future time."``, so
     callers pricing a schedule have to drop past anchors rather than send them.
 
-    ``arrival_time`` is **refused** (#270). No caller in this repo passes it any
-    more, and the parameter is kept only so that one that still does fails loudly
-    instead of receiving the depart-now baseline dressed up as an arrival-window
-    estimate — the exact silent wrongness that made #270 invisible for months.
-    Deleting the parameter outright would raise ``TypeError`` from somewhere deep
-    in a keyword-argument mismatch; raising :class:`TrafficReadError` here names
-    the field to use instead, and keeps the "both fields" contract testable.
-
     ``origin_latlng`` (a ``(lat, lng)`` pair) routes from an exact position —
     the live phone fix (#169) — instead of the ``origin`` address string, which
     is then unused. Raises :class:`TrafficReadError` on any transport/API
@@ -104,19 +95,6 @@ def compute_route(
     """
     if not api_key:
         raise TrafficReadError("Routes API key is not configured")
-    if arrival_time is not None and departure_time is not None:
-        # Routes documents the two as mutually exclusive. It does not enforce it
-        # (sending both returns 200 and honours the departure), so refusing here
-        # is what stops a caller silently getting the other field's answer.
-        raise TrafficReadError("arrival_time and departure_time are mutually exclusive")
-    if arrival_time is not None:
-        # Routes accepts `arrivalTime` for a DRIVE route and then ignores it,
-        # returning the depart-now baseline (probe table in #270). An answer that
-        # is real, plausible and not the question asked is worse than no answer,
-        # so this never reaches the wire.
-        raise TrafficReadError(
-            "arrival_time is ignored by Routes for DRIVE; pass departure_time instead"
-        )
     if origin_latlng is not None:
         origin_waypoint: dict[str, Any] = {
             "location": {"latLng": {"latitude": origin_latlng[0], "longitude": origin_latlng[1]}}

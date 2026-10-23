@@ -29,12 +29,9 @@ Recorded per leg as ``leave_now_suppressed`` / ``infeasible_suppressed``. The
 *delay* alert stays untouched — congestion on the road is a real-world signal
 regardless of who is driving.
 
-Departure anchors (#270): every leg is priced for the moment its driver is
-expected to *set off*, because ``departureTime`` is the only time field Routes
-v2 honours for a ``DRIVE`` route — an ``arrivalTime`` request is accepted and
-then ignored, returning the depart-now baseline. This check passed
-``arrival_time`` from #160 until #270, so every alert above was in fact judging
-a 09:00 school run against whatever traffic existed at the 07:00 sweep. Which
+Departure anchors: every leg is priced for the moment its driver is expected to
+*set off*, because ``departureTime`` is the only time field Routes honours for a
+``DRIVE`` route (see :func:`~src.traffic.routes_client.compute_route`). Which
 moment each leg is anchored to is decided in :func:`_departure_anchor` and
 recorded per leg as ``anchor`` / ``departure_anchor``. A departure moment that
 has already passed is never *sent* (Routes rejects it outright), but it is only
@@ -177,12 +174,10 @@ def _departure_anchor(
 ) -> tuple[datetime | None, str]:
     """The moment this leg must be priced as a *departure*, and why (#270).
 
-    Routes v2 honours exactly one time field for ``DRIVE`` + ``TRAFFIC_AWARE``:
-    ``departureTime``. ``arrivalTime`` is accepted and then ignored, returning
-    the depart-now baseline (probe table in #270), so the anchor is not a
-    cosmetic choice — it *is* the estimate. ``None`` means *send no time field*,
-    which is Routes' own "depart now" and is a deliberate anchor, not a missing
-    one.
+    The anchor *is* the estimate: Routes honours only ``departureTime`` (see
+    :func:`~src.traffic.routes_client.compute_route`). ``None`` means *send no
+    time field*, which is Routes' own "depart now" and is a deliberate anchor,
+    not a missing one.
 
     One Routes call prices one leg, and each leg carries exactly one judgment
     that needs a departure moment, so one anchor per leg is enough:

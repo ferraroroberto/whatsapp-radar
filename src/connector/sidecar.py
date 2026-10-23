@@ -106,10 +106,6 @@ class SidecarStateInfo:
         return data
 
 
-def _status_path(buffer_dir: Path) -> Path:
-    return buffer_dir / "status.json"
-
-
 def _qr_path(buffer_dir: Path) -> Path:
     return buffer_dir / "qr.png"
 

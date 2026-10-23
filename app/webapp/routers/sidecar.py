@@ -1,10 +1,11 @@
 """Sidecar control (#29): see the WhatsApp connection state, relaunch it, re-pair.
 
-The phone-first counterpart to the CLI preflight. The Execution tab's health pill
-reads :func:`sidecar_status` to colour the dot and, when the source is down,
-offers a one-tap relaunch (:func:`start_sidecar`) and — when a fresh QR is needed
-— serves the pairing image (:func:`sidecar_qr`) so a non-technical household
-member can re-link a device from their phone without ever touching a terminal.
+The phone-first counterpart to the CLI preflight. The WhatsApp source sheet in
+Settings reads :func:`sidecar_status` for the connection state and, when the
+source is down, offers a one-tap relaunch (:func:`start_sidecar`) and — when a
+fresh QR is needed — serves the pairing image (:func:`sidecar_qr`) so a
+non-technical household member can re-link a device from their phone without
+ever touching a terminal.
 
 All routes sit under ``/api`` and are covered by the bearer-token middleware
 (loopback bypasses). The QR is a local file under the ignored buffer dir; it is

@@ -28,14 +28,18 @@ def _fake_script(tmp_path: Path, code: int, message: str = "") -> Path:
     return script
 
 
+def _classify(code: int) -> tuple[bool, str]:
+    return gate.classify_exit(code, gate._PASS_LABEL, gate._FAIL_LABELS)
+
+
 def test_only_exit_zero_passes() -> None:
-    assert gate.classify_exit(0)[0] is True
+    assert _classify(0)[0] is True
     for code in (1, 2, 3, 4, -1):
-        assert gate.classify_exit(code)[0] is False, code
+        assert _classify(code)[0] is False, code
 
 
 def test_exit_three_is_not_confirmed_and_never_a_skip() -> None:
-    ok, label = gate.classify_exit(3)
+    ok, label = _classify(3)
     assert not ok
     assert "NOT CONFIRMED" in label
     assert "skip" not in label.lower()

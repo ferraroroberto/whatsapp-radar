@@ -2,11 +2,9 @@
 
 from .classifier import (
     ClassificationOutcome,
-    Classifier,
     HubClassifier,
     StubClassifier,
     TracedClassifier,
-    build_classifier,
     build_stage2_classifier,
 )
 from .contract import AnalysisResult, ContractError, parse_analysis
@@ -16,12 +14,10 @@ __all__ = [
     "AnalysisResult",
     "ContractError",
     "parse_analysis",
-    "Classifier",
     "TracedClassifier",
     "ClassificationOutcome",
     "StubClassifier",
     "HubClassifier",
-    "build_classifier",
     "build_stage2_classifier",
     "ScanOutcome",
     "scan",

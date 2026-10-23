@@ -21,8 +21,6 @@ google-auth-oauthlib>=1.2
 # FastAPI + uvicorn serve the phone-first PWA; same stack as App Launcher.
 fastapi>=0.110
 uvicorn[standard]>=0.27
-# Multipart form parsing for future file uploads / form posts.
-python-multipart>=0.0.9
 # WebAuthn passkey gate (Face ID enrol + assert).
 webauthn>=2.0
 # HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).
@@ -33,8 +31,6 @@ PyYAML>=6.0
 # Tailscale HTTPS cert inspection (scripts/gen_tailscale_cert.py --check):
 # reads the SAN + expiry off the existing leaf to decide whether to renew.
 cryptography>=42.0
-# Process introspection for the tray's port-owner reclaim.
-psutil>=5.9
 # PWA icon generation — dev-only: scripts/gen_icons.py calls
 # project-scaffolding's shared brand_gen.py, which rasterizes the vendored
 # Lucide master SVG with resvg-py (prebuilt wheel, no system deps).

@@ -139,7 +139,7 @@ def _last_activity(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
     Each answers "when did this last run and what did it find" from the unified
     run store (#163), so a CLI- or Jobs-launched run is as visible here as a
-    webapp one. ``db_run_id`` lets the Dashboard deep-link to the Run tab detail.
+    webapp one. ``db_run_id`` lets Home deep-link to the run's sheet in Activity.
     """
     runs = store.list_runs_by_kind(conn, (*_MESSAGE_KINDS, "traffic-check", "calendar-scan"))
     return [

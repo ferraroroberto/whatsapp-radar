@@ -1,7 +1,7 @@
 /* Entry point: wires every module together, runs boot(), drives the polls.
  *
- * boot() fetches build identity, passkey status, and the Dashboard metrics
- * (#9). Steps 5–7 add the remaining tab fetchers here. */
+ * boot() fetches build identity, passkey status, and Home's metrics, then arms
+ * the polls once. */
 
 import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';

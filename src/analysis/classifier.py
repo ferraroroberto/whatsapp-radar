@@ -8,9 +8,9 @@ Two implementations:
   (``base_url`` -> ``127.0.0.1:8000``, ``model="claude_sonnet"``). Wired but
   opt-in (``WR_CLASSIFIER=hub``).
 
-Both return a raw JSON *string*; the review engine always validates it through
-:func:`src.analysis.contract.parse_analysis`, so a malformed hub
-response is handled exactly like any other contract violation.
+Both report a raw JSON *string* (``ClassificationOutcome.raw_output``); the scan
+pipeline always validates it through :func:`src.analysis.contract.parse_analysis`,
+so a malformed hub response is handled exactly like any other contract violation.
 """
 
 from __future__ import annotations
@@ -21,24 +21,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from src.analysis.keywords import has_actionable_signal
 from src.analysis.prompts import load_prompt
 from src.config import ChildProfile, HubConfig
 from src.models import StoredMessage
-
-# Returned by the cascade when the cheap prefilter finds no actionable signal, so
-# no LLM call is made. Mirrors the contract the parser expects.
-_NO_SIGNAL_RESULT = json.dumps(
-    {
-        "action_required": False,
-        "priority": None,
-        "summary": None,
-        "suggested_next_action": None,
-        "deadline": None,
-        "confidence": 0.5,
-        "evidence_message_ids": [],
-    }
-)
 
 # Keywords that deterministically mark a message as actionable for the stub.
 _ACTION_KEYWORDS = (
@@ -178,27 +163,11 @@ class ClassifierUnavailable(RuntimeError):
 
 
 @runtime_checkable
-class Classifier(Protocol):
-    """Maps a chat's message delta to raw JSON output for the contract parser."""
-
-    def classify(
-        self,
-        chat_display_name: str,
-        delta: list[StoredMessage],
-        prior_context: str | None,
-        *,
-        source: str = "whatsapp",
-    ) -> str:
-        ...
-
-
-@runtime_checkable
 class TracedClassifier(Protocol):
     """A classifier that also reports trace metadata for the audit log.
 
-    Kept separate from :class:`Classifier` so the review engine and its test
-    doubles only need the plain ``classify`` method, while the scan pipeline can
-    require the richer ``classify_traced``.
+    The scan pipeline requires ``classify_traced`` so the run trace can show the
+    exact prompts sent and the raw response received.
     """
 
     def classify_traced(
@@ -250,18 +219,6 @@ class StubClassifier:
             "evidence_message_ids": evidence,
         }
         return ClassificationOutcome(raw_output=json.dumps(result, ensure_ascii=False))
-
-    def classify(
-        self,
-        chat_display_name: str,
-        delta: list[StoredMessage],
-        prior_context: str | None,
-        *,
-        source: str = "whatsapp",
-    ) -> str:
-        return self.classify_traced(
-            chat_display_name, delta, prior_context, source=source
-        ).raw_output
 
 
 # The system prompt is kept in an inspectable Markdown file
@@ -393,69 +350,16 @@ class HubClassifier:
             stop_reason=getattr(response, "stop_reason", None),
         )
 
-    def classify(
-        self,
-        chat_display_name: str,
-        delta: list[StoredMessage],
-        prior_context: str | None,
-        *,
-        source: str = "whatsapp",
-    ) -> str:
-        return self.classify_traced(
-            chat_display_name, delta, prior_context, source=source
-        ).raw_output
-
-
-class CascadeClassifier:
-    """Two-stage classifier: a cheap keyword prefilter gates an LLM call.
-
-    The prefilter (multilingual, ES/EN/CA) drops "utter noise" deltas without an
-    LLM round-trip: if no message carries an actionable root, it returns a
-    not-actionable result immediately. Otherwise it hands the whole (small) delta
-    to ``inner`` — the surrounding messages give the LLM the context a single
-    keyword-matching line would lack.
-    """
-
-    def __init__(self, inner: Classifier) -> None:
-        self._inner = inner
-
-    def classify(
-        self,
-        chat_display_name: str,
-        delta: list[StoredMessage],
-        prior_context: str | None,
-        *,
-        source: str = "whatsapp",
-    ) -> str:
-        if not has_actionable_signal(delta, source):
-            return _NO_SIGNAL_RESULT
-        return self._inner.classify(
-            chat_display_name, delta, prior_context, source=source
-        )
-
-
-def build_classifier(
-    name: str, hub: HubConfig, children: tuple[ChildProfile, ...] = ()
-) -> Classifier:
-    """Construct a classifier by config name ('stub' | 'hub' | 'cascade')."""
-    if name == "stub":
-        return StubClassifier()
-    if name == "hub":
-        return HubClassifier(hub, children)
-    if name == "cascade":
-        return CascadeClassifier(HubClassifier(hub, children))
-    raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")
-
 
 def build_stage2_classifier(
     name: str, hub: HubConfig, children: tuple[ChildProfile, ...] = ()
 ) -> TracedClassifier:
     """Construct the Stage-2 classifier for the scan pipeline.
 
-    The pipeline owns Stage 1 (the keyword prefilter) itself, so it never wants a
-    :class:`CascadeClassifier` here — it wants the engine that runs *after* the
-    prefilter. ``stub`` stays deterministic/offline; both ``hub`` and ``cascade``
-    map to the LLM-backed :class:`HubClassifier`.
+    The pipeline owns Stage 1 (the keyword prefilter) itself, so this builds only
+    the engine that runs *after* the prefilter. ``stub`` stays deterministic/
+    offline; both ``hub`` and ``cascade`` map to the LLM-backed
+    :class:`HubClassifier`.
     """
     if name == "stub":
         return StubClassifier()

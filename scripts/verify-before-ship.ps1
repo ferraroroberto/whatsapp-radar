@@ -1,7 +1,7 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, the static ratchet, the docs ratchet, the comment ratchet, mypy (strict), the offline
+# byte-compile, ruff, the static, docs, comment and structure ratchets, mypy (strict), the offline
 # pytest suite, then the Playwright e2e suite (Chromium + WebKit/iPhone) against a
 # disposable webapp the script boots itself on a free port. The e2e stage is routed by
 # scripts/classify_e2e.py against the [e2e] table in .fleet.toml: nothing for a
@@ -113,6 +113,13 @@ try {
     Write-Host "==> comment ratchet (no new issue reference in a code comment)..." -ForegroundColor Cyan
     & $python -m scripts.comment_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "comment ratchet failed or was NOT CONFIRMED." }
+
+    # Whole tree too: a directory count needs every file. The structure ratchet's exit 3
+    # (git unusable, an unparseable file, an unknown shape) fails as NOT CONFIRMED
+    # (tests/test_structure_ratchet_gate.py pins it).
+    Write-Host "==> structure ratchet (file / function / directory size, src -> app imports, root layout)..." -ForegroundColor Cyan
+    & $python -m scripts.structure_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

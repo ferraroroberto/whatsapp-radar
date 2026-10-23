@@ -151,7 +151,7 @@ Open **APIs & Services → Credentials → Create credentials → API key**. Res
 
 ```powershell
 $env:GOOGLE_MAPS_API_KEY = "<key>"
-.\.venv\Scripts\python.exe -m src.traffic.routes_client --origin "<home address>" --dest "<work address>"
+.\.venv\Scripts\python.exe -m scripts.traffic_smoke --origin "<home address>" --dest "<work address>"
 ```
 
 Expected output is one line: normal vs. traffic minutes, the delay, and a `NORMAL`/`DELAY`/`SIGNIFICANT_DELAY` status.

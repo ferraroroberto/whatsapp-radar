@@ -35,19 +35,13 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 
 ## The one-shot `scan` (what you schedule)
 
-`scan` collapses the whole flow — sync → keyword prefilter (Stage 1) → LLM (Stage 2) → digest → deliver — into one run, and persists a **full per-run audit trace** so every decision is inspectable.
+`scan` collapses the whole flow — sync → keyword prefilter (Stage 1) → LLM (Stage 2) → digest → deliver — into one run, with a full per-run audit trace surfaced read-only in Activity's run sheet. The mechanics — preflight, the settled-buffer gate, and what each guarantees — are documented once in [`scan-and-classification.md`](scan-and-classification.md); this is the day-to-day command reference.
 
 ```powershell
 .\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
 .\wr.bat scan --dry-run       # replay stored messages: no connector, no delivery, no cursor advance
 .\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
 ```
-
-Live `scan` advances each chat's cursor only **after** that chat's analysis and trace are persisted, so a classifier error safely reprocesses the same delta next run. `--dry-run` replays history straight from SQLite — it never touches the connector, delivers, or advances a cursor — so it's the safe way to preview what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`. Both are surfaced read-only in Activity's run sheet.
-
-A live `scan` / `resync` **preflights the source**: if the sidecar's heartbeat is stale it first tries to relaunch the sidecar (when the device is still paired) and re-checks; set `WR_SIDECAR_AUTOSTART=0` to disable the self-heal. If the source still isn't live it **aborts loudly** — exits non-zero, records the run failed, advances no cursor, and fires an alert — so a scheduled job against a dead sidecar can never report green while checking nothing.
-
-A live `scan` then waits for the **buffer to settle** before it reads: a freshly (re)connected sidecar streams history in asynchronously, so reading mid-stream would under-report — and because a live scan advances cursors over what it read, the un-synced tail would be skipped for good. The gate waits until the buffer stops growing for `WR_SYNC_SETTLE_SECONDS` (default 12), hard-capped at `WR_SYNC_SETTLE_TIMEOUT` (default 90, then it reads anyway); set `WR_SYNC_SETTLE_SECONDS=0` to disable. With the tray keep-alive (below) holding the buffer warm this is a near-instant no-op — it only does real waiting right after a reconnect. `resync` skips the gate by design: it is idempotent and never advances a cursor, so a mid-backfill resync simply finishes on the next run. **Net effect: one `scan` whenever you like is enough — no pre-warming syncs, never a stale or half-loaded read.**
 
 `review` remains for analyzing an already-ingested buffer without a sync; `notify` re-delivers if a send failed (the analysis and cursors are already saved):
 
@@ -64,12 +58,7 @@ Set `WR_CLASSIFIER` (in `.env` or via the PWA's Settings, the header gear):
 - **`hub`:** routes the whole delta through [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`.
 - **`cascade` (recommended for real use):** a cheap multilingual keyword prefilter (Spanish/English/Catalan) runs first; only deltas that show an actionable signal cost an LLM call.
 
-The classifier assets are plain text, so **read and tune them freely** without touching code:
-
-- `src/analysis/prompts/classification_system.md` — the channel-neutral instruction sent to Stage 2.
-- `src/analysis/prompts/keyword_roots.txt` — WhatsApp's multilingual Stage-1 roots.
-- `src/analysis/prompts/gmail_classification_taxonomy.md` — Gmail survey/reference bucket definitions used to generate Stage-1 rules; this file is not sent to Stage 2.
-- `src/analysis/prompts/gmail_keyword_roots.txt` — Gmail's `bucket | root` Stage-1 rules.
+The classifier assets are plain text, so **read and tune them freely** without touching code — all four are listed in [`scan-and-classification.md`](scan-and-classification.md#classifier).
 
 The PWA's **Settings (header gear) → How messages are judged** rows open all four assets read-only, each sheet naming its path, plus the effective Gmail sender/label whitelist and actual history scope. Stage 2 is shared but receives an explicit `Source: WhatsApp` or `Source: Gmail` line. Activity's run sheet is the execution proof: it shows the exact source, input messages, Stage-1 buckets/roots, rendered system/user prompt, raw LLM response, parsed verdict, and delivered digest evidence.
 
@@ -105,11 +94,4 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 
 ## Verification gate (for contributors)
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m mypy src app
-powershell -File scripts\verify-before-ship.ps1   # the above + Playwright e2e (Chromium + WebKit/iPhone)
-```
-
-The suite runs entirely offline against sanitized fixtures — no WhatsApp credentials, no network, no Telegram.
+The full gate command, including the static and docs ratchets, is in the README's [Verification](../README.md#verification) section — run it from there rather than from a copy here. The suite runs entirely offline against sanitized fixtures — no WhatsApp credentials, no network, no Telegram.

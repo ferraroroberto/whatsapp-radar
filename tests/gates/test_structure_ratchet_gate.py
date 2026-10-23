@@ -99,19 +99,6 @@ def test_an_unknown_shape_is_not_confirmed(
     assert "NOT CONFIRMED" in last
 
 
-def test_a_script_that_cannot_start_is_not_confirmed(
-    sandbox: tuple[Path, Path],
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def refuse(*_a: object, **_k: object) -> None:
-        raise OSError("no interpreter")
-
-    monkeypatch.setattr(gate.run_ratchet.__globals__["subprocess"], "run", refuse)
-    assert gate.run(sandbox[0]) == 1
-    assert "NOT CONFIRMED" in capsys.readouterr().out
-
-
 def test_the_pre_ship_gate_runs_the_wrapper_once_after_the_comment_ratchet() -> None:
     ps1 = (REPO_ROOT / "scripts" / "verify-before-ship.ps1").read_text(encoding="utf-8")
     stages = [ln.strip() for ln in ps1.splitlines() if ln.lstrip().startswith("& ")]

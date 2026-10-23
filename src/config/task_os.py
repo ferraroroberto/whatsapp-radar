@@ -24,11 +24,14 @@ class TaskOsConfig:
 
 
 def parse(raw: dict[str, Any]) -> TaskOsConfig:
+    defaults = TaskOsConfig()
     return TaskOsConfig(
-        enabled=_as_bool(os.environ.get("WR_TASK_OS_ENABLED"), raw.get("enabled", False)),
-        base_url=os.environ.get(
-            "WR_TASK_OS_BASE_URL", str(raw.get("base_url", "http://127.0.0.1:8448"))
+        enabled=_as_bool(
+            os.environ.get("WR_TASK_OS_ENABLED"), raw.get("enabled", defaults.enabled)
         ),
-        token=os.environ.get("WR_TASK_OS_TOKEN", str(raw.get("token", ""))),
-        timeout_s=float(raw.get("timeout_s", 6.0)),
+        base_url=os.environ.get(
+            "WR_TASK_OS_BASE_URL", str(raw.get("base_url", defaults.base_url))
+        ),
+        token=os.environ.get("WR_TASK_OS_TOKEN", str(raw.get("token", defaults.token))),
+        timeout_s=float(raw.get("timeout_s", defaults.timeout_s)),
     )

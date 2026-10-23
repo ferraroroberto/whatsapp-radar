@@ -23,31 +23,43 @@ class TripwireConfig:
 
 
 def parse(raw: dict[str, Any]) -> TripwireConfig:
+    defaults = TripwireConfig()
     return TripwireConfig(
         window_days=max(
-            1, int(os.environ.get("WR_TRIPWIRE_WINDOW_DAYS", raw.get("window_days", 7)))
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_WINDOW_DAYS", raw.get("window_days", defaults.window_days)
+                )
+            ),
         ),
         max_messages=max(
-            1, int(os.environ.get("WR_TRIPWIRE_MAX_MESSAGES", raw.get("max_messages", 500)))
+            1,
+            int(
+                os.environ.get(
+                    "WR_TRIPWIRE_MAX_MESSAGES", raw.get("max_messages", defaults.max_messages)
+                )
+            ),
         ),
         max_messages_per_chat=max(
             1,
             int(
                 os.environ.get(
                     "WR_TRIPWIRE_MAX_MESSAGES_PER_CHAT",
-                    raw.get("max_messages_per_chat", 20),
+                    raw.get("max_messages_per_chat", defaults.max_messages_per_chat),
                 )
             ),
         ),
         telegram_nudge_enabled=_as_bool(
             os.environ.get("WR_TRIPWIRE_TELEGRAM_NUDGE_ENABLED"),
-            raw.get("telegram_nudge_enabled", False),
+            raw.get("telegram_nudge_enabled", defaults.telegram_nudge_enabled),
         ),
         nudge_cadence_days=max(
             1,
             int(
                 os.environ.get(
-                    "WR_TRIPWIRE_NUDGE_CADENCE_DAYS", raw.get("nudge_cadence_days", 7)
+                    "WR_TRIPWIRE_NUDGE_CADENCE_DAYS",
+                    raw.get("nudge_cadence_days", defaults.nudge_cadence_days),
                 )
             ),
         ),

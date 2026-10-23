@@ -9,8 +9,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class HubConfig:
-    base_url: str
-    model: str
+    base_url: str = "http://127.0.0.1:8000"
+    model: str = "claude_sonnet"
     # Output token budget for one classification call. Sized per model rather
     # than hard-coded so a reasoning model with a long <think> trace can be given
     # room instead of silently truncating mid-think.
@@ -24,14 +24,21 @@ class HubConfig:
 
 
 def parse(raw: dict[str, Any]) -> HubConfig:
+    defaults = HubConfig()
     return HubConfig(
-        base_url=os.environ.get("WR_HUB_BASE_URL", raw.get("base_url", "http://127.0.0.1:8000")),
-        model=os.environ.get("WR_HUB_MODEL", raw.get("model", "claude_sonnet")),
-        max_tokens=int(os.environ.get("WR_HUB_MAX_TOKENS", raw.get("max_tokens", 8192))),
+        base_url=os.environ.get("WR_HUB_BASE_URL", raw.get("base_url", defaults.base_url)),
+        model=os.environ.get("WR_HUB_MODEL", raw.get("model", defaults.model)),
+        max_tokens=int(
+            os.environ.get("WR_HUB_MAX_TOKENS", raw.get("max_tokens", defaults.max_tokens))
+        ),
         max_prompt_chars=int(
-            os.environ.get("WR_HUB_MAX_PROMPT_CHARS", raw.get("max_prompt_chars", 24000))
+            os.environ.get(
+                "WR_HUB_MAX_PROMPT_CHARS", raw.get("max_prompt_chars", defaults.max_prompt_chars)
+            )
         ),
         recent_alert_days=int(
-            os.environ.get("WR_HUB_RECENT_ALERT_DAYS", raw.get("recent_alert_days", 7))
+            os.environ.get(
+                "WR_HUB_RECENT_ALERT_DAYS", raw.get("recent_alert_days", defaults.recent_alert_days)
+            )
         ),
     )

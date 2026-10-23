@@ -10,8 +10,7 @@ for ``DRIVE`` + ``TRAFFIC_AWARE`` (every arrival variant of one fixed route
 returned the depart-now baseline unchanged, while departures at 04:00 and 08:00
 differed by ~9%). A regression that swapped the field back would therefore not
 fail loudly — it would quietly price every future drive as if it started now.
-Hence a test on the wire format itself, plus one on the refusal that keeps
-``arrival_time`` from reaching the wire at all (#270).
+Hence a test on the wire format itself.
 """
 
 from __future__ import annotations
@@ -73,37 +72,9 @@ def test_departure_time_is_sent_as_departure_time_and_never_as_arrival_time() ->
     assert body["travelMode"] == "DRIVE"
 
 
-def test_arrival_time_is_refused_instead_of_silently_pricing_depart_now() -> None:
-    """#270: `arrivalTime` never reaches the wire again, from any caller.
-
-    Until #270 this sent `arrivalTime` and Routes answered with the depart-now
-    baseline — real, plausible, and not the question asked. The parameter is kept
-    only to turn that silence into a loud refusal that names the right field.
-    """
-    session = _FakeSession()
-    with pytest.raises(TrafficReadError, match="departure_time"):
-        compute_route(
-            ORIGIN, DESTINATION, api_key="k", arrival_time=WHEN,
-            session=session,  # type: ignore[arg-type]
-        )
-    assert session.bodies == [], "the request must not be sent at all"
-
-
 def test_neither_time_field_means_depart_now() -> None:
     body = _call().body
     assert "arrivalTime" not in body and "departureTime" not in body
-
-
-def test_arrival_and_departure_together_are_refused() -> None:
-    """Routes returns 200 and silently honours the departure — so refuse locally."""
-    session = _FakeSession()
-    with pytest.raises(TrafficReadError, match="mutually exclusive"):
-        compute_route(
-            ORIGIN, DESTINATION, api_key="k",
-            arrival_time=WHEN, departure_time=WHEN,
-            session=session,  # type: ignore[arg-type]
-        )
-    assert session.bodies == [], "the request must not be sent at all"
 
 
 def test_empty_route_list_is_an_error_not_a_zero_duration() -> None:

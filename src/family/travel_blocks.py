@@ -25,13 +25,9 @@ The computation is deliberately split in four:
    :func:`travel_block_listing_end`); a block out in that padded region is left
    alone too, for the same reason and reported the same way.
 
-That last word is load-bearing, and the reason it is: a leg that failed to price
-is still *desired*; all that is missing is its duration. Dropping it from the
-desired set without saying so would make it indistinguishable from a leg that
-must not exist, and the very next step — orphan deletion — would erase a whole
-horizon of correct blocks because Routes answered ``HTTP 429`` once. A failure
-to establish a fact must never be applied as a decision, so the failure travels
-into the reconcile as a protected key rather than being silently dropped.
+A failure to establish a fact must never be applied as a decision, so a leg that
+failed to price travels into the reconcile as a protected key rather than being
+dropped; :func:`reconcile` explains why.
 
 Nothing in this module writes to a calendar: it computes what should exist,
 what does exist, and the difference. :mod:`src.family.travel_blocks_write` owns
@@ -729,16 +725,15 @@ def reconcile(
     Those keys are excluded from the diff entirely, on both sides: their blocks
     are neither re-added nor orphan-deleted, only reported in ``protected``.
 
-    Do not "simplify" that away. Without it, `desired` silently omits an
-    unpriceable leg, its existing block matches nothing, and the orphan sweep
-    below deletes it — so one transient ``HTTP 429`` from Routes, or a sweep run
-    after the drive's departure moment, wipes the horizon's blocks and
-    re-inserts nothing. The delete triggers of #267 are "the source event was
-    cancelled or has left the horizon"; "we could not price it this minute" is
-    not one of them, and a second sweep later the same day must never remove the
-    blocks the morning's sweep correctly wrote. This is the sibling of the
-    :data:`FAILURE_BLOCKS_UNREADABLE` rule one layer up: an unestablished fact
-    gets its own reported state and never the passing one.
+    This is the module's one guard against a horizon-wide delete. A leg that
+    failed to price is still *desired* — only its duration is missing — but
+    `desired` omits it, so its existing block matches nothing and the orphan
+    sweep below would delete it: one transient ``HTTP 429`` from Routes, or a
+    sweep run after the drive's departure moment, would wipe the horizon's blocks
+    and re-insert nothing. "We could not price it this minute" is not a delete
+    trigger; only a cancelled source event or one that left the horizon is.
+    Sibling of the :data:`FAILURE_BLOCKS_UNREADABLE` rule one layer up: an
+    unestablished fact gets its own reported state and never the passing one.
     """
     protected_keys = frozenset(protected)
     by_key: dict[str, list[ExistingBlock]] = {}
@@ -885,12 +880,9 @@ class LegFailure:
     :class:`~src.traffic.TrafficReadError` messages never carry coordinates,
     addresses or API keys.
 
-    ``calendar_id`` / ``source_event_id`` / ``leg`` are carried so
-    :func:`leg_key` can reconstruct the exact key of the leg that failed. That
-    key is what :func:`plan_travel_blocks` hands ``reconcile`` as *protected*,
-    which is what stops an unpriceable leg's existing block from being read as
-    an orphan and deleted. They are not decoration: drop them and a transient
-    Routes outage becomes a horizon-wide delete.
+    ``calendar_id`` / ``source_event_id`` / ``leg`` let :func:`leg_key`
+    reconstruct the failed leg's key, which :func:`plan_travel_blocks` hands
+    ``reconcile`` as *protected*.
     """
 
     person: str
@@ -919,14 +911,9 @@ class PricedLegs:
 def _departure_anchor(request: LegRequest) -> datetime:
     """The moment to price ``request`` as a *departure*.
 
-    Routes v2 honours exactly one time field for ``DRIVE`` + ``TRAFFIC_AWARE``:
-    ``departureTime``. Verified live against the API (#266) rather than taken
-    from the docs — for one fixed pair of addresses a departure at 04:00
-    returned 983 s and at 08:00 930 s, while *every* ``arrivalTime`` variant
-    returned the depart-now baseline (1085 s) unchanged, including under
-    ``TRAFFIC_AWARE_OPTIMAL``. An arrival-shaped call is therefore not a
-    different estimate, it is silently no estimate at all — precisely what a
-    07:00 sweep pricing a 09:00 school run must not get.
+    Routes honours only ``departureTime`` for ``DRIVE`` (see
+    :func:`~src.traffic.routes_client.compute_route`), so an arrival-shaped call
+    would price a 09:00 school run at the 07:00 sweep's traffic.
 
     A return leg's anchor already *is* a departure (the source event's end), so
     it is exact. An outbound leg's anchor is an arrival (the source event's
@@ -1350,23 +1337,13 @@ def plan_travel_blocks(
     # rather than adds, and no existing block of its can be a delete candidate
     # either, since none were fetched.
     reconcilable = [leg for leg in legs if leg.calendar_id not in existing.unreadable]
-    # Every leg we failed to price is still *desired* — only its duration is
-    # missing — so `build_planned_legs` dropping it must not read as "this block
-    # is no longer wanted". Its key goes to the reconcile as protected: the block
-    # already on the calendar is left exactly where it is, and reported. Without
-    # this, a single `HTTP 429` from Routes (or an afternoon sweep whose morning
-    # drives have already departed) turns every one of those blocks into an
-    # orphan and deletes the horizon. Applies to *all* reasons deliberately:
-    # re-running the scan has to be safe at any hour, always.
+    # Every failed reason is protected (see `reconcile`), deliberately: re-running
+    # the scan has to be safe at any hour.
     protected = {
         leg_key(failure.calendar_id, failure.source_event_id, failure.leg)
         for failure in priced.failures
     }
-    # `plan_end` is the horizon's end, *not* the listing's: the read is padded
-    # past it (#272) precisely so the reconcile can see a block it wrote for an
-    # event that runs past midnight — and the padding must not make those extra
-    # blocks look orphaned, which is what telling the diff where the plan stops
-    # prevents.
+    # `plan_end` is the horizon's end, *not* the padded listing's (see `reconcile`).
     diff = reconcile(reconcilable, existing.blocks, plan_end=horizon_end, protected=protected)
     failures = list(priced.failures)
     failures.extend(

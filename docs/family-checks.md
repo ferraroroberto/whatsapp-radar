@@ -201,7 +201,7 @@ The **Family** tab's *Travel blocks* sheet (opened from its row, which shows the
 
 **In the run sheet,** the drill-down renders the whole record above the raw payload dump: mode, counts, Routes calls, horizon and what was written; then each planned block as person · leg · event title · time box · minutes; each removal and each **left alone** block with the reason that spared it; and each unpriced leg with its `reason` discriminator. `protected` keeps its own heading rather than being folded into `keeps` — "left alone because its leg could not be priced" is a warning, "checked and already right" is not. A gated sweep is named by its gate and never rendered as a plan of zeros: `dry_run` and `counts` come back `null` precisely so nothing can dress "nothing was computed" up as "nothing needed doing".
 
-### Redaction in the Audit payload dump
+### Redaction in the run sheet payload dump
 
 No calendar id appears anywhere in the rendered travel-block section — lines are keyed on person and leg, as the write-capability rows are — **nor in the raw `Run payload` dump beneath it**. That dump is redacted by **whitelist**, so a payload field nobody has thought about yet is withheld by default rather than exposed by default: recognised keys render, anything else renders as `⟨withheld⟩`, and a map *keyed* by calendar id (`write_capability`) keeps its states while its keys become `⟨withheld #1⟩`.
 
@@ -351,7 +351,7 @@ home-automation may serve `:8447` with its Tailscale certificate (HTTPS-only). T
 
 With presence enabled, the calendar sync additionally judges **today's imminent childcare windows** (within `traffic.lookahead_hours`) by the responsible parent's phone → home ETA. Leaving now and still arriving late raises a `coverage_eta` hard alert: *"~N min from home but 'kids home' starts at 17:30 — M min short even leaving now."*
 
-The judgment is **additive** — it never suppresses a calendar-based coverage gap, because position and calendar answer different questions (where the parent *is* vs. what they *intend*). Windows beyond the lookahead, days beyond today, and every presence-unavailable case remain governed by calendar inference alone. Each run's `live_coverage` trace (Audit → run detail) records the source, freshness age, ETA, and margin per window — never coordinates.
+The judgment is **additive** — it never suppresses a calendar-based coverage gap, because position and calendar answer different questions (where the parent *is* vs. what they *intend*). Windows beyond the lookahead, days beyond today, and every presence-unavailable case remain governed by calendar inference alone. Each run's `live_coverage` trace (Activity → the run's sheet) records the source, freshness age, ETA, and margin per window — never coordinates.
 
 ---
 

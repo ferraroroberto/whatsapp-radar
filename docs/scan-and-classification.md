@@ -12,7 +12,7 @@ How a review turns synced messages into one digest, and how the run fails loudly
 .\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
 ```
 
-Live `scan` advances each cursor only after that chat's analysis and trace are persisted — the same retry-safe guarantee as `review`. `--dry-run` replays history straight from SQLite: it never touches the connector, never delivers, and never advances a cursor, so it is the safe way to see what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_traces`.
+Live `scan` advances each cursor only after that chat's analysis and trace are persisted — the same retry-safe guarantee as `review`. `--dry-run` replays history straight from SQLite: it never touches the connector, never delivers, and never advances a cursor, so it is the safe way to see what a run *would* do. Funnel counters land on `review_runs`; the per-chat decision record lands on `analysis_trace`.
 
 ## Multi-source sync
 
@@ -39,7 +39,7 @@ Defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-ll
 
 Use a model that answers with JSON directly — the default `claude_sonnet` does. A reasoning model that emits a long `<think>` trace can overrun the token budget and return nothing parseable; that case is recorded as a distinct `llm_truncated` trace state rather than a generic contract error. The output budget is configurable (`WR_HUB_MAX_TOKENS`) and the per-prompt delta is capped (`WR_HUB_MAX_PROMPT_CHARS`) so a whole-history scan cannot blow the model's context window.
 
-Both prompt assets are inspectable plain-text files, tunable without touching code: the system prompt at `src/analysis/prompts/classification_system.md` and the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`.
+All four prompt assets are inspectable plain-text files, tunable without touching code: the system prompt at `src/analysis/prompts/classification_system.md`, the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`, the Gmail survey/reference bucket definitions at `src/analysis/prompts/gmail_classification_taxonomy.md` (not sent to Stage 2), and Gmail's `bucket | root` Stage-1 rules at `src/analysis/prompts/gmail_keyword_roots.txt`.
 
 ## Short-term alert memory
 

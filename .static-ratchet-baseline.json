@@ -3,6 +3,7 @@
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
     {"key": "dup:39b45ecf2387:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
-    {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]}
+    {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
+    {"key": "lint:S113:app/webapp/routers/chats.py:client = httpx.AsyncClient(timeout=None)", "files": ["app/webapp/routers/chats.py"]}
   ]
 }

@@ -1,7 +1,7 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, the static, docs, comment, structure and instruction ratchets, mypy (strict), the offline
+# byte-compile, ruff, the static, docs, comment, structure, instruction and doc-refs ratchets, mypy (strict), the offline
 # pytest suite, then the Playwright e2e suite (Chromium + WebKit/iPhone) against a
 # disposable webapp the script boots itself on a free port. The e2e stage is routed by
 # scripts/classify_e2e.py against the [e2e] table in .fleet.toml: nothing for a
@@ -127,6 +127,13 @@ try {
     Write-Host "==> instruction ratchet (no new lint hit or size-cap breach in CLAUDE.md / AGENTS.md)..." -ForegroundColor Cyan
     & $python -m scripts.instruction_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "instruction ratchet failed or was NOT CONFIRMED." }
+
+    # Whole tree too: a code change can strand a doc reference without touching the doc. The
+    # doc-refs ratchet's exit 3 (git unusable, a non-UTF-8 doc, an unclosed fence) fails as
+    # NOT CONFIRMED (tests/gates/test_doc_refs_ratchet_gate.py pins it).
+    Write-Host "==> doc refs ratchet (no doc names a path, module or link that does not exist)..." -ForegroundColor Cyan
+    & $python -m scripts.doc_refs_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "doc refs ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

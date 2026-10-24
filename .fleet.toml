@@ -64,6 +64,8 @@ exclude  = ["**/_vendored/**"]
 [docs_ratchet]
 enabled  = true
 baseline = ".docs-ratchet-baseline.json"
+# Open upstream gaps the docs point at (a missing hub option; an API that does not dedupe).
+allow_refs = ["ferraroroberto/local-llm-hub#128", "task-os#98"]
 
 # [comment_ratchet] -- the scaffold's baseline-and-ratchet comment check. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/comment_ratchet.py through

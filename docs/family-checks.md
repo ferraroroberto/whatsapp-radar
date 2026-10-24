@@ -203,7 +203,7 @@ The **Family** tab's *Travel blocks* sheet (opened from its row, which shows the
 
 ### Redaction in the run sheet payload dump
 
-No calendar id appears anywhere in the rendered travel-block section — lines are keyed on person and leg, as the write-capability rows are — **nor in the raw `Run payload` dump beneath it**. That dump is redacted by **whitelist**, so a payload field nobody has thought about yet is withheld by default rather than exposed by default: recognised keys render, anything else renders as `⟨withheld⟩`, and a map *keyed* by calendar id (`write_capability`) keeps its states while its keys become `⟨withheld #1⟩`.
+No calendar id appears anywhere in the rendered travel-block section — lines are keyed on person and leg, as the write-capability rows are — **nor in the raw `Run payload` dump beneath it**. That dump is redacted by **whitelist**, so a payload field nobody has thought about yet is withheld by default rather than exposed by default: recognised keys render, anything else renders as `⟨withheld⟩`, and a map *keyed* by calendar id (`write_capability`) keeps its states while its keys become `⟨withheld #n⟩`, numbered by position.
 
 The dump is redacted, never gutted — counts, reasons, statuses, timings and hashes all survive, because it is still the only place the complete record is visible. A line above it **names** the withheld fields rather than leaving the operator to spot the marker, so a redacted dump can never be mistaken for a complete one.
 

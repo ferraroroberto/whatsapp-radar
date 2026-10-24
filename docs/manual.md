@@ -29,8 +29,8 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 | `notify [--run N]` | Re-deliver a run's digest (retry a failed send without re-analyzing) |
 | `resync` | Force a fresh sync from the connector buffer |
 | `reprocess --confirm` | Full cache rebuild after a reader-logic change (backs up DB, preserves monitor/ignore/alias) |
-| `calendar-scan [--dry-run] [--force]` | Family calendar-conflict scan (and the travel-block sweep riding inside it); a live scheduled run always sends one Telegram summary. Self-skips (no alert, no run row) when the local hour is before `family.run_hour` (#277); `--force` runs anyway and is what every webapp button sends |
-| `traffic-check [--dry-run]` | Traffic-jam check for the next upcoming commute; self-skips (no alert, no run row) when `traffic.cadence_min` hasn't elapsed since the last check (#170) |
+| `calendar-scan [--dry-run] [--force]` | Family calendar-conflict scan (and the travel-block sweep riding inside it); a live scheduled run always sends one Telegram summary. Self-skips (no alert, no run row) when the local hour is before `family.run_hour`; `--force` runs anyway and is what every webapp button sends |
+| `traffic-check [--dry-run]` | Traffic-jam check for the next upcoming commute; self-skips (no alert, no run row) when `traffic.cadence_min` hasn't elapsed since the last check |
 | `tray` | Launch the tray surface |
 
 ## The one-shot `scan` (what you schedule)
@@ -76,7 +76,7 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 ## Routine operation
 
 - Keep the **sidecar running** — it captures live messages and history. While the **tray** is open it keeps itself alive: a keep-alive supervisor re-checks the sidecar every `WR_SIDECAR_SUPERVISE_SECONDS` (default 90) and relaunches it if the process died (never killing a live one; on a phone-side logout it toasts you to re-pair rather than crash-looping). So the buffer stays warm continuously and a scan reads an already-current source. App Launcher can also supervise it headlessly; see [`bootstrapping.md`](bootstrapping.md) Step 7.
-- The scheduled **`family-radar-scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace. `family-radar-calendar-sync` and `family-radar-traffic-check` are its sibling family-check Jobs — see [`bootstrapping.md`](bootstrapping.md) Step 7 for the full table (schedule, and the traffic-check cadence self-skip, #170). Their behaviour, every knob, and the travel-blocks rollout runbook are in [`family-checks.md`](family-checks.md).
+- The scheduled **`family-radar-scan`** Job (App Launcher Jobs tab) syncs, analyzes only the delta, delivers at most one digest, and records a full audit trace. `family-radar-calendar-sync` and `family-radar-traffic-check` are its sibling family-check Jobs — see [`bootstrapping.md`](bootstrapping.md) Step 7 for the full table (schedule, and the traffic-check cadence self-skip). Their behaviour, every knob, and the travel-blocks rollout runbook are in [`family-checks.md`](family-checks.md).
 - For day-to-day driving, use the **admin PWA** (`tray.bat`, then open it on the phone): **Home**'s glance card shows separate truthful WhatsApp/Gmail status; **Inbox** filters stored channels by source and monitoring state; **Activity** is the read-only trust surface over every message's Stage-1/LLM path. WhatsApp keeps one-tap reconnect/re-pair. Gmail shows a masked account plus the configured whitelist but never credentials or OAuth tokens.
 - Pairing survives restarts; only a phone-side logout requires re-pairing (delete `auth/`, re-run the sidecar, or re-pair from Settings → Sources → WhatsApp).
 

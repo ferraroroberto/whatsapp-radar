@@ -1,7 +1,7 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, the static, docs, comment and structure ratchets, mypy (strict), the offline
+# byte-compile, ruff, the static, docs, comment, structure and instruction ratchets, mypy (strict), the offline
 # pytest suite, then the Playwright e2e suite (Chromium + WebKit/iPhone) against a
 # disposable webapp the script boots itself on a free port. The e2e stage is routed by
 # scripts/classify_e2e.py against the [e2e] table in .fleet.toml: nothing for a
@@ -120,6 +120,13 @@ try {
     Write-Host "==> structure ratchet (file / function / directory size, src -> app imports, root layout)..." -ForegroundColor Cyan
     & $python -m scripts.structure_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or was NOT CONFIRMED." }
+
+    # Whole tree too: CLAUDE.md's reader depends on AGENTS.md. The instruction ratchet's
+    # exit 3 (git unusable, an unreadable file) fails as NOT CONFIRMED
+    # (tests/gates/test_instruction_ratchet_gate.py pins it).
+    Write-Host "==> instruction ratchet (no new lint hit or size-cap breach in CLAUDE.md / AGENTS.md)..." -ForegroundColor Cyan
+    & $python -m scripts.instruction_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "instruction ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

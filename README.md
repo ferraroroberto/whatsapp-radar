@@ -170,12 +170,13 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate     # README under 40 KiB, no new history marker in README or docs
 .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate  # no new issue reference in a code comment
 .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate # no new oversize file/function/directory, src never imports app, root folders match the shape
+.\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate # no new prompt-audit lint hit or size-cap breach in CLAUDE.md / AGENTS.md
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
 
 
-Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment and structure ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
+Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure and instruction ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
 
 ## Repository Status
 

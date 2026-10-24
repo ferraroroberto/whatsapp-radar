@@ -1,6 +1,6 @@
 # Gmail connector bootstrap
 
-This runbook enables the read-only Gmail source added in issue #59. The runtime is a plain scheduled process: it talks directly to the Gmail API with an installed-app OAuth refresh token and does not depend on Claude, MCP, a browser session, or a Google password after bootstrap.
+This runbook enables the read-only Gmail source. The runtime is a plain scheduled process: it talks directly to the Gmail API with an installed-app OAuth refresh token and does not depend on Claude, MCP, a browser session, or a Google password after bootstrap.
 
 ## Architecture and safety boundary
 

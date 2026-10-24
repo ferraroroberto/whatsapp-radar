@@ -142,7 +142,7 @@ The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a 
 
 ### Enrol a WebAuthn passkey (Tailscale-only)
 
-From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). Enrollment records the device as provisioning state only: the webapp has no passkey sign-in (assertion) ceremony and mints no token from a passkey (removed in #353), so an enrolled passkey does not unlock the PWA — use the bearer token or login password for that.
+From the tray icon menu choose **🔐 Enroll device (5 min)** — it opens a one-time enrollment window. Complete the passkey ceremony **on a device reaching the webapp over Tailscale** (passkey ceremonies are Tailscale-only by design). Enrollment records the device as provisioning state only: the webapp has no passkey sign-in (assertion) ceremony and mints no token from a passkey, so an enrolled passkey does not unlock the PWA — use the bearer token or login password for that.
 
 ## 6 — (Optional) Public access via a Cloudflare named tunnel
 
@@ -164,15 +164,15 @@ WhatsApp Radar runs as part of the home stack through [App Launcher](../../app-l
 
 ### Jobs tab — scheduled digest, calendar sync, traffic check
 
-All three jobs are named with a `family-radar-` prefix (#170) — two of the three are family checks, not WhatsApp, so a `whatsapp-radar-*` name would be misleading. App Launcher's executor points every job at this repo's `launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe launcher.py <command>` — no PYTHONPATH juggling needed.
+All three jobs are named with a `family-radar-` prefix — two of the three are family checks, not WhatsApp, so a `whatsapp-radar-*` name would be misleading. App Launcher's executor points every job at this repo's `launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe launcher.py <command>` — no PYTHONPATH juggling needed.
 
 From the Jobs tab's **+**, add:
 
 | Job id | Command (`args`) | Schedule | Notes |
 | --- | --- | --- | --- |
 | `family-radar-scan` | `scan` | daily **18:00** (machine-local / Madrid time) | The WhatsApp/Gmail digest. |
-| `family-radar-calendar-sync` | `calendar-scan` | daily **18:05** | The family calendar-conflict summary (#168) always sends one Telegram summary on a live scheduled run, and carries the travel-block sweep (#263) inside it. Deliberately its own job, not chained after the scan job — a dead WhatsApp sidecar must never suppress the family calendar summary. Arm it as generously as you like: `wr calendar-scan` self-skips in-process when the local hour is before `family.run_hour` (#277), so the *effective* earliest run follows the config with no re-arm. Keep `family.run_hour` **below** this job's hour or the job will skip every day — with 18:05 here, the shipped default of 7 never gates. A skip logs one line and records no run row. |
-| `family-radar-traffic-check` | `traffic-check` | every **5 minutes** | Armed well below the configured `traffic.cadence_min` (default 30, editable from the Family tab's Traffic checks → Check every); `wr traffic-check` self-skips in-process when the cadence hasn't elapsed (#170), so a cadence edit takes effect immediately with no re-arm. A skip logs one line and records no run row. |
+| `family-radar-calendar-sync` | `calendar-scan` | daily **18:05** | The family calendar-conflict summary always sends one Telegram summary on a live scheduled run, and carries the travel-block sweep inside it. Deliberately its own job, not chained after the scan job — a dead WhatsApp sidecar must never suppress the family calendar summary. Arm it as generously as you like: `wr calendar-scan` self-skips in-process when the local hour is before `family.run_hour`, so the *effective* earliest run follows the config with no re-arm. Keep `family.run_hour` **below** this job's hour or the job will skip every day — with 18:05 here, the shipped default of 7 never gates. A skip logs one line and records no run row. |
+| `family-radar-traffic-check` | `traffic-check` | every **5 minutes** | Armed well below the configured `traffic.cadence_min` (default 30, editable from the Family tab's Traffic checks → Check every); `wr traffic-check` self-skips in-process when the cadence hasn't elapsed, so a cadence edit takes effect immediately with no re-arm. A skip logs one line and records no run row. |
 
 A live `scan` self-heals the sidecar when the device is still paired and **aborts loudly** (non-zero exit, run recorded failed, alert sent) if the source is dead, so a scheduled run can never report green while checking nothing. Change any cadence anytime in the Jobs tab; re-saving there re-syncs the schtasks entry (the traffic-check job's *effective* cadence is instead controlled from the Family tab, per above — its Task Scheduler entry itself should stay at the fixed 5-minute polling frequency). `wr resync` and `wr reprocess --confirm` can be registered the same way if you want them on a schedule.
 

@@ -1,9 +1,9 @@
 # Calendar + traffic bootstrap
 
-This runbook provisions the Google credentials the family checks (issue #160) and school-radar calendar reminders (issue #206) need:
+This runbook provisions the Google credentials the family checks and school-radar calendar reminders need:
 
 1. A read-only **Google Calendar** installed-app OAuth refresh token (`calendar.readonly` only), mirroring [`gmail-bootstrap.md`](gmail-bootstrap.md).
-2. A separate **write-scope** Calendar token (`calendar.events` only, #217) for reminder-event creation — its own grant, since scopes can't be upgraded in place on an existing token. Commute travel blocks (#263) reuse this same token; they additionally need each shared calendar re-shared at **"Make changes to events"** (see [step 8](#sharing-level-what-make-changes-to-events-buys-you-268)).
+2. A separate **write-scope** Calendar token (`calendar.events` only) for reminder-event creation — its own grant, since scopes can't be upgraded in place on an existing token. Commute travel blocks reuse this same token; they additionally need each shared calendar re-shared at **"Make changes to events"** (see [step 8](#sharing-level-what-make-changes-to-events-buys-you)).
 3. A **Google Routes API** key for the traffic-jam check (API-key auth, a separate credential path from OAuth).
 
 All stay under ignored local paths. Never commit `auth/calendar/`, the Maps API key, real addresses, calendar ids, or token output.
@@ -51,7 +51,7 @@ The token is authorized as **one** Google account and can read that account's ow
 
 If sharing is not possible, run the bootstrap a second time signed in as the other account, writing a second token path — but the default design is one token over two shared calendars.
 
-"See all event details" is a read grant and is all the conflict scan and the traffic check ever need. Commute travel blocks write to the shared calendar, so they need the next level up — see [step 8's sharing note](#sharing-level-what-make-changes-to-events-buys-you-268).
+"See all event details" is a read grant and is all the conflict scan and the traffic check ever need. Commute travel blocks write to the shared calendar, so they need the next level up — see [step 8's sharing note](#sharing-level-what-make-changes-to-events-buys-you).
 
 ## 6. Mint the refresh token (interactive)
 
@@ -84,9 +84,9 @@ Never paste the token into config, docs, logs, or chat. The scheduled checks ref
 
 Repeat `--calendar` for each household calendar id. The smoke prints only privacy-safe aggregates (a masked summary + event count + soonest date), never full titles.
 
-## 8. Write-scope token — event creation (#217, reused by travel blocks #263)
+## 8. Write-scope token — event creation (reused by travel blocks)
 
-Reminder events (Step 4/5 of #206) and commute travel blocks (#263) need a **separate** OAuth grant: Google Calendar scopes cannot be upgraded in place on an existing token, so the read-only token from step 6 above can never gain write access. This mints a second, independent token.
+Reminder events and commute travel blocks need a **separate** OAuth grant: Google Calendar scopes cannot be upgraded in place on an existing token, so the read-only token from step 6 above can never gain write access. This mints a second, independent token.
 
 Open **Google Auth Platform → Data Access** again and add, alongside `calendar.readonly`:
 
@@ -125,7 +125,7 @@ Creates one throwaway test event a few minutes out, confirms it round-trips with
 .\.venv\Scripts\python.exe -m calendar_write.smoke --calendar you@example.com
 ```
 
-### Sharing level: what "Make changes to events" buys you (#268)
+### Sharing level: what "Make changes to events" buys you
 
 The write-scope token is authorized as **one** Google account, exactly like the read token in step 5 — so it can create and delete events on that account's own calendars, and on any calendar shared with it **at a level that permits writing**. Step 5's *"See all event details"* is a **read** grant: it is enough for the conflict scan and the traffic check, and not enough for commute travel blocks.
 
@@ -139,7 +139,7 @@ The app never probes this by writing. It reads the calendar's published `accessR
 | **Not writable** | `accessRole` is `reader` or `freeBusyReader` — shared read-only. | Writes nothing, and says so. |
 | **Unknown** | The role could not be established at all: no sweep has reported on this calendar yet, or the listing failed. | Writes nothing — an unresolved probe is **not** permission. |
 
-`Unknown` is deliberately its own state rather than a shade of the other two, in the payload, in the log and in the UI. It is what you see before the first sweep has run, and it is what you see if the calendar listing itself broke. Fix it by running a calendar sync (`wr calendar-scan --force`, or the Calendar-sync step in Activity's Run now) and re-reading the card — not by assuming the calendar is fine. `--force` is there because an unforced scan self-skips before `family.run_hour` (#277), and a fix-it-now command has to work at whatever hour you are reading this.
+`Unknown` is deliberately its own state rather than a shade of the other two, in the payload, in the log and in the UI. It is what you see before the first sweep has run, and it is what you see if the calendar listing itself broke. Fix it by running a calendar sync (`wr calendar-scan --force`, or the Calendar-sync step in Activity's Run now) and re-reading the card — not by assuming the calendar is fine. `--force` is there because an unforced scan self-skips before `family.run_hour`, and a fix-it-now command has to work at whatever hour you are reading this.
 
 The role is the *read* token's view, so it is a strong proxy rather than a proof: the write token is a second grant on the same account. That is why a failed insert still degrades per block instead of trusting this answer.
 
@@ -147,7 +147,7 @@ This step is step 2 of the travel-blocks rollout sequence; the rest of it — en
 
 ## 9. Routes API key (traffic check)
 
-Open **APIs & Services → Credentials → Create credentials → API key**. Restrict the key to the **Routes API** (Application restrictions may stay "None" for a server-side local job). Provide it to the checks via the ignored `config/local.json` (a `traffic` section, added with the main #160 build) or the `GOOGLE_MAPS_API_KEY` environment variable. Validate live:
+Open **APIs & Services → Credentials → Create credentials → API key**. Restrict the key to the **Routes API** (Application restrictions may stay "None" for a server-side local job). Provide it to the checks via the ignored `config/local.json` (a `traffic` section) or the `GOOGLE_MAPS_API_KEY` environment variable. Validate live:
 
 ```powershell
 $env:GOOGLE_MAPS_API_KEY = "<key>"

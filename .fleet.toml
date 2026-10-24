@@ -7,6 +7,7 @@ icon        = "💬"
 description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
 shape       = "webapp-tray"
+port        = ":8455"
 # Root folders the shape does not list: the four portable Google packages (shared with
 # sibling repos, so deliberately outside src/) and the separate Node connector process.
 # docs/layout.md says why each stays.
@@ -114,15 +115,17 @@ baseline = ".instruction-ratchet-baseline.json"
 # (scripts/verify-before-ship.ps1) runs scripts/doc_refs_ratchet.py through
 # scripts/doc_refs_ratchet_gate.py, which fails when README.md, CLAUDE.md or docs/**/*.md
 # names a repo path, `python -m` module or relative link that does not exist, beyond
-# .doc-refs-ratchet-baseline.json. No `port` is declared here, so loopback ports in the
-# docs (the hub, whisper, this app's own tray) are not checked. It reads the whole tree,
+# .doc-refs-ratchet-baseline.json. The declared `port` makes it check loopback ports in the
+# docs too: only this app's own port resolves, so the sibling services the docs name (hub,
+# whisper) are listed in `allow_refs`. It reads the whole tree,
 # so it is never path-routed; exit 3 (git unusable, a non-UTF-8 file, an unclosed fence)
 # is NOT CONFIRMED and fails. Procedure + limits: project-scaffolding docs/doc-refs-ratchet.md.
 [doc_refs_ratchet]
 enabled  = true
 baseline = ".doc-refs-ratchet-baseline.json"
-# App Launcher's gitignored runtime registries, named in the docs as that repo's files.
-allow_refs = ["config/apps.json", "config/jobs.json"]
+# App Launcher's gitignored runtime registries, named in the docs as that repo's files,
+# and the loopback ports of the sibling services the docs call (hub, home-automation, task-os).
+allow_refs = ["config/apps.json", "config/jobs.json", ":8000", ":8447", ":8448"]
 
 # [dead_code_ratchet] -- the scaffold's baseline-and-ratchet dead-code check. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/dead_code_ratchet.py through

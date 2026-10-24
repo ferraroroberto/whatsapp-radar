@@ -21,6 +21,8 @@ from gmail_readonly import (
 )
 from gmail_readonly.oauth import authorize
 
+from tests.oauth_fakes import expired_credential_loader, flow_loader
+
 
 def _encoded(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
@@ -295,28 +297,10 @@ def test_token_absence_refresh_and_exact_scope(tmp_path: Path) -> None:
     token_path.write_text("{}", encoding="utf-8")
     observed: dict[str, Any] = {}
 
-    class _Credentials:
-        expired = True
-        refresh_token = "present"
-        valid = True
-
-        def refresh(self, request: object) -> None:
-            observed["request"] = request
-
-        def to_json(self) -> str:
-            return '{"refreshed": true}'
-
-    credentials = _Credentials()
-
-    def load_credentials(path: str, scopes: list[str]) -> _Credentials:
-        observed["token_path"] = path
-        observed["scopes"] = scopes
-        return credentials
-
     service = _Service()
     client = build_google_read_client(
         token_path,
-        credential_loader=load_credentials,
+        credential_loader=expired_credential_loader(observed),
         request_factory=lambda: "request",
         service_builder=lambda *args, **kwargs: service,
     )
@@ -334,29 +318,13 @@ def test_oauth_uses_explicit_paths_readonly_scope_and_atomic_write(tmp_path: Pat
     credentials_path.write_text("{}", encoding="utf-8")
     observed: dict[str, Any] = {}
 
-    class _Credentials:
-        refresh_token = "present"
-
-        def to_json(self) -> str:
-            return '{"token": "secret"}'
-
-    class _Flow:
-        def run_local_server(self, **kwargs: Any) -> _Credentials:
-            observed["server"] = kwargs
-            return _Credentials()
-
-    def load_flow(path: str, scopes: list[str]) -> _Flow:
-        observed["credentials_path"] = path
-        observed["scopes"] = scopes
-        return _Flow()
-
     authorize(
         credentials_path=credentials_path,
         token_path=token_path,
         host="127.0.0.1",
         port=8765,
         open_browser=False,
-        flow_loader=load_flow,
+        flow_loader=flow_loader(observed),
     )
 
     assert observed["scopes"] == [GMAIL_READONLY_SCOPE]

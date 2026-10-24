@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts import comment_ratchet_gate as gate
+from src.subprocess_flags import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GIT = shutil.which("git")
@@ -40,10 +41,14 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     module = tmp_path / "src" / "topic.py"
     module.write_text("# Present-tense reason.\nVALUE = 1\n", encoding="utf-8")
     for argv in (["init", "-q"], ["add", "-A"]):
-        subprocess.run([GIT or "git", *argv], cwd=tmp_path, env=_git_env(), check=True)
+        subprocess.run(
+            [GIT or "git", *argv], cwd=tmp_path, env=_git_env(), check=True,
+            creationflags=NO_WINDOW,
+        )
     subprocess.run(
         [sys.executable, str(script), "--init"], cwd=tmp_path, env=_git_env(), check=True,
         capture_output=True,
+        creationflags=NO_WINDOW,
     )
     return script, module
 
@@ -52,6 +57,7 @@ def _stage_and_run(script: Path, module: Path, body: str) -> int:
     module.write_text(body, encoding="utf-8")
     subprocess.run(
         [GIT or "git", "add", "-A"], cwd=script.parents[1], env=_git_env(), check=True,
+        creationflags=NO_WINDOW,
     )
     return gate.run(script)
 

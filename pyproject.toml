@@ -20,6 +20,7 @@ select = ["E", "F", "I", "UP", "B"]
 "scripts/structure_ratchet.py" = ["E501"]
 "scripts/instruction_ratchet.py" = ["E501", "B905"]
 "scripts/doc_refs_ratchet.py" = ["E501", "B905"]
+"scripts/dead_code_ratchet.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's documented idiom evaluates Depends()/Query()/etc. in argument

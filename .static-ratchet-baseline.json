@@ -2,6 +2,7 @@
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
+    {"key": "dup:3130d4db3290:scripts/conventions_ratchet_gate.py|scripts/dead_code_ratchet_gate.py", "files": ["scripts/conventions_ratchet_gate.py", "scripts/dead_code_ratchet_gate.py"]},
     {"key": "dup:39b45ecf2387:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
     {"key": "dup:ca82959454d4:tests/test_calendar_write.py|tests/test_gmail_readonly.py", "files": ["tests/test_calendar_write.py", "tests/test_gmail_readonly.py"]},
     {"key": "lint:S113:app/webapp/routers/chats.py:client = httpx.AsyncClient(timeout=None)", "files": ["app/webapp/routers/chats.py"]}

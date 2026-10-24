@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "scripts/gen_icons.py", "counts": {"no-drive-path": 1}},
+    {"key": "tests/gates/test_dead_code_ratchet_gate.py", "counts": {"no-window": 2}},
+    {"key": "tests/gates/test_doc_refs_ratchet_gate.py", "counts": {"no-window": 3}},
+    {"key": "tests/gates/test_instruction_ratchet_gate.py", "counts": {"no-window": 3}},
+    {"key": "tests/gates/test_structure_ratchet_gate.py", "counts": {"no-window": 3}},
+    {"key": "tests/test_comment_ratchet_gate.py", "counts": {"no-window": 3}},
+    {"key": "tests/test_docs_ratchet_gate.py", "counts": {"no-window": 1}}
+  ]
+}

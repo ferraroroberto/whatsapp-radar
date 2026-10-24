@@ -10,7 +10,7 @@ The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on
 
 ## Static ratchet
 
-The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.
+The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`, plus ruff's curated bug (`B`) and security (`S`) families, `S113` included). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.
 
 ## Comment ratchet
 
@@ -31,6 +31,10 @@ The doc-refs ratchet resolves every repo path, `python -m` module and relative l
 ## Dead-code ratchet
 
 The dead-code ratchet parses every tracked Python file and fails when a function, class or method that nothing in the repo refers to is not in the committed `.dead-code-ratchet-baseline.json` (empty today). Route handlers, `__all__` exports, tests, fixtures and decorated hooks are never reported, and a name that may be reached dynamically stays below the default confidence floor. Matching is by name, so it misses dead code rather than inventing it. Vendored copies declared in `.fleet.toml` `[vendored]` are read for references but never reported, so a vendored file must be declared there before it is scanned. The fix is to delete the definition or call it; a real entry point the rules miss goes in `allow` or `entry_decorators`. It reads the whole tree, so it is never path-routed, and `verify-before-ship.ps1` calls it only through `scripts.dead_code_ratchet_gate`, which fails exit 3 (git unusable, a Python file that cannot be read or parsed) as NOT CONFIRMED, never a pass or a skip. Procedure and limits: project-scaffolding's `docs/dead-code-ratchet.md`.
+
+## Conventions ratchet
+
+The conventions ratchet holds three fleet conventions as `ast` rules and fails when a file has more hits of an enabled rule than the committed `.conventions-ratchet-baseline.json` records for it. `no-window` flags a subprocess spawn with no `creationflags=` (this app runs on Windows, where a bare spawn flashes a console; the helper is `src/subprocess_flags.py`); `logging-not-print` flags a `print` in `app/` or `src/` outside a command-line module (library code logs, a CLI prints by design); `no-drive-path` flags a string literal that starts with a drive letter (paths come from config or `src/paths.py`). `secret-compare` and `git-wrapper` are off: they enforce a repo-declared helper, and this repo has neither. Test modules are held to `no-window` only. Existing hits are baselined, not fixed; a deliberate exception takes a `# <rule>-exempt: <reason>` marker, and only `--allow-additions` raises the baseline. Vendored destinations are never scanned. It reads the whole tree, so it is never path-routed, and `verify-before-ship.ps1` calls it only through `scripts.conventions_ratchet_gate`, which fails exit 3 (git unusable, a Python file that does not parse) as NOT CONFIRMED, never a pass or a skip. Procedure and limits: project-scaffolding's `docs/conventions-ratchet.md`.
 
 ## Docs ratchet
 

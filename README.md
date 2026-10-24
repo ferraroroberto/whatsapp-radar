@@ -173,12 +173,13 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate # no new prompt-audit lint hit or size-cap breach in CLAUDE.md / AGENTS.md
 .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate # no doc names a repo path, module or link that does not exist
 .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate # no new function, class or method nothing refers to
+.\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate # no new console-window spawn, print in library code or drive-path literal
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
 
 
-Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs and dead-code ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
+Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs, dead-code and conventions ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
 
 ## Repository Status
 

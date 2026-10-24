@@ -1,7 +1,7 @@
 # Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared "done":
-# byte-compile, ruff, the static, docs, comment, structure, instruction, doc-refs and dead-code ratchets, mypy (strict), the offline
+# byte-compile, ruff, the static, docs, comment, structure, instruction, doc-refs, dead-code and conventions ratchets, mypy (strict), the offline
 # pytest suite, then the Playwright e2e suite (Chromium + WebKit/iPhone) against a
 # disposable webapp the script boots itself on a free port. The e2e stage is routed by
 # scripts/classify_e2e.py against the [e2e] table in .fleet.toml: nothing for a
@@ -141,6 +141,13 @@ try {
     Write-Host "==> dead code ratchet (no function, class or method nothing refers to)..." -ForegroundColor Cyan
     & $python -m scripts.dead_code_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "dead code ratchet failed or was NOT CONFIRMED." }
+
+    # Whole tree too: a rule added to `rules` must see every file. The conventions ratchet's
+    # exit 3 (git unusable, a Python file that cannot be read or parsed) fails as NOT
+    # CONFIRMED (tests/gates/test_conventions_ratchet_gate.py pins it).
+    Write-Host "==> conventions ratchet (no new console-window spawn, print or drive-path hit)..." -ForegroundColor Cyan
+    & $python -m scripts.conventions_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "conventions ratchet failed or was NOT CONFIRMED." }
 
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app

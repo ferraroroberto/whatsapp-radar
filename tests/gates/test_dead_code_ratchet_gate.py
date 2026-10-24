@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts import dead_code_ratchet_gate as gate
+from src.subprocess_flags import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git")
@@ -27,7 +28,10 @@ LIVE = "def helper() -> int:\n    return 1\n\n\ndef main() -> int:\n    return h
 
 def _git(root: Path, *args: str) -> None:
     env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "PYTHONUTF8": "1"}
-    subprocess.run([GIT or "git", *args], cwd=root, env=env, check=True, capture_output=True)
+    subprocess.run(
+        [GIT or "git", *args], cwd=root, env=env, check=True, capture_output=True,
+        creationflags=NO_WINDOW,
+    )
 
 
 @pytest.fixture
@@ -45,6 +49,7 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     subprocess.run(
         [sys.executable, str(script), "--init"], cwd=tmp_path, check=True, capture_output=True,
         env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "PYTHONUTF8": "1"},
+        creationflags=NO_WINDOW,
     )
     return script, module
 

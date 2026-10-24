@@ -4,9 +4,10 @@ r"""The gate's dead-code-ratchet stage: run the vendored script, map its exit co
 
 The vendored `scripts/dead_code_ratchet.py` is never edited here. This wrapper maps its
 exits onto the gate: only 0 passes. Exit 3 (git unusable, a tracked Python file that
-cannot be read or does not parse) means the tree was not checked, so it fails as NOT
-CONFIRMED instead of reading as a pass or a skip. `verify-before-ship.ps1` calls the
-wrapper, never the script; the shared mapping lives in `static_ratchet_gate`.
+cannot be read or does not parse) means the definitions were never matched against their
+uses, so it fails as NOT CONFIRMED instead of reading as a pass or a skip.
+`verify-before-ship.ps1` calls the wrapper, never the script; the shared mapping lives in
+`static_ratchet_gate`.
 
 A failure prints its reason on the last line and exits 1.
 """

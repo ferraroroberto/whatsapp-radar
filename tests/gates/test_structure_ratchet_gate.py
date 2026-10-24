@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts import structure_ratchet_gate as gate
+from src.subprocess_flags import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git")
@@ -30,7 +31,10 @@ def _git_env() -> dict[str, str]:
 
 
 def _stage(root: Path) -> None:
-    subprocess.run([GIT or "git", "add", "-A"], cwd=root, env=_git_env(), check=True)
+    subprocess.run(
+        [GIT or "git", "add", "-A"], cwd=root, env=_git_env(), check=True,
+        creationflags=NO_WINDOW,
+    )
 
 
 @pytest.fixture
@@ -45,11 +49,15 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / ".fleet.toml").write_text(FLEET, encoding="utf-8")
     big = tmp_path / "src" / "big.py"
     big.write_text("A = 1\n" * 6, encoding="utf-8")
-    subprocess.run([GIT or "git", "init", "-q"], cwd=tmp_path, env=_git_env(), check=True)
+    subprocess.run(
+        [GIT or "git", "init", "-q"], cwd=tmp_path, env=_git_env(), check=True,
+        creationflags=NO_WINDOW,
+    )
     _stage(tmp_path)
     subprocess.run(
         [sys.executable, str(script), "--init"], cwd=tmp_path, env=_git_env(), check=True,
         capture_output=True,
+        creationflags=NO_WINDOW,
     )
     return script, big
 

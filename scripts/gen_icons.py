@@ -23,7 +23,11 @@ import sys
 from pathlib import Path
 
 SCAFFOLDING_DIR = Path(
-    os.environ.get("PROJECT_SCAFFOLDING_DIR", r"E:\automation\project-scaffolding")
+    os.environ.get(
+        "PROJECT_SCAFFOLDING_DIR",
+        # no-drive-path-exempt: owner-run dev script, env var overrides the fleet default
+        r"E:\automation\project-scaffolding",
+    )
 )
 SCAFFOLDING_SCRIPTS = SCAFFOLDING_DIR / "scripts"
 sys.path.insert(0, str(SCAFFOLDING_SCRIPTS))

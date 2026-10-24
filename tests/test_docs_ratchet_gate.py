@@ -21,6 +21,7 @@ import pytest
 
 from scripts import docs_ratchet_gate as gate
 from scripts import static_ratchet_gate
+from src.subprocess_flags import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REAL_SCRIPT = REPO_ROOT / "scripts" / "docs_ratchet.py"
@@ -104,6 +105,7 @@ def test_a_new_issue_reference_in_a_doc_turns_the_real_script_red_by_name(
         return subprocess.run(
             argv, cwd=repo, env=env, capture_output=True, text=True, check=False,
             encoding="utf-8", stdin=subprocess.DEVNULL,
+            creationflags=NO_WINDOW,
         )
 
     for step in (("init", "-q"), ("add", "-A")):

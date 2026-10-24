@@ -479,7 +479,8 @@ async def tts_speak(request: Request, speech: SpeechRequest) -> StreamingRespons
         speed=speech.speed,
     )
     upstream_url = tts_client.speech_url(hub_base_url(request))
-    client = httpx.AsyncClient(timeout=None)
+    # No read timeout: the PCM stream stays open for as long as the summary plays.
+    client = httpx.AsyncClient(timeout=None)  # noqa: S113
     stream_cm = client.stream("POST", upstream_url, json=payload)
     try:
         upstream = await stream_cm.__aenter__()

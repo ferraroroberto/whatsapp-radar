@@ -21,7 +21,7 @@ from gmail_readonly import (
 )
 from gmail_readonly.oauth import authorize
 
-from tests.oauth_fakes import expired_credential_loader, flow_loader
+from tests.fakes.oauth_fakes import expired_credential_loader, flow_loader
 
 
 def _encoded(value: str) -> str:

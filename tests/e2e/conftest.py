@@ -31,6 +31,7 @@ import logging
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -171,105 +172,118 @@ def _seed_e2e_db(db_path: Path) -> None:
     starts discovered so the toggle path has something to flip.
     """
     from src.db import store
-    from src.models import ChatRecord, MessageRecord
 
     conn = store.connect(db_path)
     try:
-        mon = store.upsert_chat(
-            conn,
-            ChatRecord(source_chat_id="e2e-g1", display_name="Class 4A Group", chat_type="group"),
-        )
-        store.upsert_chat(
-            conn,
-            ChatRecord(
-                source_chat_id="e2e-g2", display_name="School Parents Group", chat_type="group"
-            ),
-        )
-        store.set_chat_status(conn, mon, "monitored")
-        for i in range(3):
-            store.insert_message(
-                conn,
-                mon,
-                MessageRecord(
-                    source_message_id=f"e2e-a{i}",
-                    message_timestamp=f"2026-06-01T10:0{i}:00+00:00",
-                    text=f"sample message {i}",
-                    sender_label="Parent",
-                ),
-            )
-        # One long message so the on-demand Summarize control (#86) has something
-        # to attach to (it only shows past SUMMARIZE_MIN_CHARS). Sanitized/invented
-        # content per the privacy rule — never real WhatsApp data.
+        _seed_whatsapp_chats(conn)
+        _seed_gmail_chats(conn)
+    finally:
+        conn.close()
+
+
+def _seed_whatsapp_chats(conn: sqlite3.Connection) -> None:
+    from src.db import store
+    from src.models import ChatRecord, MessageRecord
+
+    mon = store.upsert_chat(
+        conn,
+        ChatRecord(source_chat_id="e2e-g1", display_name="Class 4A Group", chat_type="group"),
+    )
+    store.upsert_chat(
+        conn,
+        ChatRecord(
+            source_chat_id="e2e-g2", display_name="School Parents Group", chat_type="group"
+        ),
+    )
+    store.set_chat_status(conn, mon, "monitored")
+    for i in range(3):
         store.insert_message(
             conn,
             mon,
             MessageRecord(
-                source_message_id="e2e-long",
-                message_timestamp="2026-06-01T10:05:00+00:00",
-                text=(
-                    "Reminder for the class trip on Friday: please send the signed "
-                    "permission form and 12 euros with your child by Thursday morning. "
-                    "Bring a packed lunch, a refillable water bottle, comfortable shoes, "
-                    "and a light raincoat. The coach leaves at 8:30 sharp and returns "
-                    "around 16:00. Let me know if anyone can volunteer to help supervise."
-                ),
-                sender_label="Teacher",
+                source_message_id=f"e2e-a{i}",
+                message_timestamp=f"2026-06-01T10:0{i}:00+00:00",
+                text=f"sample message {i}",
+                sender_label="Parent",
             ),
         )
-        gmail = store.upsert_chat(
-            conn,
-            ChatRecord(
-                source_chat_id="e2e-mail",
-                display_name="School Updates",
-                chat_type="email",
-                source="gmail",
+    # One long message so the on-demand Summarize control (#86) has something
+    # to attach to (it only shows past SUMMARIZE_MIN_CHARS). Sanitized/invented
+    # content per the privacy rule — never real WhatsApp data.
+    store.insert_message(
+        conn,
+        mon,
+        MessageRecord(
+            source_message_id="e2e-long",
+            message_timestamp="2026-06-01T10:05:00+00:00",
+            text=(
+                "Reminder for the class trip on Friday: please send the signed "
+                "permission form and 12 euros with your child by Thursday morning. "
+                "Bring a packed lunch, a refillable water bottle, comfortable shoes, "
+                "and a light raincoat. The coach leaves at 8:30 sharp and returns "
+                "around 16:00. Let me know if anyone can volunteer to help supervise."
             ),
-        )
-        store.set_chat_status(conn, gmail, "monitored")
-        store.insert_message(
-            conn,
-            gmail,
-            MessageRecord(
-                source_message_id="e2e-mail-1",
-                message_timestamp="2026-06-02T09:00:00+00:00",
-                text="The activity deadline is Friday.",
-                sender_label="School Office",
-                message_type="email",
-                raw={
-                    "thread_id": "e2e-thread-1",
-                    "headers": {"Subject": "Activity schedule"},
-                },
-            ),
-        )
-        # A DISCOVERED Gmail sender (#166): keyed "sender:<addr>" and left at the
-        # default 'discovered' status so the Messages tab has a promotable sender and
-        # the history overlay's sender chip has an address to show. Sanitized only.
-        discovered = store.upsert_chat(
-            conn,
-            ChatRecord(
-                source_chat_id="sender:newsletter@example.com",
-                display_name="Class Newsletter",
-                chat_type="email",
-                source="gmail",
-            ),
-        )
-        store.insert_message(
-            conn,
-            discovered,
-            MessageRecord(
-                source_message_id="e2e-news-1",
-                message_timestamp="2026-06-03T09:00:00+00:00",
-                text="This week's class newsletter is attached.",
-                sender_label="Class Newsletter",
-                message_type="email",
-                raw={
-                    "thread_id": "e2e-thread-2",
-                    "headers": {"Subject": "Weekly update"},
-                },
-            ),
-        )
-    finally:
-        conn.close()
+            sender_label="Teacher",
+        ),
+    )
+
+
+def _seed_gmail_chats(conn: sqlite3.Connection) -> None:
+    from src.db import store
+    from src.models import ChatRecord, MessageRecord
+
+    gmail = store.upsert_chat(
+        conn,
+        ChatRecord(
+            source_chat_id="e2e-mail",
+            display_name="School Updates",
+            chat_type="email",
+            source="gmail",
+        ),
+    )
+    store.set_chat_status(conn, gmail, "monitored")
+    store.insert_message(
+        conn,
+        gmail,
+        MessageRecord(
+            source_message_id="e2e-mail-1",
+            message_timestamp="2026-06-02T09:00:00+00:00",
+            text="The activity deadline is Friday.",
+            sender_label="School Office",
+            message_type="email",
+            raw={
+                "thread_id": "e2e-thread-1",
+                "headers": {"Subject": "Activity schedule"},
+            },
+        ),
+    )
+    # A DISCOVERED Gmail sender (#166): keyed "sender:<addr>" and left at the
+    # default 'discovered' status so the Messages tab has a promotable sender and
+    # the history overlay's sender chip has an address to show. Sanitized only.
+    discovered = store.upsert_chat(
+        conn,
+        ChatRecord(
+            source_chat_id="sender:newsletter@example.com",
+            display_name="Class Newsletter",
+            chat_type="email",
+            source="gmail",
+        ),
+    )
+    store.insert_message(
+        conn,
+        discovered,
+        MessageRecord(
+            source_message_id="e2e-news-1",
+            message_timestamp="2026-06-03T09:00:00+00:00",
+            text="This week's class newsletter is attached.",
+            sender_label="Class Newsletter",
+            message_type="email",
+            raw={
+                "thread_id": "e2e-thread-2",
+                "headers": {"Subject": "Weekly update"},
+            },
+        ),
+    )
 
 
 def disposable_env(db_dir: Path) -> dict[str, str]:

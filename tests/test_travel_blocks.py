@@ -814,7 +814,7 @@ def test_the_planner_module_still_contains_no_calendar_writes() -> None:
     Asserted on the source rather than on behaviour because the guarantee is
     "there is no code path at all", which no amount of stubbing can demonstrate.
     `src/family/travel_blocks_write.py` owns every write, and its own structural
-    test (tests/test_travel_blocks_write.py) pins the guard around the delete.
+    test (tests/family/test_travel_blocks_write.py) pins the guard around the delete.
     """
     root = Path(__file__).resolve().parents[1]
     for relative in (

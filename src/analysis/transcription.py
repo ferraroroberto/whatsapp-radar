@@ -279,6 +279,39 @@ def _delete_audio(buffer_dir: Path, media_path: str | None) -> None:
         logger.warning("⚠️ could not delete audio %s: %s", media_path, exc)
 
 
+def _sweep_and_skip_stale(
+    conn: sqlite3.Connection,
+    cfg: TranscriptionConfig,
+    buffer_dir: Path,
+    outcome: TranscriptionOutcome,
+    now: datetime | None,
+) -> None:
+    """Drop expired retained audio, then skip never-transcribed notes past the window."""
+    window = cfg.window_days
+    failed_window = cfg.failed_retry_days
+    retain_days = cfg.audio_retention_days
+
+    # 0) Retention sweep: drop audio for notes transcribed more than
+    # `retain_days` ago. The transcript and 'done' status stay; only the file and
+    # `media_path` go, so playback expires cleanly. Skipped when retention is off
+    # (then no audio is ever retained in the first place).
+    if retain_days > 0:
+        for row in store.expired_retained_audio(conn, retain_days=retain_days, now=now):
+            _delete_audio(buffer_dir, row["media_path"])
+            store.clear_media_path(conn, int(row["id"]))
+            outcome.swept += 1
+
+    # 1) Backlog guard: never-attempted notes older than the window are skipped; a
+    # note that already *failed* is given a longer leash (it's a transient outage, not
+    # backlog) and only skipped once it's older than `failed_window`.
+    for row in store.stale_voice_notes(
+        conn, within_days=window, failed_within_days=failed_window, now=now
+    ):
+        _delete_audio(buffer_dir, row["media_path"])
+        store.mark_transcription(conn, int(row["id"]), status="skipped_old")
+        outcome.skipped_old += 1
+
+
 def run_transcription_phase(
     conn: sqlite3.Connection,
     config: Config,
@@ -304,25 +337,7 @@ def run_transcription_phase(
     failed_window = cfg.failed_retry_days
     retain_days = cfg.audio_retention_days
 
-    # 0) Retention sweep: drop audio for notes transcribed more than
-    # `retain_days` ago. The transcript and 'done' status stay; only the file and
-    # `media_path` go, so playback expires cleanly. Skipped when retention is off
-    # (then no audio is ever retained in the first place).
-    if retain_days > 0:
-        for row in store.expired_retained_audio(conn, retain_days=retain_days, now=now):
-            _delete_audio(buffer_dir, row["media_path"])
-            store.clear_media_path(conn, int(row["id"]))
-            outcome.swept += 1
-
-    # 1) Backlog guard: never-attempted notes older than the window are skipped; a
-    # note that already *failed* is given a longer leash (it's a transient outage, not
-    # backlog) and only skipped once it's older than `failed_window`.
-    for row in store.stale_voice_notes(
-        conn, within_days=window, failed_within_days=failed_window, now=now
-    ):
-        _delete_audio(buffer_dir, row["media_path"])
-        store.mark_transcription(conn, int(row["id"]), status="skipped_old")
-        outcome.skipped_old += 1
+    _sweep_and_skip_stale(conn, cfg, buffer_dir, outcome, now)
 
     pending = store.pending_transcriptions(
         conn, within_days=window, failed_within_days=failed_window, now=now

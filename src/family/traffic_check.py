@@ -52,8 +52,9 @@ values (freshness age, delay/ETA minutes), never lat/lon.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import requests
 
@@ -202,7 +203,7 @@ def _departure_anchor(
     * **From home, no live fix** → the event's ``start``. Only the delay alert
       applies, and the true departure is one drive-length *earlier* — which is
       the number the call is about to return, so it cannot be known first. Same
-      trade-off ``travel_blocks._departure_anchor`` reasons out for an
+      trade-off ``travel_blocks_pricing._departure_anchor`` reasons out for an
       outbound leg: wrong by at most the drive's own length (10-30 min) against
       being wrong by the whole sweep-to-event distance (hours) if the moment
       were effectively dropped, and refining it would cost a second call per leg.
@@ -217,6 +218,283 @@ def _departure_anchor(
             return None, ANCHOR_DEPART_NOW_OVERDUE
         return leg.origin_event_end, ANCHOR_PRECEDING_EVENT_END
     return leg.event.start, ANCHOR_EVENT_START
+
+
+class _LegVerdict(NamedTuple):
+    """What the route result means for one leg, before any alert is sent."""
+
+    gap_min: int | None
+    feasible: bool | None
+    depart_in: int | None
+    leave_now: bool
+    leave_now_suppressed: bool
+    infeasible_alert: bool
+    infeasible_suppressed: bool
+
+
+def _judge_leg(
+    config: Config,
+    leg: rules.CommuteLeg,
+    origin: dict[str, Any],
+    result: RouteResult,
+    *,
+    now: datetime,
+) -> _LegVerdict:
+    """Feasibility, leave-now and train-exemption judgments for one priced leg."""
+    traffic = config.traffic
+    # Back-to-back adjacency feasibility: only meaningful for a
+    # calendar-chained origin, where the gap between the preceding event's
+    # end and this event's start is a real departure budget.
+    # A live-presence origin has no such fixed departure moment, so it is not
+    # feasibility-judged — only its delay is.
+    gap_min: int | None = None
+    feasible: bool | None = None
+    if (
+        origin["location_source"] == _CALENDAR_INFERENCE
+        and leg.origin_event_end is not None
+    ):
+        gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
+        feasible = (result.traffic_s / 60.0) <= gap_min
+
+    # Leave-now judgment: the loop from detection to action. Only a
+    # live phone fix supports it — a calendar-inference origin makes no claim
+    # about where the person actually is, so it never triggers a leave-now.
+    # Timeliness is bounded by the check cadence: the alert lands on
+    # the first fire after the departure moment, so `traffic.cadence_min`
+    # should be low when relying on leave-now.
+    # A train-titled commute is exempt: the ETA above is a *driving*
+    # ETA, so its departure moment is meaningless for a train ride. The
+    # computed `depart_in` is still recorded — it stays informative — and the
+    # suppression is recorded explicitly rather than silently dropping the
+    # alert. The *delay* alert is deliberately unaffected.
+    #
+    # Both driving-ETA judgments below share this one train check:
+    # a "the drive is ~10 min" claim is meaningless for a train ride,
+    # whether it is phrased as leave-now or as an infeasible hop.
+    skip_driving = traffic.skip_leave_now_for_train and rules.is_train_commute(
+        leg.event, traffic.train_keywords
+    )
+
+    depart_in: int | None = None
+    leave_now = False
+    leave_now_suppressed = False
+    if origin["location_source"] == _LIVE_PRESENCE:
+        depart_in = rules.depart_in_min(
+            now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
+        )
+        leave_now = depart_in <= 0
+        if leave_now and skip_driving:
+            leave_now = False
+            leave_now_suppressed = True
+
+    # The infeasible-hop alert is the same driving claim in different
+    # words, so it takes the same exemption. Recorded explicitly
+    # rather than silently dropped, mirroring `leave_now_suppressed`.
+    infeasible_alert = feasible is False
+    infeasible_suppressed = False
+    if infeasible_alert and skip_driving:
+        infeasible_alert = False
+        infeasible_suppressed = True
+    return _LegVerdict(
+        gap_min,
+        feasible,
+        depart_in,
+        leave_now,
+        leave_now_suppressed,
+        infeasible_alert,
+        infeasible_suppressed,
+    )
+
+
+@dataclass
+class _TrafficSweep:
+    """The mutable state of one traffic-check run: results, alert count and dedup set."""
+
+    config: Config
+    now: datetime
+    dry_run: bool
+    recent: set[str]
+    checked: list[dict[str, Any]] = field(default_factory=list)
+    alerts: int = 0
+    # Leave-now candidates ready to fire, grouped by the parts of the message
+    # that would otherwise be identical — merged into one send per group
+    # once every leg has been checked.
+    pending_leave_now: dict[tuple[str, datetime], list[dict[str, Any]]] = field(
+        default_factory=dict
+    )
+
+    def _unpriced_entry(
+        self,
+        leg: rules.CommuteLeg,
+        origin: dict[str, Any],
+        *,
+        key: str,
+        status: str,
+        detail: str,
+        anchor_kind: str,
+        anchor_iso: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "person": leg.person, "event": leg.event.summary,
+            "status": status, "detail": detail, "dedup_key": key,
+            "location_source": origin["location_source"],
+            "presence_status": origin["presence_status"],
+            "anchor": anchor_kind, "departure_anchor": anchor_iso,
+            "checked_at": self.now.isoformat(),
+        }
+
+    def check_leg(self, leg: rules.CommuteLeg, session: requests.Session) -> None:
+        """Price one leg, judge it, send any due delay alert and record the entry."""
+        config, now = self.config, self.now
+        traffic = config.traffic
+        key = rules.dedup_key(leg.person, leg.event.summary)
+        origin = _resolve_origin_for_leg(config, leg, now=now, session=session)
+        anchor, anchor_kind = _departure_anchor(
+            leg, origin["location_source"], now=now
+        )
+        anchor_iso = anchor.isoformat() if anchor is not None else None
+        if anchor is not None and anchor <= now:
+            # Reached only for a leg whose own event has already started —
+            # `_departure_anchor` folds a merely-late departure to depart-now,
+            # and `upcoming_commutes` admits no leg whose event has begun, so
+            # this is the boundary guard that keeps a past timestamp off the
+            # wire (a hard HTTP 400) no matter how the anchor was derived.
+            # No call, and no error either: nothing failed, the drive is over.
+            self.checked.append(self._unpriced_entry(
+                leg, origin, key=key, status=STATUS_ANCHOR_IN_THE_PAST,
+                detail="departure moment has already passed; "
+                       "Routes prices only future departures",
+                anchor_kind=anchor_kind, anchor_iso=anchor_iso,
+            ))
+            return
+        try:
+            result = compute_route(
+                origin["origin_label"], leg.destination, api_key=traffic.api_key,
+                departure_time=anchor, origin_latlng=origin["origin_latlng"],
+                session=session,
+            )
+        except TrafficReadError as exc:
+            self.checked.append(self._unpriced_entry(
+                leg, origin, key=key, status=leg_status.STATUS_ERROR, detail=str(exc),
+                anchor_kind=anchor_kind, anchor_iso=anchor_iso,
+            ))
+            return
+        status = delay_status(result.delay_min, significant_min=traffic.significant_delay_min)
+        verdict = _judge_leg(config, leg, origin, result, now=now)
+
+        entry = {
+            "person": leg.person, "event": leg.event.summary,
+            "origin": origin["origin_label"], "destination": leg.destination,
+            "location_source": origin["location_source"],
+            "presence_age_min": origin["presence_age_min"],
+            "presence_refreshed": origin["presence_refreshed"],
+            "presence_status": origin["presence_status"],
+            "normal_min": result.normal_s // 60, "traffic_min": result.traffic_s // 60,
+            "delay_min": result.delay_min, "status": status,
+            "anchor": anchor_kind, "departure_anchor": anchor_iso,
+            "gap_min": verdict.gap_min, "feasible": verdict.feasible,
+            "depart_in_min": verdict.depart_in, "leave_margin_min": traffic.leave_margin_min,
+            "dedup_key": key, "alerted": False, "leave_now_alerted": False,
+            "leave_now_suppressed": verdict.leave_now_suppressed,
+            "infeasible_suppressed": verdict.infeasible_suppressed,
+            "checked_at": now.isoformat(),
+        }
+        alert_needed = status == "SIGNIFICANT_DELAY" or verdict.infeasible_alert
+        if alert_needed and key not in self.recent:
+            self._send_delay_alert(leg, entry, result, verdict, anchor=anchor, key=key)
+        self._queue_leave_now(leg, entry, result, verdict)
+        self.checked.append(entry)
+
+    def _send_delay_alert(
+        self,
+        leg: rules.CommuteLeg,
+        entry: dict[str, Any],
+        result: RouteResult,
+        verdict: _LegVerdict,
+        *,
+        anchor: datetime | None,
+        key: str,
+    ) -> None:
+        if self.dry_run:
+            entry["alerted"] = True
+            self.alerts += 1
+            return
+        if verdict.infeasible_alert and verdict.gap_min is not None:
+            text = _infeasible_text(
+                leg.person, leg.event.summary, result.traffic_s // 60, verdict.gap_min
+            )
+        else:
+            text = _alert_text(
+                leg.person, leg.event.summary, result, result.delay_min,
+                anchor=anchor,
+            )
+        # Only a delivered alert may suppress the next one: a
+        # failed/skipped send must stay retryable, so it records no
+        # dedup key and carries its status into the entry instead.
+        send_status, send_detail = send_alert(self.config, text)
+        if send_status == "sent":
+            dedup.record_alert(key, now=self.now)
+            self.recent.add(key)
+            entry["alerted"] = True
+            self.alerts += 1
+        else:
+            entry["alert_status"] = send_status
+            if send_detail:
+                entry["alert_detail"] = send_detail
+
+    def _queue_leave_now(
+        self,
+        leg: rules.CommuteLeg,
+        entry: dict[str, Any],
+        result: RouteResult,
+        verdict: _LegVerdict,
+    ) -> None:
+        # A distinct dedup key lets a leave-now alert coexist with a delay alert
+        # for the same event without either suppressing the other. Sending is
+        # deferred until every leg is checked, so people sharing one event with
+        # identical resulting text can be merged into one message.
+        leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
+        if verdict.leave_now and leave_key not in self.recent:
+            # Group by the event alone, not the ETA: the ETA is computed per
+            # person from their own live phone fix, so two people heading to
+            # the same event almost never match — "~1 min" vs "~0 min" for
+            # two people in one car would send two identical-looking
+            # messages, which is exactly what the merge exists to prevent.
+            group_key = (leg.event.summary, leg.event.start)
+            self.pending_leave_now.setdefault(group_key, []).append(
+                {
+                    "person": leg.person,
+                    "leave_key": leave_key,
+                    "eta_min": result.traffic_s // 60,
+                    "entry": entry,
+                }
+            )
+
+    def flush_leave_now(self) -> None:
+        """Send one merged leave-now message per event group."""
+        for (summary, event_start), items in self.pending_leave_now.items():
+            if not self.dry_run:
+                people = [item["person"] for item in items]
+                # The largest ETA in the group: the nudge has to be right for
+                # whoever is furthest out, or it tells the slowest person they have
+                # more time than they do.
+                eta_min = max(item["eta_min"] for item in items)
+                send_status, send_detail = send_alert(
+                    self.config, _leave_now_text(people, summary, eta_min, event_start)
+                )
+                if send_status != "sent":
+                    # Not delivered: no dedup key, so the next run retries.
+                    for item in items:
+                        item["entry"]["leave_now_status"] = send_status
+                        if send_detail:
+                            item["entry"]["leave_now_detail"] = send_detail
+                    continue
+                for item in items:
+                    dedup.record_alert(item["leave_key"], now=self.now)
+                    self.recent.add(item["leave_key"])
+            for item in items:
+                item["entry"]["leave_now_alerted"] = True
+            self.alerts += 1
 
 
 def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
@@ -258,208 +536,17 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             "so one event alerts once",
             traffic.dedup_window_min, traffic.lookahead_hours, dedup_window_min,
         )
-    recent = dedup.recent_keys(dedup_window_min, now=now)
-
-    checked: list[dict[str, Any]] = []
-    alerts = 0
-    # Leave-now candidates ready to fire, grouped by the parts of the message
-    # that would otherwise be identical — merged into one send per group
-    # once every leg has been checked.
-    pending_leave_now: dict[tuple[str, datetime], list[dict[str, Any]]] = {}
+    sweep = _TrafficSweep(
+        config, now, dry_run, dedup.recent_keys(dedup_window_min, now=now)
+    )
     with requests.Session() as session:
         for leg in legs:
-            key = rules.dedup_key(leg.person, leg.event.summary)
-            origin = _resolve_origin_for_leg(config, leg, now=now, session=session)
-            anchor, anchor_kind = _departure_anchor(
-                leg, origin["location_source"], now=now
-            )
-            anchor_iso = anchor.isoformat() if anchor is not None else None
-            if anchor is not None and anchor <= now:
-                # Reached only for a leg whose own event has already started —
-                # `_departure_anchor` folds a merely-late departure to depart-now,
-                # and `upcoming_commutes` admits no leg whose event has begun, so
-                # this is the boundary guard that keeps a past timestamp off the
-                # wire (a hard HTTP 400) no matter how the anchor was derived.
-                # No call, and no error either: nothing failed, the drive is over.
-                checked.append({
-                    "person": leg.person, "event": leg.event.summary,
-                    "status": STATUS_ANCHOR_IN_THE_PAST,
-                    "detail": "departure moment has already passed; "
-                              "Routes prices only future departures",
-                    "dedup_key": key,
-                    "location_source": origin["location_source"],
-                    "presence_status": origin["presence_status"],
-                    "anchor": anchor_kind, "departure_anchor": anchor_iso,
-                    "checked_at": now.isoformat(),
-                })
-                continue
-            try:
-                result = compute_route(
-                    origin["origin_label"], leg.destination, api_key=traffic.api_key,
-                    departure_time=anchor, origin_latlng=origin["origin_latlng"],
-                    session=session,
-                )
-            except TrafficReadError as exc:
-                checked.append({
-                    "person": leg.person, "event": leg.event.summary,
-                    "status": leg_status.STATUS_ERROR, "detail": str(exc), "dedup_key": key,
-                    "location_source": origin["location_source"],
-                    "presence_status": origin["presence_status"],
-                    "anchor": anchor_kind, "departure_anchor": anchor_iso,
-                    "checked_at": now.isoformat(),
-                })
-                continue
-            status = delay_status(result.delay_min, significant_min=traffic.significant_delay_min)
-
-            # Back-to-back adjacency feasibility: only meaningful for a
-            # calendar-chained origin, where the gap between the preceding event's
-            # end and this event's start is a real departure budget.
-            # A live-presence origin has no such fixed departure moment, so it is not
-            # feasibility-judged — only its delay is.
-            gap_min: int | None = None
-            feasible: bool | None = None
-            if (
-                origin["location_source"] == _CALENDAR_INFERENCE
-                and leg.origin_event_end is not None
-            ):
-                gap_min = int((leg.event.start - leg.origin_event_end).total_seconds() // 60)
-                feasible = (result.traffic_s / 60.0) <= gap_min
-
-            # Leave-now judgment: the loop from detection to action. Only a
-            # live phone fix supports it — a calendar-inference origin makes no claim
-            # about where the person actually is, so it never triggers a leave-now.
-            # Timeliness is bounded by the check cadence: the alert lands on
-            # the first fire after the departure moment, so `traffic.cadence_min`
-            # should be low when relying on leave-now.
-            # A train-titled commute is exempt: the ETA above is a *driving*
-            # ETA, so its departure moment is meaningless for a train ride. The
-            # computed `depart_in` is still recorded — it stays informative — and the
-            # suppression is recorded explicitly rather than silently dropping the
-            # alert. The *delay* alert is deliberately unaffected.
-            #
-            # Both driving-ETA judgments below share this one train check:
-            # a "the drive is ~10 min" claim is meaningless for a train ride,
-            # whether it is phrased as leave-now or as an infeasible hop.
-            skip_driving = traffic.skip_leave_now_for_train and rules.is_train_commute(
-                leg.event, traffic.train_keywords
-            )
-
-            depart_in: int | None = None
-            leave_now = False
-            leave_now_suppressed = False
-            if origin["location_source"] == _LIVE_PRESENCE:
-                depart_in = rules.depart_in_min(
-                    now, result.traffic_s // 60, leg.event.start, traffic.leave_margin_min
-                )
-                leave_now = depart_in <= 0
-                if leave_now and skip_driving:
-                    leave_now = False
-                    leave_now_suppressed = True
-
-            # The infeasible-hop alert is the same driving claim in different
-            # words, so it takes the same exemption. Recorded explicitly
-            # rather than silently dropped, mirroring `leave_now_suppressed`.
-            infeasible_alert = feasible is False
-            infeasible_suppressed = False
-            if infeasible_alert and skip_driving:
-                infeasible_alert = False
-                infeasible_suppressed = True
-
-            entry = {
-                "person": leg.person, "event": leg.event.summary,
-                "origin": origin["origin_label"], "destination": leg.destination,
-                "location_source": origin["location_source"],
-                "presence_age_min": origin["presence_age_min"],
-                "presence_refreshed": origin["presence_refreshed"],
-                "presence_status": origin["presence_status"],
-                "normal_min": result.normal_s // 60, "traffic_min": result.traffic_s // 60,
-                "delay_min": result.delay_min, "status": status,
-                "anchor": anchor_kind, "departure_anchor": anchor_iso,
-                "gap_min": gap_min, "feasible": feasible,
-                "depart_in_min": depart_in, "leave_margin_min": traffic.leave_margin_min,
-                "dedup_key": key, "alerted": False, "leave_now_alerted": False,
-                "leave_now_suppressed": leave_now_suppressed,
-                "infeasible_suppressed": infeasible_suppressed,
-                "checked_at": now.isoformat(),
-            }
-            alert_needed = status == "SIGNIFICANT_DELAY" or infeasible_alert
-            if alert_needed and key not in recent:
-                if not dry_run:
-                    if infeasible_alert and gap_min is not None:
-                        text = _infeasible_text(
-                            leg.person, leg.event.summary, result.traffic_s // 60, gap_min
-                        )
-                    else:
-                        text = _alert_text(
-                            leg.person, leg.event.summary, result, result.delay_min,
-                            anchor=anchor,
-                        )
-                    # Only a delivered alert may suppress the next one: a
-                    # failed/skipped send must stay retryable, so it records no
-                    # dedup key and carries its status into the entry instead.
-                    send_status, send_detail = send_alert(config, text)
-                    if send_status == "sent":
-                        dedup.record_alert(key, now=now)
-                        recent.add(key)
-                        entry["alerted"] = True
-                        alerts += 1
-                    else:
-                        entry["alert_status"] = send_status
-                        if send_detail:
-                            entry["alert_detail"] = send_detail
-                else:
-                    entry["alerted"] = True
-                    alerts += 1
-
-            # A distinct dedup key lets a leave-now alert coexist with a delay alert
-            # for the same event without either suppressing the other. Sending is
-            # deferred until every leg is checked, so people sharing one event with
-            # identical resulting text can be merged into one message.
-            leave_key = rules.leave_now_dedup_key(leg.person, leg.event.summary)
-            if leave_now and leave_key not in recent:
-                # Group by the event alone, not the ETA: the ETA is computed per
-                # person from their own live phone fix, so two people heading to
-                # the same event almost never match — "~1 min" vs "~0 min" for
-                # two people in one car would send two identical-looking
-                # messages, which is exactly what the merge exists to prevent.
-                group_key = (leg.event.summary, leg.event.start)
-                pending_leave_now.setdefault(group_key, []).append(
-                    {
-                        "person": leg.person,
-                        "leave_key": leave_key,
-                        "eta_min": result.traffic_s // 60,
-                        "entry": entry,
-                    }
-                )
-            checked.append(entry)
-
-    for (summary, event_start), items in pending_leave_now.items():
-        if not dry_run:
-            people = [item["person"] for item in items]
-            # The largest ETA in the group: the nudge has to be right for
-            # whoever is furthest out, or it tells the slowest person they have
-            # more time than they do.
-            eta_min = max(item["eta_min"] for item in items)
-            send_status, send_detail = send_alert(
-                config, _leave_now_text(people, summary, eta_min, event_start)
-            )
-            if send_status != "sent":
-                # Not delivered: no dedup key, so the next run retries.
-                for item in items:
-                    item["entry"]["leave_now_status"] = send_status
-                    if send_detail:
-                        item["entry"]["leave_now_detail"] = send_detail
-                continue
-            for item in items:
-                dedup.record_alert(item["leave_key"], now=now)
-                recent.add(item["leave_key"])
-        for item in items:
-            item["entry"]["leave_now_alerted"] = True
-        alerts += 1
+            sweep.check_leg(leg, session)
+    sweep.flush_leave_now()
 
     return {
         "kind": "traffic-check", "status": "ok",
-        "checked": checked, "alerts": alerts, "dry_run": dry_run,
+        "checked": sweep.checked, "alerts": sweep.alerts, "dry_run": dry_run,
         # The window actually applied, which may be higher than configured.
         "dedup_window_min": dedup_window_min,
     }

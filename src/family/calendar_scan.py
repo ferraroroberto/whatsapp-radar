@@ -186,28 +186,15 @@ def _assess_live_coverage(
     return conflicts, coverage
 
 
-def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
-    """Run one calendar sync. ``dry_run`` never sends anything."""
+def _calendar_conflicts(
+    config: Config,
+    events: dict[str, list[Any]],
+    *,
+    now: datetime,
+    midnight: datetime,
+) -> list[rules.Conflict]:
+    """Hard conflicts and overlaps across every assessed day."""
     family = config.family
-    if not family.enabled and not dry_run:
-        return {"kind": "calendar-scan", "status": "disabled", "conflicts": [],
-                "missing_locations": [], "decisions": [],
-                "summary": {"status": "skipped", "reason": "disabled"}}
-
-    # One fetch over the full missing-location window covers the assessment days.
-    midnight = rules.local_midnight(now)
-    scan_days = scan_window_days(config)
-    window_end = midnight + timedelta(days=scan_days)
-    events = fetch_events_by_person(config.calendar, time_min=midnight, time_max=window_end)
-
-    decisions = rules.event_decisions(events, home_address=family.home_address)
-    missing = [
-        {"person": person, "event": event.summary, "start": event.start.isoformat()}
-        for person, event in rules.find_missing_locations(
-            events, home_address=family.home_address
-        )
-    ]
-
     # The zone every day below is judged in — a real ZoneInfo when
     # `family.timezone` is configured, so each day re-resolves its own correct
     # offset across a DST change instead of freezing `now`'s; otherwise the
@@ -233,6 +220,32 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
         conflicts.extend(
             rules.find_overlaps(day_events, home_address=family.home_address)
         )
+    return conflicts
+
+
+def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
+    """Run one calendar sync. ``dry_run`` never sends anything."""
+    family = config.family
+    if not family.enabled and not dry_run:
+        return {"kind": "calendar-scan", "status": "disabled", "conflicts": [],
+                "missing_locations": [], "decisions": [],
+                "summary": {"status": "skipped", "reason": "disabled"}}
+
+    # One fetch over the full missing-location window covers the assessment days.
+    midnight = rules.local_midnight(now)
+    scan_days = scan_window_days(config)
+    window_end = midnight + timedelta(days=scan_days)
+    events = fetch_events_by_person(config.calendar, time_min=midnight, time_max=window_end)
+
+    decisions = rules.event_decisions(events, home_address=family.home_address)
+    missing = [
+        {"person": person, "event": event.summary, "start": event.start.isoformat()}
+        for person, event in rules.find_missing_locations(
+            events, home_address=family.home_address
+        )
+    ]
+
+    conflicts = _calendar_conflicts(config, events, now=now, midnight=midnight)
 
     # Commute travel blocks — reuses the events fetched
     # above rather than re-reading them (the reconcile's own marker-scoped read

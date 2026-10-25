@@ -354,28 +354,19 @@ class ApplyResult:
         return payload
 
 
-def apply_travel_blocks(
+def _apply_deletes(
     plan: TravelBlockPlan,
     *,
     writer: TravelBlockWriter,
     capability: Mapping[str, str],
-    title_template: str,
-) -> ApplyResult:
-    """Carry out ``plan``'s deletes and inserts. Never raises for one event's failure.
+    failures: list[dict[str, Any]],
+) -> tuple[int, int, set[str]]:
+    """Run the plan's deletes, returning ``(deleted, skipped, blocked_keys)``.
 
-    Deletes run first so a replaced block's slot is freed before its successor
-    lands — otherwise a sweep that fails between the two leaves two overlapping
-    blocks on the calendar instead of none. For the same reason an add whose
-    matching delete failed is *skipped*: inserting it would create the duplicate
-    the delete was supposed to prevent, and the next sweep would find both.
-
-    ``capability`` gates every calendar. Only :data:`WRITABLE` proceeds — both
-    :data:`NOT_WRITABLE` and :data:`WRITE_CAPABILITY_UNKNOWN` are skipped with
-    their own recorded reason, because an unresolved probe is not a pass.
+    ``blocked_keys`` are the legs whose stale block is still on the calendar;
+    their add must wait.
     """
-    inserted = deleted = skipped = 0
-    failures: list[dict[str, Any]] = []
-    # Legs whose stale block is still on the calendar; their add must wait.
+    deleted = skipped = 0
     blocked_keys: set[str] = set()
 
     for pending in plan.deletes:
@@ -416,6 +407,20 @@ def apply_travel_blocks(
             failures.append(_delete_failure(pending, FAILED_DELETE, detail=safe_error_detail(exc)))
         else:
             deleted += 1
+    return deleted, skipped, blocked_keys
+
+
+def _apply_inserts(
+    plan: TravelBlockPlan,
+    *,
+    writer: TravelBlockWriter,
+    capability: Mapping[str, str],
+    title_template: str,
+    blocked_keys: set[str],
+    failures: list[dict[str, Any]],
+) -> tuple[int, int]:
+    """Run the plan's adds, returning ``(inserted, skipped)``."""
+    inserted = skipped = 0
 
     for leg in plan.adds:
         gate = _capability_skip(capability, leg.calendar_id)
@@ -454,6 +459,41 @@ def apply_travel_blocks(
                 leg.minutes,
                 event_id or "?",
             )
+    return inserted, skipped
+
+
+def apply_travel_blocks(
+    plan: TravelBlockPlan,
+    *,
+    writer: TravelBlockWriter,
+    capability: Mapping[str, str],
+    title_template: str,
+) -> ApplyResult:
+    """Carry out ``plan``'s deletes and inserts. Never raises for one event's failure.
+
+    Deletes run first so a replaced block's slot is freed before its successor
+    lands — otherwise a sweep that fails between the two leaves two overlapping
+    blocks on the calendar instead of none. For the same reason an add whose
+    matching delete failed is *skipped*: inserting it would create the duplicate
+    the delete was supposed to prevent, and the next sweep would find both.
+
+    ``capability`` gates every calendar. Only :data:`WRITABLE` proceeds — both
+    :data:`NOT_WRITABLE` and :data:`WRITE_CAPABILITY_UNKNOWN` are skipped with
+    their own recorded reason, because an unresolved probe is not a pass.
+    """
+    failures: list[dict[str, Any]] = []
+    deleted, skipped, blocked_keys = _apply_deletes(
+        plan, writer=writer, capability=capability, failures=failures
+    )
+    inserted, insert_skipped = _apply_inserts(
+        plan,
+        writer=writer,
+        capability=capability,
+        title_template=title_template,
+        blocked_keys=blocked_keys,
+        failures=failures,
+    )
+    skipped += insert_skipped
 
     return ApplyResult(
         status=APPLY_APPLIED,

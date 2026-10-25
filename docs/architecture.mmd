@@ -100,7 +100,7 @@ flowchart TB
     FCAL["calendar_scan.py — conflict scan + decision trace + daily summary"]
     FSOURCE["calendar_source.py — events per person (guarded seam)\n+ fetch_marked_events: marker-scoped listing\n+ non-mutating accessRole probe (#267)"]
     FDEDUP["dedup.py — data/family/ alert log"]
-    FBLOCKS["travel_blocks.py — pure desired-state planner + reconcile\nfor commute blocks + the wr_travel_block marker vocabulary\n(#265); Routes-priced plan (#266); writes nothing itself"]
+    FBLOCKS["travel_blocks.py — pure desired-state planner + sweep\nfor commute blocks (#265); Routes-priced plan (#266); writes nothing itself\nover travel_blocks_model (marker vocabulary, leg types),\ntravel_blocks_reconcile (existing blocks + diff) and\ntravel_blocks_pricing (Routes edge)"]
     FBLOCKW["travel_blocks_write.py — the only write path (#267):\nTravelBlockWriter owns the client privately, so delete_event\nis reachable only via marker guard + pre-delete JSON backup;\ndry-run builds no client at all"]
   end
   CLICMDS --> FTRAFFIC

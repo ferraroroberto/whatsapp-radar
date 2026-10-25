@@ -2,23 +2,11 @@
   "version": 1,
   "entries": [
     {"key": "dir:tests", "modules": 79},
-    {"key": "fn:app/tray/tray.py:run_tray", "lines": 206},
-    {"key": "fn:app/webapp/routers/execution.py:execution_health", "lines": 103},
     {"key": "fn:src/analysis/pipeline.py:scan", "lines": 305},
-    {"key": "fn:src/analysis/transcription.py:run_transcription_phase", "lines": 113},
-    {"key": "fn:src/db/connection.py:_migrate", "lines": 103},
-    {"key": "fn:src/db/reprocess.py:reprocess", "lines": 129},
-    {"key": "fn:src/family/calendar_scan.py:run_calendar_scan", "lines": 103},
-    {"key": "fn:src/family/traffic_check.py:run_traffic_check", "lines": 244},
-    {"key": "fn:src/family/travel_blocks.py:desired_legs", "lines": 103},
-    {"key": "fn:src/family/travel_blocks.py:plan_travel_blocks", "lines": 115},
-    {"key": "fn:src/family/travel_blocks.py:reconcile", "lines": 107},
-    {"key": "fn:src/family/travel_blocks_write.py:apply_travel_blocks", "lines": 111},
     {"key": "fn:tests/e2e/conftest.py:_seed_e2e_db", "lines": 108},
     {"key": "fn:tests/test_audit_api.py:_seed", "lines": 110},
     {"key": "size:app/webapp/static/index.html", "lines": 1045},
     {"key": "size:app/webapp/static/styles.css", "lines": 1234},
-    {"key": "size:src/family/travel_blocks.py", "lines": 1465},
     {"key": "size:tests/test_travel_blocks_write.py", "lines": 1714}
   ]
 }

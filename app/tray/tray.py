@@ -34,7 +34,7 @@ from app.tray import cloudflared_proc
 from app.tray.cloudflared_proc import TUNNEL_URL_FILE
 from app.tray.single_instance import SingleInstance
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
-from src.config import load_config
+from src.config import Config, load_config
 from src.connector import sidecar
 from src.logging_setup import configure_file_logging
 from src.paths import PROJECT_ROOT
@@ -151,6 +151,139 @@ def _notify(title: str, message: str) -> None:
         logger.debug(f"winotify failed: {exc}")
 
 
+def _start_tunnel(
+    tunnel_hostname: str, tunnel_state: dict[str, subprocess.Popen[bytes] | None]
+) -> None:
+    """Launch cloudflared for the configured hostname and record the process."""
+    bin_path = shutil.which("cloudflared")
+    if bin_path is None:
+        logger.warning("⚠️  cloudflared not on PATH — public URL won't be reachable.")
+        _notify("Cloudflare tunnel", "cloudflared not on PATH — install via winget")
+        return
+    cmd = [bin_path, "tunnel", "--config", str(TUNNEL_CONFIG_PATH), "run"]
+    kw: dict[str, object] = dict(
+        cwd=str(PROJECT_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if sys.platform == "win32":
+        kw["creationflags"] = NO_WINDOW_NEW_GROUP
+    try:
+        proc = subprocess.Popen(cmd, **kw)  # type: ignore[call-overload]
+    except OSError as exc:
+        logger.warning(f"⚠️  cloudflared failed to launch: {exc}")
+        _notify("Cloudflare tunnel", f"Failed to start: {exc}")
+        return
+    tunnel_state["proc"] = proc
+    logger.info(f"🌍 Cloudflare tunnel started → https://{tunnel_hostname} (pid={proc.pid})")
+
+    token = (load_webapp_config().auth_token or "").strip()
+    cloudflared_proc.persist_tunnel_url(tunnel_hostname, token)
+
+
+def _stop_tunnel(tunnel_state: dict[str, subprocess.Popen[bytes] | None]) -> None:
+    proc = tunnel_state.get("proc")
+    tunnel_state["proc"] = None
+    if proc is None:
+        return
+    cloudflared_proc.stop_proc(proc, "cloudflared")
+    cloudflared_proc.cleanup_url_file()
+
+
+def _start_sidecar_supervisor(cfg: Config, supervisor_stop: threading.Event) -> None:
+    """Start the keep-alive supervisor thread for the read-only WhatsApp sidecar.
+
+    While the tray is open it keeps the sidecar running so the buffer stays warm
+    and a scan never reads a cold/half-loaded source. Linked-device only (the
+    fixture has no process), and gated on the same self-heal flag as the scan
+    preflight.
+    """
+    if not (cfg.connector == "linked_device" and cfg.sidecar_autostart):
+        return
+    last_supervisor_state: dict[str, str | None] = {"state": None}
+
+    def _on_supervise(result: dict[str, object]) -> None:
+        state = str(result.get("state"))
+        action = str(result.get("action"))
+        # Toast only on the *transition* into needs_qr — a human must re-pair, and
+        # relaunching can't help, so nag once rather than every 90 s tick.
+        if action == sidecar.ACTION_NEEDS_QR and last_supervisor_state["state"] != state:
+            _notify(
+                "Family Radar: re-pair needed",
+                "The linked device was logged out — open the webapp to scan a new QR.",
+            )
+        last_supervisor_state["state"] = state
+
+    def _run_supervisor() -> None:
+        try:
+            sidecar.run_supervisor(
+                cfg.linked_device_dir, supervisor_stop, on_tick=_on_supervise
+            )
+        except Exception as exc:  # noqa: BLE001 — a supervisor crash must not kill the tray
+            logger.error(f"❌ sidecar supervisor stopped: {exc}")
+
+    logger.info("🩺 sidecar keep-alive supervisor starting")
+    threading.Thread(target=_run_supervisor, daemon=True).start()
+
+
+def _copy_local_url(manager: WebappManager) -> None:
+    url = append_auth_token(manager.base_url, load_webapp_config().auth_token)
+    _notify("Copied local URL" if _clipboard_copy(url) else "Local URL", url)
+
+
+def _copy_tailscale_url(manager: WebappManager) -> None:
+    host = _tailscale_hostname()
+    if not host:
+        _notify("Tailscale not available", "Couldn't resolve a tailnet address.")
+        return
+    scheme = "https" if cert_paths() else "http"
+    url = append_auth_token(
+        f"{scheme}://{host}:{manager.config.port}", load_webapp_config().auth_token
+    )
+    _notify("Copied Tailscale URL" if _clipboard_copy(url) else "Tailscale URL", url)
+
+
+def _copy_tunnel_url() -> None:
+    if not TUNNEL_URL_FILE.exists():
+        _notify("No tunnel URL yet", "Configure webapp/cloudflared.yml to enable it.")
+        return
+    try:
+        url = TUNNEL_URL_FILE.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        _notify("Tunnel URL read failed", str(exc))
+        return
+    if url:
+        _notify("Copied Cloudflare URL" if _clipboard_copy(url) else "Cloudflare URL", url)
+
+
+def _open_enrollment_window(manager: WebappManager) -> None:
+    scheme = "https" if cert_paths() else "http"
+    url = f"{scheme}://127.0.0.1:{manager.config.port}/api/webauthn/enroll/window"
+    try:
+        import requests
+
+        resp = requests.post(url, json={"seconds": 300}, timeout=5, verify=False)
+        if resp.status_code == 200:
+            _notify(
+                "Passkey enrollment",
+                "5-minute window open — enrol your device from Settings now.",
+            )
+        else:
+            _notify("Passkey enrollment failed", f"HTTP {resp.status_code}")
+    except Exception as exc:  # noqa: BLE001
+        _notify("Passkey enrollment failed", str(exc))
+
+
+def _restart_webapp(manager: WebappManager) -> None:
+    try:
+        _notify("Family Radar", "Restarting webapp…")
+        manager.restart(wait=True)
+        _notify("Family Radar restarted", manager.base_url)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"❌ webapp restart failed: {exc}")
+        _notify("Restart failed", str(exc))
+
+
 def run_tray() -> int:
     """Run the tray icon. Returns when the user picks Quit."""
     # pythonw has no console, so without this every tray breadcrumb is lost.
@@ -192,134 +325,28 @@ def run_tray() -> int:
 
     threading.Thread(target=_start, daemon=True).start()
 
-    def _start_tunnel() -> None:
-        if tunnel_hostname is None:
-            return
-        bin_path = shutil.which("cloudflared")
-        if bin_path is None:
-            logger.warning("⚠️  cloudflared not on PATH — public URL won't be reachable.")
-            _notify("Cloudflare tunnel", "cloudflared not on PATH — install via winget")
-            return
-        cmd = [bin_path, "tunnel", "--config", str(TUNNEL_CONFIG_PATH), "run"]
-        kw: dict[str, object] = dict(
-            cwd=str(PROJECT_ROOT),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if sys.platform == "win32":
-            kw["creationflags"] = NO_WINDOW_NEW_GROUP
-        try:
-            proc = subprocess.Popen(cmd, **kw)  # type: ignore[call-overload]
-        except OSError as exc:
-            logger.warning(f"⚠️  cloudflared failed to launch: {exc}")
-            _notify("Cloudflare tunnel", f"Failed to start: {exc}")
-            return
-        tunnel_state["proc"] = proc
-        logger.info(f"🌍 Cloudflare tunnel started → https://{tunnel_hostname} (pid={proc.pid})")
-
-        token = (load_webapp_config().auth_token or "").strip()
-        cloudflared_proc.persist_tunnel_url(tunnel_hostname, token)
-
-    def _stop_tunnel() -> None:
-        proc = tunnel_state.get("proc")
-        tunnel_state["proc"] = None
-        if proc is None:
-            return
-        cloudflared_proc.stop_proc(proc, "cloudflared")
-        cloudflared_proc.cleanup_url_file()
-
     if tunnel_hostname is not None:
-        threading.Thread(target=_start_tunnel, daemon=True).start()
+        threading.Thread(
+            target=_start_tunnel, args=(tunnel_hostname, tunnel_state), daemon=True
+        ).start()
 
-    # Keep-alive supervisor: while the tray is open, keep the read-only
-    # WhatsApp sidecar running so the buffer stays warm and a scan never reads a
-    # cold/half-loaded source. Linked-device only (the fixture has no process),
-    # and gated on the same self-heal flag as the scan preflight.
     supervisor_stop = threading.Event()
-    last_supervisor_state: dict[str, str | None] = {"state": None}
-
-    def _on_supervise(result: dict[str, object]) -> None:
-        state = str(result.get("state"))
-        action = str(result.get("action"))
-        # Toast only on the *transition* into needs_qr — a human must re-pair, and
-        # relaunching can't help, so nag once rather than every 90 s tick.
-        if action == sidecar.ACTION_NEEDS_QR and last_supervisor_state["state"] != state:
-            _notify(
-                "Family Radar: re-pair needed",
-                "The linked device was logged out — open the webapp to scan a new QR.",
-            )
-        last_supervisor_state["state"] = state
-
-    def _run_supervisor() -> None:
-        try:
-            sidecar.run_supervisor(
-                cfg.linked_device_dir, supervisor_stop, on_tick=_on_supervise
-            )
-        except Exception as exc:  # noqa: BLE001 — a supervisor crash must not kill the tray
-            logger.error(f"❌ sidecar supervisor stopped: {exc}")
-
-    if cfg.connector == "linked_device" and cfg.sidecar_autostart:
-        logger.info("🩺 sidecar keep-alive supervisor starting")
-        threading.Thread(target=_run_supervisor, daemon=True).start()
+    _start_sidecar_supervisor(cfg, supervisor_stop)
 
     def copy_local(icon: object, item: object) -> None:
-        url = append_auth_token(manager.base_url, load_webapp_config().auth_token)
-        _notify("Copied local URL" if _clipboard_copy(url) else "Local URL", url)
+        _copy_local_url(manager)
 
     def copy_tailscale(icon: object, item: object) -> None:
-        host = _tailscale_hostname()
-        if not host:
-            _notify("Tailscale not available", "Couldn't resolve a tailnet address.")
-            return
-        scheme = "https" if cert_paths() else "http"
-        url = append_auth_token(
-            f"{scheme}://{host}:{manager.config.port}", load_webapp_config().auth_token
-        )
-        _notify("Copied Tailscale URL" if _clipboard_copy(url) else "Tailscale URL", url)
+        _copy_tailscale_url(manager)
 
     def copy_tunnel(icon: object, item: object) -> None:
-        if not TUNNEL_URL_FILE.exists():
-            _notify("No tunnel URL yet", "Configure webapp/cloudflared.yml to enable it.")
-            return
-        try:
-            url = TUNNEL_URL_FILE.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            _notify("Tunnel URL read failed", str(exc))
-            return
-        if url:
-            _notify("Copied Cloudflare URL" if _clipboard_copy(url) else "Cloudflare URL", url)
+        _copy_tunnel_url()
 
     def restart_webapp(icon: object, item: object) -> None:
-        def _do() -> None:
-            try:
-                _notify("Family Radar", "Restarting webapp…")
-                manager.restart(wait=True)
-                _notify("Family Radar restarted", manager.base_url)
-            except Exception as exc:  # noqa: BLE001
-                logger.error(f"❌ webapp restart failed: {exc}")
-                _notify("Restart failed", str(exc))
-
-        threading.Thread(target=_do, daemon=True).start()
+        threading.Thread(target=_restart_webapp, args=(manager,), daemon=True).start()
 
     def enroll_device(icon: object, item: object) -> None:
-        def _do() -> None:
-            scheme = "https" if cert_paths() else "http"
-            url = f"{scheme}://127.0.0.1:{manager.config.port}/api/webauthn/enroll/window"
-            try:
-                import requests
-
-                resp = requests.post(url, json={"seconds": 300}, timeout=5, verify=False)
-                if resp.status_code == 200:
-                    _notify(
-                        "Passkey enrollment",
-                        "5-minute window open — enrol your device from Settings now.",
-                    )
-                else:
-                    _notify("Passkey enrollment failed", f"HTTP {resp.status_code}")
-            except Exception as exc:  # noqa: BLE001
-                _notify("Passkey enrollment failed", str(exc))
-
-        threading.Thread(target=_do, daemon=True).start()
+        threading.Thread(target=_open_enrollment_window, args=(manager,), daemon=True).start()
 
     def show_status(icon: object, item: object) -> None:
         s = manager.status()
@@ -331,7 +358,7 @@ def run_tray() -> int:
     def quit_app(icon: object, item: object) -> None:
         logger.info("👋 Tray quit requested")
         supervisor_stop.set()
-        _stop_tunnel()
+        _stop_tunnel(tunnel_state)
         try:
             manager.stop()
         except Exception as exc:  # noqa: BLE001

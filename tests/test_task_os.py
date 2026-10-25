@@ -2,7 +2,7 @@
 
 Fully offline. The client tests stub :func:`src._loopback_http.request`; the
 endpoint tests inject a fake exporter via ``app.state.task_os_exporter`` so
-task-os is never dialled. Mirrors ``tests/test_summarize.py``'s pattern.
+task-os is never dialled. Mirrors ``tests/webapp/test_summarize.py``'s pattern.
 """
 
 from __future__ import annotations

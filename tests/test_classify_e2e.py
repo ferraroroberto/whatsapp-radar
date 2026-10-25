@@ -181,7 +181,7 @@ def test_real_rules_route_representative_paths() -> None:
     assert tier("docs/gmail-reuse.md") == "skip"
     assert tier("assets/tray/icon.png") == "skip"
     assert tier(".github/workflows/e2e.yml") == "skip"
-    assert tier("tests/test_gmail_connector.py") == "skip"
+    assert tier("tests/connectors/test_gmail_connector.py") == "skip"
     assert tier("README.md") == "skip"
     assert tier("CLAUDE.md") == "skip"
     assert tier(".fleet.toml") == "skip"
@@ -197,9 +197,9 @@ def test_real_rules_route_representative_paths() -> None:
 
     # Mixed real diff (backend + fixture only) -> skip; add a webapp file -> full.
     assert tier(
-        "tests/test_gmail_connector.py", "tests/test_multi_source_sync.py",
+        "tests/connectors/test_gmail_connector.py", "tests/connectors/test_multi_source_sync.py",
         ".github/workflows/main-gate-watch.yml",
     ) == "skip"
     assert tier(
-        "tests/test_gmail_connector.py", "app/webapp/routers/dashboard.py",
+        "tests/connectors/test_gmail_connector.py", "app/webapp/routers/dashboard.py",
     ) == "full"

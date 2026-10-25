@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 REDACT_JS = ROOT / "app/webapp/static/redact.js"
 
 #: The modules that build a family run payload. Deliberately only these: the

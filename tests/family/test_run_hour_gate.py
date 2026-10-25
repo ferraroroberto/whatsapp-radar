@@ -29,7 +29,7 @@ import src.config.family as family_config
 from app.cli import main as cli
 from app.webapp import runs as webapp_runs
 from src.db import store
-from tests.test_unified_runs import _client
+from tests.webapp.test_unified_runs import _client
 
 #: A wall clock pinned well before and well after the default `run_hour` of 7.
 _AT_0300 = "2026-08-24T03:00:00+02:00"

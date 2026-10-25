@@ -3,7 +3,7 @@
 iOS Safari (especially PWA-installed) will serve a stale ``index.html`` and
 request a ``?v=<old hash>`` asset that no longer exists unless the index
 response carries ``Cache-Control: no-cache, must-revalidate``. The in-process
-``tests/test_webapp_api_basics.py`` pins the header at the HTTP level; this one runs through
+``tests/webapp/test_webapp_api_basics.py`` pins the header at the HTTP level; this one runs through
 the real WebKit network stack so a WebKit-specific regression (or a middleware
 ordering bug that strips the header) surfaces here.
 """

@@ -8,7 +8,7 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml` together 
 |---|---|
 | `app/` | UI surfaces: the argparse CLI, the FastAPI admin PWA, the tray. Imports `src/`, never the reverse. |
 | `src/` | The logic: connector, store, classifier, notifiers, family checks. Imported as `from src.…`. |
-| `tests/` | The offline pytest suite (fixture connector only) and the Playwright e2e suite in `tests/e2e/`. `tests/` is a baselined flat directory: a new test module goes in a subfolder (`tests/gates/` holds the ratchet gate tests, `tests/fakes/` the shared offline fakes), not in `tests/` itself. |
+| `tests/` | The offline pytest suite (fixture connector only) and the Playwright e2e suite in `tests/e2e/`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
 | `docs/` | Durable reference, this file included. |
 | `scripts/` | Helper CLIs, the verification gate, and the vendored ratchets with their gate wrappers. |
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |

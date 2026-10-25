@@ -1,8 +1,6 @@
 {
   "version": 1,
   "entries": [
-    {"key": "dir:tests", "modules": 78},
-    {"key": "size:app/webapp/static/index.html", "lines": 1045},
-    {"key": "size:app/webapp/static/styles.css", "lines": 1234}
+    {"key": "size:app/webapp/static/index.html", "lines": 1045}
   ]
 }

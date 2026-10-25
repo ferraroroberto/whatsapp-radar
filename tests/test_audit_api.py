@@ -23,9 +23,7 @@ LOOPBACK = ("127.0.0.1", 5555)
 REMOTE = ("203.0.113.5", 5555)
 
 
-def _seed(conn: sqlite3.Connection) -> int:
-    """One live run over two monitored chats: one actionable (LLM called), one
-    filtered at Stage 1. Returns the run id."""
+def _seed_chats(conn: sqlite3.Connection) -> tuple[int, int]:
     a = store.upsert_chat(
         conn,
         ChatRecord(
@@ -52,7 +50,10 @@ def _seed(conn: sqlite3.Connection) -> int:
                 sender_label="Parent",
             ),
         )
+    return a, b
 
+
+def _seed_run(conn: sqlite3.Connection) -> int:
     run_id = store.start_run(conn, mode="live", params_json=json.dumps({"days": 7}))
     store.record_run_funnel(
         conn,
@@ -81,7 +82,10 @@ def _seed(conn: sqlite3.Connection) -> int:
         ),
     )
     store.finish_run(conn, run_id, "completed", chats_reviewed=2)
+    return run_id
 
+
+def _seed_traces(conn: sqlite3.Connection, run_id: int, a: int, b: int) -> None:
     # Chat A: passed Stage 1, LLM called, actionable verdict + delivered text.
     store.insert_analysis_trace(
         conn,
@@ -132,6 +136,14 @@ def _seed(conn: sqlite3.Connection) -> int:
         telegram_text=None,
         error=None,
     )
+
+
+def _seed(conn: sqlite3.Connection) -> int:
+    """One live run over two monitored chats: one actionable (LLM called), one
+    filtered at Stage 1. Returns the run id."""
+    a, b = _seed_chats(conn)
+    run_id = _seed_run(conn)
+    _seed_traces(conn, run_id, a, b)
     return run_id
 
 

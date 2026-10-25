@@ -193,7 +193,7 @@ def test_the_one_free_text_field_is_sanitized_at_source_not_at_the_renderer() ->
     `MarkerGuardError` prints two calendar ids and a propagated googleapiclient
     `HttpError` prints the request URI containing the URL-encoded id. Withholding
     it would have gutted the dump's most useful field; sanitizing it upstream
-    keeps both properties. `tests/test_travel_blocks_write.py` drives the real
+    keeps both properties. `tests/family/test_travel_blocks_write.py` drives the real
     code to prove it; this pins the whitelist's side of the bargain.
     """
     assert "detail" in _js_set("RENDERABLE_KEYS")

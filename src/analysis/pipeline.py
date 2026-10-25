@@ -393,38 +393,17 @@ def _run_tripwire(
     return result
 
 
-def scan(
+def _begin_scan(
     conn: sqlite3.Connection,
     config: Config,
     *,
-    mode: Mode = "live",
-    days: int | None = None,
-    connector: MessageConnector | None = None,
-    connectors: list[ConnectorBinding] | None = None,
-    classifier: TracedClassifier | None = None,
-    calendar_client: CalendarWriteClient | None = None,
-    deliver: bool = True,
-    progress: Progress | None = None,
-) -> ScanOutcome:
-    """Run one scan: sync (live) -> analyze monitored deltas -> digest -> deliver.
-
-    ``connector`` and ``classifier`` may be injected (tests, alternate wiring);
-    otherwise they are built from ``config``. ``days`` windows the dry-run replay.
-    ``progress`` receives human-readable stage lines for live output.
-
-    ``calendar_client`` may also be injected (tests); otherwise it is built lazily
-    from ``config.calendar.write_token_path`` the first time it's needed, and only
-    when ``config.family.reminder_calendar_id`` is configured — an unset reminder
-    calendar or a missing/invalid write token both leave it ``None``, which simply
-    means no routine-prep reminder events are created this run. Reminder
-    creation happens for ``live`` and ``process`` alike: dry-run replays the same
-    messages on every call, which would otherwise mint a fresh duplicate event
-    each time.
-
-    ``deliver=False`` is the ``process`` verb's own ``--dry-run``: the
-    digest is still built and traced, but withheld rather than sent. It has no
-    effect on ``dry_run`` mode, which already never delivers.
-    """
+    mode: Mode,
+    days: int | None,
+    classifier: TracedClassifier | None,
+    calendar_client: CalendarWriteClient | None,
+    progress: Progress | None,
+) -> tuple[ScanOutcome, TracedClassifier, CalendarWriteClient | None]:
+    """Start the run row and resolve the Stage-2 classifier and reminder client."""
     emit(
         progress,
         "▶ process starting — analyzing monitored chats since last cursor"
@@ -450,213 +429,280 @@ def scan(
             calendar_client = build_calendar_client(config.calendar)
         except (FileNotFoundError, RuntimeError) as exc:
             emit(progress, f"⚠ calendar reminders disabled: {exc}")
+    return outcome, stage2, calendar_client
 
+
+def _live_bindings(
+    config: Config,
+    connector: MessageConnector | None,
+    connectors: list[ConnectorBinding] | None,
+) -> list[ConnectorBinding]:
+    if connectors is not None:
+        return connectors
+    if connector is not None:
+        return [ConnectorBinding(source="whatsapp", connector=connector)]
+    return build_connectors(config)
+
+
+def _sync_or_offline(
+    conn: sqlite3.Connection,
+    config: Config,
+    bindings: list[ConnectorBinding],
+    outcome: ScanOutcome,
+    progress: Progress | None,
+) -> set[str]:
+    """Sync every source; raise :class:`ConnectorOffline` when none came up."""
+    successful_sources = _sync(conn, config, bindings, outcome, progress)
+    if not successful_sources:
+        detail = "; ".join(f"{source}: {error}" for source, error in outcome.source_errors)
+        raise ConnectorOffline(
+            ConnectorStatus(name="all_sources", connected=False, detail=detail)
+        )
+    return successful_sources
+
+
+def _chat_delta(
+    conn: sqlite3.Connection,
+    config: Config,
+    chat_id: int,
+    *,
+    mode: Mode,
+    days: int | None,
+    successful_sources: set[str],
+) -> list[StoredMessage]:
+    """The messages of one monitored chat this run should analyse."""
+    delta = (
+        store.family_delta_replay(conn, chat_id, since_days=days)
+        if mode == "dry_run"
+        else store.family_delta_since_cursor(conn, chat_id)
+    )
     if mode == "live":
-        live_bindings = connectors
-        if live_bindings is None:
-            live_bindings = (
-                [ConnectorBinding(source="whatsapp", connector=connector)]
-                if connector is not None
-                else build_connectors(config)
-            )
-        try:
-            successful_sources = _sync(conn, config, live_bindings, outcome, progress)
-            if not successful_sources:
-                detail = "; ".join(
-                    f"{source}: {error}" for source, error in outcome.source_errors
+        # A failed source may have older cached messages waiting. Excluding
+        # those messages from this run ensures _advance only moves cursors
+        # for sources that were confirmed live and successfully synced.
+        source_by_chat: dict[int, str | None] = {}
+        filtered_delta: list[StoredMessage] = []
+        for message in delta:
+            if message.chat_id not in source_by_chat:
+                chat_row = store.get_chat(conn, message.chat_id)
+                source_by_chat[message.chat_id] = (
+                    str(chat_row["source"]) if chat_row is not None else None
                 )
-                raise ConnectorOffline(
-                    ConnectorStatus(name="all_sources", connected=False, detail=detail)
-                )
-        except ConnectorOffline as exc:
-            return _abort_offline(conn, config, outcome, exc, progress)
-        # Transcribe downloaded voice notes BEFORE analysis so a voice note is never
-        # classified as its "[voice note]" placeholder and the cursor never skips
-        # real content. No-op unless transcription is enabled; failures are
-        # isolated per note and never block the analysis that follows. Dry-run skips
-        # this — it replays stored messages with no network and no side effects.
-        tr = run_transcription_phase(conn, config, progress=progress)
-        outcome.transcriptions = tr.done
-        _run_tripwire(conn, config, outcome, progress)
-    elif mode == "dry_run":
-        emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
-    else:
-        emit(progress, "• process: analyzing monitored deltas since last cursor (no sync)")
+            if source_by_chat[message.chat_id] in successful_sources:
+                filtered_delta.append(message)
+        delta = filtered_delta
+    # Hold the live delta before any voice note still awaiting transcription so
+    # it is never analysed as a placeholder and the cursor never skips it.
+    # Gated on the feature flag: disabled → voice notes are ordinary messages.
+    return hold_back_if_transcribing(
+        delta, mode != "dry_run" and config.transcription.enabled
+    )
 
-    monitored = store.monitored_chats(conn)
-    outcome.chats_monitored = len(monitored)
-    for chat in monitored:
-        ensure_source_funnel(
-            outcome.source_funnels, str(chat["source"])
-        ).monitored_channels += 1
-    emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
-    for chat in monitored:
-        chat_id = int(chat["id"])
-        delta = (
-            store.family_delta_replay(conn, chat_id, since_days=days)
-            if mode == "dry_run"
-            else store.family_delta_since_cursor(conn, chat_id)
+def _reject_at_stage1(
+    conn: sqlite3.Connection,
+    outcome: ScanOutcome,
+    source_funnel: SourceFunnel,
+    chat_id: int,
+    *,
+    mode: Mode,
+    source: str,
+    signal: KeywordSignal,
+    delta: list[StoredMessage],
+) -> None:
+    """Stage 1 gate: record a not-actionable verdict without an LLM call."""
+    source_funnel.stage1_rejected += 1
+    store.insert_analysis_item(
+        conn,
+        outcome.run_id,
+        chat_id,
+        action_required=False,
+        priority=None,
+        summary=None,
+        suggested_next_action=None,
+        deadline=None,
+        confidence=None,
+        evidence_message_ids_json=json.dumps([]),
+    )
+    _write_trace(
+        conn, outcome.run_id, chat_id,
+        source=source, signal=signal, delta=delta, outcome=None,
+        result=_NOT_ACTIONABLE,
+        final_action="not_actionable", telegram_text=None, error=None,
+    )
+    outcome.messages_processed += len(delta)
+    _advance(conn, mode, chat_id, delta, None)
+    if mode in ("live", "process"):
+        source_funnel.cursors_advanced += 1
+
+
+def _contract_failure(co: ClassificationOutcome, exc: ContractError) -> tuple[str, str]:
+    """The trace ``final_action`` and error text for an unparseable Stage-2 answer.
+
+    A budget overrun (stop_reason == 'max_tokens') is recorded as a distinct,
+    self-explanatory state rather than a generic contract error, so a model swap
+    that silently zeroes out classification is obvious in the trace.
+    """
+    if co.stop_reason == "max_tokens":
+        return "llm_truncated", (
+            "model hit max_tokens before emitting parseable JSON "
+            f"(raw {len(co.raw_response or '')} chars) — use a model that "
+            "answers with JSON directly or raise hub.max_tokens"
         )
-        if mode == "live":
-            # A failed source may have older cached messages waiting. Excluding
-            # those messages from this run ensures _advance only moves cursors
-            # for sources that were confirmed live and successfully synced.
-            source_by_chat: dict[int, str | None] = {}
-            filtered_delta: list[StoredMessage] = []
-            for message in delta:
-                if message.chat_id not in source_by_chat:
-                    chat_row = store.get_chat(conn, message.chat_id)
-                    source_by_chat[message.chat_id] = (
-                        str(chat_row["source"]) if chat_row is not None else None
-                    )
-                if source_by_chat[message.chat_id] in successful_sources:
-                    filtered_delta.append(message)
-            delta = filtered_delta
-        # Hold the live delta before any voice note still awaiting transcription so
-        # it is never analysed as a placeholder and the cursor never skips it.
-        # Gated on the feature flag: disabled → voice notes are ordinary messages.
-        delta = hold_back_if_transcribing(
-            delta, mode != "dry_run" and config.transcription.enabled
+    return "contract_error", str(exc)
+
+
+def _create_reminder_if_eligible(
+    conn: sqlite3.Connection,
+    config: Config,
+    calendar_client: CalendarWriteClient | None,
+    chat: sqlite3.Row,
+    *,
+    mode: Mode,
+    item_id: int,
+    result: AnalysisResult,
+) -> None:
+    # Additive only — never touches the Telegram digest path.
+    # live + process only: dry-run replays the same messages every call, which
+    # would otherwise mint a fresh duplicate event each time. The
+    # reminder-calendar check guards even an injected client (tests) against
+    # writing to an unconfigured (empty-string) calendar id.
+    if (
+        mode in ("live", "process")
+        and calendar_client is not None
+        and config.family.reminder_calendar_id
+        and is_eligible(result)
+    ):
+        create_reminder_event(
+            conn,
+            calendar_client,
+            calendar_id=config.family.reminder_calendar_id,
+            family=config.family,
+            chat_id=int(chat["id"]),
+            item_id=item_id,
+            chat_display_name=chat["display_name"],
+            result=result,
         )
-        if not delta:
-            continue
-        outcome.chats_with_delta += 1
 
-        source = str(chat["source"])
-        source_funnel = note_delta_funnel(outcome.source_funnels, source, len(delta))
-        signal = has_actionable_signal(delta, source)
-        if not signal.matched:
-            source_funnel.stage1_rejected += 1
-            # Stage 1 gate: record a not-actionable verdict without an LLM call.
-            store.insert_analysis_item(
-                conn,
-                run_id,
-                chat_id,
-                action_required=False,
-                priority=None,
-                summary=None,
-                suggested_next_action=None,
-                deadline=None,
-                confidence=None,
-                evidence_message_ids_json=json.dumps([]),
-            )
-            _write_trace(
-                conn, run_id, chat_id,
-                source=source, signal=signal, delta=delta, outcome=None,
-                result=_NOT_ACTIONABLE,
-                final_action="not_actionable", telegram_text=None, error=None,
-            )
-            outcome.messages_processed += len(delta)
-            _advance(conn, mode, chat_id, delta, None)
-            if mode in ("live", "process"):
-                source_funnel.cursors_advanced += 1
-            continue
 
-        outcome.stage1_passed += 1
-        source_funnel.stage1_passed += 1
-        emit(
-            progress,
-            f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
-            f"(keywords: {', '.join(signal.roots) or 'n/a'}) → Stage 2",
+def _actionable_text(chat: sqlite3.Row, result: AnalysisResult) -> str:
+    return render_item(
+        DigestItem(
+            chat=chat["display_name"],
+            priority=result.priority,
+            summary=result.summary,
+            suggested_next_action=result.suggested_next_action,
+            deadline=result.deadline,
+            deadline_date=result.deadline_date,
+            confidence=result.confidence,
+            evidence_message_ids=result.evidence_message_ids,
+            prep_complexity=result.prep_complexity,
         )
-        prior = recent_alert_context(
-            conn, chat_id, since_days=config.hub.recent_alert_days, exclude_run_id=run_id
+    )
+
+
+def _analyze_chat(
+    conn: sqlite3.Connection,
+    config: Config,
+    stage2: TracedClassifier,
+    calendar_client: CalendarWriteClient | None,
+    outcome: ScanOutcome,
+    chat: sqlite3.Row,
+    delta: list[StoredMessage],
+    *,
+    mode: Mode,
+    progress: Progress | None,
+) -> ScanOutcome | None:
+    """Run Stage 1 and Stage 2 on one chat's delta and persist the verdict.
+
+    Returns the finalized outcome when the run must stop (Stage 2 unreachable),
+    else ``None`` so the scan moves on to the next chat.
+    """
+    run_id = outcome.run_id
+    chat_id = int(chat["id"])
+    source = str(chat["source"])
+    source_funnel = note_delta_funnel(outcome.source_funnels, source, len(delta))
+    signal = has_actionable_signal(delta, source)
+    if not signal.matched:
+        _reject_at_stage1(
+            conn, outcome, source_funnel, chat_id,
+            mode=mode, source=source, signal=signal, delta=delta,
         )
-        try:
-            co = stage2.classify_traced(
-                chat["display_name"], delta, prior, source=source
-            )
-        except ClassifierUnavailable as exc:
-            # Whole-run condition, not a per-chat one: every remaining chat would
-            # hit the same dead hub, so stop once instead of looping through a
-            # timeout per chat.
-            return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
-        if co.llm_called:
-            outcome.stage2_llm_calls += 1
-            source_funnel.llm_calls += 1
+        return None
 
-        try:
-            result = parse_analysis(co.raw_output)
-        except ContractError as exc:
-            # Do NOT persist an analysis item or advance the cursor: the same
-            # delta is retried next run. The trace still captures the failure.
-            # A budget overrun (stop_reason == 'max_tokens') is recorded as a
-            # distinct, self-explanatory state rather than a generic contract
-            # error, so a model swap that silently zeroes out classification is
-            # obvious in the trace.
-            if co.stop_reason == "max_tokens":
-                final_action = "llm_truncated"
-                error = (
-                    "model hit max_tokens before emitting parseable JSON "
-                    f"(raw {len(co.raw_response or '')} chars) — use a model that "
-                    "answers with JSON directly or raise hub.max_tokens"
-                )
-            else:
-                final_action = "contract_error"
-                error = str(exc)
-            outcome.errors.append((chat_id, error))
-            _write_trace(
-                conn, run_id, chat_id,
-                source=source, signal=signal, delta=delta, outcome=co, result=None,
-                final_action=final_action, telegram_text=None, error=error,
-            )
-            continue
+    outcome.stage1_passed += 1
+    source_funnel.stage1_passed += 1
+    emit(
+        progress,
+        f"  • {chat['display_name']}: {len(delta)} new msg(s) passed Stage 1 "
+        f"(keywords: {', '.join(signal.roots) or 'n/a'}) → Stage 2",
+    )
+    prior = recent_alert_context(
+        conn, chat_id, since_days=config.hub.recent_alert_days, exclude_run_id=run_id
+    )
+    try:
+        co = stage2.classify_traced(
+            chat["display_name"], delta, prior, source=source
+        )
+    except ClassifierUnavailable as exc:
+        # Whole-run condition, not a per-chat one: every remaining chat would
+        # hit the same dead hub, so stop once instead of looping through a
+        # timeout per chat.
+        return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
+    if co.llm_called:
+        outcome.stage2_llm_calls += 1
+        source_funnel.llm_calls += 1
 
-        item_id = persist_analysis_result(conn, run_id, chat_id, result)
-        outcome.messages_processed += len(delta)
-
-        # Additive only — never touches the Telegram digest path below.
-        # live + process only: dry-run replays the same messages every call, which
-        # would otherwise mint a fresh duplicate event each time. The
-        # reminder-calendar check guards even an injected client (tests) against
-        # writing to an unconfigured (empty-string) calendar id.
-        if (
-            mode in ("live", "process")
-            and calendar_client is not None
-            and config.family.reminder_calendar_id
-            and is_eligible(result)
-        ):
-            create_reminder_event(
-                conn,
-                calendar_client,
-                calendar_id=config.family.reminder_calendar_id,
-                family=config.family,
-                chat_id=chat_id,
-                item_id=item_id,
-                chat_display_name=chat["display_name"],
-                result=result,
-            )
-
-        telegram_text: str | None = None
-        final_action = "not_actionable"
-        if result.action_required:
-            outcome.actionable += 1
-            source_funnel.actionable += 1
-            final_action = "actionable"
-            telegram_text = render_item(
-                DigestItem(
-                    chat=chat["display_name"],
-                    priority=result.priority,
-                    summary=result.summary,
-                    suggested_next_action=result.suggested_next_action,
-                    deadline=result.deadline,
-                    deadline_date=result.deadline_date,
-                    confidence=result.confidence,
-                    evidence_message_ids=result.evidence_message_ids,
-                    prep_complexity=result.prep_complexity,
-                )
-            )
-
+    try:
+        result = parse_analysis(co.raw_output)
+    except ContractError as exc:
+        # Do NOT persist an analysis item or advance the cursor: the same
+        # delta is retried next run. The trace still captures the failure.
+        final_action, error = _contract_failure(co, exc)
+        outcome.errors.append((chat_id, error))
         _write_trace(
             conn, run_id, chat_id,
-            source=source, signal=signal, delta=delta, outcome=co, result=result,
-            final_action=final_action, telegram_text=telegram_text, error=None,
+            source=source, signal=signal, delta=delta, outcome=co, result=None,
+            final_action=final_action, telegram_text=None, error=error,
         )
-        _advance(conn, mode, chat_id, delta, result.summary)
-        if mode in ("live", "process"):
-            source_funnel.cursors_advanced += 1
+        return None
 
+    item_id = persist_analysis_result(conn, run_id, chat_id, result)
+    outcome.messages_processed += len(delta)
+    _create_reminder_if_eligible(
+        conn, config, calendar_client, chat, mode=mode, item_id=item_id, result=result
+    )
+
+    telegram_text: str | None = None
+    final_action = "not_actionable"
+    if result.action_required:
+        outcome.actionable += 1
+        source_funnel.actionable += 1
+        final_action = "actionable"
+        telegram_text = _actionable_text(chat, result)
+
+    _write_trace(
+        conn, run_id, chat_id,
+        source=source, signal=signal, delta=delta, outcome=co, result=result,
+        final_action=final_action, telegram_text=telegram_text, error=None,
+    )
+    _advance(conn, mode, chat_id, delta, result.summary)
+    if mode in ("live", "process"):
+        source_funnel.cursors_advanced += 1
+    return None
+
+
+def _finish_scan(
+    conn: sqlite3.Connection,
+    config: Config,
+    outcome: ScanOutcome,
+    *,
+    mode: Mode,
+    deliver: bool,
+    progress: Progress | None,
+) -> ScanOutcome:
+    """Build the digest, deliver it when due, and close the run row."""
+    run_id = outcome.run_id
     digest = build_digest(conn, run_id)
     outcome.digest = digest
 
@@ -698,6 +744,88 @@ def scan(
         f"notify {outcome.notification_status}",
     )
     return outcome
+
+
+def scan(
+    conn: sqlite3.Connection,
+    config: Config,
+    *,
+    mode: Mode = "live",
+    days: int | None = None,
+    connector: MessageConnector | None = None,
+    connectors: list[ConnectorBinding] | None = None,
+    classifier: TracedClassifier | None = None,
+    calendar_client: CalendarWriteClient | None = None,
+    deliver: bool = True,
+    progress: Progress | None = None,
+) -> ScanOutcome:
+    """Run one scan: sync (live) -> analyze monitored deltas -> digest -> deliver.
+
+    ``connector`` and ``classifier`` may be injected (tests, alternate wiring);
+    otherwise they are built from ``config``. ``days`` windows the dry-run replay.
+    ``progress`` receives human-readable stage lines for live output.
+
+    ``calendar_client`` may also be injected (tests); otherwise it is built lazily
+    from ``config.calendar.write_token_path`` the first time it's needed, and only
+    when ``config.family.reminder_calendar_id`` is configured — an unset reminder
+    calendar or a missing/invalid write token both leave it ``None``, which simply
+    means no routine-prep reminder events are created this run. Reminder
+    creation happens for ``live`` and ``process`` alike: dry-run replays the same
+    messages on every call, which would otherwise mint a fresh duplicate event
+    each time.
+
+    ``deliver=False`` is the ``process`` verb's own ``--dry-run``: the
+    digest is still built and traced, but withheld rather than sent. It has no
+    effect on ``dry_run`` mode, which already never delivers.
+    """
+    outcome, stage2, calendar_client = _begin_scan(
+        conn, config, mode=mode, days=days, classifier=classifier,
+        calendar_client=calendar_client, progress=progress,
+    )
+    successful_sources: set[str] = set()
+    if mode == "live":
+        live_bindings = _live_bindings(config, connector, connectors)
+        try:
+            successful_sources = _sync_or_offline(conn, config, live_bindings, outcome, progress)
+        except ConnectorOffline as exc:
+            return _abort_offline(conn, config, outcome, exc, progress)
+        # Transcribe downloaded voice notes BEFORE analysis so a voice note is never
+        # classified as its "[voice note]" placeholder and the cursor never skips
+        # real content. No-op unless transcription is enabled; failures are
+        # isolated per note and never block the analysis that follows. Dry-run skips
+        # this — it replays stored messages with no network and no side effects.
+        tr = run_transcription_phase(conn, config, progress=progress)
+        outcome.transcriptions = tr.done
+        _run_tripwire(conn, config, outcome, progress)
+    elif mode == "dry_run":
+        emit(progress, "• dry-run: replaying stored messages (no sync, no delivery)")
+    else:
+        emit(progress, "• process: analyzing monitored deltas since last cursor (no sync)")
+
+    monitored = store.monitored_chats(conn)
+    outcome.chats_monitored = len(monitored)
+    for chat in monitored:
+        ensure_source_funnel(
+            outcome.source_funnels, str(chat["source"])
+        ).monitored_channels += 1
+    emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
+
+    for chat in monitored:
+        delta = _chat_delta(
+            conn, config, int(chat["id"]),
+            mode=mode, days=days, successful_sources=successful_sources,
+        )
+        if not delta:
+            continue
+        outcome.chats_with_delta += 1
+        aborted = _analyze_chat(
+            conn, config, stage2, calendar_client, outcome, chat, delta,
+            mode=mode, progress=progress,
+        )
+        if aborted is not None:
+            return aborted
+
+    return _finish_scan(conn, config, outcome, mode=mode, deliver=deliver, progress=progress)
 
 
 def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:

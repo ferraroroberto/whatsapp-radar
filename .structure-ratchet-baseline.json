@@ -1,12 +1,8 @@
 {
   "version": 1,
   "entries": [
-    {"key": "dir:tests", "modules": 79},
-    {"key": "fn:src/analysis/pipeline.py:scan", "lines": 305},
-    {"key": "fn:tests/e2e/conftest.py:_seed_e2e_db", "lines": 108},
-    {"key": "fn:tests/test_audit_api.py:_seed", "lines": 110},
+    {"key": "dir:tests", "modules": 78},
     {"key": "size:app/webapp/static/index.html", "lines": 1045},
-    {"key": "size:app/webapp/static/styles.css", "lines": 1234},
-    {"key": "size:tests/test_travel_blocks_write.py", "lines": 1714}
+    {"key": "size:app/webapp/static/styles.css", "lines": 1234}
   ]
 }

@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from app.webapp.routers._helpers import STATIC_DIR
 from src.paths import PROJECT_ROOT
-from src.static_versioning import asset_hash_for, rewrite_index_html
+from src.static_versioning import asset_hash_for, inline_index_partials, rewrite_index_html
 from src.subprocess_flags import NO_WINDOW
 
 _log = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ async def index(request: Request) -> HTMLResponse:
     if not index_path.exists():
         raise HTTPException(status_code=500, detail="index.html missing")
     asset_hashes = getattr(request.app.state, "asset_hashes", {}) or {}
-    body = index_path.read_text(encoding="utf-8")
+    body = inline_index_partials(index_path.read_text(encoding="utf-8"), STATIC_DIR)
     stamped = rewrite_index_html(body, asset_hashes)
     # Force Safari (iPhone PWA especially) to revalidate the HTML on every load
     # so a stale cached index can't keep pointing at a `?v=<old hash>` script.

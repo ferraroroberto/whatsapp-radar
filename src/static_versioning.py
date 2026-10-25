@@ -53,6 +53,10 @@ _INDEX_ASSET_RE = re.compile(
     r"""(href|src)=(['"])/static/([\w\-./]+\.(?:css|js))(\?v=[^'"]*)?(['"])"""
 )
 
+# ``<!-- @include name.html -->`` on its own line in index.html: a partial that
+# lives next to it and is spliced in before the page is served.
+_INDEX_INCLUDE_RE = re.compile(r"^[ \t]*<!-- @include ([\w\-]+\.html) -->[ \t]*$", re.MULTILINE)
+
 
 def _short_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:_HASH_LEN]
@@ -138,6 +142,21 @@ def rewrite_js_imports(body: str, hashes: dict[str, str], from_dir: str = "") ->
         return f"{prefix}{spec}?v={stamp}{quote_close}"
 
     return _JS_IMPORT_RE.sub(_sub, body)
+
+
+def inline_index_partials(body: str, static_dir: Path) -> str:
+    """Splice each ``<!-- @include name.html -->`` marker with that file's text.
+
+    The icon sprite has to sit in the served document itself (iOS Safari does
+    not resolve an external ``<use href="file.svg#id">``), yet keeping it in
+    ``index.html`` pushes that file past the size cap. A missing partial raises
+    so a typo fails loudly instead of serving a page with no icons.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        return (static_dir / match.group(1)).read_text(encoding="utf-8").rstrip("\r\n")
+
+    return _INDEX_INCLUDE_RE.sub(_sub, body)
 
 
 def rewrite_index_html(body: str, hashes: dict[str, str]) -> str:

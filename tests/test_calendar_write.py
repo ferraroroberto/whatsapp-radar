@@ -13,7 +13,7 @@ from calendar_write import (
 )
 from calendar_write.oauth import authorize
 
-from tests.oauth_fakes import expired_credential_loader, flow_loader
+from tests.fakes.oauth_fakes import expired_credential_loader, flow_loader
 
 
 def test_write_scope_is_narrowest_events_scope() -> None:

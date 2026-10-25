@@ -37,6 +37,9 @@ _PAYLOAD_MODULES = (
     "src/family/traffic_check.py",
     "src/family/calendar_scan.py",
     "src/family/travel_blocks.py",
+    "src/family/travel_blocks_model.py",
+    "src/family/travel_blocks_pricing.py",
+    "src/family/travel_blocks_reconcile.py",
     "src/family/travel_blocks_write.py",
     "src/family/rules.py",
 )

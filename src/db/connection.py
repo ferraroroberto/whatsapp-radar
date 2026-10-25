@@ -90,12 +90,25 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     """Additively backfill columns missing from an older on-disk schema.
 
     Idempotent: only adds a column when absent, so repeated opens are no-ops.
     """
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(review_runs)")}
+    _migrate_review_runs(conn)
+    _migrate_chats(conn)
+    _migrate_analysis_trace(conn)
+    _migrate_analysis_items(conn)
+    _migrate_messages(conn)
+    _migrate_sync_log(conn)
+
+
+def _migrate_review_runs(conn: sqlite3.Connection) -> None:
+    existing = _columns(conn, "review_runs")
     for name, declaration in _REVIEW_RUNS_ADDED_COLUMNS:
         if name not in existing:
             conn.execute(f"ALTER TABLE review_runs ADD COLUMN {name} {declaration}")
@@ -104,10 +117,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Idempotent — new process runs are written with kind='process' directly.
     if "kind" not in existing:
         conn.execute("UPDATE review_runs SET kind = 'process' WHERE mode = 'review'")
+
+
+def _migrate_chats(conn: sqlite3.Connection) -> None:
     # `chats.alias` (operator override label) and `chats.parent_chat_id` (the
     # parent↔child link) were both added after the initial schema. Each is an
     # additive, non-destructive ALTER with a constant default.
-    chat_cols = {row["name"] for row in conn.execute("PRAGMA table_info(chats)")}
+    chat_cols = _columns(conn, "chats")
     if "alias" not in chat_cols:
         conn.execute("ALTER TABLE chats ADD COLUMN alias TEXT")
     if "parent_chat_id" not in chat_cols:
@@ -130,19 +146,25 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_source_key "
         "ON chats(source, source_chat_id)"
     )
+
+
+def _migrate_analysis_trace(conn: sqlite3.Connection) -> None:
     # `analysis_trace.messages_json` (per-message audit record: id/sender/text and
     # the Stage-1 keyword roots each message matched) was added after the initial
     # trace schema. Additive, non-destructive; old rows stay NULL and the
     # audit view falls back to the rendered `input_text` blob for them.
-    trace_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_trace)")}
+    trace_cols = _columns(conn, "analysis_trace")
     if "messages_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN messages_json TEXT")
     if "stage1_buckets_json" not in trace_cols:
         conn.execute("ALTER TABLE analysis_trace ADD COLUMN stage1_buckets_json TEXT")
+
+
+def _migrate_analysis_items(conn: sqlite3.Connection) -> None:
     # `analysis_items.deadline_date`: the model-resolved absolute date that
     # sits beside the free-text `deadline`, letting the digest flag today/overdue
     # deterministically. Additive, non-destructive; old rows stay NULL.
-    item_cols = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_items)")}
+    item_cols = _columns(conn, "analysis_items")
     if "deadline_date" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN deadline_date TEXT")
     # `analysis_items.child`/`.task_category`/`.prep_complexity`: resolved
@@ -159,11 +181,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # rows and every item that never got a reminder stay NULL.
     if "calendar_event_id" not in item_cols:
         conn.execute("ALTER TABLE analysis_items ADD COLUMN calendar_event_id TEXT")
+
+
+def _migrate_messages(conn: sqlite3.Connection) -> None:
     # `messages.transcription_status` + `messages.media_path`: the voice-note
     # transcription lifecycle and a transient ref to the downloaded audio. Additive,
     # non-destructive; old rows (and every non-voice message) stay NULL, so the
     # analysis pipeline — which reads only `messages.text` — is untouched.
-    msg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    msg_cols = _columns(conn, "messages")
     if "transcription_status" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN transcription_status TEXT")
     if "media_path" not in msg_cols:
@@ -178,10 +203,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # taps Send to Task-OS.
     if "task_exported_at" not in msg_cols:
         conn.execute("ALTER TABLE messages ADD COLUMN task_exported_at TEXT")
+
+
+def _migrate_sync_log(conn: sqlite3.Connection) -> None:
     # Multi-source sync visibility: keep the ``source`` operation tag
     # (scan/resync/reprocess) and add which connector ran plus its outcome.
     # Defaults make every older row a successful WhatsApp sync.
-    sync_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sync_log)")}
+    sync_cols = _columns(conn, "sync_log")
     if "connector_source" not in sync_cols:
         conn.execute(
             "ALTER TABLE sync_log ADD COLUMN connector_source "

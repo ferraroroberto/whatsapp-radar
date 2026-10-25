@@ -69,6 +69,82 @@ def _backup_db(conn: sqlite3.Connection, db_path: Path) -> Path:
     return backup
 
 
+def _canonical_id(
+    bindings: Sequence[ConnectorBinding], source: str, source_id: str
+) -> str:
+    """Map an old ``source_chat_id`` through its connector's current canonicalization."""
+    binding = next((item for item in bindings if item.source == source), None)
+    return (
+        binding.connector.canonical_source_id(source_id)
+        if binding is not None
+        else source_id
+    ) or source_id
+
+
+def _restore_chat_state(
+    conn: sqlite3.Connection,
+    bindings: Sequence[ConnectorBinding],
+    snapshot: Sequence[sqlite3.Row],
+    outcome: ReprocessOutcome,
+) -> None:
+    """Re-apply monitored/ignored status and aliases onto the rebuilt chats."""
+    for row in snapshot:
+        source = row["source"]
+        old_source = row["source_chat_id"]
+        status = row["status"]
+        alias = row["alias"]
+        new_source = _canonical_id(bindings, source, old_source)
+        chat_id = store.chat_id_for_source(conn, new_source, source=source)
+        if chat_id is None:
+            outcome.unmapped.append(f"{source}:{old_source}")
+            continue
+        if status == "monitored":
+            store.set_chat_status(conn, chat_id, "monitored")
+            # Re-baseline so the first post-rebuild review skips the backlog.
+            store.baseline_cursor(conn, chat_id)
+            outcome.monitored_preserved += 1
+        elif status == "ignored":
+            store.set_chat_status(conn, chat_id, "ignored")
+            outcome.ignored_preserved += 1
+        if alias:
+            store.set_chat_alias(conn, chat_id, alias)
+            outcome.aliases_preserved += 1
+
+
+def _restore_links(
+    conn: sqlite3.Connection,
+    bindings: Sequence[ConnectorBinding],
+    snapshot: Sequence[sqlite3.Row],
+    outcome: ReprocessOutcome,
+) -> None:
+    """Re-apply parent↔child links in a second pass, after every chat's id and
+    state exist in the rebuilt cache. Both sides are mapped through the
+    connector's canonicalization; a link the rebuilt topology no longer permits
+    (e.g. either end vanished, or it would now form a chain) is silently dropped.
+    """
+    for row in snapshot:
+        parent_source = row["parent_source_chat_id"]
+        if not parent_source:
+            continue
+        child_kind = row["source"]
+        parent_kind = row["parent_source"]
+        child_source = _canonical_id(bindings, child_kind, row["source_chat_id"])
+        new_parent_source = _canonical_id(bindings, parent_kind, parent_source)
+        child_id = store.chat_id_for_source(conn, child_source, source=child_kind)
+        parent_id = store.chat_id_for_source(
+            conn,
+            new_parent_source,
+            source=parent_kind,
+        )
+        if child_id is None or parent_id is None or child_id == parent_id:
+            continue
+        try:
+            store.link_chats(conn, child_id, parent_id)
+            outcome.links_preserved += 1
+        except store.LinkError:
+            continue
+
+
 def reprocess(
     conn: sqlite3.Connection,
     connector: MessageConnector | Sequence[ConnectorBinding],
@@ -125,77 +201,8 @@ def reprocess(
         messages_after=store.message_count_total(conn),
     )
 
-    for row in snapshot:
-        source = row["source"]
-        old_source = row["source_chat_id"]
-        status = row["status"]
-        alias = row["alias"]
-        restore_binding = next(
-            (item for item in bindings if item.source == source),
-            None,
-        )
-        new_source = (
-            restore_binding.connector.canonical_source_id(old_source)
-            if restore_binding is not None
-            else old_source
-        ) or old_source
-        chat_id = store.chat_id_for_source(conn, new_source, source=source)
-        if chat_id is None:
-            outcome.unmapped.append(f"{source}:{old_source}")
-            continue
-        if status == "monitored":
-            store.set_chat_status(conn, chat_id, "monitored")
-            # Re-baseline so the first post-rebuild review skips the backlog.
-            store.baseline_cursor(conn, chat_id)
-            outcome.monitored_preserved += 1
-        elif status == "ignored":
-            store.set_chat_status(conn, chat_id, "ignored")
-            outcome.ignored_preserved += 1
-        if alias:
-            store.set_chat_alias(conn, chat_id, alias)
-            outcome.aliases_preserved += 1
-
-    # Re-apply parent↔child links in a second pass, after every chat's id and
-    # state exist in the rebuilt cache. Both sides are mapped through the
-    # connector's canonicalization; a link the rebuilt topology no longer permits
-    # (e.g. either end vanished, or it would now form a chain) is silently dropped.
-    for row in snapshot:
-        parent_source = row["parent_source_chat_id"]
-        if not parent_source:
-            continue
-        child_kind = row["source"]
-        parent_kind = row["parent_source"]
-        child_binding = next(
-            (item for item in bindings if item.source == child_kind),
-            None,
-        )
-        parent_binding = next(
-            (item for item in bindings if item.source == parent_kind),
-            None,
-        )
-        child_source = (
-            child_binding.connector.canonical_source_id(row["source_chat_id"])
-            if child_binding is not None
-            else row["source_chat_id"]
-        ) or row["source_chat_id"]
-        new_parent_source = (
-            parent_binding.connector.canonical_source_id(parent_source)
-            if parent_binding is not None
-            else parent_source
-        ) or parent_source
-        child_id = store.chat_id_for_source(conn, child_source, source=child_kind)
-        parent_id = store.chat_id_for_source(
-            conn,
-            new_parent_source,
-            source=parent_kind,
-        )
-        if child_id is None or parent_id is None or child_id == parent_id:
-            continue
-        try:
-            store.link_chats(conn, child_id, parent_id)
-            outcome.links_preserved += 1
-        except store.LinkError:
-            continue
+    _restore_chat_state(conn, bindings, snapshot, outcome)
+    _restore_links(conn, bindings, snapshot, outcome)
 
     return outcome
 

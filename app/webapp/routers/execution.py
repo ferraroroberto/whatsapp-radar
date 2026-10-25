@@ -165,6 +165,48 @@ async def start_execution_run(request: Request) -> dict[str, Any]:
     return started
 
 
+def _probe_source(binding: Any) -> tuple[Any, str | None]:
+    """Connect one source, returning its status and (Gmail only) a masked account."""
+    try:
+        status = binding.connector.connect()
+        account = None
+        if isinstance(binding.connector, GmailConnector) and status.connected:
+            profile = binding.connector.profile()
+            account = profile.masked_email_address
+    except Exception as exc:
+        status = binding.connector.status()
+        status = type(status)(
+            status.name,
+            False,
+            f"status probe failed ({type(exc).__name__})",
+        )
+        account = None
+    finally:
+        binding.connector.stop()
+    return status, account
+
+
+def _gmail_health_extras(cfg: Any, status: Any, account: str | None) -> dict[str, Any]:
+    whitelist = {
+        "senders": [
+            {"address": sender.address, "name": sender.name}
+            for sender in cfg.gmail.senders
+        ],
+        "labels": [
+            {"name": label.name, "display_name": label.display_name}
+            for label in cfg.gmail.labels
+        ],
+    }
+    return {
+        "read_only": True,
+        "account": account,
+        "token_present": cfg.gmail.token_path.is_file(),
+        "whitelist": whitelist,
+        "whitelist_valid": status.connected,
+        "history_scope": "All messages matching the whitelist; no lookback limit.",
+    }
+
+
 @router.get("/api/execution/health")
 def execution_health(request: Request) -> dict[str, Any]:
     """Truthful, secret-free status for every configured message source.
@@ -181,22 +223,7 @@ def execution_health(request: Request) -> dict[str, Any]:
         syncs = [dict(row) for row in store.recent_syncs(conn, 100)]
         statuses = []
         for binding in build_connectors(cfg):
-            try:
-                status = binding.connector.connect()
-                account = None
-                if isinstance(binding.connector, GmailConnector) and status.connected:
-                    profile = binding.connector.profile()
-                    account = profile.masked_email_address
-            except Exception as exc:
-                status = binding.connector.status()
-                status = type(status)(
-                    status.name,
-                    False,
-                    f"status probe failed ({type(exc).__name__})",
-                )
-                account = None
-            finally:
-                binding.connector.stop()
+            status, account = _probe_source(binding)
 
             source_syncs = [row for row in syncs if row["connector_source"] == binding.source]
             last_attempt = source_syncs[0] if source_syncs else None
@@ -225,26 +252,7 @@ def execution_health(request: Request) -> dict[str, Any]:
                 "last_success": last_success,
             }
             if binding.source == "gmail":
-                whitelist = {
-                    "senders": [
-                        {"address": sender.address, "name": sender.name}
-                        for sender in cfg.gmail.senders
-                    ],
-                    "labels": [
-                        {"name": label.name, "display_name": label.display_name}
-                        for label in cfg.gmail.labels
-                    ],
-                }
-                item.update(
-                    {
-                        "read_only": True,
-                        "account": account,
-                        "token_present": cfg.gmail.token_path.is_file(),
-                        "whitelist": whitelist,
-                        "whitelist_valid": status.connected,
-                        "history_scope": "All messages matching the whitelist; no lookback limit.",
-                    }
-                )
+                item.update(_gmail_health_extras(cfg, status, account))
             statuses.append(item)
         # Overall health reflects the *message* sources only; the calendar row is
         # a read-only, non-ingesting source appended for visibility.

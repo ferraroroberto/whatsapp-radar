@@ -817,7 +817,13 @@ def test_the_planner_module_still_contains_no_calendar_writes() -> None:
     test (tests/test_travel_blocks_write.py) pins the guard around the delete.
     """
     root = Path(__file__).resolve().parents[1]
-    for relative in ("src/family/travel_blocks.py", "src/family/calendar_scan.py"):
+    for relative in (
+        "src/family/travel_blocks.py",
+        "src/family/travel_blocks_model.py",
+        "src/family/travel_blocks_pricing.py",
+        "src/family/travel_blocks_reconcile.py",
+        "src/family/calendar_scan.py",
+    ):
         source = (root / relative).read_text(encoding="utf-8")
         for forbidden in ("insert_event", "delete_event", "calendar_write"):
             assert forbidden not in source, f"{relative} must not write to a calendar"

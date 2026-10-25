@@ -1,10 +1,16 @@
 """Desired-state planner + reconcile for auto-written commute travel blocks.
 
-Everything above the "Routes pricing" divider is **pure**, like
+Everything here except the sweep's pricing call is **pure**, like
 :mod:`src.family.rules`: no I/O, no network, no Google client, no filesystem.
 It is a function of the events already fetched plus a mapping of leg durations
 supplied by the caller — so the calendar reconcile can be
 tested and reasoned about separately from *which blocks should exist*.
+
+The planner is spread over four modules, each re-exported from here so callers
+keep one import path: :mod:`src.family.travel_blocks_model` (marker vocabulary
+and leg types), :mod:`src.family.travel_blocks_reconcile` (existing blocks and
+the diff), :mod:`src.family.travel_blocks_pricing` (the Routes edge) and this
+module (the desired-state planner and the sweep that ties them together).
 
 The computation is deliberately split in four:
 
@@ -34,199 +40,137 @@ what does exist, and the difference. :mod:`src.family.travel_blocks_write` owns
 the whole write side — the insert, the marker-guarded delete and its backup —
 so a delete can never be issued from the module that also decides the plan.
 
-This module also owns the product-specific marker vocabulary. ``calendar_readonly``
-stays product-neutral and only transports the ``extendedProperties.private`` map;
-knowing that ``wr_travel_block`` means "we wrote this" belongs here.
+The product-specific marker vocabulary lives in
+:mod:`src.family.travel_blocks_model`. ``calendar_readonly`` stays
+product-neutral and only transports the ``extendedProperties.private`` map;
+knowing that ``wr_travel_block`` means "we wrote this" belongs to this feature.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from datetime import datetime, timedelta
+from typing import Any
 
 import requests
 from calendar_readonly.core import CalendarEvent
 
 from src.config import Config
 from src.family import rules
-from src.traffic import RouteResult, TrafficReadError, compute_route
+from src.family.travel_blocks_model import (
+    HASH_KEY,
+    LEG_KEY,
+    LEG_OUTBOUND,
+    LEG_RETURN,
+    MARKER_FILTER,
+    MARKER_KEY,
+    MARKER_VALUE,
+    SCHEMA_VERSION,
+    SCHEMA_VERSION_KEY,
+    SOURCE_EVENT_KEY,
+    LegRequest,
+    PlannedLeg,
+    block_marker,
+    content_hash,
+    is_travel_block,
+    leg_key,
+)
+from src.family.travel_blocks_pricing import (
+    FAILURE_ANCHOR_IN_THE_PAST,
+    FAILURE_BLOCKS_UNREADABLE,
+    FAILURE_ROUTES_ERROR,
+    STATUS_DISABLED,
+    STATUS_NO_HOME_ADDRESS,
+    STATUS_NO_ROUTES_API_KEY,
+    STATUS_OK,
+    LegFailure,
+    PricedLegs,
+    RouteFn,
+    price_legs,
+)
+from src.family.travel_blocks_reconcile import (
+    _PROTECT_DETAIL,
+    DELETE_REASON_DUPLICATE,
+    DELETE_REASON_ORPHANED,
+    DELETE_REASON_REPLACED,
+    PROTECT_REASON_BEYOND_HORIZON,
+    PROTECT_REASON_START_UNKNOWN,
+    PROTECT_REASON_UNPLANNED_LEG,
+    ExistingBlock,
+    ExistingBlocks,
+    PlannedDelete,
+    ProtectedBlock,
+    Reconciliation,
+    block_start_moment,
+    build_block_event,
+    carries_marker,
+    parse_existing_block,
+    reconcile,
+)
+from src.traffic import compute_route
 
 logger = logging.getLogger(__name__)
 
-# --------------------------------------------------------------- marker vocabulary
-
-#: ``extendedProperties.private`` keys stamped on every block we write, and the
-#: `privateExtendedProperty` filter the reconcile step queries with.
-MARKER_KEY = "wr_travel_block"
-MARKER_VALUE = "1"
-SOURCE_EVENT_KEY = "wr_source_event_id"
-LEG_KEY = "wr_leg"
-SCHEMA_VERSION_KEY = "wr_schema_version"
-HASH_KEY = "wr_hash"
-
-#: The ``privateExtendedProperty`` filter the reconcile lists with. Server-side,
-#: so a human's event is never even fetched — the first line of defence for a
-#: feature that can delete, and the reason it belongs at the query rather than
-#: in a post-filter. ``calendar_readonly`` transports it without knowing it.
-MARKER_FILTER = f"{MARKER_KEY}={MARKER_VALUE}"
-
-#: Bumped when the block *shape* changes in a way that must force a rewrite of
-#: already-written blocks. It is part of :func:`content_hash`, so a bump makes
-#: every existing block's stored hash mismatch and the reconcile re-issues it.
-SCHEMA_VERSION = "1"
-
-LEG_OUTBOUND = "outbound"
-LEG_RETURN = "return"
-
-
-def is_travel_block(event: CalendarEvent) -> bool:
-    """True when this event is one of *our* travel blocks — the feedback-loop guard.
-
-    A travel block is a real event on a real calendar: on the next sweep the
-    read path hands it straight back, where it has a physical ``location``,
-    passes :func:`~src.family.rules.requires_commute`, and would become both a
-    commute leg of its own *and* a candidate origin for the following event.
-    Left unguarded the sweep feeds on its own output.
-
-    The guard is applied **once, at the read seam**
-    (:func:`src.family.calendar_source.fetch_events_by_person`) rather than at
-    each of the five consumers (``event_decisions``, ``find_missing_locations``,
-    ``find_conflicts``, ``find_overlaps``, ``upcoming_commutes``). One filter
-    cannot be forgotten by a future caller; five can. Do not "restore"
-    per-consumer filtering — it would be redundant and would rot.
-
-    The reconcile step still sees our blocks: it fetches them separately via
-    ``events.list(privateExtendedProperty="wr_travel_block=1")``, which never
-    goes through that seam.
-    """
-    return event.extended_private.get(MARKER_KEY) == MARKER_VALUE
-
-
-# --------------------------------------------------------------- desired state
-
-
-@dataclass(frozen=True)
-class LegRequest:
-    """One leg that *should* exist, still waiting for its duration.
-
-    ``anchor`` is the moment the duration must be priced for, and its meaning
-    differs by leg: for an outbound it is the *arrival* time (the source
-    event's start), for a return it is the *departure* time (the source event's
-    end). Traffic depends on the clock, so pricing a 09:00 arrival at 07:00 is
-    the whole point of carrying it.
-
-    ``next_gap_min`` / ``next_outbound_key`` are the adjacency facts a return
-    leg needs for the home-dwell decision. They stay unresolved here because
-    the threshold is a function of durations (see :func:`chains_directly`).
-    ``next_gap_min is None`` means there is no following commuting event at
-    all, so the person definitely goes home. A gap *with* a ``None``
-    ``next_outbound_key`` is the A→A case — the next event is at this same
-    destination, so chaining onto it costs no drive.
-    """
-
-    person: str
-    calendar_id: str
-    leg: str  # LEG_OUTBOUND | LEG_RETURN
-    source_event_id: str
-    origin: str
-    destination: str
-    anchor: datetime
-    source_start: datetime
-    source_end: datetime
-    next_gap_min: float | None = None
-    next_outbound_key: str | None = None
-
-    @property
-    def key(self) -> str:
-        """Stable identity used to look a duration up in the ``durations`` mapping."""
-        return leg_key(self.calendar_id, self.source_event_id, self.leg)
-
-
-@dataclass(frozen=True)
-class PlannedLeg:
-    """A concrete, time-boxed block ready to be written (or diffed against)."""
-
-    person: str
-    calendar_id: str
-    leg: str  # LEG_OUTBOUND | LEG_RETURN
-    source_event_id: str
-    origin: str
-    destination: str
-    start: datetime
-    end: datetime
-    source_start: datetime
-    source_end: datetime
-    minutes: int
-
-    @property
-    def key(self) -> str:
-        return leg_key(self.calendar_id, self.source_event_id, self.leg)
-
-    @property
-    def content_hash(self) -> str:
-        return content_hash(
-            origin=self.origin,
-            destination=self.destination,
-            source_start=self.source_start,
-            source_end=self.source_end,
-            minutes=self.minutes,
-        )
-
-
-def leg_key(calendar_id: str, source_event_id: str, leg: str) -> str:
-    """The one spelling of a leg's identity, shared by request and planned leg.
-
-    ``calendar_id`` is part of it because two household members invited to the
-    same event carry the same Google event id on their own calendars.
-    """
-    return f"{calendar_id}::{source_event_id}::{leg}"
-
-
-def content_hash(
-    *,
-    origin: str,
-    destination: str,
-    source_start: datetime,
-    source_end: datetime,
-    minutes: int,
-) -> str:
-    """Stable digest of everything a written block encodes.
-
-    Lets the reconcile step tell "unchanged" from "needs rewrite" by
-    comparing against the hash stamped on the existing block, without
-    re-deriving the plan. ``sha256`` rather than :func:`hash` because it must be
-    stable *across processes* — Python's string hashing is salted per run.
-    :data:`SCHEMA_VERSION` is part of the payload so bumping it invalidates
-    every previously-written block by construction.
-    """
-    payload = "\x1f".join([
-        SCHEMA_VERSION,
-        origin,
-        destination,
-        source_start.isoformat(),
-        source_end.isoformat(),
-        str(int(minutes)),
-    ])
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-
-
-def block_marker(leg: PlannedLeg) -> dict[str, str]:
-    """The ``extendedProperties.private`` map to stamp on ``leg``'s calendar event.
-
-    Kept here rather than in the writer so the marker this module *recognizes*
-    (:func:`is_travel_block`) and the marker it *emits* can never drift apart.
-    """
-    return {
-        MARKER_KEY: MARKER_VALUE,
-        SOURCE_EVENT_KEY: leg.source_event_id,
-        LEG_KEY: leg.leg,
-        SCHEMA_VERSION_KEY: SCHEMA_VERSION,
-        HASH_KEY: leg.content_hash,
-    }
+# The names defined in the sibling modules stay importable from here, so callers
+# keep one import path for the whole planner.
+__all__ = [
+    "DELETE_REASON_DUPLICATE",
+    "DELETE_REASON_ORPHANED",
+    "DELETE_REASON_REPLACED",
+    "FAILURE_ANCHOR_IN_THE_PAST",
+    "FAILURE_BLOCKS_UNREADABLE",
+    "FAILURE_ROUTES_ERROR",
+    "HASH_KEY",
+    "LEG_KEY",
+    "LEG_OUTBOUND",
+    "LEG_RETURN",
+    "MARKER_FILTER",
+    "MARKER_KEY",
+    "MARKER_VALUE",
+    "PROTECT_REASON_BEYOND_HORIZON",
+    "PROTECT_REASON_START_UNKNOWN",
+    "PROTECT_REASON_UNPLANNED_LEG",
+    "SCHEMA_VERSION",
+    "SCHEMA_VERSION_KEY",
+    "SOURCE_EVENT_KEY",
+    "STATUS_DISABLED",
+    "STATUS_NO_HOME_ADDRESS",
+    "STATUS_NO_ROUTES_API_KEY",
+    "STATUS_OK",
+    "ExistingBlock",
+    "ExistingBlocks",
+    "LegFailure",
+    "LegRequest",
+    "PlannedDelete",
+    "PlannedLeg",
+    "PricedLegs",
+    "ProtectedBlock",
+    "Reconciliation",
+    "RouteFn",
+    "TravelBlockPlan",
+    "block_marker",
+    "block_start_moment",
+    "build_block_event",
+    "build_planned_legs",
+    "carries_marker",
+    "chains_directly",
+    "content_hash",
+    "desired_legs",
+    "empty_plan",
+    "gate_status",
+    "is_travel_block",
+    "leg_key",
+    "log_plan",
+    "parse_existing_block",
+    "plan_travel_blocks",
+    "price_legs",
+    "reconcile",
+    "scan_window_days",
+    "travel_block_horizon",
+    "travel_block_listing_end",
+]
 
 
 def _drive_destination(
@@ -250,6 +194,85 @@ def _drive_destination(
     if not rules.requires_commute(event, home_address):
         return None
     return rules.physical_location(event)
+
+
+def _outbound_requests(
+    person: str,
+    placed: Sequence[tuple[CalendarEvent, str]],
+    person_events: list[CalendarEvent],
+    *,
+    home_address: str,
+    origin_lookback_min: int,
+) -> list[LegRequest]:
+    """Outbound leg request for each placed event that needs a drive."""
+    requests: list[LegRequest] = []
+    for event, destination in placed:
+        origin = rules.resolve_origin(
+            event,
+            person_events,
+            home_address=home_address,
+            lookback_min=origin_lookback_min,
+        )
+        # A→A: already at the destination, nothing to drive.
+        if rules.same_address(origin, destination):
+            continue
+        request = LegRequest(
+            person=person,
+            calendar_id=event.calendar_id,
+            leg=LEG_OUTBOUND,
+            source_event_id=event.event_id,
+            origin=origin,
+            destination=destination,
+            anchor=event.start,  # an arrival time
+            source_start=event.start,
+            source_end=event.end,
+        )
+        requests.append(request)
+    return requests
+
+
+def _return_requests(
+    person: str,
+    placed: Sequence[tuple[CalendarEvent, str]],
+    outbound_by_event: Mapping[str, LegRequest],
+    *,
+    home_address: str,
+) -> list[LegRequest]:
+    """Return-home candidates, each pointing at the next commuting event.
+
+    The next event's own outbound block would cover the hop if the person
+    chains straight on instead of going home. Note the adjacency is to the next
+    *event*, not the next outbound: two events back-to-back at the same address
+    produce no outbound between them, yet the person plainly does not go home
+    either.
+    """
+    requests: list[LegRequest] = []
+    for index, (event, destination) in enumerate(placed):
+        next_event = next(
+            (later for later, _ in placed[index + 1 :] if later.start >= event.end),
+            None,
+        )
+        gap_min: float | None = None
+        next_outbound: LegRequest | None = None
+        if next_event is not None:
+            gap_min = (next_event.start - event.end).total_seconds() / 60.0
+            next_outbound = outbound_by_event.get(next_event.event_id)
+        requests.append(
+            LegRequest(
+                person=person,
+                calendar_id=event.calendar_id,
+                leg=LEG_RETURN,
+                source_event_id=event.event_id,
+                origin=destination,
+                destination=home_address,
+                anchor=event.end,  # a departure time
+                source_start=event.start,
+                source_end=event.end,
+                next_gap_min=gap_min,
+                next_outbound_key=None if next_outbound is None else next_outbound.key,
+            )
+        )
+    return requests
 
 
 def desired_legs(
@@ -298,62 +321,18 @@ def desired_legs(
                 placed.append((event, destination))
         placed.sort(key=lambda pair: pair[0].start)
 
-        outbound_by_event: dict[str, LegRequest] = {}
-        for event, destination in placed:
-            origin = rules.resolve_origin(
-                event,
-                person_events,
-                home_address=home_address,
-                lookback_min=origin_lookback_min,
-            )
-            # A→A: already at the destination, nothing to drive.
-            if rules.same_address(origin, destination):
-                continue
-            request = LegRequest(
-                person=person,
-                calendar_id=event.calendar_id,
-                leg=LEG_OUTBOUND,
-                source_event_id=event.event_id,
-                origin=origin,
-                destination=destination,
-                anchor=event.start,  # an arrival time
-                source_start=event.start,
-                source_end=event.end,
-            )
-            outbound_by_event[event.event_id] = request
-            requests.append(request)
-
-        # Return legs are computed in a second pass so each one can point at the
-        # *next* commuting event — whose own outbound block would cover the hop
-        # if the person chains straight on instead of going home. Note the
-        # adjacency is to the next *event*, not the next outbound: two events
-        # back-to-back at the same address produce no outbound between them, yet
-        # the person plainly does not go home either.
-        for index, (event, destination) in enumerate(placed):
-            next_event = next(
-                (later for later, _ in placed[index + 1 :] if later.start >= event.end),
-                None,
-            )
-            gap_min: float | None = None
-            next_outbound: LegRequest | None = None
-            if next_event is not None:
-                gap_min = (next_event.start - event.end).total_seconds() / 60.0
-                next_outbound = outbound_by_event.get(next_event.event_id)
-            requests.append(
-                LegRequest(
-                    person=person,
-                    calendar_id=event.calendar_id,
-                    leg=LEG_RETURN,
-                    source_event_id=event.event_id,
-                    origin=destination,
-                    destination=home_address,
-                    anchor=event.end,  # a departure time
-                    source_start=event.start,
-                    source_end=event.end,
-                    next_gap_min=gap_min,
-                    next_outbound_key=None if next_outbound is None else next_outbound.key,
-                )
-            )
+        outbound = _outbound_requests(
+            person,
+            placed,
+            person_events,
+            home_address=home_address,
+            origin_lookback_min=origin_lookback_min,
+        )
+        requests.extend(outbound)
+        outbound_by_event = {request.source_event_id: request for request in outbound}
+        requests.extend(
+            _return_requests(person, placed, outbound_by_event, home_address=home_address)
+        )
     return requests
 
 
@@ -460,558 +439,6 @@ def _is_chained(
         drive_out_min = float(priced)
     return chains_directly(
         request.next_gap_min, drive_home_min, drive_out_min, min_home_dwell_min
-    )
-
-
-# --------------------------------------------------------------- existing state & reconcile
-#
-# Still pure. Everything here is a function of "what should exist" (the planned
-# legs above) and "what does exist" (blocks handed in by the caller, fetched
-# through the marker-scoped query). No client, no filesystem, no network.
-
-#: Why a block is being removed. Reported per delete so the log and the payload
-#: can never say "deleted" without saying what made it stale.
-DELETE_REASON_REPLACED = "replaced"  # a desired leg exists, but its hash/schema differs
-DELETE_REASON_ORPHANED = "orphaned"  # no desired leg — source cancelled, moved or out of horizon
-DELETE_REASON_DUPLICATE = "duplicate"  # a second block for a leg already satisfied by another
-
-#: Why a block was left exactly as it is instead of being removed. Reported per
-#: block for the same reason a delete carries a reason: "left alone" without a
-#: why is as unaccountable as "deleted" without one, and the three cases are
-#: genuinely different facts about what this sweep managed to establish.
-PROTECT_REASON_UNPLANNED_LEG = "leg_not_planned"  # its leg could not be planned this sweep
-PROTECT_REASON_BEYOND_HORIZON = "beyond_planning_horizon"  # seen only via the padded read
-PROTECT_REASON_START_UNKNOWN = "start_not_established"  # cannot tell which side of the plan it is
-
-_PROTECT_DETAIL = {
-    PROTECT_REASON_UNPLANNED_LEG: (
-        "its leg could not be planned this sweep, so nothing is known about whether it is "
-        "still right"
-    ),
-    PROTECT_REASON_BEYOND_HORIZON: (
-        "it starts past the planning horizon, where the sweep computes no desired state, so "
-        "'no desired counterpart' says nothing about it"
-    ),
-    PROTECT_REASON_START_UNKNOWN: (
-        "its start could not be read, so it cannot be placed inside or outside the planning "
-        "horizon"
-    ),
-}
-
-
-@dataclass(frozen=True)
-class ExistingBlock:
-    """One block *we* already wrote, as read back from the calendar.
-
-    ``resource`` is the complete fetched event resource, kept verbatim for two
-    reasons that both matter more than tidiness: it is what the pre-delete
-    backup persists, and it is what the delete guard re-checks the marker on.
-    Carrying the resource (rather than a bare event id) is what makes
-    :meth:`src.family.travel_blocks_write.TravelBlockWriter.delete_block`
-    *able* to refuse — an id alone would leave nothing to verify.
-
-    Excluded from equality so two parses of the same block compare equal and
-    the record stays hashable.
-    """
-
-    calendar_id: str
-    event_id: str
-    source_event_id: str
-    leg: str
-    schema_version: str
-    stored_hash: str
-    start: str = ""
-    resource: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
-
-    @property
-    def key(self) -> str:
-        """Same identity as the planned leg's — the join column of the diff."""
-        return leg_key(self.calendar_id, self.source_event_id, self.leg)
-
-
-@dataclass(frozen=True)
-class ExistingBlocks:
-    """What the reconcile knows about the calendars' current contents.
-
-    ``unreadable`` maps a calendar id to why its marked-block listing failed.
-    Such a calendar is **not** "empty": planning adds against an unknown current
-    state would duplicate every block on it. It gets its own reportable failure
-    (:data:`FAILURE_BLOCKS_UNREADABLE`) and is left entirely alone for the run —
-    the ``CLAUDE.md`` rule that an unestablished fact is never folded into a
-    passing one, applied to the riskiest place it could be folded.
-    """
-
-    blocks: tuple[ExistingBlock, ...] = ()
-    unreadable: Mapping[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class PlannedDelete:
-    """One existing block the reconcile wants gone, and the reason it is stale."""
-
-    block: ExistingBlock
-    reason: str
-
-
-@dataclass(frozen=True)
-class ProtectedBlock:
-    """One existing block left exactly as it is, and the reason it was not judged.
-
-    Deliberately shaped like :class:`PlannedDelete`: both are "a block plus why",
-    and a protection that could not say *which* unestablished fact spared it
-    would be the silent pass ``CLAUDE.md`` forbids. ``reason`` is one of the
-    ``PROTECT_REASON_*`` constants.
-    """
-
-    block: ExistingBlock
-    reason: str
-
-
-@dataclass(frozen=True)
-class Reconciliation:
-    """The four-way diff: what to insert, what to remove, and what to leave alone.
-
-    ``keeps`` is the whole point of the exercise. Identical desired state must
-    cost **zero** API writes, so an unchanged block is neither re-inserted nor
-    touched — it is only counted.
-
-    ``protected`` is the *other* kind of "leave alone": a block about which this
-    sweep established nothing — either its leg could not be planned, or it sits
-    outside the window the plan was computed for. It is reported rather than
-    acted on — never a keep (nothing verified it) and never a delete (nothing
-    said it was stale).
-    """
-
-    adds: list[PlannedLeg]
-    deletes: list[PlannedDelete]
-    keeps: list[ExistingBlock]
-    protected: list[ProtectedBlock] = field(default_factory=list)
-
-
-def parse_existing_block(raw: Mapping[str, Any], *, calendar_id: str) -> ExistingBlock | None:
-    """Read one fetched resource back into an :class:`ExistingBlock`, or ``None``.
-
-    Refuses anything without our marker even though the listing query already
-    filtered on it: this is the only constructor of the record the delete path
-    accepts, so making it marker-checking means an unmarked resource can never
-    reach a delete decision in the first place. A resource with no id is
-    likewise refused — there would be nothing to delete or to name in a backup.
-    """
-    private = _private_properties(raw)
-    if private.get(MARKER_KEY) != MARKER_VALUE:
-        logger.warning(
-            "⚠️ travel blocks: ignoring calendar event %r returned by the %s query without "
-            "the marker — it is not ours and will never be touched",
-            raw.get("id"),
-            MARKER_FILTER,
-        )
-        return None
-    event_id = str(raw.get("id") or "")
-    if not event_id:
-        logger.warning("⚠️ travel blocks: ignoring a marked event with no id")
-        return None
-    start = raw.get("start") or {}
-    return ExistingBlock(
-        calendar_id=calendar_id,
-        event_id=event_id,
-        source_event_id=private.get(SOURCE_EVENT_KEY, ""),
-        leg=private.get(LEG_KEY, ""),
-        schema_version=private.get(SCHEMA_VERSION_KEY, ""),
-        stored_hash=private.get(HASH_KEY, ""),
-        start=str(start.get("dateTime") or start.get("date") or "")
-        if isinstance(start, Mapping)
-        else "",
-        resource=dict(raw),
-    )
-
-
-def _private_properties(raw: Mapping[str, Any]) -> dict[str, str]:
-    """``extendedProperties.private`` as ``{str: str}``; ``{}`` when absent or malformed."""
-    node = raw.get("extendedProperties")
-    private = node.get("private") if isinstance(node, Mapping) else None
-    if not isinstance(private, Mapping):
-        return {}
-    return {str(key): str(value) for key, value in private.items()}
-
-
-def carries_marker(raw: Mapping[str, Any]) -> bool:
-    """Whether a raw event resource carries our marker — the delete guard's predicate.
-
-    The resource-level twin of :func:`is_travel_block` (which reads a normalized
-    :class:`~calendar_readonly.core.CalendarEvent`). Both spell the same rule
-    once, here, next to the marker constants they check.
-    """
-    return _private_properties(raw).get(MARKER_KEY) == MARKER_VALUE
-
-
-def block_start_moment(block: ExistingBlock) -> datetime | None:
-    """``block``'s start as an aware datetime, or ``None`` when it cannot be established.
-
-    Every block this app writes carries a ``dateTime`` start with an offset, so
-    the ``None`` branches are the can't-happen ones — an all-day ``date`` start,
-    an absent start, an unparseable string. They are still answered as ``None``
-    rather than coerced to a moment, because the one caller uses this to decide
-    whether a block may be *deleted*: a guessed position is exactly the kind of
-    unestablished fact that must not be folded into a decision.
-    """
-    raw = block.start
-    if not raw:
-        return None
-    try:
-        moment = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    # A naive moment (an all-day `date`, or a start without an offset) cannot be
-    # compared with the aware horizon at all — comparing would raise, and
-    # assuming a timezone would invent the very fact that is missing.
-    return moment if moment.tzinfo is not None else None
-
-
-def _protect_reason_beyond_plan(block: ExistingBlock, plan_end: datetime) -> str | None:
-    """Why ``block`` must be spared the orphan sweep, or ``None`` when it is fair game.
-
-    Only ever consulted for a block with **no desired counterpart**. Inside the
-    planning window that means "nothing wants this any more"; at or after
-    ``plan_end`` it means nothing was ever computed about it, because the
-    listing deliberately reads further than the plan does. The two must
-    not produce the same decision.
-    """
-    moment = block_start_moment(block)
-    if moment is None:
-        return PROTECT_REASON_START_UNKNOWN
-    return PROTECT_REASON_BEYOND_HORIZON if moment >= plan_end else None
-
-
-def reconcile(
-    desired: Sequence[PlannedLeg],
-    existing: Sequence[ExistingBlock],
-    *,
-    plan_end: datetime,
-    protected: Collection[str] = (),
-) -> Reconciliation:
-    """Diff desired against existing on ``(calendar, source event, leg)`` — pure.
-
-    Matching is on the leg key and *equality* is on the stored content hash, so:
-
-    * unchanged block → kept, zero writes;
-    * hash differs (the source event moved, or its location changed) → the old
-      block is deleted and the new one inserted, because Calendar's ``patch``
-      would leave a half-updated block behind if it failed midway;
-    * unrecognised :data:`SCHEMA_VERSION` → treated as changed, never as a keep.
-      A build that cannot vouch for a block's shape must not certify it;
-    * no desired counterpart, and it starts **inside** the planning window →
-      deleted (source cancelled, or out of horizon);
-    * no desired counterpart, but it starts at or after ``plan_end`` → left
-      strictly alone, reported as :data:`PROTECT_REASON_BEYOND_HORIZON`;
-    * a duplicate for an already-satisfied leg → deleted. Duplicates should not
-      happen, but a run interrupted between insert and its next sweep can leave
-      one, and quietly tolerating it would let them accumulate forever.
-
-    ``plan_end`` is where the *desired* state stops being computed — the
-    planning horizon's end — and it is required, with no default, for the same
-    reason ``existing`` is required one layer up. The listing that produced
-    ``existing`` deliberately reads **past** that moment (Calendar's
-    ``timeMax`` is exclusive on an event's *start*, so a return block for an
-    event ending after the horizon is otherwise never returned and gets
-    re-inserted on every sweep). Widening the read must not widen the plan: a
-    block found in that padded region has no desired counterpart simply because
-    nothing was computed out there, and reading that absence as "orphaned"
-    would delete correct blocks. Defaulting
-    ``plan_end`` to "no window" would default that guard off, which is the one
-    direction this feature may never fail in.
-
-    ``protected`` names the leg keys whose desired shape this sweep **failed to
-    establish** — every :class:`LegFailure` (see :func:`plan_travel_blocks`).
-    Those keys are excluded from the diff entirely, on both sides: their blocks
-    are neither re-added nor orphan-deleted, only reported in ``protected``.
-
-    This is the module's one guard against a horizon-wide delete. A leg that
-    failed to price is still *desired* — only its duration is missing — but
-    `desired` omits it, so its existing block matches nothing and the orphan
-    sweep below would delete it: one transient ``HTTP 429`` from Routes, or a
-    sweep run after the drive's departure moment, would wipe the horizon's blocks
-    and re-insert nothing. "We could not price it this minute" is not a delete
-    trigger; only a cancelled source event or one that left the horizon is.
-    Sibling of the :data:`FAILURE_BLOCKS_UNREADABLE` rule one layer up: an
-    unestablished fact gets its own reported state and never the passing one.
-    """
-    protected_keys = frozenset(protected)
-    by_key: dict[str, list[ExistingBlock]] = {}
-    protected_blocks: list[ProtectedBlock] = []
-    for block in existing:
-        if block.key in protected_keys:
-            protected_blocks.append(ProtectedBlock(block, PROTECT_REASON_UNPLANNED_LEG))
-            continue
-        by_key.setdefault(block.key, []).append(block)
-
-    adds: list[PlannedLeg] = []
-    deletes: list[PlannedDelete] = []
-    keeps: list[ExistingBlock] = []
-    for leg in desired:
-        # Belt and braces: a key cannot be both planned and failed today (one
-        # leg request yields a duration or a failure, never both), but if the
-        # two ever disagree the protected reading wins — leaving a calendar
-        # alone is the only choice that cannot destroy anything.
-        if leg.key in protected_keys:
-            continue
-        candidates = by_key.pop(leg.key, [])
-        match = next(
-            (
-                block
-                for block in candidates
-                if block.schema_version == SCHEMA_VERSION and block.stored_hash == leg.content_hash
-            ),
-            None,
-        )
-        if match is None:
-            adds.append(leg)
-            deletes.extend(PlannedDelete(block, DELETE_REASON_REPLACED) for block in candidates)
-            continue
-        keeps.append(match)
-        deletes.extend(
-            PlannedDelete(block, DELETE_REASON_DUPLICATE)
-            for block in candidates
-            if block is not match
-        )
-    for orphans in by_key.values():
-        for block in orphans:
-            spared = _protect_reason_beyond_plan(block, plan_end)
-            if spared is None:
-                deletes.append(PlannedDelete(block, DELETE_REASON_ORPHANED))
-            else:
-                protected_blocks.append(ProtectedBlock(block, spared))
-
-    deletes.sort(key=lambda pending: (pending.block.calendar_id, pending.block.start,
-                                      pending.block.event_id))
-    protected_blocks.sort(
-        key=lambda pending: (pending.block.calendar_id, pending.block.start, pending.block.event_id)
-    )
-    return Reconciliation(
-        adds=adds, deletes=deletes, keeps=keeps, protected=protected_blocks
-    )
-
-
-def build_block_event(leg: PlannedLeg, *, title_template: str) -> dict[str, Any]:
-    """The Calendar event resource to insert for ``leg``.
-
-    Deliberate choices, each of them a requirement rather than a preference:
-
-    * ``summary`` is the configured title verbatim and never the destination —
-      a shared calendar view must leak nothing about where the person is going.
-    * ``location`` **is** the destination address: tapping the block in Google
-      Calendar has to open navigation, which is most of the feature's value.
-      (``visibility: "private"`` is what keeps that from being shared.)
-    * ``opaque`` so the block actually defends the time as busy.
-    * reminders explicitly overridden to none — these are placeholders around
-      real events, and a notification for each one would be unusable.
-    """
-    return {
-        "summary": title_template,
-        "location": leg.destination,
-        "start": {"dateTime": leg.start.isoformat()},
-        "end": {"dateTime": leg.end.isoformat()},
-        "transparency": "opaque",
-        "visibility": "private",
-        "reminders": {"useDefault": False, "overrides": []},
-        "extendedProperties": {"private": block_marker(leg)},
-    }
-
-
-# --------------------------------------------------------------- Routes pricing (the I/O edge)
-#
-# Everything below this line talks to the network. The pure planner above never
-# imports it back, so `desired_legs` / `build_planned_legs` stay testable with a
-# plain dict of durations.
-
-#: A leg was dropped because the Routes call failed, was rejected, or returned
-#: no route. The fact could not be established — never a guessed duration.
-FAILURE_ROUTES_ERROR = "routes_error"
-#: A leg was dropped without calling Routes at all: its departure moment is in
-#: the past. Routes prices only future departures (verified live: a past
-#: ``departureTime`` is ``HTTP 400 "Timestamp must be set to a future time."``),
-#: and a block for a drive that already happened reserves nothing anyway.
-#:
-#: It reserves nothing, but it is also not *wrong*, and an afternoon sweep must
-#: not undo the morning's work: a block whose travel time has already passed is
-#: protected like any other unplannable leg and simply left where it is. That
-#: keeps re-running the scan unconditionally safe — the property the whole
-#: feature rests on — and there is deliberately no knob and no ``elapsed``
-#: delete reason to turn it back into a delete.
-FAILURE_ANCHOR_IN_THE_PAST = "anchor_in_the_past"
-#: A leg was priced but *not* planned as an add, because the blocks already on
-#: its calendar could not be listed. The current state being unknown, an
-#: add would risk duplicating a block that is already there — so the calendar is
-#: left untouched for this run and the leg says so out loud.
-FAILURE_BLOCKS_UNREADABLE = "existing_blocks_unreadable"
-
-STATUS_OK = "ok"
-STATUS_DISABLED = "disabled"
-STATUS_NO_ROUTES_API_KEY = "no_routes_api_key"
-STATUS_NO_HOME_ADDRESS = "no_home_address"
-
-
-class RouteFn(Protocol):
-    """The slice of :func:`~src.traffic.compute_route` this module depends on.
-
-    Injected rather than called directly so the sweep can be driven offline by a
-    stub — the whole test suite prices legs without a network or an API key.
-    """
-
-    def __call__(
-        self,
-        origin: str,
-        destination: str,
-        *,
-        api_key: str,
-        departure_time: datetime | None = ...,
-        session: requests.Session | None = ...,
-    ) -> RouteResult: ...
-
-
-@dataclass(frozen=True)
-class LegFailure:
-    """One leg that could not be priced, and why — its own reportable state.
-
-    A dropped leg must never be indistinguishable from "no commute needed":
-    silently writing nothing looks exactly like correctly deciding nothing was
-    needed, which is the failure mode ``CLAUDE.md`` forbids. ``reason`` is the
-    machine-readable discriminator (:data:`FAILURE_ROUTES_ERROR` /
-    :data:`FAILURE_ANCHOR_IN_THE_PAST`); ``detail`` is the privacy-safe text —
-    :class:`~src.traffic.TrafficReadError` messages never carry coordinates,
-    addresses or API keys.
-
-    ``calendar_id`` / ``source_event_id`` / ``leg`` let :func:`leg_key`
-    reconstruct the failed leg's key, which :func:`plan_travel_blocks` hands
-    ``reconcile`` as *protected*.
-    """
-
-    person: str
-    calendar_id: str
-    source_event_id: str
-    leg: str
-    reason: str
-    detail: str
-
-
-@dataclass(frozen=True)
-class PricedLegs:
-    """What one pricing sweep established: durations, non-facts, and its cost.
-
-    ``routes_calls`` counts *attempted* Routes calls after within-sweep dedup —
-    the number the per-leg billing is charged against. It is returned rather
-    than derived by the caller so the count can never drift from what actually
-    happened.
-    """
-
-    durations: dict[str, float]  # LegRequest.key -> minutes (unrounded)
-    failures: list[LegFailure]
-    routes_calls: int
-
-
-def _departure_anchor(request: LegRequest) -> datetime:
-    """The moment to price ``request`` as a *departure*.
-
-    Routes honours only ``departureTime`` for ``DRIVE`` (see
-    :func:`~src.traffic.routes_client.compute_route`), so an arrival-shaped call
-    would price a 09:00 school run at the 07:00 sweep's traffic.
-
-    A return leg's anchor already *is* a departure (the source event's end), so
-    it is exact. An outbound leg's anchor is an arrival (the source event's
-    start) and the true departure is one drive-length earlier — which is the
-    number being computed, so it cannot be known before the call. Pricing the
-    departure at the arrival moment costs one call and is wrong by at most the
-    drive's own length (typically 10-30 min), against being wrong by the whole
-    sweep-to-event distance (hours) if the moment were dropped. Refining it
-    would take a second call per leg, which the pricing design rules out.
-    """
-    return request.anchor
-
-
-def _call_key(request: LegRequest, anchor: datetime) -> tuple[str, str, str]:
-    """Identity of the Routes call a leg needs — the within-sweep dedup key.
-
-    Normalised to UTC whole minutes so two legs carrying different but
-    equivalent tz offsets still share one call. Two people driving the same
-    road at the same minute, or an outbound whose origin/destination/time
-    coincide with another leg's, are one billable call, not two.
-    """
-    minute = anchor.astimezone(UTC).replace(second=0, microsecond=0)
-    return (request.origin, request.destination, minute.isoformat())
-
-
-def price_legs(
-    leg_requests: Sequence[LegRequest],
-    *,
-    api_key: str,
-    now: datetime,
-    session: requests.Session | None = None,
-    route_fn: RouteFn = compute_route,
-) -> PricedLegs:
-    """Price every leg with one live traffic-aware Routes call — the I/O edge.
-
-    One call per distinct ``(origin, destination, departure minute)``: identical
-    legs within a sweep share a call, and a *failed* call is cached too, so a
-    repeated bad leg costs one attempt rather than one per occurrence.
-
-    A failure degrades that leg alone — the loop never aborts the sweep — and is
-    recorded as a :class:`LegFailure` instead of a duration, so
-    :func:`build_planned_legs` drops the leg rather than emitting a guessed or
-    zero-length block.
-    """
-    durations: dict[str, float] = {}
-    failures: list[LegFailure] = []
-    # Cached outcome per call key: minutes on success, None on failure (with the
-    # detail alongside), so both halves of the dedup contract hold.
-    outcomes: dict[tuple[str, str, str], tuple[float | None, str]] = {}
-    routes_calls = 0
-
-    for request in leg_requests:
-        anchor = _departure_anchor(request)
-        if anchor <= now:
-            failures.append(
-                _failure(
-                    request,
-                    FAILURE_ANCHOR_IN_THE_PAST,
-                    "departure moment has already passed; Routes prices only future departures",
-                )
-            )
-            continue
-        key = _call_key(request, anchor)
-        cached = outcomes.get(key)
-        if cached is None:
-            routes_calls += 1
-            try:
-                result = route_fn(
-                    request.origin,
-                    request.destination,
-                    api_key=api_key,
-                    departure_time=anchor,
-                    session=session,
-                )
-            except TrafficReadError as exc:
-                # Transport failure, non-200 (quota included) and an empty
-                # `routes` list all arrive here, already phrased privacy-safely.
-                cached = (None, str(exc))
-            else:
-                cached = (result.traffic_s / 60.0, "")
-            outcomes[key] = cached
-        minutes, detail = cached
-        if minutes is None:
-            failures.append(_failure(request, FAILURE_ROUTES_ERROR, detail))
-            continue
-        durations[request.key] = minutes
-
-    return PricedLegs(durations=durations, failures=failures, routes_calls=routes_calls)
-
-
-def _failure(request: LegRequest, reason: str, detail: str) -> LegFailure:
-    return LegFailure(
-        person=request.person,
-        calendar_id=request.calendar_id,
-        source_event_id=request.source_event_id,
-        leg=request.leg,
-        reason=reason,
-        detail=detail,
     )
 
 
@@ -1263,6 +690,49 @@ def scan_window_days(config: Config) -> int:
     return max(family.unknown_scan_days, family.assessment_days)
 
 
+def _price_sweep(
+    config: Config,
+    leg_requests: Sequence[LegRequest],
+    *,
+    now: datetime,
+    session: requests.Session | None,
+    route_fn: RouteFn,
+) -> PricedLegs:
+    # One pooled session for the whole sweep — a bare connection per leg would
+    # park an ephemeral port in TIME_WAIT for every block priced.
+    owned = session is None
+    http = session or requests.Session()
+    try:
+        return price_legs(
+            leg_requests,
+            api_key=config.traffic.api_key,
+            now=now,
+            session=http,
+            route_fn=route_fn,
+        )
+    finally:
+        if owned:
+            http.close()
+
+
+def _unreadable_failures(
+    legs: Sequence[PlannedLeg], existing: ExistingBlocks
+) -> list[LegFailure]:
+    """A failure per desired leg whose calendar's own blocks could not be listed."""
+    return [
+        LegFailure(
+            person=leg.person,
+            calendar_id=leg.calendar_id,
+            source_event_id=leg.source_event_id,
+            leg=leg.leg,
+            reason=FAILURE_BLOCKS_UNREADABLE,
+            detail=existing.unreadable[leg.calendar_id],
+        )
+        for leg in legs
+        if leg.calendar_id in existing.unreadable
+    ]
+
+
 def plan_travel_blocks(
     config: Config,
     events_by_person: Mapping[str, Sequence[CalendarEvent]],
@@ -1313,21 +783,9 @@ def plan_travel_blocks(
         horizon_end=horizon_end,
         train_keywords=config.traffic.train_keywords,
     )
-    # One pooled session for the whole sweep — a bare connection per leg would
-    # park an ephemeral port in TIME_WAIT for every block priced.
-    owned = session is None
-    http = session or requests.Session()
-    try:
-        priced = price_legs(
-            leg_requests,
-            api_key=config.traffic.api_key,
-            now=now,
-            session=http,
-            route_fn=route_fn,
-        )
-    finally:
-        if owned:
-            http.close()
+    priced = _price_sweep(
+        config, leg_requests, now=now, session=session, route_fn=route_fn
+    )
 
     legs = build_planned_legs(
         leg_requests, priced.durations, min_home_dwell_min=settings.min_home_dwell_min
@@ -1346,18 +804,7 @@ def plan_travel_blocks(
     # `plan_end` is the horizon's end, *not* the padded listing's (see `reconcile`).
     diff = reconcile(reconcilable, existing.blocks, plan_end=horizon_end, protected=protected)
     failures = list(priced.failures)
-    failures.extend(
-        LegFailure(
-            person=leg.person,
-            calendar_id=leg.calendar_id,
-            source_event_id=leg.source_event_id,
-            leg=leg.leg,
-            reason=FAILURE_BLOCKS_UNREADABLE,
-            detail=existing.unreadable[leg.calendar_id],
-        )
-        for leg in legs
-        if leg.calendar_id in existing.unreadable
-    )
+    failures.extend(_unreadable_failures(legs, existing))
     plan = TravelBlockPlan(
         status=STATUS_OK,
         dry_run=planned_dry_run,

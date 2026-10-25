@@ -44,7 +44,7 @@ Declared exceptions (`extra_roots`), each outside `src/` on purpose:
 | `src/analysis/` | Classifier, pipeline, tripwire, transcription, summaries, prompts. |
 | `src/notify/` | Notification channels and delivery, retryable independently of analysis. |
 | `src/report/` | The digest. |
-| `src/family/` | Calendar scan, rules, traffic check and travel blocks. `travel_blocks_write.py` is the only path that writes to or deletes from calendars. |
+| `src/family/` | Calendar scan, rules, traffic check and travel blocks (planner in `travel_blocks.py` over `travel_blocks_model.py`, `travel_blocks_reconcile.py` and `travel_blocks_pricing.py`). `travel_blocks_write.py` is the only path that writes to or deletes from calendars. |
 | `src/presence/`, `src/traffic/`, `src/task_os/` | Clients for the presence, traffic and Task OS integrations. |
 | `src/fixtures/` | Sanitized sample chats. |
 | `src/*.py` | Shared leaf modules: models, paths, logging, runtime data, vendored `runtime_data.py` and `usage_log.py`. |

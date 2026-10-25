@@ -255,7 +255,7 @@ def test_the_javascript_spelling_matches_the_python_one() -> None:
 #: docstring says "mirrors", not "is". Collapsing them would couple two
 #: independent vocabularies on a coincidence, so it keeps its own spelling — and
 #: is named here rather than being quietly skipped by a looser pattern.
-_NOT_THIS_VOCABULARY = {"src/family/travel_blocks.py"}
+_NOT_THIS_VOCABULARY = {"src/family/travel_blocks_pricing.py"}
 
 
 def test_no_python_surface_spells_the_leg_statuses_by_hand_any_more() -> None:

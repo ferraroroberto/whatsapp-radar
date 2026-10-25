@@ -65,6 +65,9 @@ def test_index_served_and_stamped(loopback: TestClient) -> None:
     assert "<title>Family Radar</title>" in r.text
     assert "WhatsApp Radar" not in r.text and "WA Radar" not in r.text
     assert "?v=" in r.text  # asset URLs are version-stamped
+    # The icon sprite is spliced into the served document (iOS needs it inline).
+    assert '<symbol id="i-gauge"' in r.text
+    assert "@include" not in r.text
 
 
 def test_served_index_hashes_match_disk(loopback: TestClient) -> None:

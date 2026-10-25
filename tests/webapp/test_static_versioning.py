@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.static_versioning import (
     asset_hash_for,
     compute_asset_hashes,
     fleet_hash_of,
+    inline_index_partials,
     rewrite_index_html,
     rewrite_js_imports,
 )
@@ -128,3 +131,15 @@ def test_rewrite_js_imports_root_level_still_stamps_without_from_dir() -> None:
     hashes = {"tabs.js": "abc123"}
     out = rewrite_js_imports("import { wireTabs } from './tabs.js';", hashes)
     assert "./tabs.js?v=abc123" in out
+
+
+def test_inline_index_partials_splices_the_marker_line(tmp_path: Path) -> None:
+    (tmp_path / "sprite.html").write_text("<svg>\n  <symbol/>\n</svg>\n", encoding="utf-8")
+    body = "<body>\n  <!-- @include sprite.html -->\n  <main></main>\n</body>"
+    out = inline_index_partials(body, tmp_path)
+    assert out == "<body>\n<svg>\n  <symbol/>\n</svg>\n  <main></main>\n</body>"
+
+
+def test_inline_index_partials_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        inline_index_partials("<!-- @include nope.html -->", tmp_path)

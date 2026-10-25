@@ -32,7 +32,7 @@ Declared exceptions (`extra_roots`), each outside `src/` on purpose:
 | `app/tray/` | The pystray surface that owns the webapp lifecycle. |
 | `app/webapp/` | FastAPI server (`server.py`), adopt-or-spawn uvicorn lifecycle (`manager.py`), auth middleware, run tracking. |
 | `app/webapp/routers/` | One API router per area (chats, config, family, audit, auth, …). |
-| `app/webapp/static/` | The vanilla-JS PWA shell, its CSS, and vendored components under `_vendored/`. |
+| `app/webapp/static/` | The vanilla-JS PWA shell, its CSS, and vendored components under `_vendored/`. `index.html` stays under the size cap by keeping the icon sprite in `app-icons-sprite.html`, spliced in at the `<!-- @include app-icons-sprite.html -->` marker when `/` is served (the sprite must sit inside the document: iOS Safari does not resolve an external `<use>`). |
 
 ## `src/`
 

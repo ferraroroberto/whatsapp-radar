@@ -19,7 +19,7 @@ will eventually disagree with itself.
 So this module imports **nothing but the standard library**, and
 ``src/family/__init__.py`` is (and must stay) import-free, which is what makes
 ``from src.family.leg_status import …`` cost the webapp nothing. That is not a
-convention to be taken on trust: ``tests/test_leg_status.py`` imports this
+convention to be taken on trust: ``tests/family/test_leg_status.py`` imports this
 module in a clean subprocess and asserts no ``google*`` package landed in
 ``sys.modules``.
 

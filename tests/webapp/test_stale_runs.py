@@ -207,7 +207,7 @@ def test_webapp_startup_reconciles_stale_rows(tmp_path: Path) -> None:
 
 
 def test_activity_view_gives_abandoned_its_own_badge() -> None:
-    js = (Path(__file__).resolve().parent.parent / "app/webapp/static/activity.js").read_text(
+    js = (Path(__file__).resolve().parents[2] / "app/webapp/static/activity.js").read_text(
         encoding="utf-8"
     )
     assert "'abandoned'" in js and "statusChip('Abandoned'" in js

@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-STATIC_DIR = Path(__file__).resolve().parents[1] / "app" / "webapp" / "static"
+STATIC_DIR = Path(__file__).resolve().parents[2] / "app" / "webapp" / "static"
 
 # `function xUrl(...) { ... }` / `function xSrc(...) { ... }` — matches to the
 # function's own closing brace at column 0, good enough for this tree's flat,

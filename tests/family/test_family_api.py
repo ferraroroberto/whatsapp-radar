@@ -21,7 +21,7 @@ import pytest
 
 import app.webapp.routers.family as family_router
 from src.db import store
-from tests.test_unified_runs import _client
+from tests.webapp.test_unified_runs import _client
 
 
 def _patched_save(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:

@@ -816,7 +816,7 @@ def test_the_planner_module_still_contains_no_calendar_writes() -> None:
     `src/family/travel_blocks_write.py` owns every write, and its own structural
     test (tests/family/test_travel_blocks_write.py) pins the guard around the delete.
     """
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     for relative in (
         "src/family/travel_blocks.py",
         "src/family/travel_blocks_model.py",
@@ -925,7 +925,7 @@ def test_the_two_window_starts_are_one_shared_expression_not_two_copies() -> Non
     `run_calendar_scan`'s fetch window load-bearing. Two identical lines agree
     only until someone edits one, which is how #280 became possible at all.
     """
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     for relative in ("src/family/travel_blocks.py", "src/family/calendar_scan.py"):
         source = (root / relative).read_text(encoding="utf-8")
         assert "rules.local_midnight(now)" in source, relative

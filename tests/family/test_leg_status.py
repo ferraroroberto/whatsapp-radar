@@ -93,7 +93,7 @@ def test_importing_the_vocabulary_pulls_in_no_google_client() -> None:
         " if m.split('.')[0] in {'google', 'googleapiclient', 'google_auth_oauthlib',"
         " 'calendar_readonly', 'requests'}))"
     )
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     proc = subprocess.run(
         [sys.executable, "-c", probe],
         capture_output=True, text=True, cwd=root, check=True,
@@ -230,7 +230,7 @@ def test_the_javascript_spelling_matches_the_python_one() -> None:
     JavaScript copy. Asserted on the source because the guarantee is "these two
     lists agree", which no amount of DOM stubbing from Python can demonstrate.
     """
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     fmt = (root / "app/webapp/static/format.js").read_text(encoding="utf-8")
     line = next(
         ln for ln in fmt.splitlines() if ln.startswith("const UNPRICED_LEG_STATUSES")
@@ -260,7 +260,7 @@ _NOT_THIS_VOCABULARY = {"src/family/travel_blocks_pricing.py"}
 
 def test_no_python_surface_spells_the_leg_statuses_by_hand_any_more() -> None:
     """The criterion: not a fourth hand-written copy anywhere (#283)."""
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     owner = "src/family/leg_status.py"
     offenders = []
     for path in sorted([*(root / "src").rglob("*.py"), *(root / "app").rglob("*.py")]):
@@ -279,7 +279,7 @@ def test_the_dashboard_no_longer_keeps_its_own_copy_of_the_set() -> None:
     drag the Google clients into webapp startup. The fix is a leaf module that
     does not, not four copies of a literal.
     """
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     dashboard = (root / "app/webapp/routers/dashboard.py").read_text(encoding="utf-8")
     assert "_UNPRICED_LEG_STATUSES" not in dashboard
     assert "from src.family.leg_status import" in dashboard
@@ -287,7 +287,7 @@ def test_the_dashboard_no_longer_keeps_its_own_copy_of_the_set() -> None:
 
 def test_the_module_is_a_leaf_and_must_stay_one() -> None:
     """Its whole value is that importing it is free; that is easy to lose."""
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     source = (root / "src/family/leg_status.py").read_text(encoding="utf-8")
     for line in source.splitlines():
         if line.startswith(("import ", "from ")):

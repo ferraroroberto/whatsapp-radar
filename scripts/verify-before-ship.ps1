@@ -79,6 +79,8 @@ function Get-E2ERoute {
 
 $env:PYTHONUTF8 = "1"
 Push-Location $repoRoot
+
+. (Join-Path $PSScriptRoot "box_lock_gate.ps1"); Enter-BoxLockGate
 try {
     $e2e = Get-E2ERoute
     if ($RouteOnly) {

@@ -144,6 +144,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     except sqlite3.Error as exc:
         _log.warning(f"⚠️ startup stale-run reconcile failed: {exc}")
     yield
+    probe = getattr(app.state, "source_probe", None)
+    if probe is not None:
+        probe.close()
 
 
 def create_app() -> FastAPI:

@@ -54,6 +54,7 @@ from app.webapp.routers import (
 )
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
+from src.compression import StreamSafeGZipMiddleware
 from src.config import load_config
 from src.db import store
 from src.logging_setup import configure_file_logging
@@ -198,6 +199,10 @@ def create_app() -> FastAPI:
     app.include_router(usage_router(
         runtime_db_path("whatsapp-radar", "usage.sqlite3", env_var="WR_USAGE_DB_PATH", create=True),
     ))
+
+    # Added last so it is the outermost layer: a 401 or 304 passes through unchanged.
+    # No bypass paths: the one stream (/api/tts/speak) is audio/L16, skipped by type.
+    app.add_middleware(StreamSafeGZipMiddleware, bypass_paths=())
 
     return app
 

@@ -25,6 +25,7 @@ a second request returns 409.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,9 +33,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.webapp import runs
 from app.webapp.routers._helpers import db_path, get_conn, loads_json_column, maybe_json
 from src.config import load_config
-from src.connector.factory import build_connectors
+from src.connector.base import ConnectorStatus
+from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.gmail import GmailConnector
 from src.db import store
+from src.demand_snapshot import DemandSnapshot
 
 router = APIRouter()
 
@@ -186,6 +189,52 @@ def _probe_source(binding: Any) -> tuple[Any, str | None]:
     return status, account
 
 
+#: Probe results the health route serves: ``(binding, status, masked account)``.
+_Probed = list[tuple[ConnectorBinding, ConnectorStatus, str | None]]
+
+# Source probes are network round trips (Gmail token refresh + profile), so
+# they are refreshed in the background while the page is being read rather than
+# on each request. Reads refresh every minute — the page's own cadence — for
+# three minutes after the last read; anything older than five minutes is
+# rebuilt inline and never served as current.
+_PROBE_REFRESH_S = 60.0
+_PROBE_DEMAND_S = 180.0
+_PROBE_STALE_S = 300.0
+_probe_init_lock = threading.Lock()
+
+
+def _probe_key() -> str:
+    """Fingerprint of everything a probe result depends on.
+
+    A settings edit (sources, whitelist, connector, token) or a re-authorized
+    token changes it, so the next read rebuilds instead of serving the old state.
+    """
+    cfg = load_config()
+    token = cfg.gmail.token_path
+    token_stamp = token.stat().st_mtime_ns if token.is_file() else 0
+    return repr((cfg.sources, cfg.connector, cfg.linked_device_dir, cfg.gmail, token_stamp))
+
+
+def _probe_all() -> _Probed:
+    return [(binding, *_probe_source(binding)) for binding in build_connectors(load_config())]
+
+
+def _source_probe(request: Request) -> DemandSnapshot[_Probed]:
+    with _probe_init_lock:
+        snapshot: DemandSnapshot[_Probed] | None = getattr(request.app.state, "source_probe", None)
+        if snapshot is None:
+            snapshot = DemandSnapshot(
+                _probe_all,
+                _probe_key,
+                refresh_s=_PROBE_REFRESH_S,
+                demand_s=_PROBE_DEMAND_S,
+                stale_s=_PROBE_STALE_S,
+                name="source-probe",
+            )
+            request.app.state.source_probe = snapshot
+        return snapshot
+
+
 def _gmail_health_extras(cfg: Any, status: Any, account: str | None) -> dict[str, Any]:
     whitelist = {
         "senders": [
@@ -214,7 +263,9 @@ def execution_health(request: Request) -> dict[str, Any]:
     A plain ``def`` on purpose: the connector probes are blocking network
     I/O (Gmail token refresh + profile calls), and Starlette runs a sync route in
     its threadpool, so a slow upstream can't freeze the event loop — and with it
-    ``/healthz`` and every other request.
+    ``/healthz`` and every other request. The probes come from the demand-driven
+    snapshot (``probed_age_s`` says how old); the stored counts and sync history
+    are read fresh from the database on every call.
     """
     cfg = load_config()
     conn = store.connect(db_path(request))
@@ -222,9 +273,8 @@ def execution_health(request: Request) -> dict[str, Any]:
         aggregates = {row["source"]: dict(row) for row in store.source_overview(conn)}
         syncs = [dict(row) for row in store.recent_syncs(conn, 100)]
         statuses = []
-        for binding in build_connectors(cfg):
-            status, account = _probe_source(binding)
-
+        probed, probed_age_s = _source_probe(request).get()
+        for binding, status, account in probed:
             source_syncs = [row for row in syncs if row["connector_source"] == binding.source]
             last_attempt = source_syncs[0] if source_syncs else None
             last_success = next(
@@ -267,6 +317,7 @@ def execution_health(request: Request) -> dict[str, Any]:
             "connected": connected,
             "detail": detail,
             "sources": sources,
+            "probed_age_s": round(probed_age_s, 1),
         }
     except ValueError as exc:
         return {
@@ -274,6 +325,7 @@ def execution_health(request: Request) -> dict[str, Any]:
             "connected": False,
             "detail": str(exc),
             "sources": [],
+            "probed_age_s": 0.0,
         }
     finally:
         conn.close()

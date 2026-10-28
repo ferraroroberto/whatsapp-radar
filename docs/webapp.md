@@ -86,7 +86,7 @@ Settings is the header gear on every pane, never a tab: a dialog laid out as the
 - **This install** — Passkeys (the enrolled devices, each removed behind an in-sheet confirm, and, only while the tray's enrollment window is open, a device name and *Enroll this device*) and the build. While the window is open, Home's and Settings' header lines read *Passkey enrollment open* (Home's opens the Passkeys sheet).
 
 - `GET /api/config`, `POST /api/config` (partial)
-- `GET /api/execution/health`, `GET /api/execution/syncs`
+- `GET /api/execution/health`, `GET /api/execution/syncs`. Health serves the per-source connector probes (Gmail token refresh and profile calls) from an in-memory snapshot (`src/demand_snapshot.py`): refreshed every 60 s in the background only while the page is being read, rebuilt inline when older than 5 minutes or when the config or token changed, and stamped with `probed_age_s`. Stored counts and sync history are read from the database on each call.
 - `GET /api/sidecar/status`, `POST /api/sidecar/start`, `GET /api/sidecar/qr`
 - `GET /api/webauthn/status`, `DELETE /api/webauthn/devices/{id}`, `POST /api/webauthn/enroll/{begin,finish}`
 

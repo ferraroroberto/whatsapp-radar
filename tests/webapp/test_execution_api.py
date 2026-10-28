@@ -134,7 +134,7 @@ def test_health_reports_connector_status(captured: dict[str, Any]) -> None:
     res = captured["client"].get("/api/execution/health")
     assert res.status_code == 200
     body = res.json()
-    assert set(body) == {"name", "connected", "detail", "sources"}
+    assert set(body) == {"name", "connected", "detail", "sources", "probed_age_s"}
     assert isinstance(body["connected"], bool)
     assert body["sources"][0]["source"] == "whatsapp"
     source = body["sources"][0]

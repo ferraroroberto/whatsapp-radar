@@ -26,6 +26,7 @@
 /scripts/instruction_ratchet.py
 /scripts/static_ratchet.py
 /scripts/structure_ratchet.py
+/src/compression.py
 /src/runtime_data.py
 /src/usage_log.py
 /tests/e2e/_browser_sweep.py

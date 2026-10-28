@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -119,7 +120,9 @@ def test_tts_stream_delivers_first_chunk_before_the_second_exists(
         await asyncio.wait_for(app(scope, receive, send), timeout=5)
         return sent
 
-    sent = asyncio.run(drive())
+    # A worker thread has no running loop; earlier Playwright tests leave one on the main thread.
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        sent = pool.submit(asyncio.run, drive()).result(timeout=10)
     start = next(m for m in sent if m["type"] == "http.response.start")
     headers = {k.decode().lower(): v.decode() for k, v in start["headers"]}
     assert start["status"] == 200

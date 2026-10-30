@@ -251,6 +251,9 @@ def detect_chat_language(conn: sqlite3.Connection, chat_id: int) -> str | None:
         DetectorFactory.seed = 0  # deterministic results across runs/tests
         return str(detect(sample))
     except Exception:  # noqa: BLE001 — LangDetectException or import issue → just skip the hint
+        # no-silent-except-exempt: both causes legitimately collapse to the same
+        # "no hint, let the backend auto-detect" outcome -- there is no distinct
+        # established fact being hidden here, unlike a self-skip's cadence/hour gate.
         return None
 
 

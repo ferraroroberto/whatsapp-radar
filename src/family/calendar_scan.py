@@ -223,6 +223,44 @@ def _calendar_conflicts(
     return conflicts
 
 
+def calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | None:
+    """Hour self-skip — the reason to skip an unforced ``calendar-scan``, or None.
+
+    ``family.run_hour`` is exposed and editable on ``/api/family``, so this gate
+    is what makes the knob mean what it says — a scan fired before ``run_hour``
+    local time does nothing and says so.
+
+    Deliberately mirrors :func:`src.family.traffic_check.traffic_cadence_skip_reason`:
+    the external job is armed generously and the *effective* schedule follows
+    the config, so an edit in the Family tab takes effect on the next fire with
+    no App Launcher re-arm. Like that one it is checked before the caller opens
+    a run row, so a skip writes **no DB run row** — which is also what keeps it
+    out of the Family tab's "last sweep" lookup, a scan of ``review_runs`` for
+    the newest ``calendar-scan`` payload carrying a ``travel_blocks`` section
+    (``app/webapp/routers/family.py::_last_travel_sweep``). A skip that
+    recorded a row would either be mistaken for a completed sweep or blank out
+    the genuine earlier one. The caller's filesystem run record is still
+    written and reads as ``skipped``, so the fire is auditable without
+    polluting the history the Family tab reasons over.
+
+    Callers must not invoke this for a **forced** fire: ``--force`` is how an
+    explicit, human-requested run (every button in the webapp, and a hand-typed
+    terminal run) says "I am asking for this now", and the whole point of an
+    hour gate is that it governs the unattended schedule, not the operator.
+
+    The comparison is on the local hour only — no "already ran today" memory.
+    ``run_hour`` answers "not before when", which is all the knob ever claimed;
+    once-a-day is the job's business, and the reconcile is idempotent anyway.
+    """
+    run_hour = config.family.run_hour
+    if now.hour >= run_hour:
+        return None
+    return (
+        f"before family.run_hour={run_hour:02d}:00 "
+        f"(local hour {now.hour:02d}); pass --force to run anyway"
+    )
+
+
 def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
     """Run one calendar sync. ``dry_run`` never sends anything."""
     family = config.family

@@ -46,6 +46,8 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
         (tmp_path / folder / "mod.py").write_text("VALUE = 1\n", encoding="utf-8")
     script = tmp_path / "scripts" / "structure_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    layout = gate.SCRIPT.with_name("structure_layout.py")
+    shutil.copy(layout, script.with_name(layout.name))
     (tmp_path / ".fleet.toml").write_text(FLEET, encoding="utf-8")
     big = tmp_path / "src" / "big.py"
     big.write_text("A = 1\n" * 6, encoding="utf-8")

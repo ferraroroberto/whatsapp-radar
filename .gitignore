@@ -61,3 +61,4 @@ Thumbs.db
 
 # Private, uncommitted local context/spec files (household spec for #160, etc.)
 _local/
+.proof/

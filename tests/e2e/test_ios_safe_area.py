@@ -67,13 +67,12 @@ def test_mobile_shell_defers_to_vendored_safe_area(
         padding = _app_padding(page)
     finally:
         context.close()
-    # Since the nav re-vendor (project-scaffolding#288) the phone top padding is
-    # `env(safe-area-inset-top)` alone — the first card starts directly under the
-    # status bar — and env() resolves to 0 in every headless/CI browser (no real
-    # notch). The top edge therefore no longer discriminates the cascade winner;
-    # the bottom-clearance assertion below still does.
-    assert padding["top"] == "0px", (
-        f"expected the vendored top-safe-area formula (env(0) alone) on a "
+    # The vendored nav's phone top padding is `env(safe-area-inset-top)` plus a
+    # fixed 4px, and env() resolves to 0 in every headless/CI browser (no real
+    # notch), so the top edge is 4px here. The bottom-clearance assertion below
+    # also discriminates the cascade winner.
+    assert padding["top"] == "4px", (
+        f"expected the vendored top-safe-area formula (env(0) + 4px) on a "
         f"narrow coarse-pointer viewport, got padding-top={padding['top']!r}"
     )
     # 115px = env(bottom, 0) + --bottom-tabs-margin(21) + --bottom-tabs-height(61)

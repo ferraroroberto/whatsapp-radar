@@ -20,8 +20,7 @@ import argparse
 import logging
 import sqlite3
 import sys
-from datetime import UTC, datetime
-from typing import Any
+from datetime import datetime
 
 from gmail_readonly import GmailReadError
 
@@ -36,7 +35,9 @@ from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
+from src.family import calendar_scan, traffic_check
 from src.family.leg_status import count_legs
+from src.family.travel_blocks_report import format_travel_blocks_progress
 from src.logging_setup import configure_file_logging
 from src.notify import deliver_digest
 from src.notify.alert import send_alert
@@ -382,168 +383,6 @@ def _local_now() -> datetime:
     return datetime.now().astimezone()
 
 
-def _traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str | None:
-    """Cadence self-skip — the reason to skip a **live** ``traffic-check`` fire, or None.
-
-    The Windows job is armed at a fixed high frequency (every few minutes) so a
-    ``traffic.cadence_min`` edit in the Run tab takes effect immediately, with no
-    App Launcher re-arm. Most fires are then no-ops: this compares "now" against
-    the last recorded live ``traffic-check`` run and skips when the configured
-    cadence hasn't elapsed. A skip is deliberately **not** recorded as a run row
-    (it would drown the Audit tab in a no-op entry every few minutes); it only
-    prints a log line, so `output.log` on the App Launcher side is the skip's
-    audit trail.
-
-    Callers must only invoke this for **live** fires — a ``--dry-run`` is
-    an explicit human-requested test pass and must always execute, never be
-    cadence-skipped. :func:`store.last_run_started_at` already excludes dry-run
-    rows from the "last run" lookup, so a dry run can't distort this either way.
-    """
-    last_started = store.last_run_started_at(conn, "traffic-check")
-    if last_started is None:
-        return None
-    last_dt = datetime.fromisoformat(last_started)
-    if last_dt.tzinfo is None:
-        last_dt = last_dt.replace(tzinfo=UTC)
-    elapsed_min = (datetime.now(UTC) - last_dt).total_seconds() / 60
-    cadence_min = config.traffic.cadence_min
-    if elapsed_min < cadence_min:
-        return (
-            f"cadence {cadence_min}min not elapsed "
-            f"({elapsed_min:.1f}min since last check)"
-        )
-    return None
-
-
-def _calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | None:
-    """Hour self-skip — the reason to skip an unforced ``calendar-scan``, or None.
-
-    ``family.run_hour`` is exposed and editable on ``/api/family``, so this gate
-    is what makes the knob mean what it says — a scan fired before ``run_hour``
-    local time does nothing and says so.
-
-    Deliberately mirrors :func:`_traffic_cadence_skip_reason`: the external job
-    is armed generously and the *effective* schedule follows the config, so an
-    edit in the Family tab takes effect on the next fire with no App Launcher
-    re-arm. Like that one it returns before ``store.start_run``, so a skip
-    writes **no DB run row** — which is also what keeps it out of the Family
-    tab's "last sweep" lookup, a scan of ``review_runs`` for the newest
-    ``calendar-scan`` payload carrying a ``travel_blocks`` section
-    (``app/webapp/routers/family.py::_last_travel_sweep``). A skip that
-    recorded a row would either be mistaken for a completed sweep or blank out
-    the genuine earlier one. The filesystem run record is still written
-    (:mod:`app.cli.runlog`) and reads as ``skipped``, so the fire is auditable
-    without polluting the history the Family tab reasons over.
-
-    Callers must not invoke this for a **forced** fire: ``--force`` is how an
-    explicit, human-requested run (every button in the webapp, and a hand-typed
-    terminal run) says "I am asking for this now", and the whole point of an
-    hour gate is that it governs the unattended schedule, not the operator.
-
-    The comparison is on the local hour only — no "already ran today" memory.
-    ``run_hour`` answers "not before when", which is all the knob ever claimed;
-    once-a-day is the job's business, and the reconcile is idempotent anyway.
-    """
-    run_hour = config.family.run_hour
-    if now.hour >= run_hour:
-        return None
-    return (
-        f"before family.run_hour={run_hour:02d}:00 "
-        f"(local hour {now.hour:02d}); pass --force to run anyway"
-    )
-
-
-def _progress_travel_blocks(section: dict[str, Any]) -> None:
-    """Print the travel-block plan and what was applied.
-
-    One line per block to add with its origin, destination, time box and
-    minutes, one per block to delete *with the reason it is stale*, then every
-    leg that could **not** be priced, phrased so it can never be read as "no
-    commute was needed", then a counted summary carrying the Routes call count
-    and, when the feature is live, what the apply actually did.
-
-    The delete lines are the rehearsal required before any live write is
-    allowed: read them on a dry run and confirm nothing outside the plan is
-    listed for deletion.
-    """
-    status = str(section.get("status") or "")
-    # `disabled` is a decision, not an unestablished fact, and it is the state
-    # of every default install — printing it on every scan would be pure noise.
-    # It still rides the run payload. The other non-ok statuses are
-    # misconfigurations of an *enabled* feature and stay loud.
-    if not status or status == "disabled":
-        return
-    if status != "ok":
-        _progress(f"🚗 travel blocks: {status} — no plan computed, no Routes calls")
-        return
-    for leg in section.get("adds", []):
-        _progress(
-            f"   + {leg['person']} {leg['leg']} — “{leg['event']}”: "
-            f"{leg['origin']} → {leg['destination']}, "
-            f"{_fmt_block_when(leg['start'])}–{_fmt_block_when(leg['end'], time_only=True)} "
-            f"({leg['minutes']} min)"
-        )
-    for pending in section.get("deletes", []):
-        _progress(
-            f"   − delete ({pending['reason']}) {pending['leg']} block {pending['event_id']} "
-            f"on {pending['calendar_id']} — source event {pending['source_event_id']}, "
-            f"starting {_fmt_block_when(pending['start'])}"
-        )
-    for failure in section.get("failures", []):
-        _progress(
-            f"   ⚠️ unpriced ({failure['reason']}) {failure['person']} {failure['leg']} — "
-            f"“{failure['event']}”: {failure['detail']}. No block planned — the drive "
-            f"could not be established, this is not a decision that none is needed"
-        )
-    counts = section.get("counts") or {}
-    _progress(
-        f"🚗 travel blocks: {counts.get('adds', 0)} add(s), "
-        f"{counts.get('deletes', 0)} delete(s), "
-        f"{counts.get('keeps', 0)} kept, "
-        f"{counts.get('failures', 0)} unpriced leg(s), "
-        f"{section.get('routes_calls', 0)} Routes call(s)"
-        + (" [dry-run]" if section.get("dry_run") else "")
-    )
-    _progress_travel_block_apply(section.get("apply") or {})
-
-
-def _progress_travel_block_apply(apply: dict[str, Any]) -> None:
-    """Print what the apply actually did, and every calendar it may not write to.
-
-    A calendar whose capability is ``unknown`` gets its own line: it is neither
-    a permission nor a refusal, and folding it into either would hide the one
-    state that means "we never found out".
-    """
-    if not apply:
-        return
-    for calendar_id, state in sorted((apply.get("write_capability") or {}).items()):
-        if state == "writable":
-            continue
-        _progress(f"   ⚠️ calendar {calendar_id}: write capability {state} — nothing written to it")
-    for failure in apply.get("failures", []):
-        _progress(
-            f"   ⚠️ {failure['operation']} skipped ({failure['reason']}) on "
-            f"{failure['calendar_id']}"
-            + (f": {failure['detail']}" if failure.get("detail") else "")
-        )
-    counts = apply.get("counts") or {}
-    _progress(
-        f"🚗 travel blocks [{apply.get('status', '?')}]: "
-        f"{counts.get('inserted', 0)} inserted, {counts.get('deleted', 0)} deleted, "
-        f"{counts.get('kept', 0)} kept, {counts.get('skipped', 0)} skipped, "
-        f"{counts.get('backups', 0)} backup(s)"
-        + (f" — {apply['detail']}" if apply.get("detail") else "")
-    )
-
-
-def _fmt_block_when(iso: str, *, time_only: bool = False) -> str:
-    try:
-        moment = datetime.fromisoformat(iso)
-    except ValueError:
-        return iso
-    return moment.strftime("%H:%M" if time_only else "%a %d %b %H:%M")
-
-
 def _cmd_family_check(
     conn: sqlite3.Connection, config: Config, kind: str, dry_run: bool, force: bool = False
 ) -> int:
@@ -560,15 +399,12 @@ def _cmd_family_check(
     """
     import json
 
-    from src.family.calendar_scan import run_calendar_scan
-    from src.family.traffic_check import run_traffic_check
-
     now = _local_now()
     skip_reason: str | None = None
     if kind == "traffic-check" and not dry_run:
-        skip_reason = _traffic_cadence_skip_reason(conn, config)
+        skip_reason = traffic_check.traffic_cadence_skip_reason(conn, config)
     elif kind == "calendar-scan" and not force:
-        skip_reason = _calendar_run_hour_skip_reason(config, now=now)
+        skip_reason = calendar_scan.calendar_run_hour_skip_reason(config, now=now)
     if skip_reason is not None:
         _progress(f"⏭ {kind} skipped — {skip_reason}")
         _emit_result({"kind": kind, "status": "skipped", "reason": skip_reason})
@@ -579,7 +415,10 @@ def _cmd_family_check(
     # earlier fires left at `running`.
     store.reconcile_stale_runs(conn)
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
-    runner = run_calendar_scan if kind == "calendar-scan" else run_traffic_check
+    if kind == "calendar-scan":
+        runner = calendar_scan.run_calendar_scan
+    else:
+        runner = traffic_check.run_traffic_check
     try:
         payload = runner(config, now=now, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError) as exc:
@@ -616,7 +455,8 @@ def _cmd_family_check(
         # This repo configures no logging handlers, so `run_travel_blocks`'
         # INFO lines are dropped — without this the reconciled plan
         # would only ever be visible by opening the persisted run payload.
-        _progress_travel_blocks(payload.get("travel_blocks") or {})
+        for line in format_travel_blocks_progress(payload.get("travel_blocks") or {}):
+            _progress(line)
     else:
         # "N route(s) checked" counts only priced legs: a coverage number that
         # silently counted legs that established nothing about the road is how

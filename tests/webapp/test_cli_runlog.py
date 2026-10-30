@@ -209,7 +209,9 @@ def test_self_skipped_run_is_visible_and_distinct_from_an_error(
 
     monkeypatch.setattr(traffic_check, "run_traffic_check", never_called)
     monkeypatch.setattr(
-        cli, "_traffic_cadence_skip_reason", lambda conn, config: "cadence 30min not elapsed"
+        traffic_check,
+        "traffic_cadence_skip_reason",
+        lambda conn, config: "cadence 30min not elapsed",
     )
 
     assert cli.main(["traffic-check"]) == 0

@@ -33,6 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from cryptography import x509
+
 # scripts/ is sys.path[0] when run as a file — put the repo root on it too, so `src` resolves.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -59,33 +61,43 @@ def _tailscale_hostname() -> str:
     return name
 
 
-def _tailscale_hostname_from_cert(cert_path: Path) -> str | None:
+def _load_cert(cert_path: Path) -> x509.Certificate | None:
+    """Parse the cert, or ``None`` after printing a ``[WARN]`` naming it.
+
+    An unreadable/unparseable cert is its own outcome — distinct from "not a
+    Tailscale cert" and from "not expiring" — so it must not fold into either
+    of those silent, by-design skips. Before this returned a bare ``False``/
+    ``None`` indistinguishable from a deliberate skip, so a corrupt cert
+    stopped auto-renewal with no visible symptom until it expired on the
+    phone.
+    """
+    try:
+        return x509.load_pem_x509_certificate(cert_path.read_bytes())
+    except Exception as exc:
+        print(f"[WARN] could not read/parse certificate {cert_path}: {exc}")
+        return None
+
+
+def _tailscale_hostname_from_cert(cert: x509.Certificate) -> str | None:
     """Return the .ts.net DNS SAN from the cert, or None if not a Tailscale cert."""
     try:
-        from cryptography import x509
-        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-        for name in san.value.get_values_for_type(x509.DNSName):
-            if ".ts.net" in name:
-                return name
-    except Exception:
-        pass
+    except x509.ExtensionNotFound:
+        return None
+    for name in san.value.get_values_for_type(x509.DNSName):
+        if ".ts.net" in name:
+            return name
     return None
 
 
-def _expiring_within(cert_path: Path, days: int) -> bool:
+def _expiring_within(cert: x509.Certificate, days: int) -> bool:
     """Return True if the cert expires within `days` days."""
     try:
-        from cryptography import x509
-        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
-        try:
-            expiry = cert.not_valid_after_utc
-        except AttributeError:  # cryptography < 42
-            expiry = cert.not_valid_after.replace(tzinfo=datetime.UTC)
-        threshold = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days)
-        return expiry < threshold
-    except Exception:
-        return False
+        expiry = cert.not_valid_after_utc
+    except AttributeError:  # cryptography < 42
+        expiry = cert.not_valid_after.replace(tzinfo=datetime.UTC)
+    threshold = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days)
+    return expiry < threshold
 
 
 def _provision(hostname: str) -> None:
@@ -124,11 +136,15 @@ def _check_and_renew() -> None:
     if not cert_path.exists():
         return
 
-    hostname = _tailscale_hostname_from_cert(cert_path)
+    cert = _load_cert(cert_path)
+    if cert is None:
+        return  # unknown — _load_cert already printed why; startup stays non-blocking
+
+    hostname = _tailscale_hostname_from_cert(cert)
     if hostname is None:
         return  # self-signed / non-tailnet cert; leave it alone
 
-    if not _expiring_within(cert_path, RENEW_WITHIN_DAYS):
+    if not _expiring_within(cert, RENEW_WITHIN_DAYS):
         return
 
     print(

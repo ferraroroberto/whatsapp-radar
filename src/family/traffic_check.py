@@ -52,13 +52,15 @@ values (freshness age, delay/ETA minutes), never lat/lon.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 import requests
 
 from src.config import Config
+from src.db import store
 from src.family import dedup, leg_status, rules
 from src.family.calendar_source import fetch_events_by_person
 from src.notify.alert import send_alert
@@ -495,6 +497,40 @@ class _TrafficSweep:
             for item in items:
                 item["entry"]["leave_now_alerted"] = True
             self.alerts += 1
+
+
+def traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str | None:
+    """Cadence self-skip — the reason to skip a **live** ``traffic-check`` fire, or None.
+
+    The Windows job is armed at a fixed high frequency (every few minutes) so a
+    ``traffic.cadence_min`` edit in the Run tab takes effect immediately, with no
+    App Launcher re-arm. Most fires are then no-ops: this compares "now" against
+    the last recorded live ``traffic-check`` run and skips when the configured
+    cadence hasn't elapsed. A skip is deliberately **not** recorded as a run row
+    (it would drown the Audit tab in a no-op entry every few minutes); it only
+    prints a log line, so `output.log` on the App Launcher side is the skip's
+    audit trail.
+
+    Callers must only invoke this for **live** fires — a ``--dry-run`` is
+    an explicit human-requested test pass and must always execute, never be
+    cadence-skipped. :func:`src.db.store.last_run_started_at` already excludes
+    dry-run rows from the "last run" lookup, so a dry run can't distort this
+    either way.
+    """
+    last_started = store.last_run_started_at(conn, "traffic-check")
+    if last_started is None:
+        return None
+    last_dt = datetime.fromisoformat(last_started)
+    if last_dt.tzinfo is None:
+        last_dt = last_dt.replace(tzinfo=UTC)
+    elapsed_min = (datetime.now(UTC) - last_dt).total_seconds() / 60
+    cadence_min = config.traffic.cadence_min
+    if elapsed_min < cadence_min:
+        return (
+            f"cadence {cadence_min}min not elapsed "
+            f"({elapsed_min:.1f}min since last check)"
+        )
+    return None
 
 
 def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:

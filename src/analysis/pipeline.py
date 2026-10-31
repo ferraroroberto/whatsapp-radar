@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -44,7 +44,7 @@ from src.analysis.classifier import (
     build_stage2_classifier,
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
+from src.analysis.keywords import KeywordSignal, has_actionable_signal
 from src.analysis.reminders import (
     build_client as build_calendar_client,
 )
@@ -67,6 +67,7 @@ from src.analysis.source_funnel import (
     source_funnels_dict,
     source_funnels_json,
 )
+from src.analysis.trace import write_trace
 from src.analysis.transcription import run_transcription_phase
 from src.analysis.tripwire import TripwireScan, scan_tripwire
 from src.config import Config
@@ -125,75 +126,6 @@ class ScanOutcome:
     source_errors: list[tuple[str, str]] = field(default_factory=list)
     source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
     digest: Digest | None = None
-
-
-def _render_delta(delta: list[StoredMessage]) -> str:
-    return "\n".join(
-        f"[{m.source_message_id}] {m.sender_label or 'unknown'}: {m.text or ''}" for m in delta
-    )
-
-
-def _messages_record(delta: list[StoredMessage], source: str) -> str:
-    """Per-message audit record: each message with the Stage-1 roots it matched.
-
-    Captured at run time (not recomputed on read) so the trace stays faithful to
-    the keyword roots that actually ran, even if ``keyword_roots.txt`` changes
-    later. The LLM's per-message verdict is *not* stored here — it is derived on
-    read from the parsed result's ``evidence_message_ids``.
-    """
-    records: list[dict[str, Any]] = []
-    for message in delta:
-        rules = matched_rules(message.text, source)
-        records.append(
-            {
-                "id": message.source_message_id,
-                "sender": message.sender_label,
-                "text": message.text,
-                "type": message.message_type,
-                "roots": [rule.root for rule in rules],
-                "buckets": list(dict.fromkeys(rule.bucket for rule in rules)),
-            }
-        )
-    return json.dumps(records, ensure_ascii=False)
-
-
-def _result_json(result: AnalysisResult) -> str:
-    return json.dumps(asdict(result), ensure_ascii=False)
-
-
-def _write_trace(
-    conn: sqlite3.Connection,
-    run_id: int,
-    chat_id: int,
-    *,
-    source: str,
-    signal: KeywordSignal,
-    delta: list[StoredMessage],
-    outcome: ClassificationOutcome | None,
-    result: AnalysisResult | None,
-    final_action: str,
-    telegram_text: str | None,
-    error: str | None,
-) -> None:
-    store.insert_analysis_trace(
-        conn,
-        run_id,
-        chat_id,
-        input_message_ids_json=json.dumps([m.source_message_id for m in delta]),
-        input_text=_render_delta(delta),
-        messages_json=_messages_record(delta, source),
-        stage1_passed=signal.matched,
-        stage1_roots_json=json.dumps(list(signal.roots)),
-        stage1_buckets_json=json.dumps(list(signal.buckets)),
-        llm_called=outcome.llm_called if outcome else False,
-        llm_system_prompt=outcome.system_prompt if outcome else None,
-        llm_user_prompt=outcome.user_prompt if outcome else None,
-        llm_raw_response=outcome.raw_response if outcome else None,
-        parsed_result_json=_result_json(result) if result else None,
-        final_action=final_action,
-        telegram_text=telegram_text,
-        error=error,
-    )
 
 
 def _advance(
@@ -512,7 +444,7 @@ def _reject_at_stage1(
         confidence=None,
         evidence_message_ids_json=json.dumps([]),
     )
-    _write_trace(
+    write_trace(
         conn, outcome.run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=None,
         result=_NOT_ACTIONABLE,
@@ -663,7 +595,7 @@ def _analyze_chat(
         # delta is retried next run. The trace still captures the failure.
         final_action, error = _contract_failure(co, exc)
         outcome.errors.append((chat_id, error))
-        _write_trace(
+        write_trace(
             conn, run_id, chat_id,
             source=source, signal=signal, delta=delta, outcome=co, result=None,
             final_action=final_action, telegram_text=None, error=error,
@@ -677,7 +609,7 @@ def _analyze_chat(
     )
 
     final_action, telegram_text = _tally_verdict(outcome, source_funnel, chat, result)
-    _write_trace(
+    write_trace(
         conn, run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=co, result=result,
         final_action=final_action, telegram_text=telegram_text, error=None,

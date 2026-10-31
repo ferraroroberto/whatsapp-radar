@@ -26,6 +26,12 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+from app.cli.stack_watchdog import arm_for_argv  # noqa: E402
+
+# Armed before the app's own imports so a stall inside them is dumped too.
+if __name__ == "__main__":
+    arm_for_argv(sys.argv)
+
 from app.cli.main import main  # noqa: E402
 
 if __name__ == "__main__":

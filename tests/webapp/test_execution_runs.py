@@ -219,6 +219,49 @@ def test_prune_runs_tolerates_a_locked_directory(
         handle.close()
 
 
+def test_post_run_prune_stops_at_its_time_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A slow filesystem must not hold a finished run open: the prune on its exit
+    path stops at the budget and leaves the rest for the next pass."""
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "RETENTION_PER_KIND", 0)
+    monkeypatch.setattr(runs, "active_run", lambda: None)
+    for i in range(4):
+        _seed_completed("traffic-check", f"2026010{i + 1}T000000", "2026-01-01T00:00:00+00:00")
+
+    clock = [0.0]
+    monkeypatch.setattr(runs.time, "monotonic", lambda: clock[0])
+    real_rmtree = runs.shutil.rmtree
+
+    def slow_rmtree(path: Path) -> None:
+        clock[0] += 20.0  # one delete as slow as the stalled 18:00 window
+        real_rmtree(path)
+
+    monkeypatch.setattr(runs.shutil, "rmtree", slow_rmtree)
+
+    with caplog.at_level("INFO"):
+        runs.prune_runs(budget_s=10.0)
+
+    remaining = list((tmp_path / "runs" / "traffic-check").iterdir())
+    assert len(remaining) == 3  # one delete, then the budget was spent
+    assert "budget" in caplog.text
+    assert "3 run(s) past the cap left for the next pass" in caplog.text
+
+
+def test_finalize_record_bounds_its_prune(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    seen: list[float | None] = []
+    monkeypatch.setattr(runs, "prune_runs", lambda budget_s=None: seen.append(budget_s))
+    run_dir = runs.new_run_dir("traffic-check", "20260101T000000")
+
+    runs.finalize_record(run_dir, 0)
+
+    assert seen == [runs.POST_RUN_PRUNE_BUDGET_S]
+
+
 # --- spawn → poll → funnel (end to end) ------------------------------------
 
 def _poll(kind: str, run_id: str, timeout: float = 90.0) -> dict:

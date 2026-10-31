@@ -29,6 +29,7 @@ them run directories would be noise.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import traceback
@@ -38,6 +39,8 @@ from typing import IO, TextIO, cast
 
 from app.webapp import runs
 from src.db.runs import FAMILY_KINDS
+
+logger = logging.getLogger(__name__)
 
 #: Verbs that record a run and are worth a run record. The webapp exposes the
 #: same set as Execution actions; the inverse mapping (action → argv tail) lives
@@ -116,6 +119,7 @@ def run_captured(verb: str, argv: list[str], command: Callable[[], int]) -> int:
     """
     if verb not in LAUNCHABLE_VERBS or os.environ.get(runs.CAPTURED_ENV_VAR):
         return command()
+    logger.info("📂 %s: opening its run record", verb)
     record = _open_record(verb, argv)
     if record is None:
         return command()
@@ -141,4 +145,5 @@ def run_captured(verb: str, argv: list[str], command: Callable[[], int]) -> int:
             log.close()
         except OSError:
             pass
+        logger.info("📂 %s: finalizing run record %s", verb, run_dir.name)
         runs.finalize_record(run_dir, exit_code)

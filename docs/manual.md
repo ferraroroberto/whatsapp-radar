@@ -55,8 +55,7 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 Set `WR_CLASSIFIER` (in `.env` or via the PWA's Settings, the header gear):
 
 - **`stub` (default, offline):** keyword-based, deterministic, no network. Good for a first run.
-- **`hub`:** routes the whole delta through [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`.
-- **`cascade` (recommended for real use):** a cheap multilingual keyword prefilter (Spanish/English/Catalan) runs first; only deltas that show an actionable signal cost an LLM call.
+- **`hub` / `cascade` (equivalent; use for real runs):** the Stage-1 multilingual keyword prefilter (Spanish/English/Catalan) runs for every classifier, and only deltas that show an actionable signal cost an LLM call, sent to [local-llm-hub](../../local-llm-hub) on `127.0.0.1:8000`. `cascade` is an accepted alias of `hub`.
 
 The classifier assets are plain text, so **read and tune them freely** without touching code — all four are listed in [`scan-and-classification.md`](scan-and-classification.md#classifier).
 

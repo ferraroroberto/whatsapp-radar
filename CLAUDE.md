@@ -24,7 +24,7 @@ whatsapp-radar/
     analysis/ (classifier, pipeline, tripwire, transcription, prompts/, ...)
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
     family/ (calendar_scan, rules, traffic_check, travel_blocks, travel_blocks_write — the only
-             path that writes to and deletes from calendars)
+             path that deletes from calendars; analysis/reminders.py is the insert-only writer)
     presence/  traffic/  task_os/    fixtures/sample_chats.json
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json + .env gitignored
@@ -48,7 +48,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 
 - FastAPI + vanilla JS on port **8455** (mirrors App Launcher — deliberately not Streamlit, #8); no second service port. `tray.bat` adopt-or-spawns it; `webapp.bat` runs it standalone. Four tabs (named under **UX surface** below; follow-ups are Telegram-only), plus the Settings dialog from every pane's gear. Family and Settings rows open sheets built on `static/edit-sheet.js` that save on Done; endpoint lists in `docs/webapp.md`.
 - Auth: bearer token (loopback bypasses), optional login password, WebAuthn passkey enrollment (Tailscale-only; provisioning state, no passkey sign-in, #353), Tailscale TLS, dormant Cloudflare scaffolding.
-- Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`, which `WR_TELEGRAM_*` env / `config/local.json` still override; non-secret `enabled`/`host`/`port` live in `config/default.json` under `webapp`.
+- Secrets + passkey state (bearer token, login password, Telegram token/chat id, passkeys) live in gitignored `config/webapp_config.json`; the Telegram pair resolves `WR_TELEGRAM_*` env, then `webapp_config.json`, then `config/local.json`/`default.json`. Non-secret `enabled`/`host`/`port` also live in `webapp_config.json` (defaults in `src/webapp_config.py`).
 - **Safe restart (never blanket-kill python):** tray and `tray.bat --restart` reclaim **only** the `:8455` PID scoped to this repo's `.venv` — never a blanket `pythonw`/`python` kill (would take down sister apps). By hand: find the owner with `Get-NetTCPConnection -LocalPort 8455`, stop that PID, relaunch via `tray.bat`.
 - **Build confirmation:** `GET /api/version` returns `{git_sha, built_at, asset_hash}` — after a restart `git_sha` should match `HEAD` and `asset_hash` should change when static assets did.
 
@@ -107,11 +107,13 @@ Gate, from the repo root, with the project venv:
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m mypy src app
 .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate
+.\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate
+.\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate
 ```
 
 Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram. The one exception is the **static ratchet** (`scripts/static_ratchet.py`, vendored; `.fleet.toml [static_ratchet]`, baseline `.static-ratchet-baseline.json`): it fails on a duplicate block (jscpd via `npx`, so **Node is a prerequisite**), an unused import/variable (ruff `F401,F841`) or a likely bug or security pattern (ruff's curated `B` and `S` families, `S113` included) not in the baseline. It reads the whole tree, never path-routed.

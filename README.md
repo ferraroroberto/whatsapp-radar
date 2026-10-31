@@ -89,7 +89,7 @@ Adding new messages causes only the delta to be reviewed. The per-chat cursor ad
 .\wr.bat scan --dry-run       # replay stored messages, touch nothing
 ```
 
-Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOURCES=whatsapp,gmail`; the classifier with `WR_CLASSIFIER` (`stub` offline default, `hub`, or `cascade` — keyword prefilter in front of the LLM, recommended for real use). A run that cannot check its source or reach the classifier fails loudly and holds every cursor. Preflight, the settled-buffer gate, prompt assets and alert memory: [`docs/scan-and-classification.md`](docs/scan-and-classification.md).
+Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOURCES=whatsapp,gmail`; the classifier with `WR_CLASSIFIER` (`stub` offline default, or `hub` / `cascade` — equivalent names for the LLM classifier; the keyword prefilter gates the LLM for every classifier). A run that cannot check its source or reach the classifier fails loudly and holds every cursor. Preflight, the settled-buffer gate, prompt assets and alert memory: [`docs/scan-and-classification.md`](docs/scan-and-classification.md).
 
 ## Running Against Real WhatsApp + Telegram
 

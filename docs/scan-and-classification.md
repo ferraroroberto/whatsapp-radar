@@ -22,7 +22,7 @@ The committed default is WhatsApp-only. Set `sources` in the ignored `config/loc
 
 A live `scan` / `resync` preflights each source before reading it. If the WhatsApp sidecar's heartbeat is stale (the process stopped) it first tries to relaunch the sidecar — when the device is still paired — and re-checks; set `WR_SIDECAR_AUTOSTART=0` to disable that self-heal. If the source still is not live it **aborts loudly**: exits non-zero, records the run as failed, advances no cursor, and fires an alert to the notification channel, rather than reporting green while checking nothing.
 
-The **classifier** end of the pipeline aborts the same way: if the LLM hub is unreachable — down, timing out, or erroring — the run stops at the first chat rather than timing out once per monitored chat, is recorded as failed with `notification_status=classifier_offline` (distinct from a source `offline`), fires the alert, exits non-zero, and holds every cursor so the unanalysed deltas are retried next run.
+The **classifier** end of the pipeline aborts the same way: if the LLM hub is unreachable — down, timing out, or erroring — the run stops at the first chat rather than timing out once per monitored chat, is recorded as failed, fires the alert, exits non-zero, and holds the cursor of every chat it did not analyse so those deltas are retried next run. Chats analysed before the hub died keep their results: their actionable alerts are still built and delivered as the normal digest, and `notification_status` records that delivery (`sent`, `failed`, `skipped`). When no digest went out it is `classifier_offline` (distinct from a source `offline`). The abort alert names only the chats left unanalysed.
 
 ## Keeping the buffer warm
 

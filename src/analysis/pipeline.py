@@ -54,12 +54,12 @@ from src.analysis.reminders import (
 )
 from src.analysis.review import (
     CLASSIFIER_OFFLINE_STATUS,
-    abort_classifier_offline,
     advance_family_cursors,
     hold_back_if_transcribing,
     note_delta_funnel,
     persist_analysis_result,
     recent_alert_context,
+    send_classifier_abort_alert,
 )
 from src.analysis.source_funnel import (
     SourceFunnel,
@@ -118,6 +118,9 @@ class ScanOutcome:
     tripwire_truncated: bool = False
     tripwire_nudge_status: str = "disabled"
     notification_status: str = "none"
+    # True when Stage 2 became unreachable mid-run: the run is recorded as
+    # failed even though the alerts saved before the abort are still delivered.
+    aborted: bool = False
     errors: list[tuple[int, str]] = field(default_factory=list)
     source_errors: list[tuple[str, str]] = field(default_factory=list)
     source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
@@ -293,49 +296,34 @@ def _abort_offline(
     return outcome
 
 
-def _abort_classifier(
+def _unanalysed_after_abort(
     conn: sqlite3.Connection,
     config: Config,
     outcome: ScanOutcome,
-    exc: ClassifierUnavailable,
-    progress: Progress | None,
+    failed_chat: sqlite3.Row,
+    remaining: list[sqlite3.Row],
     *,
-    chat_id: int = 0,
-) -> ScanOutcome:
-    """Finalize a live/dry/process run that aborted because Stage 2 could not reach the hub.
+    mode: Mode,
+    days: int | None,
+    successful_sources: set[str],
+) -> list[str]:
+    """Names of the chats a classifier abort left unanalysed, cursors held.
 
-    The mirror image of :func:`_abort_offline` at the other end of the pipeline:
-    a source outage aborts loudly, alerts, and records the run as ``failed``,
-    and a *classifier* outage does the same instead of raising straight out of
-    ``scan`` and stranding the run row at ``status='running'``. The funnel keeps the
-    counters earned before the failure — the chats analysed up to that point are
-    real work — and every remaining cursor is held. ``chat_id`` names the chat
-    whose classify call actually hit the dead hub — 0 only when no chat was
-    in flight yet.
+    The chat whose classify call hit the dead hub, plus every later monitored
+    chat that has a delta waiting. Chats analysed before the abort are done and
+    are not listed. ``chats_with_delta`` is raised to cover the later ones so
+    the run row counts every chat that had work.
     """
-    outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
-    outcome.errors.append((chat_id, str(exc)))
-    abort_classifier_offline(
-        conn,
-        config,
-        outcome.run_id,
-        exc,
-        chats_with_delta=outcome.chats_with_delta,
-        progress=progress,
-    )
-    store.record_run_funnel(
-        conn,
-        outcome.run_id,
-        chats_synced=outcome.chats_synced,
-        messages_synced=outcome.messages_synced,
-        chats_monitored=outcome.chats_monitored,
-        stage1_passed=outcome.stage1_passed,
-        stage2_llm_calls=outcome.stage2_llm_calls,
-        actionable=outcome.actionable,
-        notification_status=CLASSIFIER_OFFLINE_STATUS,
-        source_funnel_json=source_funnels_json(outcome.source_funnels),
-    )
-    return outcome
+    names = [str(failed_chat["display_name"])]
+    for chat in remaining:
+        delta = _chat_delta(
+            conn, config, int(chat["id"]),
+            mode=mode, days=days, successful_sources=successful_sources,
+        )
+        if delta:
+            outcome.chats_with_delta += 1
+            names.append(str(chat["display_name"]))
+    return names
 
 
 def _run_tripwire(
@@ -612,11 +600,11 @@ def _analyze_chat(
     *,
     mode: Mode,
     progress: Progress | None,
-) -> ScanOutcome | None:
+) -> ClassifierUnavailable | None:
     """Run Stage 1 and Stage 2 on one chat's delta and persist the verdict.
 
-    Returns the finalized outcome when the run must stop (Stage 2 unreachable),
-    else ``None`` so the scan moves on to the next chat.
+    Returns the error when the run must stop (Stage 2 unreachable; this chat's
+    cursor is held), else ``None`` so the scan moves on to the next chat.
     """
     run_id = outcome.run_id
     chat_id = int(chat["id"])
@@ -648,7 +636,8 @@ def _analyze_chat(
         # Whole-run condition, not a per-chat one: every remaining chat would
         # hit the same dead hub, so stop once instead of looping through a
         # timeout per chat.
-        return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
+        outcome.errors.append((chat_id, str(exc)))
+        return exc
     if co.llm_called:
         outcome.stage2_llm_calls += 1
         source_funnel.llm_calls += 1
@@ -700,12 +689,22 @@ def _finish_scan(
     mode: Mode,
     deliver: bool,
     progress: Progress | None,
+    unanalysed: list[str] | None = None,
+    abort_error: ClassifierUnavailable | None = None,
 ) -> ScanOutcome:
-    """Build the digest, deliver it when due, and close the run row."""
+    """Build the digest, deliver it when due, and close the run row.
+
+    After a classifier abort (``abort_error``), the alerts saved before the hub
+    died are still delivered — their cursors already advanced, so nothing else
+    would ever send them — and the run is then recorded as ``failed``. The abort
+    alert names ``unanalysed``, the chats whose cursors were held. With no
+    digest delivered, ``notification_status`` stays ``classifier_offline``.
+    """
     run_id = outcome.run_id
     digest = build_digest(conn, run_id)
     outcome.digest = digest
 
+    delivered = False
     if mode == "dry_run":
         outcome.notification_status = "dry_run"
     elif not deliver:
@@ -715,14 +714,24 @@ def _finish_scan(
     elif digest.has_actionable_items:
         status, _ = deliver_digest(conn, config, run_id, digest)
         outcome.notification_status = status
+        delivered = True
     else:
         outcome.notification_status = "none"
 
-    run_status = (
-        "completed_with_errors"
-        if outcome.errors or outcome.source_errors
-        else "completed"
-    )
+    if abort_error is not None:
+        outcome.aborted = True
+        if not delivered:
+            outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
+        send_classifier_abort_alert(
+            config, abort_error, unanalysed or [], progress=progress
+        )
+        run_status = "failed"
+    else:
+        run_status = (
+            "completed_with_errors"
+            if outcome.errors or outcome.source_errors
+            else "completed"
+        )
     store.finish_run(conn, run_id, run_status, outcome.chats_with_delta)
     store.record_run_funnel(
         conn,
@@ -810,7 +819,7 @@ def scan(
         ).monitored_channels += 1
     emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
-    for chat in monitored:
+    for index, chat in enumerate(monitored):
         delta = _chat_delta(
             conn, config, int(chat["id"]),
             mode=mode, days=days, successful_sources=successful_sources,
@@ -818,12 +827,20 @@ def scan(
         if not delta:
             continue
         outcome.chats_with_delta += 1
-        aborted = _analyze_chat(
+        abort_error = _analyze_chat(
             conn, config, stage2, calendar_client, outcome, chat, delta,
             mode=mode, progress=progress,
         )
-        if aborted is not None:
-            return aborted
+        if abort_error is not None:
+            emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {abort_error}")
+            unanalysed = _unanalysed_after_abort(
+                conn, config, outcome, chat, monitored[index + 1:],
+                mode=mode, days=days, successful_sources=successful_sources,
+            )
+            return _finish_scan(
+                conn, config, outcome, mode=mode, deliver=deliver, progress=progress,
+                unanalysed=unanalysed, abort_error=abort_error,
+            )
 
     return _finish_scan(conn, config, outcome, mode=mode, deliver=deliver, progress=progress)
 
@@ -842,6 +859,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
         "ok": (
             outcome.notification_status
             not in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+            and not outcome.aborted
             and not outcome.source_errors
         ),
         "run_id": outcome.run_id,

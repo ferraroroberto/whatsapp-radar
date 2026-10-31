@@ -32,39 +32,28 @@ from src.progress import Progress, emit
 CLASSIFIER_OFFLINE_STATUS = "classifier_offline"
 
 
-def abort_classifier_offline(
-    conn: sqlite3.Connection,
-    config: Config | None,
-    run_id: int,
+def send_classifier_abort_alert(
+    config: Config,
     exc: ClassifierUnavailable,
+    unanalysed: list[str],
     *,
-    chats_with_delta: int,
     progress: Progress | None = None,
 ) -> str:
-    """Finish a run stranded by an unreachable Stage-2 classifier, and alert.
+    """Alert that a run stopped on an unreachable Stage-2 classifier.
 
-    Shared by every ``scan`` mode: each calls the hub inside a loop over
-    monitored chats, and an unreachable hub fails identically for every
-    remaining one. Finalizing here keeps the SDK error from raising straight out
-    of the command, which would leave the ``review_runs`` row at
-    ``status='running'`` forever, fire no alert, and leave every later chat
-    unanalysed. Cursors are untouched, so the held deltas are retried on the next run.
-
-    Returns the alert status for the caller's funnel/progress line. ``config``
-    is ``None`` only where no notification channel is configured (tests), in
-    which case the run is still finalized and the alert is reported skipped.
+    Every ``scan`` mode calls the hub in a loop over monitored chats, and a dead
+    hub fails identically for each remaining one, so the run stops once. The
+    alert names only ``unanalysed`` — the chats whose cursors were held and whose
+    deltas the next run retries — not the chats analysed before the abort.
+    Returns the alert status.
     """
-    emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {exc}")
-    alert_status = "skipped"
-    if config is not None:
-        alert_status, _ = send_alert(
-            config,
-            f"⚠️ Family Radar: run aborted — Stage-2 classifier unreachable "
-            f"({exc}). {chats_with_delta} chat(s) with new messages were left "
-            "unanalysed; their cursors are held. Restore the LLM hub and re-run.",
-        )
-        emit(progress, f"• classifier alert: {alert_status}")
-    store.finish_run(conn, run_id, "failed", chats_with_delta)
+    alert_status, _ = send_alert(
+        config,
+        f"⚠️ Family Radar: run aborted — Stage-2 classifier unreachable "
+        f"({exc}). {len(unanalysed)} chat(s) were left unanalysed; their cursors "
+        f"are held: {', '.join(unanalysed)}. Restore the LLM hub and re-run.",
+    )
+    emit(progress, f"• classifier alert: {alert_status}")
     return alert_status
 
 

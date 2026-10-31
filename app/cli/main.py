@@ -138,7 +138,8 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     _emit_result(scan_outcome_to_dict(outcome))
     return (
         1
-        if outcome.notification_status in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+        if outcome.aborted
+        or outcome.notification_status in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
         else 0
     )
 
@@ -163,7 +164,8 @@ def _cmd_scan(
     _emit_result(scan_outcome_to_dict(outcome))
     return (
         1
-        if outcome.notification_status
+        if outcome.aborted
+        or outcome.notification_status
         in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
         or outcome.source_errors
         else 0

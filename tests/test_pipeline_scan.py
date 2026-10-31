@@ -742,6 +742,91 @@ def test_live_scan_aborts_when_classifier_is_unreachable(
     ).fetchone() is None
 
 
+class _HubDiesAfterFirstChat:
+    """Classifies one chat as actionable, then the hub becomes unreachable."""
+
+    def __init__(self, healthy_chat: str) -> None:
+        self._healthy_chat = healthy_chat
+        self.seen: list[str] = []
+
+    def classify_traced(
+        self,
+        chat_display_name: str,
+        delta: list[StoredMessage],
+        prior_context: str | None,
+        *,
+        source: str = "whatsapp",
+    ) -> ClassificationOutcome:
+        self.seen.append(chat_display_name)
+        if chat_display_name != self._healthy_chat:
+            raise ClassifierUnavailable("hub unreachable at http://127.0.0.1:8000: boom")
+        return ClassificationOutcome(
+            raw_output=_ACTIONABLE_JSON,
+            llm_called=True,
+            system_prompt="SYSTEM-PROMPT",
+            user_prompt="USER-PROMPT",
+            raw_response=_ACTIONABLE_JSON,
+            stop_reason=None,
+        )
+
+
+def test_classifier_abort_still_delivers_alerts_saved_before_it(
+    ingested_conn: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Chat A actionable, hub gone before chat B: A's alert is sent, the run is aborted."""
+    chat_a = _monitor(ingested_conn, "chat-class-4a")
+    chat_b = _monitor(ingested_conn, "chat-school-parents")
+    delivered: list[str] = []
+    alerts: list[str] = []
+
+    def fake_deliver(_conn: sqlite3.Connection, _config: Config, _run_id: int, digest: Any):
+        delivered.append(digest.to_telegram_text())
+        return "sent", None
+
+    def fake_alert(_config: Config, text: str) -> tuple[str, None]:
+        alerts.append(text)
+        return "sent", None
+
+    monkeypatch.setattr("src.analysis.pipeline.deliver_digest", fake_deliver)
+    monkeypatch.setattr("src.analysis.review.send_alert", fake_alert)
+    stage2 = _HubDiesAfterFirstChat("Class 4A Group")
+
+    outcome = scan(
+        ingested_conn,
+        _config(tmp_path),
+        mode="live",
+        connector=FixtureConnector(),
+        classifier=stage2,
+    )
+
+    assert stage2.seen == ["Class 4A Group", "School Parents Group"]
+    assert len(delivered) == 1 and "Pay the fee" in delivered[0]
+    assert outcome.aborted is True
+    assert outcome.notification_status == "sent"
+    assert scan_outcome_to_dict(outcome)["ok"] is False
+    row = ingested_conn.execute(
+        "SELECT status, notification_status, chats_reviewed FROM review_runs WHERE id = ?",
+        (outcome.run_id,),
+    ).fetchone()
+    assert row["status"] == "failed"
+    assert row["notification_status"] == "sent"
+    assert row["chats_reviewed"] == 2
+
+    # Only B was left unanalysed — A was done, so the abort alert must not name it.
+    assert len(alerts) == 1
+    assert "School Parents Group" in alerts[0]
+    assert "Class 4A Group" not in alerts[0]
+    assert "1 chat(s)" in alerts[0]
+
+    # A's cursor advanced; B's is held for the next run.
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_a,)
+    ).fetchone() is not None
+    assert ingested_conn.execute(
+        "SELECT 1 FROM chat_review_state WHERE chat_id = ?", (chat_b,)
+    ).fetchone() is None
+
+
 def test_audit_trace_text_matches_delivered_digest_for_non_routine_item(
     ingested_conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

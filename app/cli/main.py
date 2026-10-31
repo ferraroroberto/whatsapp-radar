@@ -18,13 +18,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sqlite3
 import sys
+import time
 from datetime import datetime
 
 from gmail_readonly import GmailReadError
 
-from app.cli import runlog
+from app.cli import runlog, stack_watchdog
 from src.analysis.classifier import build_stage2_classifier
 from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
@@ -423,6 +425,7 @@ def _cmd_family_check(
     else:
         runner = traffic_check.run_traffic_check
     try:
+        logger.info("🌐 %s run %s: running the check", kind, run_id)
         payload = runner(config, now=now, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError) as exc:
         _progress(f"❌ {kind} failed: {exc}")
@@ -501,13 +504,23 @@ def main(argv: list[str] | None = None) -> int:
         return run_tray()
 
     configure_file_logging("cli")
+    started = time.monotonic()
+    budget = stack_watchdog.armed_budget()
+    logger.info(
+        "▶ cli %s start (pid %d, stack dump %s)",
+        args.command, os.getpid(), f"after {budget:.0f}s" if budget else "off",
+    )
 
     # Everything below is wrapped so a run launched here — a terminal, or an App
     # Launcher Job — writes the same output-bearing run record the webapp writes
     # for the runs it spawns. A no-op for verbs that record no run, and
     # for a process the webapp is already capturing. Installed after the UTF-8
     # reconfigure above so the tee wraps streams that are already UTF-8.
-    return runlog.run_captured(args.command, raw_argv, lambda: _run_command(args))
+    exit_code = runlog.run_captured(args.command, raw_argv, lambda: _run_command(args))
+    logger.info(
+        "■ cli %s exit %d after %.1fs", args.command, exit_code, time.monotonic() - started
+    )
+    return exit_code
 
 
 def _run_command(args: argparse.Namespace) -> int:
@@ -527,6 +540,7 @@ def _run_command(args: argparse.Namespace) -> int:
             return 1
         return 0
 
+    logger.info("🗄 cli %s opening the DB", args.command)
     conn = store.connect(config.db_path)
     try:
         # Family checks never touch the message store, but they
@@ -563,4 +577,5 @@ def _run_command(args: argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":
+    stack_watchdog.arm_for_argv(sys.argv)
     raise SystemExit(main())

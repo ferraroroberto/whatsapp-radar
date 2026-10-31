@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -45,6 +46,16 @@ _LAUNCHER = PROJECT_ROOT / "launcher.py"
 #: records, newest first. A hard count bound, not an age cap — it directly
 #: guarantees "cannot grow without bound" regardless of fire rate.
 RETENTION_PER_KIND = 200
+
+#: Seconds the prune that follows every finished run may spend deleting. It sits
+#: on the exit path of every scheduled Job, and on a slow filesystem one
+#: ``rmtree`` has taken ~20 s, so an unbounded sweep held a 1-second run open
+#: for minutes. What is left over is caught by the next run's pass.
+POST_RUN_PRUNE_BUDGET_S = 10.0
+
+#: A pass slower than this is logged with its duration, so a slow filesystem
+#: shows up in the log before it costs a Job its timeout.
+_SLOW_PRUNE_S = 2.0
 
 #: A "running" record older than this is presumed dead, not in-flight.
 #: Only a CLI/Jobs-launched run can be stuck here — the webapp's own runs are
@@ -267,12 +278,13 @@ def _is_stale_running(run_dir: Path, record: dict[str, Any]) -> bool:
     return age_hours >= _STALE_RUNNING_HOURS
 
 
-def prune_runs() -> None:
+def prune_runs(budget_s: float | None = None) -> None:
     """Cap each kind directory at the newest :data:`RETENTION_PER_KIND` records.
 
-    Called after every run finishes (webapp- and CLI-launched alike) and once at
-    webapp startup to sweep any backlog. Names are timestamp-sortable, so this is
-    a name sort, not a ``stat()`` scan.
+    Called after every run finishes (webapp- and CLI-launched alike, with
+    :data:`POST_RUN_PRUNE_BUDGET_S`) and once at webapp startup to sweep any
+    backlog (unbounded). Names are timestamp-sortable, so this is a name sort,
+    not a ``stat()`` scan.
 
     Never deletes: the webapp's own in-flight run (:func:`active_run`), or a
     still-"running" record younger than :data:`_STALE_RUNNING_HOURS` (a
@@ -283,11 +295,14 @@ def prune_runs() -> None:
 
     Tolerant of a locked directory (an open ``output.log`` handle on Windows
     cannot be unlinked): that directory is skipped this pass and retried next
-    time, logged rather than raised.
+    time, logged rather than raised. With ``budget_s`` set, deletion stops once
+    that many seconds have passed and the remainder waits for the next pass.
     """
     if not RUNS_DIR.is_dir():
         return
+    started = time.monotonic()
     active = active_run()
+    deferred = 0
     for kind_dir in sorted(RUNS_DIR.iterdir()):
         if not kind_dir.is_dir():
             continue
@@ -300,6 +315,9 @@ def prune_runs() -> None:
         pruned = 0
         locked = 0
         for name in stale_names:
+            if budget_s is not None and time.monotonic() - started > budget_s:
+                deferred += 1
+                continue
             if active is not None and active["kind"] == kind_dir.name and active["run_id"] == name:
                 continue
             run_dir = kind_dir / name
@@ -319,6 +337,14 @@ def prune_runs() -> None:
             )
         if locked:
             logger.info(f"⏭ left {locked} locked run(s) for kind {kind_dir.name}; will retry")
+    elapsed = time.monotonic() - started
+    if deferred:
+        logger.info(
+            f"⏸ prune stopped at its {budget_s:.0f}s budget after {elapsed:.1f}s; "
+            f"{deferred} run(s) past the cap left for the next pass"
+        )
+    elif elapsed > _SLOW_PRUNE_S:
+        logger.info(f"🐢 prune pass took {elapsed:.1f}s (slow filesystem?)")
 
 
 # ----------------------------------------------------------- spawn / watch
@@ -427,7 +453,7 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
         if isinstance(result.get("run_id"), int):
             fields["db_run_id"] = result["run_id"]
     write_run_json(run_dir, **fields)
-    prune_runs()
+    prune_runs(budget_s=POST_RUN_PRUNE_BUDGET_S)
 
 
 def _watch(run_id: str, run_dir: Path, proc: subprocess.Popen[bytes], log_fh: IO[bytes]) -> None:

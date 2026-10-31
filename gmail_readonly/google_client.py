@@ -12,6 +12,7 @@ from google_oauth_common.token_store import write_token_atomically as write_toke
 from google_oauth_common.transport import (
     DEFAULT_REQUEST_TIMEOUT_S,
     build_service,
+    close_service,
 )
 
 from gmail_readonly.core import GMAIL_READONLY_SCOPE, GmailReadClient
@@ -167,10 +168,7 @@ class GoogleGmailReadClient:
         return self._service.users().messages().get(**kwargs)
 
     def close(self) -> None:
-        http = getattr(self._service, "_http", None)
-        close = getattr(http, "close", None)
-        if callable(close):
-            close()
+        close_service(self._service)
 
 
 def build_google_read_client(

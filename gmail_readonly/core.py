@@ -11,6 +11,8 @@ from email.utils import parseaddr, parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any, Protocol
 
+from google_oauth_common.errors import safe_http_error_detail
+
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 _SELECTED_HEADERS = (
     "message-id",
@@ -348,20 +350,7 @@ def masked_email_address(address: str) -> str:
 
 
 def _safe_error_detail(exc: Exception) -> str:
-    if isinstance(exc, TimeoutError):
-        # Distinct from a generic failure: the transport-level timeout bounds
-        # what would otherwise be an unbounded hang.
-        return "Gmail API request timed out — network stalled or Google unreachable"
-    status = getattr(getattr(exc, "resp", None), "status", None)
-    if status == 401:
-        return "OAuth token is invalid or expired"
-    if status == 403:
-        return "Gmail API permission or quota denied"
-    if status == 429:
-        return "Gmail API quota exceeded"
-    if isinstance(exc, FileNotFoundError):
-        return str(exc)
-    return f"Gmail API request failed ({type(exc).__name__})"
+    return safe_http_error_detail(exc, "Gmail")
 
 
 def _optional_int(value: Any) -> int | None:

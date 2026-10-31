@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.config._shared import rooted_path
+
 
 @dataclass(frozen=True)
 class GmailSender:
@@ -52,19 +54,10 @@ class GmailConfig:
 
 def parse(raw: dict[str, Any], root: Path) -> GmailConfig:
     defaults = GmailConfig()
-    credentials = Path(
-        os.environ.get(
-            "WR_GMAIL_CREDENTIALS_PATH",
-            raw.get("credentials_path", defaults.credentials_path),
-        )
+    credentials = rooted_path(
+        "WR_GMAIL_CREDENTIALS_PATH", raw, "credentials_path", defaults.credentials_path, root
     )
-    if not credentials.is_absolute():
-        credentials = root / credentials
-    token = Path(
-        os.environ.get("WR_GMAIL_TOKEN_PATH", raw.get("token_path", defaults.token_path))
-    )
-    if not token.is_absolute():
-        token = root / token
+    token = rooted_path("WR_GMAIL_TOKEN_PATH", raw, "token_path", defaults.token_path, root)
     return GmailConfig(
         credentials_path=credentials,
         token_path=token,

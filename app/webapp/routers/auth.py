@@ -62,7 +62,9 @@ async def login(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="bearer token not configured")
     body = await maybe_json(request)
     presented = str(body.get("password") or "")
-    if not presented or not hmac.compare_digest(presented, cfg.auth_password):
+    if not presented or not hmac.compare_digest(
+        presented.encode("utf-8"), cfg.auth_password.encode("utf-8")
+    ):
         auth_logger.warning(
             f"🚨 Failed password attempt from {client_host} "
             f"(presented: {len(presented)} chars)"

@@ -57,3 +57,11 @@ def build_service(
         http=bounded_authorized_http(credentials, request_timeout_s),
         cache_discovery=False,
     )
+
+
+def close_service(service: Any) -> None:
+    """Close the transport behind a service built by :func:`build_service`, if it has one."""
+    http = getattr(service, "_http", None)
+    close = getattr(http, "close", None)
+    if callable(close):
+        close()

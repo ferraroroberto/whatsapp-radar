@@ -71,7 +71,7 @@ def prune_gmail_unmonitored(
         (cutoff,),
     ).rowcount
     senders_removed = conn.execute(
-        "DELETE FROM chats WHERE source = 'gmail' AND status != 'monitored' "
+        "DELETE FROM chats WHERE source = 'gmail' AND status = 'discovered' "
         "AND id NOT IN (SELECT DISTINCT chat_id FROM messages)",
     ).rowcount
     conn.commit()

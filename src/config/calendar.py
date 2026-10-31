@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from src.config._shared import rooted_path
 
 logger = logging.getLogger(__name__)
 
@@ -51,27 +52,13 @@ class CalendarConfig:
 
 def parse(raw: dict[str, Any], root: Path) -> CalendarConfig:
     defaults = CalendarConfig()
-    creds = Path(
-        os.environ.get(
-            "WR_CALENDAR_CREDENTIALS_PATH",
-            raw.get("credentials_path", defaults.credentials_path),
-        )
+    creds = rooted_path(
+        "WR_CALENDAR_CREDENTIALS_PATH", raw, "credentials_path", defaults.credentials_path, root
     )
-    if not creds.is_absolute():
-        creds = root / creds
-    token = Path(
-        os.environ.get("WR_CALENDAR_TOKEN_PATH", raw.get("token_path", defaults.token_path))
+    token = rooted_path("WR_CALENDAR_TOKEN_PATH", raw, "token_path", defaults.token_path, root)
+    write_token = rooted_path(
+        "WR_CALENDAR_WRITE_TOKEN_PATH", raw, "write_token_path", defaults.write_token_path, root
     )
-    if not token.is_absolute():
-        token = root / token
-    write_token = Path(
-        os.environ.get(
-            "WR_CALENDAR_WRITE_TOKEN_PATH",
-            raw.get("write_token_path", defaults.write_token_path),
-        )
-    )
-    if not write_token.is_absolute():
-        write_token = root / write_token
     raw_accounts = [
         CalendarAccount(
             calendar_id=str(item.get("calendar_id", "")).strip(),

@@ -34,6 +34,7 @@ from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
+from src.db.runs import FAMILY_KINDS
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.family import calendar_scan, traffic_check
 from src.family.leg_status import count_legs
@@ -452,9 +453,9 @@ def _cmd_family_check(
             f"{len(payload.get('missing_locations', []))} missing location(s)"
             + (" [dry-run]" if dry_run else "")
         )
-        # This repo configures no logging handlers, so `run_travel_blocks`'
-        # INFO lines are dropped — without this the reconciled plan
-        # would only ever be visible by opening the persisted run payload.
+        # The progress line is the operator-visible summary on the terminal and in
+        # a captured run; the reconciled plan is otherwise only in the persisted
+        # run payload.
         for line in format_travel_blocks_progress(payload.get("travel_blocks") or {}):
             _progress(line)
     else:
@@ -528,7 +529,7 @@ def _run_command(args: argparse.Namespace) -> int:
     try:
         # Family checks never touch the message store, but they
         # record a run row so scheduled executions are visible in the Audit tab.
-        if args.command in ("calendar-scan", "traffic-check"):
+        if args.command in FAMILY_KINDS:
             # `--force` exists only on `calendar-scan`; traffic-check's own
             # self-skip is exempted by `--dry-run` instead.
             return _cmd_family_check(

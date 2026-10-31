@@ -37,13 +37,12 @@ from pathlib import Path
 from typing import IO, TextIO, cast
 
 from app.webapp import runs
+from src.db.runs import FAMILY_KINDS
 
 #: Verbs that record a run and are worth a run record. The webapp exposes the
 #: same set as Execution actions; the inverse mapping (action → argv tail) lives
 #: in ``app/webapp/routers/execution.py::_compose_argv``.
-LAUNCHABLE_VERBS = frozenset(
-    {"scan", "review", "resync", "reprocess", "notify", "calendar-scan", "traffic-check"}
-)
+LAUNCHABLE_VERBS = frozenset({"scan", "review", "resync", "reprocess", "notify", *FAMILY_KINDS})
 
 #: The webapp calls the ``review`` verb's action "process". The run record must
 #: use the webapp's name, or the same execution would file under two kinds and

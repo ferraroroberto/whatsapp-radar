@@ -192,3 +192,12 @@ def test_login_success_and_failure() -> None:
         assert ok.status_code == 200
         assert ok.json()["token"] == "thetoken"
         assert c.post("/api/login", json={"password": "wrong"}).status_code == 401
+
+
+def test_non_ascii_password_and_token_are_compared_without_a_server_error() -> None:
+    with _client(REMOTE, token="tökén", password="contraseña") as c:
+        ok = c.post("/api/login", json={"password": "contraseña"})
+        assert ok.status_code == 200
+        assert c.post("/api/login", json={"password": "contraseñá"}).status_code == 401
+        assert c.get("/api/version", params={"token": "tökén"}).status_code != 401
+        assert c.get("/api/version", params={"token": "tókén"}).status_code == 401

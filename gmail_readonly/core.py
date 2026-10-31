@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import base64
-import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.utils import parseaddr, parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any, Protocol
+
+from google_oauth_common.errors import safe_http_error_detail
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 _SELECTED_HEADERS = (
@@ -348,20 +349,7 @@ def masked_email_address(address: str) -> str:
 
 
 def _safe_error_detail(exc: Exception) -> str:
-    if isinstance(exc, TimeoutError):
-        # Distinct from a generic failure: the transport-level timeout bounds
-        # what would otherwise be an unbounded hang.
-        return "Gmail API request timed out — network stalled or Google unreachable"
-    status = getattr(getattr(exc, "resp", None), "status", None)
-    if status == 401:
-        return "OAuth token is invalid or expired"
-    if status == 403:
-        return "Gmail API permission or quota denied"
-    if status == 429:
-        return "Gmail API quota exceeded"
-    if isinstance(exc, FileNotFoundError):
-        return str(exc)
-    return f"Gmail API request failed ({type(exc).__name__})"
+    return safe_http_error_detail(exc, "Gmail")
 
 
 def _optional_int(value: Any) -> int | None:
@@ -399,12 +387,27 @@ def _message_body(payload: dict[str, Any]) -> str:
     return "\n\n".join(part for part in (plain or rich) if part).strip()
 
 
+# HTMLParser hands the CSS/JS inside these to handle_data; it is not message text.
+_NON_TEXT_TAGS = frozenset({"style", "script"})
+
+
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _NON_TEXT_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _NON_TEXT_TAGS and self._skip_depth:
+            self._skip_depth -= 1
 
     def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
         value = data.strip()
         if value:
             self.parts.append(value)
@@ -412,7 +415,7 @@ class _TextExtractor(HTMLParser):
 
 def _html_to_text(value: str) -> str:
     parser = _TextExtractor()
-    parser.feed(html.unescape(value))
+    parser.feed(value)
     return re.sub(r"\s+([.,;:!?])", r"\1", " ".join(parser.parts))
 
 

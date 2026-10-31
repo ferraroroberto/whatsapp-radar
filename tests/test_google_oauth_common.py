@@ -224,3 +224,38 @@ def test_calendar_list_events_asks_the_api_client_to_retry_transient_errors() ->
     )
 
     assert seen and all(kwargs.get("num_retries", 0) >= 1 for kwargs in seen)
+
+
+@pytest.mark.parametrize("api", ["Gmail", "Calendar"])
+def test_safe_http_error_detail_names_the_api_and_maps_a_timeout(api: str) -> None:
+    from google_oauth_common.errors import safe_http_error_detail
+
+    assert safe_http_error_detail(TimeoutError("socket"), api) == (
+        f"{api} API request timed out — network stalled or Google unreachable"
+    )
+    assert safe_http_error_detail(ValueError("secret body"), api) == (
+        f"{api} API request failed (ValueError)"
+    )
+
+
+def test_calendar_error_detail_reports_a_transport_timeout() -> None:
+    from calendar_readonly.core import safe_error_detail
+
+    assert "timed out" in safe_error_detail(TimeoutError("socket"))
+
+
+def test_close_service_closes_the_transport_and_tolerates_none() -> None:
+    from google_oauth_common.transport import close_service
+
+    closed: list[bool] = []
+
+    class _Http:
+        def close(self) -> None:
+            closed.append(True)
+
+    class _Service:
+        _http = _Http()
+
+    close_service(_Service())
+    close_service(object())
+    assert closed == [True]

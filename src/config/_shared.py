@@ -85,6 +85,19 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return out
 
 
+def rooted(value: str | Path, root: Path) -> Path:
+    """Return ``value`` as a path, rooting a relative one at the repository."""
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def rooted_path(
+    env_name: str, raw: dict[str, Any], key: str, default: str | Path, root: Path
+) -> Path:
+    """Resolve a path: env var, else ``raw[key]``, else ``default``, rooted at ``root``."""
+    return rooted(os.environ.get(env_name, raw.get(key, default)), root)
+
+
 def _local_config_path(root: Path) -> Path:
     """Return the host override path, honoring the e2e-safe environment seam.
 
@@ -96,8 +109,7 @@ def _local_config_path(root: Path) -> Path:
     configured = os.environ.get("WR_LOCAL_CONFIG_PATH")
     if not configured:
         return root / "config" / "local.json"
-    path = Path(configured)
-    return path if path.is_absolute() else root / path
+    return rooted(configured, root)
 
 
 def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> Path:

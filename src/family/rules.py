@@ -10,6 +10,7 @@ conflict detection all live here as plain, unit-tested code.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo
@@ -97,7 +98,10 @@ def same_address(a: str, b: str) -> bool:
     a2, b2 = _norm_address(a), _norm_address(b)
     if not a2 or not b2:
         return False
-    return a2 == b2 or a2 in b2 or b2 in a2
+    # Compare on whole tokens so "calle mayor 1" is not inside "calle mayor 12".
+    shorter, longer = sorted((a2.split(), b2.split()), key=len)
+    width = len(shorter)
+    return any(longer[i : i + width] == shorter for i in range(len(longer) - width + 1))
 
 
 def _is_video_only(location: str) -> bool:
@@ -136,7 +140,13 @@ def is_train_commute(event: CalendarEvent, keywords: tuple[str, ...]) -> bool:
     alert is deliberately not suppressed.
     """
     summary = event.summary.lower()
-    return any(keyword and keyword.lower() in summary for keyword in keywords)
+    # Whole-word match: a bare substring would read "Entrenamiento" or "Training"
+    # as a train commute and suppress the alerts a sports practice needs.
+    return any(
+        keyword.strip()
+        and re.search(rf"(?<!\w){re.escape(keyword.strip().lower())}(?!\w)", summary)
+        for keyword in keywords
+    )
 
 
 def requires_commute(event: CalendarEvent, home_address: str) -> bool:

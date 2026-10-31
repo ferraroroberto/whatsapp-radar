@@ -35,7 +35,7 @@ With keep-alive holding the buffer warm the gate is a near-instant no-op, so **o
 
 ## Classifier
 
-Defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../../local-llm-hub) (the `claude_sonnet` model on `127.0.0.1:8000`), or `WR_CLASSIFIER=cascade` (recommended for real use) to run a cheap multilingual keyword prefilter first that gates the LLM call, so "utter noise" deltas never reach the model. The trade-offs are in [`manual.md`](manual.md#choosing-the-classifier).
+Defaults to the offline stub. Set `WR_CLASSIFIER=hub` (or its alias `cascade`) to route through [local-llm-hub](../../local-llm-hub) (the `claude_sonnet` model on `127.0.0.1:8000`). Stage 1, a cheap multilingual keyword prefilter, runs for every classifier and gates the LLM call, so "utter noise" deltas never reach the model. See [`manual.md`](manual.md#choosing-the-classifier).
 
 Use a model that answers with JSON directly — the default `claude_sonnet` does. A reasoning model that emits a long `<think>` trace can overrun the token budget and return nothing parseable; that case is recorded as a distinct `llm_truncated` trace state rather than a generic contract error. The output budget is configurable (`WR_HUB_MAX_TOKENS`) and the per-prompt delta is capped (`WR_HUB_MAX_PROMPT_CHARS`) so a whole-history scan cannot blow the model's context window.
 

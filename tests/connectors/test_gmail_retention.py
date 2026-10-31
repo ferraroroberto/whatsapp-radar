@@ -234,3 +234,17 @@ def test_prune_clears_cursor_of_monitored_then_demoted_sender(conn: sqlite3.Conn
     assert (
         conn.execute("SELECT COUNT(*) AS n FROM chat_review_state").fetchone()["n"] == 0
     )
+
+
+def test_ignored_sender_keeps_its_decision_after_its_mail_is_pruned(
+    conn: sqlite3.Connection,
+) -> None:
+    ignored = _add_chat(conn, "gmail", "sender:noise@example.com", "ignored")
+    _add_msg(conn, ignored, "i-old", 400)
+
+    outcome = store.prune_gmail_unmonitored(conn, retention_days=30, now=NOW)
+
+    assert outcome.messages_pruned == 1
+    assert outcome.senders_removed == 0
+    row = store.get_chat(conn, ignored)
+    assert row is not None and row["status"] == "ignored"

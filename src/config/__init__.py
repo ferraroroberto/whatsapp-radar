@@ -41,6 +41,7 @@ from src.config._shared import (
     _load_json,
     _local_config_path,
     project_root,
+    rooted,
     save_local_overrides,
 )
 from src.config.calendar import CalendarAccount, CalendarConfig
@@ -186,13 +187,8 @@ def load_config(root: Path | None = None) -> Config:
     task_os = _task_os.parse(merged.get("task_os", {}))
     children = _family.parse_children(merged.get("children", []))
 
-    resolved_db = Path(db_path)
-    if not resolved_db.is_absolute():
-        resolved_db = root / resolved_db
-
-    resolved_buffer = Path(linked_device_dir)
-    if not resolved_buffer.is_absolute():
-        resolved_buffer = root / resolved_buffer
+    resolved_db = rooted(db_path, root)
+    resolved_buffer = rooted(linked_device_dir, root)
 
     return Config(
         db_path=resolved_db,

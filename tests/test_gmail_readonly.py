@@ -503,3 +503,14 @@ def test_google_client_retries_rate_limited_batch_items(
     assert [raw["id"] for raw in results] == ["steady", "flaky"]
     assert service.attempts == {"steady": 1, "flaky": 2}
     assert sleeps == [1]
+
+
+def test_html_to_text_drops_style_and_script_content() -> None:
+    from gmail_readonly.core import _html_to_text
+
+    text = _html_to_text(
+        "<html><head><style>p { color: red }</style><script>var x = 1;</script></head>"
+        "<body><p>Bring water &amp; a hat.</p></body></html>"
+    )
+
+    assert text == "Bring water & a hat."

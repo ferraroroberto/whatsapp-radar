@@ -12,6 +12,7 @@ from google_oauth_common.token_store import write_token_atomically
 from google_oauth_common.transport import (
     DEFAULT_REQUEST_TIMEOUT_S,
     build_service,
+    close_service,
 )
 
 from calendar_readonly.core import CALENDAR_READONLY_SCOPE
@@ -92,10 +93,7 @@ class GoogleCalendarReadClient:
         return str(response.get("summary") or calendar_id)
 
     def close(self) -> None:
-        http = getattr(self._service, "_http", None)
-        close = getattr(http, "close", None)
-        if callable(close):
-            close()
+        close_service(self._service)
 
 
 def build_google_calendar_client(

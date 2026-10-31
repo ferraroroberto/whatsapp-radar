@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Protocol
 
+from google_oauth_common.errors import safe_http_error_detail
+
 CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
 
@@ -155,13 +157,4 @@ def normalize_event(raw: dict[str, Any], *, calendar_id: str) -> CalendarEvent:
 
 def safe_error_detail(exc: Exception) -> str:
     """A privacy-safe error string that never echoes calendar content."""
-    status = getattr(getattr(exc, "resp", None), "status", None)
-    if status == 401:
-        return "OAuth token is invalid or expired"
-    if status == 403:
-        return "Calendar API permission or quota denied"
-    if status == 429:
-        return "Calendar API quota exceeded"
-    if isinstance(exc, FileNotFoundError):
-        return str(exc)
-    return f"Calendar API request failed ({type(exc).__name__})"
+    return safe_http_error_detail(exc, "Calendar")

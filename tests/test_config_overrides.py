@@ -214,3 +214,16 @@ def test_tts_profiles_local_json_overrides_default(tmp_path: Path) -> None:
     )
     tts = config.load_config(root=root).tts
     assert tts.en_male == config.VoiceProfile("orpheus-tts", "zac")
+
+
+def test_rooted_path_prefers_env_then_raw_then_default_and_roots_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.config._shared import rooted_path
+
+    monkeypatch.delenv("WR_TEST_PATH", raising=False)
+    assert rooted_path("WR_TEST_PATH", {}, "p", "d/x.json", tmp_path) == tmp_path / "d" / "x.json"
+    assert rooted_path("WR_TEST_PATH", {"p": "r.json"}, "p", "d", tmp_path) == tmp_path / "r.json"
+    absolute = tmp_path / "abs.json"
+    monkeypatch.setenv("WR_TEST_PATH", str(absolute))
+    assert rooted_path("WR_TEST_PATH", {"p": "r.json"}, "p", "d", tmp_path / "other") == absolute

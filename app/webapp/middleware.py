@@ -140,7 +140,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         if not presented:
             presented = request.query_params.get("token", "").strip()
 
-        if presented and hmac.compare_digest(presented, token):
+        if presented and hmac.compare_digest(presented.encode("utf-8"), token.encode("utf-8")):
             return await call_next(request)
 
         return JSONResponse(

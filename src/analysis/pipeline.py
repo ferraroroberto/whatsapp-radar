@@ -589,6 +589,20 @@ def _actionable_text(chat: sqlite3.Row, result: AnalysisResult) -> str:
     )
 
 
+def _tally_verdict(
+    outcome: ScanOutcome,
+    source_funnel: SourceFunnel,
+    chat: sqlite3.Row,
+    result: AnalysisResult,
+) -> tuple[str, str | None]:
+    """Count an actionable verdict in the funnels; return ``(final_action, digest text)``."""
+    if not result.action_required:
+        return "not_actionable", None
+    outcome.actionable += 1
+    source_funnel.actionable += 1
+    return "actionable", _actionable_text(chat, result)
+
+
 def _analyze_chat(
     conn: sqlite3.Connection,
     config: Config,
@@ -662,14 +676,7 @@ def _analyze_chat(
         conn, config, calendar_client, chat, mode=mode, item_id=item_id, result=result
     )
 
-    telegram_text: str | None = None
-    final_action = "not_actionable"
-    if result.action_required:
-        outcome.actionable += 1
-        source_funnel.actionable += 1
-        final_action = "actionable"
-        telegram_text = _actionable_text(chat, result)
-
+    final_action, telegram_text = _tally_verdict(outcome, source_funnel, chat, result)
     _write_trace(
         conn, run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=co, result=result,

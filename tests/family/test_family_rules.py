@@ -418,3 +418,21 @@ def test_household_zone_recomputes_the_offset_across_a_dst_change():
     after = datetime(2026, 10, 25, 17, 30, tzinfo=zone)
     assert before.utcoffset() == timedelta(hours=2)
     assert after.utcoffset() == timedelta(hours=1)
+
+
+# --------------------------------------------------------------- bug regressions
+
+
+def test_train_keyword_matches_whole_words_only() -> None:
+    keywords = ("tren", "train")
+    assert rules.is_train_commute(_event("Reunión (en tren)"), keywords)
+    assert rules.is_train_commute(_event("Train to Madrid"), keywords)
+    for summary in ("Entrenamiento fútbol", "Entreno", "Training"):
+        assert not rules.is_train_commute(_event(summary), keywords), summary
+
+
+def test_same_address_requires_whole_token_match() -> None:
+    assert rules.same_address("Calle Mayor 1", "Calle Mayor 1, Madrid")
+    assert not rules.same_address("Calle Mayor 1", "Calle Mayor 12, Madrid")
+    assert not rules.same_address("Carrer X 10", "Carrer X 100")
+    assert rules.same_address("Diagonal 621", "Av. Diagonal 621, Barcelona")

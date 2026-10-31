@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from app.webapp.routers._helpers import get_conn
 from src.config import Config, load_config, save_local_overrides
 from src.db import store
+from src.db.runs import FAMILY_KINDS
 from src.family.leg_status import count_legs
 from src.family.travel_blocks import (
     STATUS_DISABLED,
@@ -103,7 +104,6 @@ def _hour(value: int) -> int:
         raise HTTPException(status_code=400, detail="hour must be in 0..23")
     return value
 
-_FAMILY_KINDS = {"calendar-scan", "traffic-check"}
 _WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _WEEKDAY_LOOKUP = {name.lower(): name.lower() for name in _WEEKDAY_NAMES}
 
@@ -429,9 +429,9 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     # One newest-first, per-kind-bounded read of the unified run store feeds
     # the recent-runs list, the traffic card's status line and the
     # last travel sweep — a chatty traffic-check can't crowd out calendar-scan.
-    recent_runs = store.list_runs_by_kind(conn, tuple(_FAMILY_KINDS))
+    recent_runs = store.list_runs_by_kind(conn, FAMILY_KINDS)
     family_runs = [
-        _run_summary(row) for row in recent_runs if row["kind"] in _FAMILY_KINDS
+        _run_summary(row) for row in recent_runs if row["kind"] in FAMILY_KINDS
     ][:15]
     # The daily calendar run, by itself: a day of traffic checks pushes it out of
     # the 15 above, and the Family header names its missing locations.

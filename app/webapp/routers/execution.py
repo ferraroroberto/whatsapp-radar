@@ -37,12 +37,13 @@ from src.connector.base import ConnectorStatus
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.gmail import GmailConnector
 from src.db import store
+from src.db.runs import FAMILY_KINDS
 from src.demand_snapshot import DemandSnapshot
 
 router = APIRouter()
 
 # Actions whose argv carries a live/dry-run mode.
-_MODAL_ACTIONS = {"scan", "process", "calendar-scan", "traffic-check"}
+_MODAL_ACTIONS = {"scan", "process", *FAMILY_KINDS}
 _VALID_MODES = {"live", "dry_run"}
 _DAYS_MAX = 3650  # a generous ceiling; the UI offers small windows
 
@@ -97,7 +98,7 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
             )
         return ["reprocess", "--confirm"]
 
-    if action in {"calendar-scan", "traffic-check"}:
+    if action in FAMILY_KINDS:
         # Family checks: the same verb App Launcher Jobs schedule. A live
         # run honours the enable toggle and may send an alert; dry-run never does.
         argv = [action]
@@ -376,7 +377,7 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
     """
     rid = int(row["id"])
     kind = row["kind"]
-    if kind in ("calendar-scan", "traffic-check"):
+    if kind in FAMILY_KINDS:
         result = loads_json_column(row["summary_json"])
     else:
         result = {

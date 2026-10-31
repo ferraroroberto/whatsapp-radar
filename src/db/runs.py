@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 #: claiming an outcome nobody saw.
 STATUS_ABANDONED = "abandoned"
 
+#: The one-shot family checks. They share ``review_runs`` with the message
+#: pipeline but never touch the message store, so every list that must treat them
+#: apart (Audit scopes, run modal, CLI run capture, staleness) reads this one tuple.
+FAMILY_KINDS: tuple[str, ...] = ("traffic-check", "calendar-scan")
+
 #: How long a run of each kind may legitimately stay at ``running``. Only
 #: kinds with a known, short bound are listed: a one-shot family check records
 #: its result within seconds (slowest observed ~160 s, a Routes call per leg), so
@@ -32,8 +37,7 @@ STATUS_ABANDONED = "abandoned"
 #: here (``scan`` / ``process`` can legitimately run for many minutes, and nothing
 #: bounds them) is never reconciled — its age cannot establish that it is dead.
 STALE_RUNNING_AFTER: dict[str, timedelta] = {
-    "traffic-check": timedelta(minutes=30),
-    "calendar-scan": timedelta(minutes=30),
+    kind: timedelta(minutes=30) for kind in FAMILY_KINDS
 }
 
 

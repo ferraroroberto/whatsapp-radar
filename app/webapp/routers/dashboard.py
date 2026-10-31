@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
+from src.db.runs import FAMILY_KINDS
 from src.family.leg_status import count_legs
 
 router = APIRouter()
@@ -141,7 +142,7 @@ def _last_activity(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     run store, so a CLI- or Jobs-launched run is as visible here as a
     webapp one. ``db_run_id`` lets Home deep-link to the run's sheet in Activity.
     """
-    runs = store.list_runs_by_kind(conn, (*_MESSAGE_KINDS, "traffic-check", "calendar-scan"))
+    runs = store.list_runs_by_kind(conn, (*_MESSAGE_KINDS, *FAMILY_KINDS))
     return [
         {"source": "whatsapp", **_message_activity(runs, "whatsapp")},
         {"source": "gmail", **_message_activity(runs, "gmail")},

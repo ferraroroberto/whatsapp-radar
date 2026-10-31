@@ -34,6 +34,7 @@ from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
+from src.db.runs import FAMILY_KINDS
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.family import calendar_scan, traffic_check
 from src.family.leg_status import count_legs
@@ -528,7 +529,7 @@ def _run_command(args: argparse.Namespace) -> int:
     try:
         # Family checks never touch the message store, but they
         # record a run row so scheduled executions are visible in the Audit tab.
-        if args.command in ("calendar-scan", "traffic-check"):
+        if args.command in FAMILY_KINDS:
             # `--force` exists only on `calendar-scan`; traffic-check's own
             # self-skip is exempted by `--dry-run` instead.
             return _cmd_family_check(

@@ -563,8 +563,8 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     )
     # Never shorter than the lookahead — see `effective_dedup_window_min`.
     # The window actually applied rides the run payload below, so a
-    # configured-but-overridden value is visible in the Audit tab: this repo
-    # configures no logging handlers, so the log line alone would be dropped.
+    # configured-but-overridden value is visible in the Audit tab, which reads
+    # the payload rather than the log.
     dedup_window_min = traffic.effective_dedup_window_min
     if dedup_window_min != traffic.dedup_window_min:
         logger.info(

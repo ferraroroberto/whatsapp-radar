@@ -452,9 +452,9 @@ def _cmd_family_check(
             f"{len(payload.get('missing_locations', []))} missing location(s)"
             + (" [dry-run]" if dry_run else "")
         )
-        # This repo configures no logging handlers, so `run_travel_blocks`'
-        # INFO lines are dropped — without this the reconciled plan
-        # would only ever be visible by opening the persisted run payload.
+        # The progress line is the operator-visible summary on the terminal and in
+        # a captured run; the reconciled plan is otherwise only in the persisted
+        # run payload.
         for line in format_travel_blocks_progress(payload.get("travel_blocks") or {}):
             _progress(line)
     else:

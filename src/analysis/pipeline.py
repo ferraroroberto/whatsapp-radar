@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -44,7 +44,7 @@ from src.analysis.classifier import (
     build_stage2_classifier,
 )
 from src.analysis.contract import AnalysisResult, ContractError, parse_analysis
-from src.analysis.keywords import KeywordSignal, has_actionable_signal, matched_rules
+from src.analysis.keywords import KeywordSignal, has_actionable_signal
 from src.analysis.reminders import (
     build_client as build_calendar_client,
 )
@@ -54,12 +54,12 @@ from src.analysis.reminders import (
 )
 from src.analysis.review import (
     CLASSIFIER_OFFLINE_STATUS,
-    abort_classifier_offline,
     advance_family_cursors,
     hold_back_if_transcribing,
     note_delta_funnel,
     persist_analysis_result,
     recent_alert_context,
+    send_classifier_abort_alert,
 )
 from src.analysis.source_funnel import (
     SourceFunnel,
@@ -67,6 +67,7 @@ from src.analysis.source_funnel import (
     source_funnels_dict,
     source_funnels_json,
 )
+from src.analysis.trace import write_trace
 from src.analysis.transcription import run_transcription_phase
 from src.analysis.tripwire import TripwireScan, scan_tripwire
 from src.config import Config
@@ -118,79 +119,13 @@ class ScanOutcome:
     tripwire_truncated: bool = False
     tripwire_nudge_status: str = "disabled"
     notification_status: str = "none"
+    # True when Stage 2 became unreachable mid-run: the run is recorded as
+    # failed even though the alerts saved before the abort are still delivered.
+    aborted: bool = False
     errors: list[tuple[int, str]] = field(default_factory=list)
     source_errors: list[tuple[str, str]] = field(default_factory=list)
     source_funnels: dict[str, SourceFunnel] = field(default_factory=dict)
     digest: Digest | None = None
-
-
-def _render_delta(delta: list[StoredMessage]) -> str:
-    return "\n".join(
-        f"[{m.source_message_id}] {m.sender_label or 'unknown'}: {m.text or ''}" for m in delta
-    )
-
-
-def _messages_record(delta: list[StoredMessage], source: str) -> str:
-    """Per-message audit record: each message with the Stage-1 roots it matched.
-
-    Captured at run time (not recomputed on read) so the trace stays faithful to
-    the keyword roots that actually ran, even if ``keyword_roots.txt`` changes
-    later. The LLM's per-message verdict is *not* stored here — it is derived on
-    read from the parsed result's ``evidence_message_ids``.
-    """
-    records: list[dict[str, Any]] = []
-    for message in delta:
-        rules = matched_rules(message.text, source)
-        records.append(
-            {
-                "id": message.source_message_id,
-                "sender": message.sender_label,
-                "text": message.text,
-                "type": message.message_type,
-                "roots": [rule.root for rule in rules],
-                "buckets": list(dict.fromkeys(rule.bucket for rule in rules)),
-            }
-        )
-    return json.dumps(records, ensure_ascii=False)
-
-
-def _result_json(result: AnalysisResult) -> str:
-    return json.dumps(asdict(result), ensure_ascii=False)
-
-
-def _write_trace(
-    conn: sqlite3.Connection,
-    run_id: int,
-    chat_id: int,
-    *,
-    source: str,
-    signal: KeywordSignal,
-    delta: list[StoredMessage],
-    outcome: ClassificationOutcome | None,
-    result: AnalysisResult | None,
-    final_action: str,
-    telegram_text: str | None,
-    error: str | None,
-) -> None:
-    store.insert_analysis_trace(
-        conn,
-        run_id,
-        chat_id,
-        input_message_ids_json=json.dumps([m.source_message_id for m in delta]),
-        input_text=_render_delta(delta),
-        messages_json=_messages_record(delta, source),
-        stage1_passed=signal.matched,
-        stage1_roots_json=json.dumps(list(signal.roots)),
-        stage1_buckets_json=json.dumps(list(signal.buckets)),
-        llm_called=outcome.llm_called if outcome else False,
-        llm_system_prompt=outcome.system_prompt if outcome else None,
-        llm_user_prompt=outcome.user_prompt if outcome else None,
-        llm_raw_response=outcome.raw_response if outcome else None,
-        parsed_result_json=_result_json(result) if result else None,
-        final_action=final_action,
-        telegram_text=telegram_text,
-        error=error,
-    )
 
 
 def _advance(
@@ -293,49 +228,34 @@ def _abort_offline(
     return outcome
 
 
-def _abort_classifier(
+def _unanalysed_after_abort(
     conn: sqlite3.Connection,
     config: Config,
     outcome: ScanOutcome,
-    exc: ClassifierUnavailable,
-    progress: Progress | None,
+    failed_chat: sqlite3.Row,
+    remaining: list[sqlite3.Row],
     *,
-    chat_id: int = 0,
-) -> ScanOutcome:
-    """Finalize a live/dry/process run that aborted because Stage 2 could not reach the hub.
+    mode: Mode,
+    days: int | None,
+    successful_sources: set[str],
+) -> list[str]:
+    """Names of the chats a classifier abort left unanalysed, cursors held.
 
-    The mirror image of :func:`_abort_offline` at the other end of the pipeline:
-    a source outage aborts loudly, alerts, and records the run as ``failed``,
-    and a *classifier* outage does the same instead of raising straight out of
-    ``scan`` and stranding the run row at ``status='running'``. The funnel keeps the
-    counters earned before the failure — the chats analysed up to that point are
-    real work — and every remaining cursor is held. ``chat_id`` names the chat
-    whose classify call actually hit the dead hub — 0 only when no chat was
-    in flight yet.
+    The chat whose classify call hit the dead hub, plus every later monitored
+    chat that has a delta waiting. Chats analysed before the abort are done and
+    are not listed. ``chats_with_delta`` is raised to cover the later ones so
+    the run row counts every chat that had work.
     """
-    outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
-    outcome.errors.append((chat_id, str(exc)))
-    abort_classifier_offline(
-        conn,
-        config,
-        outcome.run_id,
-        exc,
-        chats_with_delta=outcome.chats_with_delta,
-        progress=progress,
-    )
-    store.record_run_funnel(
-        conn,
-        outcome.run_id,
-        chats_synced=outcome.chats_synced,
-        messages_synced=outcome.messages_synced,
-        chats_monitored=outcome.chats_monitored,
-        stage1_passed=outcome.stage1_passed,
-        stage2_llm_calls=outcome.stage2_llm_calls,
-        actionable=outcome.actionable,
-        notification_status=CLASSIFIER_OFFLINE_STATUS,
-        source_funnel_json=source_funnels_json(outcome.source_funnels),
-    )
-    return outcome
+    names = [str(failed_chat["display_name"])]
+    for chat in remaining:
+        delta = _chat_delta(
+            conn, config, int(chat["id"]),
+            mode=mode, days=days, successful_sources=successful_sources,
+        )
+        if delta:
+            outcome.chats_with_delta += 1
+            names.append(str(chat["display_name"]))
+    return names
 
 
 def _run_tripwire(
@@ -524,7 +444,7 @@ def _reject_at_stage1(
         confidence=None,
         evidence_message_ids_json=json.dumps([]),
     )
-    _write_trace(
+    write_trace(
         conn, outcome.run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=None,
         result=_NOT_ACTIONABLE,
@@ -601,6 +521,20 @@ def _actionable_text(chat: sqlite3.Row, result: AnalysisResult) -> str:
     )
 
 
+def _tally_verdict(
+    outcome: ScanOutcome,
+    source_funnel: SourceFunnel,
+    chat: sqlite3.Row,
+    result: AnalysisResult,
+) -> tuple[str, str | None]:
+    """Count an actionable verdict in the funnels; return ``(final_action, digest text)``."""
+    if not result.action_required:
+        return "not_actionable", None
+    outcome.actionable += 1
+    source_funnel.actionable += 1
+    return "actionable", _actionable_text(chat, result)
+
+
 def _analyze_chat(
     conn: sqlite3.Connection,
     config: Config,
@@ -612,11 +546,11 @@ def _analyze_chat(
     *,
     mode: Mode,
     progress: Progress | None,
-) -> ScanOutcome | None:
+) -> ClassifierUnavailable | None:
     """Run Stage 1 and Stage 2 on one chat's delta and persist the verdict.
 
-    Returns the finalized outcome when the run must stop (Stage 2 unreachable),
-    else ``None`` so the scan moves on to the next chat.
+    Returns the error when the run must stop (Stage 2 unreachable; this chat's
+    cursor is held), else ``None`` so the scan moves on to the next chat.
     """
     run_id = outcome.run_id
     chat_id = int(chat["id"])
@@ -648,7 +582,8 @@ def _analyze_chat(
         # Whole-run condition, not a per-chat one: every remaining chat would
         # hit the same dead hub, so stop once instead of looping through a
         # timeout per chat.
-        return _abort_classifier(conn, config, outcome, exc, progress, chat_id=chat_id)
+        outcome.errors.append((chat_id, str(exc)))
+        return exc
     if co.llm_called:
         outcome.stage2_llm_calls += 1
         source_funnel.llm_calls += 1
@@ -660,7 +595,7 @@ def _analyze_chat(
         # delta is retried next run. The trace still captures the failure.
         final_action, error = _contract_failure(co, exc)
         outcome.errors.append((chat_id, error))
-        _write_trace(
+        write_trace(
             conn, run_id, chat_id,
             source=source, signal=signal, delta=delta, outcome=co, result=None,
             final_action=final_action, telegram_text=None, error=error,
@@ -673,15 +608,8 @@ def _analyze_chat(
         conn, config, calendar_client, chat, mode=mode, item_id=item_id, result=result
     )
 
-    telegram_text: str | None = None
-    final_action = "not_actionable"
-    if result.action_required:
-        outcome.actionable += 1
-        source_funnel.actionable += 1
-        final_action = "actionable"
-        telegram_text = _actionable_text(chat, result)
-
-    _write_trace(
+    final_action, telegram_text = _tally_verdict(outcome, source_funnel, chat, result)
+    write_trace(
         conn, run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=co, result=result,
         final_action=final_action, telegram_text=telegram_text, error=None,
@@ -700,12 +628,22 @@ def _finish_scan(
     mode: Mode,
     deliver: bool,
     progress: Progress | None,
+    unanalysed: list[str] | None = None,
+    abort_error: ClassifierUnavailable | None = None,
 ) -> ScanOutcome:
-    """Build the digest, deliver it when due, and close the run row."""
+    """Build the digest, deliver it when due, and close the run row.
+
+    After a classifier abort (``abort_error``), the alerts saved before the hub
+    died are still delivered — their cursors already advanced, so nothing else
+    would ever send them — and the run is then recorded as ``failed``. The abort
+    alert names ``unanalysed``, the chats whose cursors were held. With no
+    digest delivered, ``notification_status`` stays ``classifier_offline``.
+    """
     run_id = outcome.run_id
     digest = build_digest(conn, run_id)
     outcome.digest = digest
 
+    delivered = False
     if mode == "dry_run":
         outcome.notification_status = "dry_run"
     elif not deliver:
@@ -715,14 +653,24 @@ def _finish_scan(
     elif digest.has_actionable_items:
         status, _ = deliver_digest(conn, config, run_id, digest)
         outcome.notification_status = status
+        delivered = True
     else:
         outcome.notification_status = "none"
 
-    run_status = (
-        "completed_with_errors"
-        if outcome.errors or outcome.source_errors
-        else "completed"
-    )
+    if abort_error is not None:
+        outcome.aborted = True
+        if not delivered:
+            outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
+        send_classifier_abort_alert(
+            config, abort_error, unanalysed or [], progress=progress
+        )
+        run_status = "failed"
+    else:
+        run_status = (
+            "completed_with_errors"
+            if outcome.errors or outcome.source_errors
+            else "completed"
+        )
     store.finish_run(conn, run_id, run_status, outcome.chats_with_delta)
     store.record_run_funnel(
         conn,
@@ -810,7 +758,7 @@ def scan(
         ).monitored_channels += 1
     emit(progress, f"• monitoring {outcome.chats_monitored} chat(s)")
 
-    for chat in monitored:
+    for index, chat in enumerate(monitored):
         delta = _chat_delta(
             conn, config, int(chat["id"]),
             mode=mode, days=days, successful_sources=successful_sources,
@@ -818,12 +766,20 @@ def scan(
         if not delta:
             continue
         outcome.chats_with_delta += 1
-        aborted = _analyze_chat(
+        abort_error = _analyze_chat(
             conn, config, stage2, calendar_client, outcome, chat, delta,
             mode=mode, progress=progress,
         )
-        if aborted is not None:
-            return aborted
+        if abort_error is not None:
+            emit(progress, f"✗ aborted — Stage-2 classifier unreachable: {abort_error}")
+            unanalysed = _unanalysed_after_abort(
+                conn, config, outcome, chat, monitored[index + 1:],
+                mode=mode, days=days, successful_sources=successful_sources,
+            )
+            return _finish_scan(
+                conn, config, outcome, mode=mode, deliver=deliver, progress=progress,
+                unanalysed=unanalysed, abort_error=abort_error,
+            )
 
     return _finish_scan(conn, config, outcome, mode=mode, deliver=deliver, progress=progress)
 
@@ -842,6 +798,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
         "ok": (
             outcome.notification_status
             not in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+            and not outcome.aborted
             and not outcome.source_errors
         ),
         "run_id": outcome.run_id,

@@ -1,6 +1,6 @@
 # `toast` — the neutral frosted toast
 
-The fleet's one transient message, for the result of a user-initiated command ("Saved", "Opening in Explorer", "Couldn't reach the server"). It is the floating nav bar's glass (translucent card fill, hairline border, `backdrop-filter: blur(20px) saturate(1.25)`), centred 8px above the nav so the nav never hides it, and above every overlay. **Only a real error tints** — a `danger` fill, border and `accent-fg` text. Success, info and warning stay neutral: the message says what happened, colour does not. Spec: `~/.claude/design.md` → `toast` component and its contract bullet; feedback altitude in "Async data & feedback". Normalized from app-launcher's "Neutral frosted toast" (ported from home-automation #782).
+The fleet's one transient message, for the result of a user-initiated command ("Saved", "Opening in Explorer", "Couldn't reach the server"). It is the floating nav bar's glass (translucent card fill, hairline border, `backdrop-filter: blur(20px) saturate(1.25)`), centred 8px above the nav so the nav never hides it, and above every overlay. **Only a real error tints** — a darkened `danger` fill, a `danger` border and `accent-fg` text. Success, info and warning stay neutral: the message says what happened, colour does not. Spec: `~/.claude/design.md` → `toast` component and its contract bullet; feedback altitude in "Async data & feedback". Normalized from app-launcher's "Neutral frosted toast" (ported from home-automation #782).
 
 ## Files
 
@@ -48,15 +48,26 @@ showToast('Uploading…', undefined, { ms: 0 });       // stays until the next t
 
 | Token | Light value | Used for |
 | --- | --- | --- |
-| `--tabbar-bg` | `rgba(255,255,255,0.85)` (dark `rgba(22,27,34,0.86)`) | glass fill (the nav bar's) |
-| `--tabbar-border` | `rgba(31,35,40,0.12)` (dark `rgba(255,255,255,0.13)`) | hairline border (the nav bar's) |
+| `--tabbar-bg` | `rgba(255,255,255,0.62)` (dark `rgba(42,45,52,0.55)`) | glass fill (the nav bar's) |
+| `--tabbar-border` | `rgba(0,0,0,0.08)` (dark `rgba(255,255,255,0.14)`) | hairline border (the nav bar's) |
 | `--ink` | `#1f2328` | text |
-| `--deficit` | `#cf222e` | error fill (75% mix) and border |
+| `--deficit` | `#cf222e` (dark `#f85149`) | error border, and the error fill (75% `--deficit` over black) |
 | `--accent-fg` | `#ffffff` | error text |
 | `--shadow` | `0 8px 24px rgba(31,35,40,0.12)` | the theme shadow (falls back to the nav bar's `0 10px 34px rgba(0,0,0,0.5)` if undefined) |
 | `--radius-md` | `12px` | corners |
 | `--font-label` | `0.875rem` | text size |
 | `--bottom-tabs-height` / `--bottom-tabs-margin` | `61px` / `21px` | optional; fall back to the nav's own defaults |
+
+## Error contrast
+
+The error fill is opaque: `color-mix(in srgb, var(--deficit) 75%, black)`. `--deficit` stays the spec `danger` everywhere, so no adopter overrides it for the toast, and there is no extra token to define. White (`--accent-fg`) text on that fill is measured against WCAG AA's 4.5:1:
+
+| Theme | `--deficit` | Fill | White text on the fill |
+| --- | --- | --- | --- |
+| Light | `#cf222e` | `#9b1a22` | 8.18:1 |
+| Dark | `#f85149` | `#ba3d37` | 5.52:1 |
+
+The fill is opaque, so the ratio does not depend on the page behind the toast. The former translucent fill measured 3.73:1 (light `--deficit`) and 2.55:1 (dark `--deficit`) over a white page. `tests/test_toast_contrast.py` recomputes the ratio from `toast.css` for both themes over every page ground in the gallery and fails below 4.5:1.
 
 ## Don't diverge
 

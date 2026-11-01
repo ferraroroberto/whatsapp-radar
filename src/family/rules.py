@@ -1,6 +1,6 @@
 """Deterministic decision logic for the family checks.
 
-Pure functions over :class:`calendar_readonly.core.CalendarEvent` and the typed
+Pure functions over :class:`src.calendar_readonly.core.CalendarEvent` and the typed
 config — no I/O, no network, no LLM. This is the evidence-backed core: the
 OpenClaw postmortem traced its failures to LLM-narrated, non-deterministic
 decisions, so classification, origin resolution, dedup, quiet hours, and
@@ -15,8 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
-from calendar_readonly.core import CalendarEvent
-
+from src.calendar_readonly.core import CalendarEvent
 from src.config import FamilyConfig
 
 _EN_CASA = "(en casa)"

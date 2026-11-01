@@ -9,8 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from calendar_readonly.core import CalendarEvent
-
+from src.calendar_readonly.core import CalendarEvent
 from src.config import ChildcareWindow, FamilyConfig
 from src.family import rules
 

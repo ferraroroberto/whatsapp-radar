@@ -389,10 +389,13 @@ def test_the_portable_calendar_packages_stay_product_neutral() -> None:
     root = Path(__file__).resolve().parents[2]
     product_specific = ("wr_travel_block", "wr_source_event_id", "Trayecto", "calendar_backups")
     for package in ("calendar_readonly", "calendar_write"):
-        for path in (root / package).glob("*.py"):
+        for path in (root / "src" / package).glob("*.py"):
             source = path.read_text(encoding="utf-8")
             for forbidden in ("from src", "import src", "from app", "import app", "from scripts"):
                 assert forbidden not in source, f"{path.name} must not import {forbidden}"
+            for line in source.splitlines():
+                if line.lstrip().startswith("from .."):
+                    assert line.lstrip().startswith("from ..google_oauth_common"), path.name
             for term in product_specific:
                 assert term not in source, f"{path.name} must not name {term}"
 

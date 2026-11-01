@@ -16,8 +16,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from calendar_readonly.core import CalendarEvent
 
+from src.calendar_readonly.core import CalendarEvent
 from src.config import (
     Config,
     FamilyConfig,

@@ -16,9 +16,8 @@ import sqlite3
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from calendar_write import CalendarWriteClient, build_google_calendar_write_client
-
 from src.analysis.contract import AnalysisResult
+from src.calendar_write import CalendarWriteClient, build_google_calendar_write_client
 from src.config import CalendarConfig, FamilyConfig
 from src.db import store
 

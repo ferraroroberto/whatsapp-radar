@@ -440,7 +440,7 @@ def test_a_dry_run_performs_no_insert_no_delete_and_no_backup(
     monkeypatch.setattr(
         calendar_source, "build_google_calendar_client", lambda _p: FakeReadClient()
     )
-    from calendar_readonly.core import normalize_event
+    from src.calendar_readonly.core import normalize_event
 
     payload = travel_blocks_write.run_travel_blocks(
         make_config(dry_run=True),
@@ -498,7 +498,7 @@ def test_a_failed_insert_degrades_that_block_alone(
         CalendarAccount(calendar_id=CALENDAR_ID, person=PERSON),
         CalendarAccount(calendar_id=CALENDAR_B, person=PERSON_B),
     )
-    from calendar_readonly.core import normalize_event
+    from src.calendar_readonly.core import normalize_event
 
     read_client = FakeReadClient()
     write_client = FakeWriteClient(insert_fails=[CALENDAR_B])
@@ -618,7 +618,7 @@ def test_a_calendar_read_that_fails_entirely_reports_unknown_not_empty(
     monkeypatch.setattr(
         travel_blocks_write, "build_google_calendar_write_client", lambda _p: write_client
     )
-    from calendar_readonly.core import normalize_event
+    from src.calendar_readonly.core import normalize_event
 
     payload = travel_blocks_write.run_travel_blocks(
         make_config(),

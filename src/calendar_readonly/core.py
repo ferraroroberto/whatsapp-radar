@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Protocol
 
-from google_oauth_common.errors import safe_http_error_detail
+from ..google_oauth_common.errors import safe_http_error_detail
 
 CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 

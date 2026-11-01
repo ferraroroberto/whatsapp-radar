@@ -91,7 +91,7 @@ def test_importing_the_vocabulary_pulls_in_no_google_client() -> None:
         "import sys; import src.family.leg_status;"
         "print(sorted(m for m in sys.modules"
         " if m.split('.')[0] in {'google', 'googleapiclient', 'google_auth_oauthlib',"
-        " 'calendar_readonly', 'requests'}))"
+        " 'requests'} or m.startswith('src.calendar_readonly')))"
     )
     root = Path(__file__).resolve().parents[2]
     proc = subprocess.run(

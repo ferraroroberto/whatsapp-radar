@@ -13,17 +13,16 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gmail_readonly import (
+from src.analysis.keywords import load_keyword_rules, normalize, roots_file_path
+from src.config import Config
+from src.connector.gmail import build_gmail_read_client
+from src.gmail_readonly import (
     GmailLabel,
     GmailMailbox,
     GmailSender,
     GmailSource,
     NormalizedEmail,
 )
-
-from src.analysis.keywords import load_keyword_rules, normalize, roots_file_path
-from src.config import Config
-from src.connector.gmail import build_gmail_read_client
 from src.progress import Progress
 
 _BUCKET_NAME = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")

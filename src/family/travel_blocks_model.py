@@ -17,7 +17,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 
-from calendar_readonly.core import CalendarEvent
+from src.calendar_readonly.core import CalendarEvent
 
 #: ``extendedProperties.private`` keys stamped on every block we write, and the
 #: `privateExtendedProperty` filter the reconcile step queries with.

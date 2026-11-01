@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from gmail_readonly import GmailMailbox, GmailSender
 
 from scripts.gmail_school_backtest import (
     _dated_search,
@@ -22,6 +21,7 @@ from scripts.gmail_school_backtest import (
 from src.analysis.classifier import ClassificationOutcome, StubClassifier
 from src.config import Config, GmailConfig, HubConfig, TelegramConfig
 from src.config import GmailSender as ConfigGmailSender
+from src.gmail_readonly import GmailMailbox, GmailSender
 
 
 def _encoded(value: str) -> str:

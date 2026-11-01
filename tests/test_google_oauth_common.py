@@ -16,15 +16,18 @@ import pytest
 
 
 def test_component_imports_no_application_or_client_modules() -> None:
-    component_root = Path(__file__).parents[1] / "google_oauth_common"
+    component_root = Path(__file__).parents[1] / "src" / "google_oauth_common"
     imported_modules: set[str] = set()
     for path in component_root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported_modules.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imported_modules.add(node.module)
+            elif isinstance(node, ast.ImportFrom):
+                # Parent-relative imports would reach into the host package.
+                assert node.level <= 1, path.name
+                if node.module:
+                    imported_modules.add(node.module)
     forbidden_prefixes = (
         "src",
         "app",
@@ -51,10 +54,11 @@ def test_every_builder_bounds_its_transport_timeout(
     that first; this asserts all three builders carry the same bound.
     """
     import googleapiclient.discovery
-    from calendar_readonly.google_client import build_google_calendar_client
-    from calendar_write.google_client import build_google_calendar_write_client
-    from gmail_readonly.google_client import build_google_read_client
-    from google_oauth_common.transport import DEFAULT_REQUEST_TIMEOUT_S
+
+    from src.calendar_readonly.google_client import build_google_calendar_client
+    from src.calendar_write.google_client import build_google_calendar_write_client
+    from src.gmail_readonly.google_client import build_google_read_client
+    from src.google_oauth_common.transport import DEFAULT_REQUEST_TIMEOUT_S
 
     class _Credentials:
         expired = False
@@ -95,7 +99,7 @@ def test_every_builder_bounds_its_transport_timeout(
 
 def test_build_service_injected_builder_gets_credentials_and_owns_transport() -> None:
     """The legacy test seam: an injected builder receives ``credentials=``, no ``http=``."""
-    from google_oauth_common.transport import build_service
+    from src.google_oauth_common.transport import build_service
 
     calls: list[tuple[str, str, dict[str, object]]] = []
 
@@ -133,7 +137,7 @@ class _RefreshingCredentials:
 def _refresh(
     tmp_path: Path, credentials: _RefreshingCredentials, sleeps: list[float]
 ) -> list[Path]:
-    from google_oauth_common.credentials import load_or_refresh_credentials
+    from src.google_oauth_common.credentials import load_or_refresh_credentials
 
     token_path = tmp_path / "token.json"
     token_path.write_text("{}", encoding="utf-8")
@@ -167,7 +171,8 @@ def test_refresh_retries_a_transient_transport_error(tmp_path: Path) -> None:
 
 def test_refresh_gives_up_with_a_distinct_transient_error(tmp_path: Path) -> None:
     from google.auth.exceptions import TransportError
-    from google_oauth_common.credentials import REFRESH_ATTEMPTS, TransientNetworkError
+
+    from src.google_oauth_common.credentials import REFRESH_ATTEMPTS, TransientNetworkError
 
     credentials = _RefreshingCredentials([TransportError("SSLEOFError")] * 10)
     sleeps: list[float] = []
@@ -184,7 +189,8 @@ def test_refresh_gives_up_with_a_distinct_transient_error(tmp_path: Path) -> Non
 def test_refresh_does_not_retry_an_auth_error(tmp_path: Path) -> None:
     """A revoked token (``invalid_grant``) is a real failure: one attempt, loud."""
     from google.auth.exceptions import RefreshError
-    from google_oauth_common.credentials import TransientNetworkError
+
+    from src.google_oauth_common.credentials import TransientNetworkError
 
     credentials = _RefreshingCredentials([RefreshError("invalid_grant")] * 5)
     sleeps: list[float] = []
@@ -201,7 +207,7 @@ def test_calendar_list_events_asks_the_api_client_to_retry_transient_errors() ->
     """The read call retries SSL/connection drops itself, like the token refresh."""
     from datetime import UTC, datetime
 
-    from calendar_readonly.google_client import GoogleCalendarReadClient
+    from src.calendar_readonly.google_client import GoogleCalendarReadClient
 
     seen: list[dict[str, object]] = []
 
@@ -228,7 +234,7 @@ def test_calendar_list_events_asks_the_api_client_to_retry_transient_errors() ->
 
 @pytest.mark.parametrize("api", ["Gmail", "Calendar"])
 def test_safe_http_error_detail_names_the_api_and_maps_a_timeout(api: str) -> None:
-    from google_oauth_common.errors import safe_http_error_detail
+    from src.google_oauth_common.errors import safe_http_error_detail
 
     assert safe_http_error_detail(TimeoutError("socket"), api) == (
         f"{api} API request timed out — network stalled or Google unreachable"
@@ -239,13 +245,13 @@ def test_safe_http_error_detail_names_the_api_and_maps_a_timeout(api: str) -> No
 
 
 def test_calendar_error_detail_reports_a_transport_timeout() -> None:
-    from calendar_readonly.core import safe_error_detail
+    from src.calendar_readonly.core import safe_error_detail
 
     assert "timed out" in safe_error_detail(TimeoutError("socket"))
 
 
 def test_close_service_closes_the_transport_and_tolerates_none() -> None:
-    from google_oauth_common.transport import close_service
+    from src.google_oauth_common.transport import close_service
 
     closed: list[bool] = []
 

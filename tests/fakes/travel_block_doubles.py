@@ -305,7 +305,7 @@ def run_sweep(
     **config_kwargs: Any,
 ) -> tuple[dict[str, Any], FakeReadClient, FakeWriteClient]:
     """Drive `run_travel_blocks` end to end with both clients faked."""
-    from calendar_readonly.core import normalize_event
+    from src.calendar_readonly.core import normalize_event
 
     read_client = read or FakeReadClient()
     write_client = write or FakeWriteClient()

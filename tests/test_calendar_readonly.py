@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from calendar_readonly.core import normalize_event
+from src.calendar_readonly.core import normalize_event
 
 _RAW_ALL_DAY = {
     "id": "allday1",

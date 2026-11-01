@@ -5,7 +5,7 @@ Sibling of ``gmail_readonly``: installed-app OAuth refresh-token flow scoped to
 normalization. Bootstrap/runbook: ``docs/calendar-bootstrap.md``.
 """
 
-from calendar_readonly.core import (
+from .core import (
     CALENDAR_READONLY_SCOPE,
     CalendarEvent,
     CalendarReadClient,
@@ -13,7 +13,7 @@ from calendar_readonly.core import (
     normalize_event,
     safe_error_detail,
 )
-from calendar_readonly.google_client import (
+from .google_client import (
     GoogleCalendarReadClient,
     build_google_calendar_client,
 )

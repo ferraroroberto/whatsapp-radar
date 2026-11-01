@@ -24,8 +24,6 @@ import sys
 import time
 from datetime import datetime
 
-from gmail_readonly import GmailReadError
-
 from app.cli import runlog, stack_watchdog
 from src.analysis.classifier import build_stage2_classifier
 from src.analysis.gmail_survey import run_gmail_survey
@@ -41,6 +39,7 @@ from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.family import calendar_scan, traffic_check
 from src.family.leg_status import count_legs
 from src.family.travel_blocks_report import format_travel_blocks_progress
+from src.gmail_readonly import GmailReadError
 from src.logging_setup import configure_file_logging
 from src.notify import deliver_digest
 from src.notify.alert import send_alert

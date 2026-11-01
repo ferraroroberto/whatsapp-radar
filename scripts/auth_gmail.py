@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from gmail_readonly.oauth import main as oauth_main
-
 from src.config import load_config
+from src.gmail_readonly.oauth import main as oauth_main
 
 
 def main() -> int:

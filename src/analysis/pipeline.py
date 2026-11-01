@@ -35,8 +35,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from calendar_write import CalendarWriteClient
-
 from src.analysis.classifier import (
     ClassificationOutcome,
     ClassifierUnavailable,
@@ -70,6 +68,7 @@ from src.analysis.source_funnel import (
 from src.analysis.trace import write_trace
 from src.analysis.transcription import run_transcription_phase
 from src.analysis.tripwire import TripwireScan, scan_tripwire
+from src.calendar_write import CalendarWriteClient
 from src.config import Config
 from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding, build_connectors

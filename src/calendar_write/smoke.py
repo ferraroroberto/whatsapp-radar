@@ -6,7 +6,7 @@ id, then delete it again — proving the write token can create and remove
 events and leaves nothing behind. Prints only privacy-safe aggregates (a
 truncated event id), never full event content.
 
-    python -m calendar_write.smoke --calendar you@example.com
+    python -m src.calendar_write.smoke --calendar you@example.com
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from calendar_write.core import CalendarWriteError
-from calendar_write.google_client import build_google_calendar_write_client
+from .core import CalendarWriteError
+from .google_client import build_google_calendar_write_client
 
 
 def main(argv: list[str] | None = None) -> int:

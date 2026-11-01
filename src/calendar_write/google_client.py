@@ -6,15 +6,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from google_oauth_common.credentials import load_or_refresh_credentials
-from google_oauth_common.token_store import write_token_atomically
-from google_oauth_common.transport import (
+from ..google_oauth_common.credentials import load_or_refresh_credentials
+from ..google_oauth_common.token_store import write_token_atomically
+from ..google_oauth_common.transport import (
     DEFAULT_REQUEST_TIMEOUT_S,
     build_service,
     close_service,
 )
-
-from calendar_write.core import CALENDAR_WRITE_SCOPE
+from .core import CALENDAR_WRITE_SCOPE
 
 CredentialLoader = Callable[[str, list[str]], Any]
 RequestFactory = Callable[[], Any]

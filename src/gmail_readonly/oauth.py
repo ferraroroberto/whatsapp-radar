@@ -1,4 +1,4 @@
-"""Standalone installed-app OAuth bootstrap for the read-only Calendar scope."""
+"""Standalone installed-app OAuth bootstrap for the read-only Gmail scope."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ import logging
 import sys
 from pathlib import Path
 
-from google_oauth_common.bootstrap import FlowLoader, authorize_installed_app, run_bootstrap_cli
-from google_oauth_common.token_store import write_token_atomically
-
-from calendar_readonly.core import CALENDAR_READONLY_SCOPE
+from ..google_oauth_common.bootstrap import FlowLoader, authorize_installed_app, run_bootstrap_cli
+from ..google_oauth_common.token_store import write_token_atomically
+from .core import GMAIL_READONLY_SCOPE
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +26,8 @@ def authorize(
     authorize_installed_app(
         credentials_path=credentials_path,
         token_path=token_path,
-        scope=CALENDAR_READONLY_SCOPE,
-        not_found_label="Calendar",
+        scope=GMAIL_READONLY_SCOPE,
+        not_found_label="Gmail",
         token_writer=write_token_atomically,
         host=host,
         port=port,
@@ -42,8 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     return run_bootstrap_cli(
         argv,
         description=__doc__,
-        opening_message="Opening Google consent for read-only Calendar access.",
-        success_label="Calendar read-only",
+        opening_message="Opening Google consent for read-only Gmail access.",
+        success_label="Gmail read-only",
         logger=logger,
         authorize_fn=authorize,
     )

@@ -1,4 +1,4 @@
-"""Portable offline contract tests for the root-level Gmail component."""
+"""Portable offline contract tests for the portable Gmail component."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from gmail_readonly import (
+
+from src.gmail_readonly import (
     GMAIL_READONLY_SCOPE,
     GmailLabel,
     GmailMailbox,
@@ -19,8 +20,7 @@ from gmail_readonly import (
     build_google_read_client,
     masked_email_address,
 )
-from gmail_readonly.oauth import authorize
-
+from src.gmail_readonly.oauth import authorize
 from tests.fakes.oauth_fakes import expired_credential_loader, flow_loader
 
 
@@ -112,7 +112,7 @@ class _FakeClient:
 
 
 def test_component_imports_no_application_modules() -> None:
-    component_root = Path(__file__).parents[1] / "gmail_readonly"
+    component_root = Path(__file__).parents[1] / "src" / "gmail_readonly"
     imported_modules: set[str] = set()
     for path in component_root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -121,6 +121,9 @@ def test_component_imports_no_application_modules() -> None:
                 imported_modules.update(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported_modules.add(node.module)
+                # A parent-relative import may only reach the sibling OAuth package.
+                if node.level > 1:
+                    assert node.module.split(".")[0] == "google_oauth_common", path.name
     assert not any(
         module == prefix or module.startswith(f"{prefix}.")
         for module in imported_modules
@@ -388,7 +391,7 @@ def test_google_client_batches_gets_in_chunks_of_fifty(
 ) -> None:
     sleeps: list[float] = []
     monkeypatch.setattr(
-        "gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
+        "src.gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
     )
 
     class _FakeRequest:
@@ -447,7 +450,7 @@ def test_google_client_retries_rate_limited_batch_items(
 ) -> None:
     sleeps: list[float] = []
     monkeypatch.setattr(
-        "gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
+        "src.gmail_readonly.google_client.time.sleep", lambda seconds: sleeps.append(seconds)
     )
 
     class _Response:
@@ -506,7 +509,7 @@ def test_google_client_retries_rate_limited_batch_items(
 
 
 def test_html_to_text_drops_style_and_script_content() -> None:
-    from gmail_readonly.core import _html_to_text
+    from src.gmail_readonly.core import _html_to_text
 
     text = _html_to_text(
         "<html><head><style>p { color: red }</style><script>var x = 1;</script></head>"

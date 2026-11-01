@@ -53,10 +53,15 @@
   display: none;
 }
 
-/* The only tinted variant: a real error. A `danger` 75% mix fill, `danger`
-   border, `accent-fg` text. There is deliberately no success rule. */
+/* The only tinted variant: a real error. An opaque `danger`-over-black fill,
+   `danger` border, `accent-fg` text. There is deliberately no success rule.
+   Opaque and darkened on purpose: white text on `danger` itself is 3.35:1 in
+   dark, and a translucent fill lets the page ground behind the toast pull the
+   contrast under 4.5:1 (2.55:1 over a white page). 75% danger / 25% black
+   keeps white text above 4.5:1 in both themes whatever is behind it
+   (tests/test_toast_contrast.py). */
 .toast.error {
-  background: color-mix(in srgb, var(--deficit) 75%, transparent);
+  background: color-mix(in srgb, var(--deficit) 75%, black);
   border-color: var(--deficit);
   color: var(--accent-fg);
 }

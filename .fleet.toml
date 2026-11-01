@@ -8,10 +8,8 @@ description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
 shape       = "webapp-tray"
 port        = ":8455"
-# Root folders the shape does not list: the four portable Google packages (shared with
-# sibling repos, so deliberately outside src/) and the separate Node connector process.
-# docs/layout.md says why each stays.
-extra_roots = ["calendar_readonly", "calendar_write", "gmail_readonly", "google_oauth_common", "sidecar"]
+# sidecar: the read-only Node/Baileys connector, a separate non-Python process (docs/layout.md).
+extra_roots = ["sidecar"]
 
 [vendored]
 e2e_live_guard = { src = "tests/e2e/_e2e_live_guard.py", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "tests/e2e/_e2e_live_guard.py" }
@@ -237,20 +235,7 @@ tier       = "none"
 prefix     = "src/"
 extensions = ["py"]
 
-# Portable Google API clients + the read-only WhatsApp connector -- backend
-# only, no rendered surface.
-[[e2e.rule]]
-tier   = "none"
-prefix = "calendar_readonly/"
-[[e2e.rule]]
-tier   = "none"
-prefix = "calendar_write/"
-[[e2e.rule]]
-tier   = "none"
-prefix = "gmail_readonly/"
-[[e2e.rule]]
-tier   = "none"
-prefix = "google_oauth_common/"
+# The read-only WhatsApp connector -- backend only, no rendered surface.
 [[e2e.rule]]
 tier   = "none"
 prefix = "sidecar/"

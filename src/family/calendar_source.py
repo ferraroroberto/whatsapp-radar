@@ -20,9 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from calendar_readonly.core import CalendarEvent, normalize_event, safe_error_detail
-from calendar_readonly.google_client import build_google_calendar_client
-
+from src.calendar_readonly.core import CalendarEvent, normalize_event, safe_error_detail
+from src.calendar_readonly.google_client import build_google_calendar_client
 from src.config import CalendarConfig
 from src.family.travel_blocks import is_travel_block
 

@@ -200,7 +200,7 @@ def carries_marker(raw: Mapping[str, Any]) -> bool:
     """Whether a raw event resource carries our marker — the delete guard's predicate.
 
     The resource-level twin of :func:`is_travel_block` (which reads a normalized
-    :class:`~calendar_readonly.core.CalendarEvent`). Both spell the same rule
+    :class:`~src.calendar_readonly.core.CalendarEvent`). Both spell the same rule
     once, here, next to the marker constants they check.
     """
     return _private_properties(raw).get(MARKER_KEY) == MARKER_VALUE

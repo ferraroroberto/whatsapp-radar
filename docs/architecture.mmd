@@ -89,7 +89,7 @@ flowchart TB
   TRAYPY -->|keep-alive supervise| SIDECARPY
   LINKED --> SIDECARPY
 
-  subgraph gmailcore["gmail_readonly/ — reusable framework-neutral component"]
+  subgraph gmailcore["src/gmail_readonly/ — reusable framework-neutral component"]
     GMAILCORE["OAuth + token refresh\nwhitelist + paginated search\nsender discovery (last N days)\nmetadata/count + MIME normalization"]
   end
   GMAIL --> GMAILCORE
@@ -129,7 +129,7 @@ flowchart TB
   RUNS --> FTRAFFIC
   RUNS --> FCAL
 
-  subgraph calcore["calendar_readonly/ + src/traffic/ — Google read clients (#160)"]
+  subgraph calcore["src/calendar_readonly/ + src/traffic/ — Google read clients (#160)"]
     CALCLIENT["calendar_readonly — OAuth + Calendar v3 read"]
     ROUTESCLIENT["src/traffic — Routes API v2 computeRoutes"]
   end
@@ -137,7 +137,7 @@ flowchart TB
   FTRAFFIC --> ROUTESCLIENT
   FBLOCKS -->|one departure-time call per deduped leg| ROUTESCLIENT
 
-  subgraph calwrite["calendar_write/ — Google write client (#217)"]
+  subgraph calwrite["src/calendar_write/ — Google write client (#217)"]
     CALWRITECLIENT["calendar_write — separate OAuth (calendar.events)\n+ Calendar v3 insert/delete"]
   end
   REMINDERS --> CALWRITECLIENT

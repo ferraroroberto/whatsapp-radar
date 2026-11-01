@@ -6,7 +6,7 @@ summary + event count + soonest date) — never full titles or attendee data.
 This is the "does the refresh token actually read the calendars" validation
 that runs after the interactive bootstrap.
 
-    python -m calendar_readonly.smoke --calendar you@example.com --days 3
+    python -m src.calendar_readonly.smoke --calendar you@example.com --days 3
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from calendar_readonly.core import CalendarReadError, normalize_event
-from calendar_readonly.google_client import build_google_calendar_client
+from .core import CalendarReadError, normalize_event
+from .google_client import build_google_calendar_client
 
 
 def _mask(text: str) -> str:

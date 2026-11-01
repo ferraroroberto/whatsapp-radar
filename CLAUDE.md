@@ -15,9 +15,9 @@ whatsapp-radar/
   app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py, runs.py,
                          #   routers/, static/ (vanilla-JS shell)
   app/tray/tray.py       # pystray surface that owns the webapp lifecycle
-  calendar_readonly/ calendar_write/ gmail_readonly/   # portable Google clients (see Layout & Imports)
-  google_oauth_common/   # installed-app OAuth bootstrap the three clients wrap
   src/                   # logic, imported as `from src.…`
+    calendar_readonly/ calendar_write/ gmail_readonly/   # portable Google clients (see Layout & Imports)
+    google_oauth_common/ # installed-app OAuth bootstrap the three clients wrap
     config/ (load_config aggregates one module per subsystem)   models.py  paths.py  ...
     connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
     db/ (store.py facade over per-table modules, sync.py/reprocess.py, schema.sql)
@@ -55,7 +55,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 ## Layout & Imports
 
 - `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
-- `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` and their shared `google_oauth_common/` bootstrap (installed-app OAuth, plus the token load/refresh and atomic-write steps all three wrap) are portable packages deliberately outside `src/` (liftable into another repo unchanged), each imported as `from <package>…` — the intentional exception to the absolute-`from src.…` rule. All four carry the same "no imports from `src`/`app`/`scripts`" contract; lifting a client means copying `google_oauth_common/` alongside it (`docs/gmail-reuse.md`).
+- `src/calendar_readonly/`, `src/calendar_write/`, `src/gmail_readonly/` and their shared `src/google_oauth_common/` bootstrap (installed-app OAuth, plus the token load/refresh and atomic-write steps all three wrap) are portable packages, liftable into another repo unchanged: inside them every import is relative (`from .core`, `from ..google_oauth_common.x`), never `from src.…`, and they import nothing from `src`/`app`/`scripts`. Callers import them as `from src.<package>…`; lifting a client means copying `google_oauth_common/` alongside it under the same parent (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
 - Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
 - Out-of-tree script importing `src.*`/`app.*` → the global PYTHONPATH gotcha; prefer `-m <module>` from the repo root.

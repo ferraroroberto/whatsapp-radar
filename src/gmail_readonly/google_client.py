@@ -7,15 +7,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from google_oauth_common.credentials import load_or_refresh_credentials
-from google_oauth_common.token_store import write_token_atomically as write_token_atomically
-from google_oauth_common.transport import (
+from ..google_oauth_common.credentials import load_or_refresh_credentials
+from ..google_oauth_common.token_store import write_token_atomically as write_token_atomically
+from ..google_oauth_common.transport import (
     DEFAULT_REQUEST_TIMEOUT_S,
     build_service,
     close_service,
 )
-
-from gmail_readonly.core import GMAIL_READONLY_SCOPE, GmailReadClient
+from .core import GMAIL_READONLY_SCOPE, GmailReadClient
 
 CredentialLoader = Callable[[str, list[str]], Any]
 RequestFactory = Callable[[], Any]

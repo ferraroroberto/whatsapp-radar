@@ -14,15 +14,11 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml` together 
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |
 | `assets/` | Tray icon, Stream Deck icon and the Telegram bot avatars. |
 
-Declared exceptions (`extra_roots`), each outside `src/` on purpose:
+Declared exception (`extra_roots`), outside `src/` on purpose:
 
 | Folder | Why it stays a root |
 |---|---|
-| `calendar_readonly/`, `calendar_write/`, `gmail_readonly/` | Portable Google API clients shared with sibling repos, liftable unchanged. They import nothing from `src/`, `app/` or `scripts/`. |
-| `google_oauth_common/` | The installed-app OAuth bootstrap, token store and transport the three clients wrap. Lifted alongside any of them. |
 | `sidecar/` | The read-only Node/Baileys connector. A separate process with its own `package.json`, not Python. |
-
-**Google API code goes in those packages, not in `src/`.** `src/` consumes them through their public functions (`from calendar_readonly import …`); a new Google call extends the matching client, and a new Google surface gets its own sibling package that follows the same no-`src`/`app` contract (`docs/gmail-reuse.md`).
 
 ## `app/`
 
@@ -46,7 +42,11 @@ Declared exceptions (`extra_roots`), each outside `src/` on purpose:
 | `src/report/` | The digest. |
 | `src/family/` | Calendar scan, rules, traffic check and travel blocks (planner in `travel_blocks.py` over `travel_blocks_model.py`, `travel_blocks_reconcile.py` and `travel_blocks_pricing.py`). `travel_blocks_write.py` is the only path that deletes from calendars; `src/analysis/reminders.py` is the only other writer and is insert-only (routine-prep reminders created by `scan`). |
 | `src/presence/`, `src/traffic/`, `src/task_os/` | Clients for the presence, traffic and Task OS integrations. |
+| `src/calendar_readonly/`, `src/calendar_write/`, `src/gmail_readonly/` | Portable Google API clients shared with sibling repos, liftable unchanged. Every import inside them is relative, and they import nothing from the rest of `src/`, `app/` or `scripts/`. |
+| `src/google_oauth_common/` | The installed-app OAuth bootstrap, token store and transport the three clients wrap. Lifted alongside any of them, as a sibling under the same parent package. |
 | `src/fixtures/` | Sanitized sample chats. |
 | `src/*.py` | Shared leaf modules: models, paths, logging, runtime data, vendored `runtime_data.py`, `usage_log.py` and `compression.py`. |
+
+**Google API code goes in the portable client packages.** The rest of `src/` consumes them through their public functions (`from src.calendar_readonly import …`); a new Google call extends the matching client, and a new Google surface gets its own sibling package under `src/` that follows the same relative-imports, no-`src`/`app` contract (`docs/gmail-reuse.md`).
 
 Prefer a domain subpackage over a new module at `src/` itself; the module count of a directory is what the ratchet watches.

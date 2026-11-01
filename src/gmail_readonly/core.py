@@ -10,7 +10,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any, Protocol
 
-from google_oauth_common.errors import safe_http_error_detail
+from ..google_oauth_common.errors import safe_http_error_detail
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 _SELECTED_HEADERS = (

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from gmail_readonly import GoogleGmailReadClient
 
 from src.config import (
     Config,
@@ -27,6 +26,7 @@ from src.connector.gmail import (
 from src.connector.preflight import ConnectorOffline
 from src.db import store
 from src.db.sync import sync_sources
+from src.gmail_readonly import GoogleGmailReadClient
 
 
 def _encoded(value: str) -> str:

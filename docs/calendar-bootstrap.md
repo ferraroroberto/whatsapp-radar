@@ -79,7 +79,7 @@ Never paste the token into config, docs, logs, or chat. The scheduled checks ref
 ## 7. Validate the calendar read (non-interactive)
 
 ```powershell
-.\.venv\Scripts\python.exe -m calendar_readonly.smoke --calendar you@example.com --days 3
+.\.venv\Scripts\python.exe -m src.calendar_readonly.smoke --calendar you@example.com --days 3
 ```
 
 Repeat `--calendar` for each household calendar id. The smoke prints only privacy-safe aggregates (a masked summary + event count + soonest date), never full titles.
@@ -122,7 +122,7 @@ Never paste the token into config, docs, logs, or chat — same discipline as th
 Creates one throwaway test event a few minutes out, confirms it round-trips with an id, then deletes it again — nothing is left behind:
 
 ```powershell
-.\.venv\Scripts\python.exe -m calendar_write.smoke --calendar you@example.com
+.\.venv\Scripts\python.exe -m src.calendar_write.smoke --calendar you@example.com
 ```
 
 ### Sharing level: what "Make changes to events" buys you

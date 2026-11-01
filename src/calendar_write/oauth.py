@@ -6,10 +6,9 @@ import logging
 import sys
 from pathlib import Path
 
-from google_oauth_common.bootstrap import FlowLoader, authorize_installed_app, run_bootstrap_cli
-from google_oauth_common.token_store import write_token_atomically
-
-from calendar_write.core import CALENDAR_WRITE_SCOPE
+from ..google_oauth_common.bootstrap import FlowLoader, authorize_installed_app, run_bootstrap_cli
+from ..google_oauth_common.token_store import write_token_atomically
+from .core import CALENDAR_WRITE_SCOPE
 
 logger = logging.getLogger(__name__)
 

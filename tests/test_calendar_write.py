@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from calendar_write import (
+
+from src.calendar_write import (
     CALENDAR_WRITE_SCOPE,
     GoogleCalendarWriteClient,
     build_google_calendar_write_client,
 )
-from calendar_write.oauth import authorize
-
+from src.calendar_write.oauth import authorize
 from tests.fakes.oauth_fakes import expired_credential_loader, flow_loader
 
 

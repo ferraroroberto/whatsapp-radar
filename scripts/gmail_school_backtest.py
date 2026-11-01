@@ -30,12 +30,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from gmail_readonly import GmailLabel, GmailMailbox, GmailSearch, GmailSender, NormalizedEmail
-
 from src.analysis.classifier import HubClassifier, TracedClassifier
 from src.analysis.contract import ContractError, parse_analysis
 from src.config import Config, load_config
 from src.connector.gmail import build_gmail_read_client
+from src.gmail_readonly import GmailLabel, GmailMailbox, GmailSearch, GmailSender, NormalizedEmail
 from src.models import StoredMessage
 
 Progress = Callable[[str], None]

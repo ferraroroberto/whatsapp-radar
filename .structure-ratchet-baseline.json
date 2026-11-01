@@ -1,6 +1,6 @@
 {
   "version": 1,
   "band": {"files": 3, "functions": 10},
-  "root_extras": ["calendar_readonly", "calendar_write", "gmail_readonly", "google_oauth_common", "sidecar"],
+  "root_extras": ["sidecar"],
   "entries": []
 }

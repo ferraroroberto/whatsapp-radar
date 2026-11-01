@@ -43,9 +43,9 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from calendar_readonly.core import CalendarEvent, safe_error_detail
-from calendar_write import CalendarWriteClient, build_google_calendar_write_client
 
+from src.calendar_readonly.core import CalendarEvent, safe_error_detail
+from src.calendar_write import CalendarWriteClient, build_google_calendar_write_client
 from src.config import Config
 from src.family.calendar_source import MarkedEvents, fetch_marked_events
 from src.family.travel_blocks import (

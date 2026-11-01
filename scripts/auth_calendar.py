@@ -17,8 +17,7 @@ from __future__ import annotations
 
 import sys
 
-from calendar_readonly.oauth import main as oauth_main
-
+from src.calendar_readonly.oauth import main as oauth_main
 from src.config import load_config
 
 

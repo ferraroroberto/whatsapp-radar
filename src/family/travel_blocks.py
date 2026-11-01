@@ -55,8 +55,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import requests
-from calendar_readonly.core import CalendarEvent
 
+from src.calendar_readonly.core import CalendarEvent
 from src.config import Config
 from src.family import rules
 from src.family.travel_blocks_model import (

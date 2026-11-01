@@ -246,7 +246,7 @@ git check-ignore auth\calendar\write_token.json
 Then verify the write path end-to-end. This creates one throwaway event a few minutes out, confirms it round-trips, and deletes it again, leaving nothing behind:
 
 ```powershell
-.\.venv\Scripts\python.exe -m calendar_write.smoke --calendar <your-calendar-id>
+.\.venv\Scripts\python.exe -m src.calendar_write.smoke --calendar <your-calendar-id>
 ```
 
 Full detail in [`calendar-bootstrap.md`](calendar-bootstrap.md).

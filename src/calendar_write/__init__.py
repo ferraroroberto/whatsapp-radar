@@ -7,12 +7,12 @@ Deliberately minimal — insert + delete only, the narrowest scope
 management. Bootstrap/runbook: ``docs/calendar-bootstrap.md``.
 """
 
-from calendar_write.core import (
+from .core import (
     CALENDAR_WRITE_SCOPE,
     CalendarWriteClient,
     CalendarWriteError,
 )
-from calendar_write.google_client import (
+from .google_client import (
     GoogleCalendarWriteClient,
     build_google_calendar_write_client,
 )

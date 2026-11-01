@@ -122,7 +122,7 @@ Run the interactive bootstrap from the repository root:
 That command is a thin WhatsApp Radar wrapper around the reusable explicit-path command:
 
 ```powershell
-.\.venv\Scripts\python.exe -m gmail_readonly.oauth `
+.\.venv\Scripts\python.exe -m src.gmail_readonly.oauth `
   --credentials auth\gmail\credentials.json `
   --token auth\gmail\token.json
 ```

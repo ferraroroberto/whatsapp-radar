@@ -1,6 +1,6 @@
 """Portable, read-only Gmail OAuth and search component."""
 
-from gmail_readonly.core import (
+from .core import (
     GMAIL_READONLY_SCOPE,
     GmailLabel,
     GmailMailbox,
@@ -13,7 +13,7 @@ from gmail_readonly.core import (
     NormalizedEmail,
     masked_email_address,
 )
-from gmail_readonly.google_client import (
+from .google_client import (
     GoogleGmailReadClient,
     build_google_read_client,
     write_token_atomically,

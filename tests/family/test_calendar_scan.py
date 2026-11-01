@@ -15,8 +15,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
-from calendar_readonly.core import CalendarEvent, normalize_event
 
+from src.calendar_readonly.core import CalendarEvent, normalize_event
 from src.config import (
     ChildcareWindow,
     Config,

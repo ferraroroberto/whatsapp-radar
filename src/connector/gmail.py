@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from gmail_readonly import (
+from src.config import GmailConfig
+from src.connector.base import ConnectorStatus
+from src.connector.preflight import ConnectorOffline
+from src.gmail_readonly import (
     GmailLabel,
     GmailMailbox,
     GmailProfile,
@@ -16,10 +19,6 @@ from gmail_readonly import (
     NormalizedEmail,
     build_google_read_client,
 )
-
-from src.config import GmailConfig
-from src.connector.base import ConnectorStatus
-from src.connector.preflight import ConnectorOffline
 from src.models import ChatRecord, MessageRecord
 
 logger = logging.getLogger(__name__)

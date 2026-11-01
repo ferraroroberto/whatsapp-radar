@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from calendar_readonly.core import CalendarEvent, normalize_event
 
+from src.calendar_readonly.core import CalendarEvent, normalize_event
 from src.config import (
     CalendarAccount,
     CalendarConfig,

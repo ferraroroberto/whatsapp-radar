@@ -41,6 +41,7 @@
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
+  <link rel="stylesheet" href="/static/_vendored/page-foot/page-foot.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/action-row/action-row.css">
@@ -407,13 +408,12 @@
       </section>
     </section>
 
-    <!-- Build identity: which build the PWA is running. Filled by main.js;
-         visible on every tab (it sits outside the panes). -->
-    <footer class="page-foot">
-      <p id="buildReadout" class="muted small"></p>
-    </footer>
-
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- Build identity (vendored page-foot): last child of .app, outside the panes. -->
+    <footer class="page-foot">
+      <p id="buildReadout"></p>
+    </footer>
   </main>
 
   <!-- Settings: opened by the home-head gear on every pane. Settings is

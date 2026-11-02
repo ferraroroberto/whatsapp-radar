@@ -377,15 +377,6 @@
 .audit-msg-badge.muted { color: var(--muted); }
 .audit-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 
-/* ============================================================ footer */
-/* Build-identity footer (which build the PWA is running) — the one element
-   visible under every tab. */
-.page-foot {
-  margin: var(--space-md) var(--space-xs);
-  text-align: center;
-}
-.page-foot p { margin: 2px 0; }
-
 /* ------------------------------------ inset groups + editing sheets
    Family's and Settings' shape: the run-group overline over an
    action-list card whose rows read glyph + label + current value + chevron at

@@ -1,6 +1,6 @@
 {
   "version": 1,
   "band": {"files": 3, "functions": 10},
-  "root_extras": ["sidecar"],
+  "root_extras": [],
   "entries": []
 }

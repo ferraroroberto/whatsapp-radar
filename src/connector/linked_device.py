@@ -1,7 +1,7 @@
 """Real WhatsApp Web linked-device connector (read-only reader half).
 
 The unofficial WhatsApp protocol is spoken entirely by the Node Baileys sidecar
-(``sidecar/``), which keeps a linked device paired and appends everything it sees
+(``src/sidecar/``), which keeps a linked device paired and appends everything it sees
 to a local NDJSON buffer. This class is a pure *reader* of that buffer: it never
 talks to WhatsApp and exposes no write surface, so the read-only guarantee of the
 :class:`MessageConnector` boundary holds by construction.

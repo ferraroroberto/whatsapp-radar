@@ -46,7 +46,8 @@ import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, "..");
+// This file lives at src/sidecar/, two levels below the repo root that holds auth/ and data/.
+const repoRoot = resolve(__dirname, "..", "..");
 
 // Paths are overridable by env so App Launcher / tests can redirect them.
 const authDir = process.env.WR_AUTH_DIR || join(repoRoot, "auth");

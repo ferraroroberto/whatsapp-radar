@@ -8,8 +8,6 @@ description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
 shape       = "webapp-tray"
 port        = ":8455"
-# sidecar: the read-only Node/Baileys connector, a separate non-Python process (docs/layout.md).
-extra_roots = ["sidecar"]
 
 [vendored]
 e2e_live_guard = { src = "tests/e2e/_e2e_live_guard.py", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "tests/e2e/_e2e_live_guard.py" }
@@ -238,7 +236,7 @@ extensions = ["py"]
 # The read-only WhatsApp connector -- backend only, no rendered surface.
 [[e2e.rule]]
 tier   = "none"
-prefix = "sidecar/"
+prefix = "src/sidecar/"
 
 [[e2e.rule]]
 tier   = "none"

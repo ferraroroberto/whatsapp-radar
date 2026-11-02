@@ -1,6 +1,6 @@
 # Layout
 
-Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml` together with the root folders it adds (`extra_roots`); the structure ratchet (`scripts/structure_ratchet.py`, run by the gate through `scripts/structure_ratchet_gate.py`) checks that the root folders match, that no new file passes 1,000 lines, no new function 100 lines and no directory 40 modules, and that nothing under `src/` imports `app/`. Offenders that predate the ratchet sit in `.structure-ratchet-baseline.json` at their size and may not grow; split them rather than raise the baseline.
+Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the structure ratchet (`scripts/structure_ratchet.py`, run by the gate through `scripts/structure_ratchet_gate.py`) checks that the root folders match, that no new file passes 1,000 lines, no new function 100 lines and no directory 40 modules, and that nothing under `src/` imports `app/`. Offenders that predate the ratchet sit in `.structure-ratchet-baseline.json` at their size and may not grow; split them rather than raise the baseline.
 
 ## Top-level folders
 
@@ -13,12 +13,6 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml` together 
 | `scripts/` | Helper CLIs, the verification gate, and the vendored ratchets with their gate wrappers. |
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |
 | `assets/` | Tray icon, Stream Deck icon and the Telegram bot avatars. |
-
-Declared exception (`extra_roots`), outside `src/` on purpose:
-
-| Folder | Why it stays a root |
-|---|---|
-| `sidecar/` | The read-only Node/Baileys connector. A separate process with its own `package.json`, not Python. |
 
 ## `app/`
 
@@ -45,6 +39,7 @@ Declared exception (`extra_roots`), outside `src/` on purpose:
 | `src/calendar_readonly/`, `src/calendar_write/`, `src/gmail_readonly/` | Portable Google API clients shared with sibling repos, liftable unchanged. Every import inside them is relative, and they import nothing from the rest of `src/`, `app/` or `scripts/`. |
 | `src/google_oauth_common/` | The installed-app OAuth bootstrap, token store and transport the three clients wrap. Lifted alongside any of them, as a sibling under the same parent package. |
 | `src/fixtures/` | Sanitized sample chats. |
+| `src/sidecar/` | The read-only Node/Baileys connector: `index.js`, its own `package.json`, and a gitignored `node_modules/` from `npm ci`. A separate process, not Python; `src/connector/sidecar.py` launches it, and it finds `auth/` and `data/linked_device/` two levels up at the repo root. |
 | `src/*.py` | Shared leaf modules: models, paths, logging, runtime data, vendored `runtime_data.py`, `usage_log.py` and `compression.py`. |
 
 **Google API code goes in the portable client packages.** The rest of `src/` consumes them through their public functions (`from src.calendar_readonly import …`); a new Google call extends the matching client, and a new Google surface gets its own sibling package under `src/` that follows the same relative-imports, no-`src`/`app` contract (`docs/gmail-reuse.md`).

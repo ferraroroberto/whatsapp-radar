@@ -175,7 +175,7 @@ def test_real_rules_route_representative_paths() -> None:
     assert tier("src/calendar_write/client.py") == "skip"
     assert tier("src/gmail_readonly/client.py") == "skip"
     assert tier("src/google_oauth_common/bootstrap.py") == "skip"
-    assert tier("sidecar/index.js") == "skip"
+    assert tier("src/sidecar/index.js") == "skip"
     assert tier("scripts/verify-before-ship.ps1") == "skip"
     assert tier("config/default.json") == "skip"
     assert tier("docs/gmail-reuse.md") == "skip"

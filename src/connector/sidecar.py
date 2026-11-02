@@ -1,6 +1,6 @@
 """Sidecar lifecycle: read its liveness state and (re)launch it when down.
 
-The Node/Baileys sidecar (``sidecar/index.js``) is the only process that speaks
+The Node/Baileys sidecar (``src/sidecar/index.js``) is the only process that speaks
 the WhatsApp protocol; the Python side is a read-only reader of the NDJSON buffer
 it writes. This module is the thin supervisor that the rest of the system needs
 but did not have: it derives a *coarse lifecycle state* from the sidecar's
@@ -67,8 +67,8 @@ Spawner = Callable[..., "subprocess.Popen[bytes]"]
 
 
 def sidecar_dir() -> Path:
-    """The ``sidecar/`` directory holding ``index.js`` and ``node_modules``."""
-    return PROJECT_ROOT / "sidecar"
+    """The ``src/sidecar/`` directory holding ``index.js`` and ``node_modules``."""
+    return PROJECT_ROOT / "src" / "sidecar"
 
 
 class SidecarLaunchError(RuntimeError):
@@ -247,7 +247,7 @@ def launch_sidecar(
         raise SidecarLaunchError(f"sidecar entry point not found at {root / 'index.js'}")
     if not (root / "node_modules").is_dir():
         raise SidecarLaunchError(
-            "sidecar dependencies are not installed — run `npm install` in the sidecar/ directory"
+            "sidecar dependencies are not installed — run `npm install` in src/sidecar/"
         )
 
     node = node_bin or os.environ.get("WR_NODE_BIN", "node")

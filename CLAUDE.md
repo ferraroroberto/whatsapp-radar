@@ -114,6 +114,7 @@ Gate, from the repo root, with the project venv:
 .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate
+.\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate
 ```
 
 Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram. The one exception is the **static ratchet** (`scripts/static_ratchet.py`, vendored; `.fleet.toml [static_ratchet]`, baseline `.static-ratchet-baseline.json`): it fails on a duplicate block (jscpd via `npx`, so **Node is a prerequisite**), an unused import/variable (ruff `F401,F841`) or a likely bug or security pattern (ruff's curated `B` and `S` families, `S113` included) not in the baseline. It reads the whole tree, never path-routed.
@@ -121,6 +122,7 @@ Entirely offline against sanitized fixtures: no WhatsApp credentials, no network
 Every ratchet is a vendored `scripts/<name>_ratchet.py` with a `.fleet.toml [<name>_ratchet]` table and a `.<name>-ratchet-baseline.json`; `verify-before-ship.ps1` calls it only through `scripts.<name>_ratchet_gate`, which fails exit 3 (a detector could not run) as NOT CONFIRMED, never a pass or skip. Shrink a baseline with `--update-baseline` in the PR that removes the debt; adding needs `--allow-additions` and shows in review; reword or fix the flagged line rather than raising a baseline. Re-vendor a script only from project-scaffolding. Per ratchet:
 
 - **docs** — `README.md` size and history markers (issue references, dated or changelog headings) in `README.md` and `docs/**/*.md`; docs you touch state the present-tense why with no `#N` citations.
+- **runtime write** — `code_folders = ["src", "app", "scripts"]`; fails when a file gains a write target (`open`, `write_text`, `mkdir`, a file log handler, `sqlite3.connect`, …) resolving under a code folder, and the gate brackets the pytest stages with `--snapshot`/`--probe`, which fails on any file the test runs leave under a code folder. Runtime output goes under `data/` or the runtime root (`src/runtime_data.py`). A path the check cannot resolve is unknown (exit 3), never clean: build it from the module's own constants, or mark the call `# runtime-write-exempt: <reason>`.
 - **comment** — counts `#NNN` issue references inside code comments per file and fails when one rises; a comment you touch states the present-tense why with no issue number or history narrative.
 - **structure** — `.fleet.toml` `shape = "webapp-tray"` + `extra_roots` + `[structure_ratchet]`; fails on a file over 1,000 lines, a function over 100, a directory over 40 modules, a `src`→`app` import, or a root folder the shape and `extra_roots` do not list, with baselined offenders held at today's size. New code goes where `docs/layout.md` says — Google API code in the portable root packages, not `src/` — so split rather than grow.
 - **instruction** — fails when `CLAUDE.md` or `AGENTS.md` gains a prompt-audit lint hit or passes its size cap.

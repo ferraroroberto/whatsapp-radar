@@ -155,7 +155,7 @@ flowchart TB
   ROUTERS -->|POST /api/messages/{id}/task-export #307| TOSCLIENT
   TOSCLIENT -->|POST /api/tasks, bearer token| TASKOS["task-os Inbox API\n127.0.0.1:8448"]
 
-  subgraph sidecarnode["sidecar/index.js — Node/Baileys (external process)"]
+  subgraph sidecarnode["src/sidecar/index.js — Node/Baileys (external process)"]
     BAILEYS["read-only WhatsApp linked device\nwrites NDJSON buffer + status.json heartbeat\nunder gitignored data/linked_device/"]
   end
   SIDECARPY -->|spawn / heartbeat poll| BAILEYS

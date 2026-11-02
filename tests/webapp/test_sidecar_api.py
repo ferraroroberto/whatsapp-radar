@@ -76,7 +76,7 @@ def test_start_surfaces_launch_error_as_503(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def boom(buffer_dir: Path) -> dict[str, Any]:
-        raise sidecar_mod.SidecarLaunchError("run `npm install` in the sidecar/ directory")
+        raise sidecar_mod.SidecarLaunchError("run `npm install` in src/sidecar/")
 
     monkeypatch.setattr(sidecar_mod, "launch_sidecar", boom)
     res = client.post("/api/sidecar/start")

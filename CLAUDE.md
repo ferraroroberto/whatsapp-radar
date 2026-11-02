@@ -6,7 +6,7 @@
 
 WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionable items through a separate notification channel. **Treat it as a sensitive-data project even though the repository is public.**
 
-Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `sidecar/`. Runs from a checkout, never installed.
+Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `src/sidecar/`. Runs from a checkout, never installed.
 
 ```
 whatsapp-radar/
@@ -26,10 +26,10 @@ whatsapp-radar/
     family/ (calendar_scan, rules, traffic_check, travel_blocks, travel_blocks_write — the only
              path that deletes from calendars; analysis/reminders.py is the insert-only writer)
     presence/  traffic/  task_os/    fixtures/sample_chats.json
+    sidecar/             # read-only Node/Baileys connector (own package.json, not Python)
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json + .env gitignored
   scripts/               # helper CLIs + run-e2e.ps1, verify-before-ship.ps1
-  sidecar/               # read-only Node/Baileys connector
   webapp/                # runtime log output + certificates/ + cloudflared.yml (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
   launcher.py  wr.bat    # CLI entry points

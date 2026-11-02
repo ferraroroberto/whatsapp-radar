@@ -204,6 +204,6 @@ Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}`
 | Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `scripts\set_password.py` |
 | Telegram bot token | On leak only | Re-issue via BotFather, update `config\webapp_config.json` (or `WR_TELEGRAM_*`) |
 | Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from Settings → Sources → WhatsApp) |
-| Baileys (sidecar) updates | Occasionally — it tracks an unofficial protocol | `cd sidecar && npm update`; the buffer contract isolates churn to `sidecar/index.js` |
+| Baileys (sidecar) updates | Occasionally — it tracks an unofficial protocol | `cd src/sidecar && npm update`; the buffer contract isolates churn to `src/sidecar/index.js` |
 
 See [`manual.md`](manual.md) for routine operation and troubleshooting, and [`linked-device.md`](linked-device.md) for the connector design and unofficial-library risk.

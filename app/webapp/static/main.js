@@ -6,6 +6,7 @@
 import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
 import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
+import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus } from './webauthn.js';
 import { fetchDashboard, wireDashboard } from './dashboard.js';
@@ -16,24 +17,12 @@ import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
 
 // --------------------------------------------------------- build identity
-// Identical text + format to home-automation's footer readout.
-function fmtBuildTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso).replace('T', ' ').slice(0, 16);
-  const pad = function (n) { return String(n).padStart(2, '0'); };
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-}
-
 async function fetchVersion() {
   // Visible proof of which build the PWA is running. Catches stale-cache
   // confusion before it costs a debugging session.
   try {
     const body = await jsonApi('/api/version');
-    const sha = body.git_sha || 'unknown';
-    const ts = fmtBuildTime(body.built_at || '');
-    els.buildReadout.textContent = ts ? ('Build: ' + sha + ' · ' + ts) : ('Build: ' + sha);
+    els.buildReadout.textContent = buildReadoutText(body.git_sha || 'unknown', body.built_at || '');
     renderSettingsStatus();
   } catch (exc) {
     els.buildReadout.textContent = '';

@@ -23,41 +23,39 @@ from src.subprocess_flags import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git")
+TABLE = '[runtime_write_ratchet]\nenabled = true\ncode_folders = ["src"]\n'
 CLEAN = "from pathlib import Path\n\nOUT = Path('data') / 'run.log'\n"
 
 
-def _env() -> dict[str, str]:
-    return {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "PYTHONUTF8": "1"}
-
-
-def _git(root: Path, *args: str) -> None:
+def _run(root: Path, *argv: str) -> None:
+    """Run one command in the sandbox, failing the test when it exits non-zero."""
     subprocess.run(
-        [GIT or "git", *args], cwd=root, env=_env(), check=True, capture_output=True,
-        creationflags=NO_WINDOW,
+        list(argv), cwd=root, check=True, capture_output=True, creationflags=NO_WINDOW,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "PYTHONUTF8": "1"},
     )
+
+
+def _stage(root: Path) -> None:
+    _run(root, GIT or "git", "add", "-A")
 
 
 @pytest.fixture
 def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     """A baselined throwaway repo: returns (the copied script, its `src/mod.py`)."""
     assert GIT, "git is a prerequisite of the runtime write ratchet"
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "src").mkdir()
-    script = tmp_path / "scripts" / "runtime_write_ratchet.py"
-    shutil.copy(gate.SCRIPT, script)
-    resolver = "runtime_write_resolve.py"
-    shutil.copy(gate.SCRIPT.with_name(resolver), script.with_name(resolver))
+    for name in ("scripts", "src"):
+        (tmp_path / name).mkdir()
+    script = tmp_path / "scripts" / gate.SCRIPT.name
+    for source in (gate.SCRIPT, gate.SCRIPT.with_name("runtime_write_resolve.py")):
+        shutil.copy(source, script.with_name(source.name))
     (tmp_path / ".fleet.toml").write_text(
-        '[runtime_write_ratchet]\nenabled = true\ncode_folders = ["src"]\n', encoding="utf-8"
+        TABLE, encoding="utf-8"
     )
     module = tmp_path / "src" / "mod.py"
     module.write_text(CLEAN, encoding="utf-8")
-    _git(tmp_path, "init", "-q")
-    _git(tmp_path, "add", "-A")
-    subprocess.run(
-        [sys.executable, str(script), "--init"], cwd=tmp_path, check=True, capture_output=True,
-        env=_env(), creationflags=NO_WINDOW,
-    )
+    _run(tmp_path, GIT or "git", "init", "-q")
+    _stage(tmp_path)
+    _run(tmp_path, sys.executable, str(script), "--init")
     return script, module
 
 
@@ -76,7 +74,7 @@ def test_a_new_write_under_a_code_folder_fails_by_file(
     module.write_text(
         CLEAN + "\n(Path(__file__).parent / 'run.log').write_text('x')\n", encoding="utf-8"
     )
-    _git(script.parents[1], "add", "-A")
+    _stage(script.parents[1])
     assert gate.run(script) == 1
     out = capsys.readouterr().out
     assert "mod.py" in out
@@ -91,7 +89,7 @@ def test_a_write_target_it_cannot_resolve_is_not_confirmed(
         CLEAN + "\n\ndef save(target: Path) -> None:\n    target.write_text('x')\n",
         encoding="utf-8",
     )
-    _git(script.parents[1], "add", "-A")
+    _stage(script.parents[1])
     assert gate.run(script) == 1
     last = capsys.readouterr().out.rstrip().splitlines()[-1]
     assert last.startswith("FAIL: runtime write ratchet")

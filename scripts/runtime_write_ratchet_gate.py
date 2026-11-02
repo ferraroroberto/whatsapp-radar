@@ -32,7 +32,10 @@ _PASS_LABEL = "no write target under a code folder beyond the baseline"
 _FAIL_LABELS = {
     EXIT_NEW: "a new write target under a code folder, or the baseline is missing",
     EXIT_CONFIG: "bad [runtime_write_ratchet] table, baseline or arguments",
-    EXIT_NOT_CONFIRMED: "NOT CONFIRMED -- a write target could not be resolved, or the tree could not be read; nothing was fully checked",
+    EXIT_NOT_CONFIRMED: (
+        "NOT CONFIRMED -- a write target could not be resolved, or the tree could not be read; "
+        "nothing was fully checked"
+    ),
 }
 
 

@@ -45,7 +45,8 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "src").mkdir()
     script = tmp_path / "scripts" / "runtime_write_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
-    shutil.copy(gate.SCRIPT.with_name("runtime_write_resolve.py"), script.with_name("runtime_write_resolve.py"))
+    resolver = "runtime_write_resolve.py"
+    shutil.copy(gate.SCRIPT.with_name(resolver), script.with_name(resolver))
     (tmp_path / ".fleet.toml").write_text(
         '[runtime_write_ratchet]\nenabled = true\ncode_folders = ["src"]\n', encoding="utf-8"
     )

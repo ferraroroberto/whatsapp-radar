@@ -31,6 +31,7 @@ export function childrenOf(parentId) {
 
 function linkBtn(text, onClick) {
   const b = document.createElement('button');
+  b.dataset.track = 'chat-links.action';
   b.type = 'button';
   b.className = 'link-btn';
   b.textContent = text;

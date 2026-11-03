@@ -93,7 +93,7 @@
           <svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>
           Home
         </span>
-        <button id="dashStatus" type="button" class="status status-link" disabled>&nbsp;</button>
+        <button data-track="home.status" id="dashStatus" type="button" class="status status-link" disabled>&nbsp;</button>
         <button type="button" class="icon-button home-toggle theme-toggle" data-track="theme-toggle" title="Toggle theme"
                 aria-label="Toggle dark mode"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
         <button type="button" class="icon-button home-toggle home-settings" data-track="settings-open" aria-label="Settings" title="Settings">
@@ -144,7 +144,7 @@
             <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
             <input id="chatsSearch" type="search" placeholder="Search by name" autocomplete="off"
                    aria-label="Search chats by name">
-            <select id="chatsSource" class="chats-source-chip" aria-label="Message source">
+            <select data-track="chats.source" id="chatsSource" class="chats-source-chip" aria-label="Message source">
               <option value="all">All sources</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="gmail">Gmail</option>
@@ -313,7 +313,7 @@
                 <span class="action-row-title">Calendar sync</span>
               </button>
               <span class="action-row-trail">
-                <button type="button" id="familySyncSwitch" class="toggle" role="switch"
+                <button data-track="family.sync-switch" type="button" id="familySyncSwitch" class="toggle" role="switch"
                         aria-checked="false" aria-label="Calendar sync"><span class="knob"></span><span class="toggle-label">OFF</span></button>
               </span>
             </li>
@@ -323,7 +323,7 @@
                 <span class="action-row-title">Ask for missing locations</span>
               </button>
               <span class="action-row-trail">
-                <button type="button" id="familyAskSwitch" class="toggle" role="switch"
+                <button data-track="family.ask-switch" type="button" id="familyAskSwitch" class="toggle" role="switch"
                         aria-checked="false" aria-label="Ask for missing locations"><span class="knob"></span><span class="toggle-label">OFF</span></button>
               </span>
             </li>
@@ -345,7 +345,7 @@
                   <span id="execTrafficStatus" class="action-row-meta">&nbsp;</span></span>
               </button>
               <span class="action-row-trail">
-                <button type="button" id="execTrafficEnabled" class="toggle" role="switch"
+                <button data-track="family.traffic-switch" type="button" id="execTrafficEnabled" class="toggle" role="switch"
                         aria-checked="false" aria-label="Traffic checks enabled"><span class="knob"></span><span class="toggle-label">OFF</span></button>
               </span>
             </li>
@@ -419,12 +419,12 @@
   <!-- Settings: opened by the home-head gear on every pane. Settings is
        never a tab (fleet nav contract). The cards keep their ids, so
        config.js / execution.js wire them unchanged. -->
-  <dialog id="settingsDialog" class="detail-dialog">
+  <dialog data-track-view="settings" id="settingsDialog" class="detail-dialog">
     <div class="detail-card settings-card" aria-labelledby="settingsTitle">
       <div class="detail-header">
         <h2 id="settingsTitle">Settings</h2>
         <span id="settingsStatus" class="detail-status" role="status" aria-live="polite">&nbsp;</span>
-        <button id="settingsClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="settings.close" id="settingsClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <!-- Settings: inset groups, as Family. Each row shows its current
@@ -442,9 +442,9 @@
               </div>
               <span class="action-row-trail">
                 <span class="segmented" id="textSizeControl" role="group" aria-label="Text size">
-                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
-                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
-                  <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+                  <button data-track="settings.textsize-small" type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+                  <button data-track="settings.textsize-default" type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
+                  <button data-track="settings.textsize-large" type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
                 </span>
               </span>
             </li>
@@ -600,17 +600,17 @@
   <!-- Settings sheets: one shell filled per row by config.js. Done
        commits a partial POST /api/config; the close button, the backdrop and
        Esc discard the sheet's edits. -->
-  <dialog id="settingsSheet" class="detail-dialog edit-sheet">
+  <dialog data-track-view="settings-sheet" id="settingsSheet" class="detail-dialog edit-sheet">
     <div class="detail-card" aria-labelledby="settingsSheetTitle">
       <div class="detail-header">
         <h2 id="settingsSheetTitle"></h2>
-        <button id="settingsSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="settings-sheet.close" id="settingsSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="settingsSheetBody"></div>
       <p id="settingsSheetError" class="sheet-error" role="alert" hidden></p>
       <div id="settingsSheetFoot" class="detail-actions">
-        <button id="settingsSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <button data-track="settings-sheet.done" id="settingsSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
         <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
@@ -620,11 +620,11 @@
        counts, health, Reconnect + pairing QR and recent syncs that
        execution.js and dashboard.js keep writing in place. `data-source` picks
        whose entries show. -->
-  <dialog id="sourceSheet" class="detail-dialog edit-sheet" data-source="whatsapp">
+  <dialog data-track-view="source-sheet" id="sourceSheet" class="detail-dialog edit-sheet" data-source="whatsapp">
     <div class="detail-card" aria-labelledby="sourceSheetTitle">
       <div class="detail-header">
         <h2 id="sourceSheetTitle"></h2>
-        <button id="sourceSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="source-sheet.close" id="sourceSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="sourceSheetBody"></div>
@@ -644,7 +644,7 @@
         <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
       </div>
       <div id="sourceSheetFoot" class="detail-actions">
-        <button id="sourceSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <button data-track="source-sheet.done" id="sourceSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
         <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
@@ -653,11 +653,11 @@
   <!-- Run sheet: one detail for every run, opened from an Activity row.
        A phone shows it as this sheet; a wide screen moves #runSheetCard into
        the Activity pane's right-hand column instead (activity.js). -->
-  <dialog id="runSheet" class="detail-dialog run-sheet-dialog">
+  <dialog data-track-view="run-sheet" id="runSheet" class="detail-dialog run-sheet-dialog">
     <div id="runSheetCard" class="detail-card run-sheet" aria-labelledby="runSheetTitle">
       <div class="detail-header">
         <h2 id="runSheetTitle"></h2>
-        <button id="runSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="run-sheet.close" id="runSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <p id="runSheetMeta" class="muted small"></p>
@@ -670,7 +670,7 @@
         <pre id="runPreviewText" class="codebox"></pre>
       </div>
       <details id="runOutputCard" class="card card--collapsible run-output">
-        <summary class="collapse-summary">
+        <summary data-track="run-sheet.raw-output" class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
             <h3 class="collapse-title">Raw output</h3>
@@ -689,11 +689,11 @@
 
   <!-- Run now: manual runs are rare, so the controls fold behind the
        Activity header action. Behaviour is execution.js's queue, unchanged. -->
-  <dialog id="runNowSheet" class="detail-dialog">
+  <dialog data-track-view="run-now" id="runNowSheet" class="detail-dialog">
     <div class="detail-card run-now-card" aria-labelledby="runNowTitle">
       <div class="detail-header">
         <h2 id="runNowTitle">Run now</h2>
-        <button id="runNowClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="run-now.close" id="runNowClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <fieldset class="exec-stages" aria-label="Pipeline steps to run">
@@ -701,28 +701,28 @@
           <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
           <span class="exec-stage-text"><span class="exec-stage-label">Sync messages</span>
             <span class="exec-stage-desc">pull the latest into the store</span></span>
-          <button type="button" id="execStageSync" class="toggle on" role="switch"
+          <button data-track="run-now.stage-sync" type="button" id="execStageSync" class="toggle on" role="switch"
                   aria-checked="true" aria-label="Sync messages step"><span class="knob"></span><span class="toggle-label">ON</span></button>
         </div>
         <div class="exec-stage-row">
           <svg class="icon" aria-hidden="true"><use href="#i-play"></use></svg>
           <span class="exec-stage-text"><span class="exec-stage-label">Process messages &amp; email</span>
             <span class="exec-stage-desc">classify new items</span></span>
-          <button type="button" id="execStageProcess" class="toggle on" role="switch"
+          <button data-track="run-now.stage-process" type="button" id="execStageProcess" class="toggle on" role="switch"
                   aria-checked="true" aria-label="Process messages and email step"><span class="knob"></span><span class="toggle-label">ON</span></button>
         </div>
         <div class="exec-stage-row">
           <svg class="icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
           <span class="exec-stage-text"><span class="exec-stage-label">Send alerts</span>
             <span class="exec-stage-desc">deliver the digest</span></span>
-          <button type="button" id="execStageMessage" class="toggle on" role="switch"
+          <button data-track="run-now.stage-message" type="button" id="execStageMessage" class="toggle on" role="switch"
                   aria-checked="true" aria-label="Send alerts step"><span class="knob"></span><span class="toggle-label">ON</span></button>
         </div>
         <div class="exec-stage-row">
           <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
           <span class="exec-stage-text"><span class="exec-stage-label">Calendar sync</span>
             <span class="exec-stage-desc">scan the household calendars</span></span>
-          <button type="button" id="execStageCalendar" class="toggle" role="switch"
+          <button data-track="run-now.stage-calendar" type="button" id="execStageCalendar" class="toggle" role="switch"
                   aria-checked="false" aria-label="Calendar sync step"><span class="knob"></span><span class="toggle-label">OFF</span></button>
         </div>
       </fieldset>
@@ -736,8 +736,8 @@
       </div>
       <div id="execDryOpts" class="exec-dry-opts" hidden>
         <div id="execWindow" class="segmented" role="group" aria-label="Dry-run window">
-          <button id="execWinNew" type="button" class="segmented-item" aria-pressed="true" data-window="new">New only</button>
-          <button id="execWinDays" type="button" class="segmented-item" aria-pressed="false" data-window="days">Last N days</button>
+          <button data-track="run-now.window-new" id="execWinNew" type="button" class="segmented-item" aria-pressed="true" data-window="new">New only</button>
+          <button data-track="run-now.window-days" id="execWinDays" type="button" class="segmented-item" aria-pressed="false" data-window="days">Last N days</button>
         </div>
         <input id="execDays" type="number" class="input-native exec-days" min="1" max="3650"
                value="7" inputmode="numeric" aria-label="Days to replay" hidden>
@@ -751,34 +751,34 @@
        travel-block sheet (its sweep controls poll in place, so it keeps its
        own nodes). Done commits through POST /api/family; the close button,
        the backdrop and Esc discard the sheet's edits. -->
-  <dialog id="familySheet" class="detail-dialog edit-sheet">
+  <dialog data-track-view="family-sheet" id="familySheet" class="detail-dialog edit-sheet">
     <div class="detail-card" aria-labelledby="familySheetTitle">
       <div class="detail-header">
         <h2 id="familySheetTitle"></h2>
-        <button id="familySheetClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="family-sheet.close" id="familySheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="familySheetBody"></div>
       <p id="familySheetError" class="sheet-error" role="alert" hidden></p>
       <div id="familySheetFoot" class="detail-actions">
-        <button id="familySheetDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <button data-track="family-sheet.done" id="familySheetDone" type="button" class="button-primary detail-save-btn">Done</button>
         <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
   </dialog>
 
-  <dialog id="familyTravelSheet" class="detail-dialog edit-sheet">
+  <dialog data-track-view="family-travel-sheet" id="familyTravelSheet" class="detail-dialog edit-sheet">
     <div id="familyTravelCard" class="detail-card" aria-labelledby="familyTravelTitle">
       <div class="detail-header">
         <h2 id="familyTravelTitle">Travel blocks</h2>
-        <button id="familyTravelClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="family-travel-sheet.close" id="familyTravelClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="familyTravelBlocks"></div>
       <p id="familyTravelError" class="sheet-error" role="alert" hidden></p>
       <div id="familyTravelSweep"></div>
       <div class="detail-actions">
-        <button id="familyTravelDone" type="button" class="button-primary detail-save-btn">Done</button>
+        <button data-track="family-travel-sheet.done" id="familyTravelDone" type="button" class="button-primary detail-save-btn">Done</button>
         <p class="sheet-rule">Done saves. Close discards your changes.</p>
       </div>
     </div>
@@ -786,19 +786,19 @@
 
   <!-- Filtered out: opened from the fold row at the end of
        Activity's Messages list. -->
-  <dialog id="filteredSheet" class="detail-dialog">
+  <dialog data-track-view="filtered-sheet" id="filteredSheet" class="detail-dialog">
     <div class="detail-card filtered-card" aria-labelledby="filteredTitle">
       <div class="detail-header">
         <h2 id="filteredTitle">Filtered out</h2>
-        <button id="filteredClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="filtered-sheet.close" id="filteredClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <div id="auditFilteredCard" class="filtered-body" data-state="loading">
         <p class="muted small">Recent messages the radar reviewed without raising an actionable item.</p>
         <div id="auditFilteredDays" class="segmented" role="group" aria-label="Filtered-out time range">
-          <button type="button" class="segmented-item" aria-pressed="false" data-days="7">7 days</button>
-          <button type="button" class="segmented-item" aria-pressed="true" data-days="30">30 days</button>
-          <button type="button" class="segmented-item" aria-pressed="false" data-days="90">90 days</button>
+          <button data-track="filtered-sheet.days-7" type="button" class="segmented-item" aria-pressed="false" data-days="7">7 days</button>
+          <button data-track="filtered-sheet.days-30" type="button" class="segmented-item" aria-pressed="true" data-days="30">30 days</button>
+          <button data-track="filtered-sheet.days-90" type="button" class="segmented-item" aria-pressed="false" data-days="90">90 days</button>
         </div>
         <p id="auditFilteredStatus" class="muted small" role="status" aria-live="polite">Reading filtered decisions…</p>
         <ul id="auditFiltered" class="card-list audit-filtered-list" aria-label="Filtered-out decisions"></ul>
@@ -806,12 +806,12 @@
           <svg class="icon empty-state-icon" aria-hidden="true"><use href="#i-search"></use></svg>
           <p class="empty-state-message">Nothing was filtered out in this period.</p>
         </div>
-        <button id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
+        <button data-track="filtered-sheet.more" id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="historyOverlay" class="detail-dialog">
+  <dialog data-track-view="history" id="historyOverlay" class="detail-dialog">
     <div id="historyCard" class="detail-card history-card" aria-labelledby="historyTitle">
       <!-- One labelled menu and the close: no overlapping hit areas. -->
       <div class="detail-header history-header">
@@ -822,7 +822,7 @@
         </span>
         <button id="historyMenu" type="button" data-track="chat.actions" class="icon-button history-menu" aria-label="Chat actions"
                 title="Chat actions"><svg class="icon" aria-hidden="true"><use href="#i-ellipsis-vertical"></use></svg></button>
-        <button id="historyClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="history.close" id="historyClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <p id="historyTripwire" class="muted small history-tripwire" hidden></p>
@@ -832,11 +832,11 @@
     </div>
   </dialog>
 
-  <dialog id="linkPickerOverlay" class="detail-dialog">
+  <dialog data-track-view="link-picker" id="linkPickerOverlay" class="detail-dialog">
     <div class="detail-card history-card" aria-labelledby="linkPickerTitle">
       <div class="detail-header">
         <h2 id="linkPickerTitle">Link to…</h2>
-        <button id="linkPickerClose" type="button" class="icon-button detail-close" aria-label="Close">
+        <button data-track="link-picker.close" id="linkPickerClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <input id="linkPickerSearch" type="search" class="input-native link-search" placeholder="Search by name or alias…" autocomplete="off">
@@ -851,7 +851,7 @@
       <h2>Sign in</h2>
       <p class="muted small">Enter the password to use Family Radar.</p>
       <input id="loginPassword" type="password" class="input-native" autocomplete="current-password" placeholder="Password" required>
-      <button type="submit" class="button-tint btn-block">Unlock</button>
+      <button data-track="login.unlock" type="submit" class="button-tint btn-block">Unlock</button>
       <div id="loginError" class="login-error" hidden></div>
     </form>
   </div>

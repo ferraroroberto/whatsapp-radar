@@ -154,6 +154,7 @@ export function valueRow(labelText, value) {
 
 export function buildSelect(options, current, labelText, onChange) {
   const sel = document.createElement('select');
+  sel.dataset.track = 'sheet.select';
   sel.className = 'select-native';
   sel.setAttribute('aria-label', labelText);
   let matched = false;

@@ -130,6 +130,7 @@ export function renderPasskeys(body, rerender) {
     } else {
       li.append(el('span', undefined, d.label + ' · added ' + d.added_at));
       const rm = document.createElement('button');
+      rm.dataset.track = 'settings.passkey-remove';
       rm.type = 'button';
       rm.className = 'icon-button danger';
       rm.innerHTML = icon('trash-2');

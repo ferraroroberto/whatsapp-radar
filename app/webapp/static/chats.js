@@ -217,6 +217,7 @@ function renderTripwire() {
 
     // The vendored icon-button: a glyph on nothing at rest (COMP-05).
     const promote = document.createElement('button');
+    promote.dataset.track = 'chats.tripwire-promote';
     promote.type = 'button';
     promote.className = 'icon-button action-row-trail tripwire-promote';
     promote.title = 'Not monitored — tap to monitor';
@@ -256,6 +257,7 @@ function row(c) {
   // The watch toggle: a plain icon button, accent (pressed) when monitored.
   const monitored = c.status === 'monitored';
   const watch = document.createElement('button');
+  watch.dataset.track = 'chats.watch-toggle';
   watch.type = 'button';
   watch.className = 'icon-button action-row-trail chat-watch';
   watch.setAttribute('aria-pressed', monitored ? 'true' : 'false');
@@ -382,6 +384,7 @@ function summarizeControl(id, existingSummary) {
   const wrap = document.createElement('div');
   wrap.className = 'msg-summary-wrap';
   const btn = document.createElement('button');
+  btn.dataset.track = 'chats.summarize';
   btn.type = 'button';
   btn.className = 'summarize-action';
   const out = document.createElement('div');
@@ -389,6 +392,7 @@ function summarizeControl(id, existingSummary) {
   const summaryText = document.createElement('div');
   summaryText.className = 'msg-summary-text';
   const speak = document.createElement('button');
+  speak.dataset.track = 'chats.summary-speak';
   speak.type = 'button';
   speak.className = 'summary-speech-action';
   speak.textContent = 'Play summary aloud';
@@ -455,6 +459,7 @@ function taskExportControl(id, existingExportedAt) {
   const wrap = document.createElement('div');
   wrap.className = 'msg-task-export-wrap';
   const btn = document.createElement('button');
+  btn.dataset.track = 'chats.task-export';
   btn.type = 'button';
   // Distinct class from Summarize's (same visual styling, shared in CSS) so
   // e2e/UI locators that target one control never pick up the other.
@@ -499,6 +504,7 @@ function audioUrl(id) {
 // the start when stopped, so the next tap replays from the top.
 function voicePlayer(id) {
   const btn = document.createElement('button');
+  btn.dataset.track = 'chats.voice-play';
   btn.type = 'button';
   btn.className = 'voice-play';
   // Static sprite markup only, so innerHTML is safe here.

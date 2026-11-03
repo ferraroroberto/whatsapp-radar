@@ -287,6 +287,7 @@ function windowRow(w, onRemove) {
   const head = el('div', 'family-window-head');
   head.append(textInput(w.label, 'Label (e.g. swim practice)', 0, function (v) { w.label = v; }));
   const rm = document.createElement('button');
+  rm.dataset.track = 'family.window-remove';
   rm.type = 'button';
   rm.className = 'icon-button danger';
   rm.innerHTML = icon('trash-2');

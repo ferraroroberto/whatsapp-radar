@@ -45,6 +45,16 @@ def via_cloudflare(headers: Mapping[str, str]) -> bool:
     return any(h in headers for h in _CLOUDFLARE_HEADERS)
 
 
+def is_pc_itself(request: Request) -> bool:
+    """True for a request from this PC: a loopback peer that did not come through the tunnel.
+
+    The tunnel daemon runs here and forwards to localhost, so a loopback peer alone
+    proves nothing: a request carrying edge headers is remote whatever address it shows.
+    """
+    client_host = request.client.host if request.client else ""
+    return client_host in LOOPBACK_HOSTS and not via_cloudflare(request.headers)
+
+
 def client_in_tailnet(client_host: str, allowlist: list[str]) -> bool:
     """True when the client IP is loopback, in the tailnet, or allowlisted."""
     try:
@@ -96,14 +106,9 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        client_host = request.client.host if request.client else ""
-        # The peer address alone cannot establish that a caller is local: the
-        # tunnel daemon runs on this machine and forwards to localhost, so an
-        # anonymous request off the public edge also arrives with a loopback
-        # peer. Treat any request carrying edge headers as remote regardless of
-        # the address it appears to come from.
+        # See is_pc_itself: a loopback peer alone does not prove the caller is local.
         tunnelled = via_cloudflare(request.headers)
-        is_loopback = client_host in LOOPBACK_HOSTS and not tunnelled
+        is_loopback = is_pc_itself(request)
         path = request.url.path
 
         # Passkey ceremonies are Tailscale-only, enforced even when no bearer

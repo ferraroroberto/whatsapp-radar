@@ -9,12 +9,19 @@ from __future__ import annotations
 
 import hmac
 import logging
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.middleware import is_pc_itself
 from app.webapp.routers._helpers import maybe_json
+from src.config import load_config
+from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
+from src.notify.alert import send_alert
 from src.paths import PROJECT_ROOT
 from src.webapp_config import WebappConfig
 
@@ -43,6 +50,28 @@ def ensure_log_handler() -> None:
         logger.warning(f"⚠️  Could not open {_AUTH_LOG_PATH}: {exc}")
 
 
+_APP_NAME = "Family Radar"
+
+
+def _send_login_alert(alert: LockoutAlert) -> None:
+    """Tell the owner someone is guessing the password, off the request thread."""
+    held = f" (+{alert.suppressed} more held back)" if alert.suppressed else ""
+    text = f"🚨 {_APP_NAME}: {alert.failures} wrong passwords in a row from {alert.key}{held}"
+
+    def send() -> None:
+        # Config is read here, not at boot, so the current chat id and token apply.
+        status, detail = send_alert(load_config(), text)
+        if status == "failed":
+            logger.warning(f"⚠️  login alert not delivered: {detail}")
+
+    threading.Thread(target=send, name="login-alert", daemon=True).start()
+
+
+def build_login_lockout(clock: Callable[[], float] = time.monotonic) -> LoginLockout:
+    """The one per-app lock-out; ``create_app`` stores it on ``app.state``."""
+    return LoginLockout(on_alert=_send_login_alert, clock=clock)
+
+
 router = APIRouter()
 
 
@@ -50,6 +79,15 @@ router = APIRouter()
 async def login(request: Request) -> dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     client_host = request.client.host if request.client else "?"
+    lockout: LoginLockout = request.app.state.login_lockout
+    # The PC itself never locks out: the owner at the keyboard is always let in.
+    exempt = is_pc_itself(request)
+    wait = 0.0 if exempt else lockout.retry_after(client_host)
+    if wait > 0:
+        auth_logger.warning(f"🔒 Login refused for {client_host}: locked out for {wait:.0f}s")
+        raise HTTPException(
+            status_code=429, detail="too many attempts", headers=retry_after_header(wait)
+        )
     if not cfg.auth_password:
         auth_logger.info(
             f"⚠️  Login attempt from {client_host} but no auth_password configured"
@@ -69,6 +107,9 @@ async def login(request: Request) -> dict[str, Any]:
             f"🚨 Failed password attempt from {client_host} "
             f"(presented: {len(presented)} chars)"
         )
+        if not exempt:
+            lockout.record_failure(client_host)
         raise HTTPException(status_code=401, detail="bad password")
+    lockout.reset(client_host)
     auth_logger.info(f"🔓 Password login from {client_host}")
     return {"token": cfg.auth_token}

@@ -175,6 +175,7 @@ function traceBlock(t) {
   det.className = 'audit-trace card card--collapsible';
 
   const sum = document.createElement('summary');
+  sum.dataset.track = 'activity.trace-toggle';
   sum.className = 'collapse-summary';
   const main = document.createElement('span');
   main.className = 'collapse-main';

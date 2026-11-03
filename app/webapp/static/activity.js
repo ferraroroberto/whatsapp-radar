@@ -654,6 +654,7 @@ function filteredListItem(item) {
   li.className = 'audit-filtered-row';
 
   const button = document.createElement('button');
+  button.dataset.track = 'activity.open-filtered-run';
   button.type = 'button';
   button.className = 'audit-filtered-main';
   button.setAttribute('aria-label', `Open run ${item.run_id} for ${item.display_name}`);

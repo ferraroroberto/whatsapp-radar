@@ -42,6 +42,7 @@ export function wireTabs(onTab) {
     storageKey: STORAGE_KEY,
     onChange: function (tab) {
       state.tab = tab;
+      // dynamic-id-exempt: tab is one of the fixed nav tab names, each a valid id
       usage.trackView(tab);
       if (onTab) onTab(tab);
     },

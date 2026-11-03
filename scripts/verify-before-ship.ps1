@@ -159,6 +159,14 @@ try {
     & $python -m scripts.runtime_write_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "runtime write ratchet failed or was NOT CONFIRMED." }
 
+    # Whole tree too: a web control with no constant tracking id, a <dialog> with no
+    # data-track-view, a built id, or an app that does not reach its usage log. Exit 3 (a file
+    # that cannot be read, or JS that never closes) fails as NOT CONFIRMED
+    # (tests/gates/test_usage_track_ratchet_gate.py pins it).
+    Write-Host "==> usage track ratchet (tracked controls, sheets and ids, usage log wired)..." -ForegroundColor Cyan
+    & $python -m scripts.usage_track_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "usage track ratchet failed or was NOT CONFIRMED." }
+
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app
     if ($LASTEXITCODE -ne 0) { Fail "mypy failed." }

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "app/webapp/static/activity.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/chat-links.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/chats.js", "counts": {"untracked-control": 6}},
+    {"key": "app/webapp/static/edit-sheet.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/family.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/index.html", "counts": {"untracked-control": 34, "untracked-sheet": 10}},
+    {"key": "app/webapp/static/run-trace.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/tabs.js", "counts": {"dynamic-id": 1}},
+    {"key": "app/webapp/static/webauthn.js", "counts": {"untracked-control": 1}}
+  ]
+}

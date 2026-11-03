@@ -175,6 +175,7 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate # no new function, class or method nothing refers to
 .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate # no new console-window spawn, print in library code or drive-path literal
 .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate # no new write target resolving under src/, app/ or scripts/
+.\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate # no new untracked control or sheet, built tracking id, or unwired usage log
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```

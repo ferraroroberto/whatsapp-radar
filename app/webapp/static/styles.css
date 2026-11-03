@@ -173,7 +173,7 @@
 * { box-sizing: border-box; }
 
 /* The `hidden` attribute must always win, even over a class that sets
-   `display` (e.g. .login-overlay uses flex). */
+   `display`. */
 [hidden] { display: none !important; }
 
 html, body {

@@ -1,11 +1,12 @@
-/* HTTP helpers + bearer-token plumbing + login overlay + toast.
+/* HTTP helpers + bearer-token plumbing + sign-in + toast.
  *
  * Every module reaches the server through api()/jsonApi() so the
- * Authorization: Bearer header is attached once, and 401s flip the login
- * overlay open from one place.
+ * Authorization: Bearer header is attached once, and a 401 awaits the one
+ * vendored sign-in sheet from one place.
  */
 
-import { els, TOKEN_KEY } from './state.js';
+import { TOKEN_KEY } from './state.js';
+import { requestSignIn } from './_vendored/sign-in/sign-in.js';
 
 // --------------------------------------------------------------- tokens
 export function tokenFromUrl() {
@@ -26,15 +27,20 @@ export function writeToken(t) { if (t) localStorage.setItem(TOKEN_KEY, t); }
 // --------------------------------------------------------------- fetch
 export async function api(path, opts) {
   opts = opts || {};
-  const headers = new Headers(opts.headers || {});
-  const token = readToken();
-  if (token) headers.set('Authorization', 'Bearer ' + token);
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
-  if (res.status === 401) {
-    showLogin();
-    throw new Error('auth required');
-  }
-  return res;
+  const send = function () {
+    const headers = new Headers(opts.headers || {});
+    const token = readToken();
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+    return fetch(path, Object.assign({}, opts, { headers }));
+  };
+  const res = await send();
+  if (res.status !== 401) return res;
+  // Every call that hits a 401 waits on the same open sheet, then retries once
+  // with the new token; a second 401 means the fresh token was refused too.
+  await signIn();
+  const retry = await send();
+  if (retry.status === 401) throw new Error('auth required');
+  return retry;
 }
 
 export async function jsonApi(path, opts) {
@@ -53,7 +59,7 @@ export async function jsonApi(path, opts) {
 
 // Every tab's "load my data" entry point repeated the same
 // try/jsonApi/catch-and-return-undefined scaffold: a 401 already flips
-// the login overlay open above in api(), so the catch here just needs to stay
+// the sign-in sheet open in api(), so the catch here just needs to stay
 // quiet and skip the render. `onOk` runs only on a successful fetch, and may
 // itself be async — awaited so a caller that needs the whole thing settled
 // (a second fetch, a following state write) can `await fetchQuiet(...)`.
@@ -67,49 +73,13 @@ export async function fetchQuiet(path, onOk) {
   await onOk(data);
 }
 
-// --------------------------------------------------------------- login
-export function showLogin() {
-  if (!els.loginOverlay) return;
-  els.loginOverlay.hidden = false;
-  // The login overlay is not a <dialog>, so the nav's body:has(dialog[open])
-  // rule can't see it — the vendored nav hides on this class instead.
-  document.body.classList.add('nav-hidden');
-  els.loginPassword.value = '';
-  els.loginPassword.focus();
-}
-
-export function hideLogin() {
-  if (els.loginOverlay) els.loginOverlay.hidden = true;
-  document.body.classList.remove('nav-hidden');
-}
-
-// Boot hook called from main.js — passed `onLoginSuccess` so this module stays
-// independent of the boot sequence.
-export function wireLoginForm(onLoginSuccess) {
-  els.loginForm.addEventListener('submit', async function (ev) {
-    ev.preventDefault();
-    els.loginError.hidden = true;
-    const password = els.loginPassword.value;
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const body = await res.json().catch(function () { return null; });
-      if (!res.ok || !body || !body.token) {
-        const msg = (body && body.detail) || 'Login failed';
-        els.loginError.textContent = msg;
-        els.loginError.hidden = false;
-        return;
-      }
-      writeToken(body.token);
-      hideLogin();
-      onLoginSuccess();
-    } catch (exc) {
-      els.loginError.textContent = String(exc.message || exc);
-      els.loginError.hidden = false;
-    }
+// --------------------------------------------------------------- sign-in
+// The sheet keeps one promise open while it is showing, so concurrent 401s share it.
+function signIn() {
+  return requestSignIn({
+    endpoint: '/api/login',
+    hint: 'Enter the password to use Family Radar.',
+    onToken: writeToken,
   });
 }
 

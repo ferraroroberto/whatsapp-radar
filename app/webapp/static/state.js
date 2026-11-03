@@ -1,8 +1,8 @@
 /* Shared singletons: app state, DOM-element references, constants.
  *
  * Auth: a bearer token is stored in localStorage. The page extracts it from
- * ?token=… on first load and strips it from the URL. On 401, the login overlay
- * shows; password → /api/login → bearer token.
+ * ?token=… on first load and strips it from the URL. On 401, the vendored sign-in
+ * sheet opens; password → /api/login → bearer token.
  *
  * The four tabs (Home · Activity · Inbox · Family) each own a state slice
  * below; Settings is a modal, not a tab.
@@ -237,9 +237,4 @@ export const els = {
   familyTravelDone: document.getElementById('familyTravelDone'),
 
   buildReadout: document.getElementById('buildReadout'),
-
-  loginOverlay: document.getElementById('loginOverlay'),
-  loginForm: document.getElementById('loginForm'),
-  loginPassword: document.getElementById('loginPassword'),
-  loginError: document.getElementById('loginError'),
 };

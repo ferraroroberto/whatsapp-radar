@@ -4,7 +4,7 @@
  * the polls once. */
 
 import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
-import { jsonApi, tokenFromUrl, toast, wireLoginForm, writeToken } from './api.js';
+import { jsonApi, tokenFromUrl, toast, writeToken } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
 import { wireTabs } from './tabs.js';
@@ -27,7 +27,7 @@ async function fetchVersion() {
   } catch (exc) {
     els.buildReadout.textContent = '';
     // An auth failure must reach boot(): it stops there, before any poll timer is
-    // armed that would keep 401-ing and re-clearing the password field.
+    // armed that would keep 401-ing against a token the server refuses.
     if (String(exc.message) === 'auth required') throw exc;
   }
 }
@@ -59,10 +59,6 @@ function refreshHome() {
   fetchDashboard().catch(function () {});
 }
 
-// boot() re-runs after a successful password login (wireLoginForm); the poll
-// timers must be registered exactly once across both runs.
-let pollsArmed = false;
-
 async function boot() {
   const fromUrl = tokenFromUrl();
   if (fromUrl) writeToken(fromUrl);
@@ -78,8 +74,6 @@ async function boot() {
   await fetchWebauthnStatus();
   await fetchDashboard();
 
-  if (pollsArmed) return;
-  pollsArmed = true;
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});
   }, WEBAUTHN_POLL_MS);
@@ -98,7 +92,6 @@ async function boot() {
 }
 
 // --------------------------------------------------------- wire + go
-wireLoginForm(boot);
 wireTabs(function (tab) {
   if (tab === 'dashboard') refreshHome();
   if (tab === 'chats') fetchChats().catch(function () {});

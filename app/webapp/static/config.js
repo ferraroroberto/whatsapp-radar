@@ -100,6 +100,7 @@ function options(list) {
 
 function passwordInput(placeholder, onChange) {
   const input = document.createElement('input');
+  // password-input-vendored-exempt: masks the Telegram bot token in Settings, not this app's own sign-in
   input.type = 'password';
   input.className = 'input-native';
   input.autocomplete = 'off';

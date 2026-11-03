@@ -164,6 +164,7 @@ def create_app() -> FastAPI:
 
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
+    app.state.login_lockout = auth.build_login_lockout()
     # Resolved once; the dashboard router reads it (tests override app.state.db_path).
     _cfg = load_config()
     app.state.db_path = _cfg.db_path

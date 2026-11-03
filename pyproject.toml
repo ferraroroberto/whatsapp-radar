@@ -24,6 +24,7 @@ select = ["E", "F", "I", "UP", "B"]
 "scripts/conventions_ratchet.py" = ["E501"]
 "scripts/runtime_write_ratchet.py" = ["E501"]
 "scripts/runtime_write_resolve.py" = ["E501"]
+"src/login_lockout.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's documented idiom evaluates Depends()/Query()/etc. in argument

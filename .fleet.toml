@@ -8,6 +8,7 @@ description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
 shape       = "webapp-tray"
 port        = ":8455"
+depends_on  = ["home-automation", "local-llm-hub", "project-scaffolding", "task-os"]
 
 [vendored]
 e2e_live_guard = { src = "tests/e2e/_e2e_live_guard.py", sha = "4c699636afecd5cae5e966bc2bcb17fa49744390", dest = "tests/e2e/_e2e_live_guard.py" }

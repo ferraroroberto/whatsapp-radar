@@ -21,39 +21,6 @@
 }
 .webauthn-devices li span { flex: 1; word-break: break-word; }
 
-/* ============================================================ login */
-.login-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--scrim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: var(--space-md);
-}
-.login-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 20px;
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  text-align: center;
-}
-.login-card h2 { margin: 0; font-size: var(--font-heading-lg); }
-.login-error {
-  background: var(--deficit-soft);
-  border: 1px solid var(--deficit);
-  color: var(--deficit);
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-caption);
-}
-
 /* ================================================================== execution */
 /* Traffic card's paired Run-now buttons sit side by side. */
 

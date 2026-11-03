@@ -39,6 +39,7 @@
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
   <link rel="stylesheet" href="/static/_vendored/icon-button/icon-button.css">
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
+  <link rel="stylesheet" href="/static/_vendored/sign-in/sign-in.css">
   <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
   <link rel="stylesheet" href="/static/_vendored/page-foot/page-foot.css">
@@ -845,16 +846,6 @@
       <p id="linkPickerEmpty" class="muted small" hidden>No matching chats.</p>
     </div>
   </dialog>
-
-  <div id="loginOverlay" class="login-overlay" hidden>
-    <form id="loginForm" class="login-card" autocomplete="off">
-      <h2>Sign in</h2>
-      <p class="muted small">Enter the password to use Family Radar.</p>
-      <input id="loginPassword" type="password" class="input-native" autocomplete="current-password" placeholder="Password" required>
-      <button data-track="login.unlock" type="submit" class="button-tint btn-block">Unlock</button>
-      <div id="loginError" class="login-error" hidden></div>
-    </form>
-  </div>
 
   <script type="module" src="/static/main.js"></script>
 </body>

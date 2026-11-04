@@ -1,4 +1,7 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {"key": ".github/workflows/e2e.yml", "count": 3},
+    {"key": ".github/workflows/main-gate-watch.yml", "count": 2}
+  ]
 }

@@ -1,4 +1,4 @@
-"""Webapp process manager — adopt-or-spawn for uvicorn.
+"""Webapp process manager — adopt-or-spawn for the HTTP/2 webapp.
 
 ``status()`` probes ``/healthz`` + a TCP fallback, ``start()`` adopts an
 already-listening uvicorn or spawns one, ``stop()`` only terminates a process
@@ -48,6 +48,8 @@ class WebappManagerConfig:
     startup_timeout_seconds: float = 15.0
     request_timeout_seconds: float = 1.0
     poll_interval_seconds: float = 0.4
+    # hypercorn serves HTTP/2 over the certificate; uvicorn is the HTTP/1.1 fallback.
+    server: str = "hypercorn"
 
 
 @dataclass
@@ -251,14 +253,15 @@ class WebappManager:
         cmd: list[str] = [
             py,
             "-m",
-            "uvicorn",
-            "app.webapp.server:app",
+            "app.webapp.serve",
             "--host",
             self.config.host,
             "--port",
             str(self.config.port),
             "--log-level",
             "warning",
+            "--server",
+            self.config.server,
         ]
         certs = cert_paths()
         if certs is not None:

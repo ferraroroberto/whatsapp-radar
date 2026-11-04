@@ -37,6 +37,8 @@ class WebappConfig:
     enabled: bool = True
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    # hypercorn serves HTTP/2 over the certificate; uvicorn is the HTTP/1.1 fallback.
+    server: str = "hypercorn"
     # Bearer token enforced when the request did NOT come from a loopback IP.
     # Empty string disables enforcement entirely.
     auth_token: str = ""
@@ -83,6 +85,7 @@ def load_webapp_config(path: Path | None = None) -> WebappConfig:
         enabled=bool(raw.get("enabled", True)),
         host=str(raw.get("host", DEFAULT_HOST)),
         port=int(raw.get("port", DEFAULT_PORT)),
+        server=str(raw.get("server", "hypercorn")),
         auth_token=str(raw.get("auth_token", "")),
         auth_password=str(raw.get("auth_password", "")),
         tailnet_allowlist=[str(p) for p in (raw.get("tailnet_allowlist") or [])],
@@ -110,6 +113,7 @@ def save_webapp_config(cfg: WebappConfig, path: Path | None = None) -> Path:
         "enabled": cfg.enabled,
         "host": cfg.host,
         "port": cfg.port,
+        "server": cfg.server,
         "auth_token": cfg.auth_token,
         "auth_password": cfg.auth_password,
         "tailnet_allowlist": cfg.tailnet_allowlist,
@@ -155,6 +159,8 @@ _VALID_VOICE_GENDERS = {"female", "male"}
 def _validate(cfg: WebappConfig) -> None:
     if not (1 <= cfg.port <= 65535):
         raise ValueError(f"port out of range: {cfg.port}")
+    if cfg.server not in ("hypercorn", "uvicorn"):
+        raise ValueError(f"invalid server: {cfg.server!r}")
     if cfg.default_voice_gender not in _VALID_VOICE_GENDERS:
         raise ValueError(f"invalid default_voice_gender: {cfg.default_voice_gender!r}")
     for sender, gender in cfg.sender_voice_genders.items():

@@ -57,7 +57,7 @@ def main() -> int:
     log_fp = (data_dir / "webapp.log").open("w", encoding="utf-8")
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "uvicorn", "app.webapp.server:app",
+            sys.executable, "-m", "app.webapp.serve",
             "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning",
         ],
         cwd=str(ROOT), env=env, stdout=log_fp, stderr=subprocess.STDOUT,

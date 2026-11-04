@@ -25,6 +25,7 @@ select = ["E", "F", "I", "UP", "B"]
 "scripts/runtime_write_ratchet.py" = ["E501"]
 "scripts/runtime_write_resolve.py" = ["E501"]
 "src/login_lockout.py" = ["E501"]
+"app/webapp/serve.py" = ["E501", "B010"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's documented idiom evaluates Depends()/Query()/etc. in argument
@@ -49,6 +50,7 @@ module = [
     "fastapi.*",
     "starlette.*",
     "uvicorn.*",
+    "hypercorn.*",
     "webauthn.*",
     "pystray.*",
     "PIL.*",

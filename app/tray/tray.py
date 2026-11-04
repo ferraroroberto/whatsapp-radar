@@ -307,7 +307,7 @@ def run_tray() -> int:
     wcfg = load_webapp_config()
     cfg = load_config()
     manager = WebappManager(
-        WebappManagerConfig(enabled=wcfg.enabled, host=wcfg.host, port=wcfg.port)
+        WebappManagerConfig(wcfg.enabled, wcfg.host, wcfg.port, server=wcfg.server)
     )
 
     tunnel_hostname = cloudflared_proc.read_hostname(TUNNEL_CONFIG_PATH)

@@ -3,7 +3,7 @@
 Three run modes (issue #225, guard vendored from project-scaffolding's
 `_e2e_live_guard.py` — issue #191/#194/#197):
 
-* **Autoboot (default gate path).** ``WR_E2E_AUTOBOOT=1`` boots uvicorn on a
+* **Autoboot (default gate path).** ``WR_E2E_AUTOBOOT=1`` boots the webapp on a
   free port against a throwaway DB and tears it down after.
   ``scripts/verify-before-ship.ps1`` / ``scripts/run-e2e.ps1`` set this — the
   suite always drives a disposable instance, never the live tray.
@@ -360,8 +360,7 @@ def base_url() -> Iterator[str]:
         [
             sys.executable,
             "-m",
-            "uvicorn",
-            "app.webapp.server:app",
+            "app.webapp.serve",
             "--host",
             "127.0.0.1",
             "--port",

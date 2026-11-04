@@ -21,6 +21,7 @@ google-auth-oauthlib>=1.2
 # FastAPI + uvicorn serve the phone-first PWA; same stack as App Launcher.
 fastapi>=0.110
 uvicorn[standard]>=0.27
+hypercorn>=0.18
 # WebAuthn passkey gate (Face ID enrol + assert).
 webauthn>=2.0
 # HTTP client (healthz polling, tray enroll call) + YAML (cloudflared config).

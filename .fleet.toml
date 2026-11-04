@@ -198,6 +198,11 @@ rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wir
 [design.review]
 theme_storage_key = "wa-radar.theme"
 
+# /perf-review's "ready": the Home glance rows carrying live data. Without a selector it
+# reads first contentful paint, which goes green on the placeholder rows before any data.
+[perf.review]
+ready_selector = '#dashGlance[data-state="ready"] .glance-row'
+
 # `measure --e2e` and `--synthetic` walk this throwaway webapp (the e2e autoboot's
 # sanitized seeded DB, fixture connector, temp runtime paths), never the live tray
 # on :8455 (scripts/design_review_synthetic.py).

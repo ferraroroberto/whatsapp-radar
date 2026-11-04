@@ -110,6 +110,8 @@ def test_home_glance_card_links_into_activity(page: Page, base_url: str) -> None
     expect(pane.locator(".home-head .home-title")).to_have_text("Home")
     rows = page.locator("#dashGlance .glance-row")
     expect(rows).to_have_count(4)
+    # The declared perf-review ready_selector: visible once the data landed.
+    expect(page.locator('#dashGlance[data-state="ready"] .glance-row')).to_have_count(4)
     for i, name in enumerate(("WhatsApp", "Gmail", "Calendar", "Traffic")):
         expect(rows.nth(i).locator(".action-row-title")).to_have_text(name)
     # Exceptions only: no OK anywhere, a Failed chip, the traffic alert chip,

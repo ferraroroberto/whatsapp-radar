@@ -138,7 +138,10 @@ function renderHeader() {
   btn.onclick = open;
 }
 
+// `ready` only once /api/dashboard has landed: the rows paint earlier with a
+// placeholder, and the phone-load probe's ready_selector keys on this state.
 function renderGlance() {
+  els.dashGlance.dataset.state = state.dashboard ? 'ready' : 'loading';
   els.dashGlance.textContent = '';
   for (const source of GLANCE) els.dashGlance.appendChild(glanceRow(source));
   renderHeader();

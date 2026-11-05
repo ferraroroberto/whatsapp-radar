@@ -2,5 +2,14 @@
   "version": 1,
   "band": {"files": 3, "functions": 10},
   "root_extras": [],
+  "shape_contract": {
+    "root_files": ["wr.bat"],
+    "redundant": [],
+    "folder_types": {
+      "src/analysis/prompts": 4,
+      "src/fixtures": 1,
+      "src/sidecar": 2
+    }
+  },
   "entries": []
 }

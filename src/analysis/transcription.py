@@ -47,6 +47,7 @@ import requests
 from src.config import Config, TranscriptionConfig
 from src.db import store
 from src.models import StoredMessage
+from src.pooled_http import SESSION as POOLED_SESSION
 from src.progress import Progress, emit
 from src.subprocess_flags import NO_WINDOW
 
@@ -184,7 +185,7 @@ def transcribe_file(
     if language and language.lower() != "auto":
         data["language"] = language
     wav_bytes, filename = _read_as_wav(path)
-    post = session.post if session is not None else requests.post
+    post = (session if session is not None else POOLED_SESSION).post
     try:
         response = post(
             url, data=data, files={"file": (filename, wav_bytes, "audio/wav")}, timeout=timeout

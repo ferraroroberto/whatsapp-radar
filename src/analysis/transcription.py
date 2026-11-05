@@ -64,6 +64,10 @@ Transcriber = Callable[[Path, str | None], str]
 
 _WS_RUN = re.compile(r"\s+")
 
+# ffmpeg decodes a voice note to WAV far faster than real time; two minutes is well
+# past a healthy run for the longest note and keeps a hung child from stalling the scan.
+_FFMPEG_WAV_TIMEOUT_SECONDS = 120
+
 # Below this many characters of chat text, language detection isn't trustworthy —
 # we send no hint and let the backend auto-detect rather than guess from noise.
 _MIN_DETECT_CHARS = 20
@@ -153,7 +157,12 @@ def _read_as_wav(path: Path) -> tuple[bytes, str]:
             [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(path),
              "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"],
             capture_output=True, check=True, creationflags=NO_WINDOW,
+            timeout=_FFMPEG_WAV_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise TranscriptionError(
+            f"ffmpeg timed out after {_FFMPEG_WAV_TIMEOUT_SECONDS}s transcoding {path.name}"
+        ) from exc
     except (OSError, subprocess.CalledProcessError) as exc:
         detail = getattr(exc, "stderr", b"") or b""
         raise TranscriptionError(

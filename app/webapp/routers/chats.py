@@ -58,8 +58,9 @@ def _transcode_to_mp3(src: Path) -> bytes:
 
     WhatsApp voice notes are OGG/Opus, which iOS Safari's ``<audio>`` element can't
     play; MP3 plays on every target browser. Raises ``FileNotFoundError`` when
-    ffmpeg isn't on PATH and ``subprocess.CalledProcessError`` on a transcode error,
-    both of which the endpoint catches to fall back to the original bytes.
+    ffmpeg isn't on PATH, ``subprocess.CalledProcessError`` on a transcode error and
+    ``subprocess.TimeoutExpired`` when ffmpeg outlives its bound, all of which the
+    endpoint catches to fall back to the original bytes.
     """
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
@@ -68,10 +69,14 @@ def _transcode_to_mp3(src: Path) -> bytes:
         [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(src),
          "-vn", "-ac", "1", "-ar", "24000", "-b:a", "64k", "-f", "mp3", "pipe:1"],
         capture_output=True, check=True, creationflags=NO_WINDOW,
+        timeout=_FFMPEG_MP3_TIMEOUT_SECONDS,
     )
     return proc.stdout
 
 _VALID_STATUSES = {"discovered", "monitored", "ignored"}
+# One voice note is seconds to a few minutes of audio and ffmpeg encodes it in a
+# fraction of that; a minute is far past a healthy run and still answers the player.
+_FFMPEG_MP3_TIMEOUT_SECONDS = 60
 _HISTORY_MAX = 200
 _ALIAS_MAX = 100
 
@@ -339,7 +344,7 @@ async def message_audio(
         return FileResponse(target, media_type="audio/wav")
     try:
         mp3 = await asyncio.to_thread(_transcode_to_mp3, target)
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         logger.warning("⚠️ audio transcode failed for message %s: %s", message_id, exc)
         media_type = _AUDIO_MEDIA_TYPES.get(suffix, "application/octet-stream")
         return FileResponse(target, media_type=media_type)

@@ -25,6 +25,8 @@ from typing import Any
 import requests
 import urllib3
 
+from src.pooled_http import pooled_request
+
 logger = logging.getLogger(__name__)
 
 # The hub binds loopback only and serves plain HTTP, but a sibling loopback
@@ -77,10 +79,10 @@ def request(
     failure becomes a 503; a ``>= 400`` response is raised with its own status;
     a non-JSON body returns ``{}`` when ``allow_empty`` (the default), else
     raises a 502. ``**kwargs`` (``json``, ``params``, ``files``, ``data``,
-    ``headers``, ...) flow straight to ``requests.request``.
+    ``headers``, ...) flow straight to the pooled session's ``request``.
     """
     try:
-        resp = requests.request(method, url, timeout=timeout, verify=verify, **kwargs)
+        resp = pooled_request(method, url, timeout=timeout, verify=verify, **kwargs)
     except requests.RequestException as exc:
         raise error(f"{service} unreachable at {url} ({exc})", status=503) from exc
     if resp.status_code >= 400:

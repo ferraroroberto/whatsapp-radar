@@ -49,6 +49,9 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "src").mkdir()
     script = tmp_path / "scripts" / "conventions_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    # the ratchet loads this sibling at import
+    readers = "conventions_readers.py"
+    shutil.copy(gate.SCRIPT.with_name(readers), script.with_name(readers))
     (tmp_path / ".fleet.toml").write_text(
         f"[conventions_ratchet]\nenabled = true\nrules = {RULES}\n", encoding="utf-8"
     )

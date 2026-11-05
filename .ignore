@@ -23,6 +23,7 @@
 /scripts/classify_e2e.py
 /scripts/comment_ratchet.py
 /scripts/conventions_ratchet.py
+/scripts/conventions_readers.py
 /scripts/dead_code_ratchet.py
 /scripts/doc_refs_ratchet.py
 /scripts/docs_ratchet.py
@@ -37,6 +38,7 @@
 /scripts/usage_track_scan.py
 /src/compression.py
 /src/login_lockout.py
+/src/pooled_http.py
 /src/runtime_data.py
 /src/usage_log.py
 /tests/e2e/_browser_sweep.py

@@ -260,9 +260,9 @@ def _open_enrollment_window(manager: WebappManager) -> None:
     scheme = "https" if cert_paths() else "http"
     url = f"{scheme}://127.0.0.1:{manager.config.port}/api/webauthn/enroll/window"
     try:
-        import requests
+        from src.pooled_http import pooled_request
 
-        resp = requests.post(url, json={"seconds": 300}, timeout=5, verify=False)
+        resp = pooled_request("POST", url, json={"seconds": 300}, timeout=5, verify=False)
         if resp.status_code == 200:
             _notify(
                 "Passkey enrollment",

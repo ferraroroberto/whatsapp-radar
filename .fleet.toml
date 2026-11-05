@@ -169,6 +169,12 @@ enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
 rules    = ["no-window", "logging-not-print", "no-drive-path", "password-input-vendored", "login-lockout", "subprocess-timeout"]
 
+# A raw connect skips the WAL pragma, the schema and the migrations.
+[[conventions_ratchet.must_use]]
+call   = "sqlite3.connect"
+helper = ["src/db/connection.py"]
+why    = "src/db/connection.py is the one SQLite connection helper (WAL, schema, migrations)"
+
 # Outbound HTTP goes through the pooled session, not a bare requests call.
 [[conventions_ratchet.must_use]]
 call   = ["requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "requests.head", "requests.request"]

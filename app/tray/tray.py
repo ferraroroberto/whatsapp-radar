@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
 # tolerates a busy daemon without letting a wedged one freeze tray startup.
 TAILSCALE_CLI_TIMEOUT_SECONDS = 12
 
+# `clip` copies a short URL and answers in well under a second, so a child still
+# alive after 10 s is wedged and must not stall the tray menu thread.
+CLIP_TIMEOUT_SECONDS = 10
+
 TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 
 
@@ -75,8 +79,11 @@ def _clipboard_copy(text: str) -> bool:
                 check=False,
                 encoding="utf-8",
                 creationflags=NO_WINDOW,
+                timeout=CLIP_TIMEOUT_SECONDS,
             )
             return p.returncode == 0
+        except subprocess.TimeoutExpired:
+            logger.warning(f"clip did not finish within {CLIP_TIMEOUT_SECONDS}s; clipboard not set")
         except OSError as exc:
             logger.debug(f"clip failed: {exc}")
     return False

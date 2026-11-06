@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
+from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
 from src.runresult import parse_result, strip_result_line
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP
@@ -140,9 +141,7 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
         except (OSError, json.JSONDecodeError):
             existing = {}
     existing.update({k: v for k, v in fields.items() if v is not None})
-    tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-    os.replace(tmp, target)
+    atomic_write_text(target, json.dumps(existing, indent=2))
 
 
 def read_run(run_dir: Path) -> dict[str, Any]:

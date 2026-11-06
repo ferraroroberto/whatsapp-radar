@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import secrets
 import threading
 import time
@@ -43,6 +42,7 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
+from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
 from src.webapp_config import WebappConfig
 
@@ -112,9 +112,7 @@ class WebAuthnGate:
 
     def _save_devices(self, devices: list[dict[str, Any]]) -> None:
         self._devices_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._devices_path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps({"devices": devices}, indent=2), encoding="utf-8")
-        os.replace(tmp, self._devices_path)
+        atomic_write_text(self._devices_path, json.dumps({"devices": devices}, indent=2))
 
     def list_devices(self) -> list[dict[str, Any]]:
         """Public view of enrolled devices (no key material)."""

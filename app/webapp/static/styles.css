@@ -16,6 +16,7 @@
   --bg: #ffffff;            /* canvas (page background) */
   --card: #ffffff;          /* elevated card surface */
   --card-off: #f6f8fa;      /* canvas-subtle (inset / off-card surfaces) */
+  --card-2: #f6f8fa;        /* menu surface one step above the card (vendored row-menu) */
   --ink: #1f2328;           /* fg (primary text) */
   --muted: #656d76;         /* fg-muted (secondary text) */
   --line: #d1d9e0;          /* border (default hairline) */
@@ -109,6 +110,7 @@
   --bg: #0d1117;            /* canvas (GitHub dark canvas) */
   --card: #161b22;          /* elevated card surface */
   --card-off: #010409;      /* canvas-subtle (true black inset) */
+  --card-2: #21262d;        /* menu surface one step above the card (vendored row-menu) */
   --ink: #e6edf3;           /* fg */
   --muted: #7d8590;         /* fg-muted */
   --line: #30363d;          /* border */

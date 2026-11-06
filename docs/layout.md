@@ -40,7 +40,7 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 | `src/google_oauth_common/` | The installed-app OAuth bootstrap, token store and transport the three clients wrap. Lifted alongside any of them, as a sibling under the same parent package. |
 | `src/fixtures/` | Sanitized sample chats. |
 | `src/sidecar/` | The read-only Node/Baileys connector: `index.js`, its own `package.json`, and a gitignored `node_modules/` from `npm ci`. A separate process, not Python; `src/connector/sidecar.py` launches it, and it finds `auth/` and `data/linked_device/` two levels up at the repo root. |
-| `src/*.py` | Shared leaf modules: models, paths, logging, runtime data, vendored `runtime_data.py`, `usage_log.py` and `compression.py`. |
+| `src/*.py` | Shared leaf modules: models, paths, logging, atomic file writes (`atomic_write.py`, the one `os.replace` caller), runtime data, vendored `runtime_data.py`, `usage_log.py` and `compression.py`. |
 
 **Google API code goes in the portable client packages.** The rest of `src/` consumes them through their public functions (`from src.calendar_readonly import …`); a new Google call extends the matching client, and a new Google surface gets its own sibling package under `src/` that follows the same relative-imports, no-`src`/`app` contract (`docs/gmail-reuse.md`).
 

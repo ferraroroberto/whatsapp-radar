@@ -175,6 +175,12 @@ call   = "sqlite3.connect"
 helper = ["src/db/connection.py"]
 why    = "src/db/connection.py is the one SQLite connection helper (WAL, schema, migrations)"
 
+# A raw replace skips the unique temp name and the cleanup on a failed write.
+[[conventions_ratchet.must_use]]
+call   = "os.replace"
+helper = ["src/atomic_write.py"]
+why    = "src/atomic_write.py is the one atomic file writer (unique temp, cleanup on failure)"
+
 # Outbound HTTP goes through the pooled session, not a bare requests call.
 [[conventions_ratchet.must_use]]
 call   = ["requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "requests.head", "requests.request"]

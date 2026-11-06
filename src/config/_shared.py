@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
 
 
@@ -126,7 +127,5 @@ def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> P
     merged = _deep_merge(current, partial)
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(merged, indent=2), encoding="utf-8")
-    os.replace(tmp, target)
+    atomic_write_text(target, json.dumps(merged, indent=2))
     return target

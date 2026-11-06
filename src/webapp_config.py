@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse, urlunparse
 
+from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -126,9 +126,7 @@ def save_webapp_config(cfg: WebappConfig, path: Path | None = None) -> Path:
         "default_voice_gender": cfg.default_voice_gender,
     }
 
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(tmp, target)
+    atomic_write_text(target, json.dumps(payload, indent=2))
     logger.info(f"💾 Saved webapp_config to {target}")
     return target
 

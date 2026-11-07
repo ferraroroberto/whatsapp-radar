@@ -44,7 +44,9 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "scripts").mkdir()
     script = tmp_path / "scripts" / "instruction_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
-    fleet = "[instruction_ratchet]\nenabled = true\n"
+    for sibling in ("instruction_frontmatter.py", "instruction_repeats.py"):
+        shutil.copy(gate.SCRIPT.parent / sibling, tmp_path / "scripts" / sibling)
+    fleet ="[instruction_ratchet]\nenabled = true\n"
     (tmp_path / ".fleet.toml").write_text(fleet, encoding="utf-8")
     claude_md = tmp_path / "CLAUDE.md"
     claude_md.write_text(CLEAN, encoding="utf-8")

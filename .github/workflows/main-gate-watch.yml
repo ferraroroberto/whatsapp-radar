@@ -1,8 +1,8 @@
-# Files an issue the moment main's e2e gate goes red (#258).
+# Files an issue the moment main's e2e gate goes red.
 #
 # CI is advisory here — the local gate (pytest/ruff/mypy, CLAUDE.md) is the
 # real contract — but a red main should never rely on someone noticing it by
-# accident while reviewing an unrelated PR (that's exactly how #258's Gmail
+# accident while reviewing an unrelated PR (that is exactly how a Gmail
 # idempotency regression went unreported for four days: two markdown-only
 # PRs correctly discounted the red gate for their own diffs, and nobody
 # treated "main is red" as a finding in its own right). This watches only

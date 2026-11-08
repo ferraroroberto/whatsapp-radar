@@ -94,6 +94,7 @@ def _open_record(verb: str, argv: list[str]) -> tuple[Path, IO[bytes]] | None:
     kind = run_kind(verb)
     try:
         run_dir = runs.new_run_dir(kind, runs.new_run_id())
+        # runtime-write-exempt: run dir from runs.new_run_dir under webapp/runs/
         log: IO[bytes] = (run_dir / "output.log").open("wb")
     except OSError:
         return None

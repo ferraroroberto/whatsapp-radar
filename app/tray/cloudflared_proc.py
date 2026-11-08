@@ -47,7 +47,9 @@ def persist_tunnel_url(hostname: str, token: str) -> None:
     if token:
         url = append_auth_token(url, token)
     try:
+        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
         TUNNEL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
         TUNNEL_URL_FILE.write_text(url + "\n", encoding="utf-8")
         logger.info(f"📡 Tunnel URL → {TUNNEL_URL_FILE}")
         logger.info(f"   {url}")

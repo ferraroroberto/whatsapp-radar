@@ -65,6 +65,7 @@ def _backup_db(conn: sqlite3.Connection, db_path: Path) -> Path:
     conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     backup = db_path.with_name(f"{db_path.name}.bak-{stamp}")
+    # runtime-write-exempt: backup beside the caller-supplied db
     shutil.copy2(db_path, backup)
     return backup
 

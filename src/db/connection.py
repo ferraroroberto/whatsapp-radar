@@ -77,7 +77,9 @@ def _rowid(cur: sqlite3.Cursor) -> int:
 
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open (creating parent dirs) and migrate a database, returning the connection."""
+    # runtime-write-exempt: caller-supplied db path
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    # runtime-write-exempt: caller-supplied db path
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     # WAL + NORMAL keeps the many small commits in the review/ingest paths fast

@@ -70,7 +70,9 @@ def configure_file_logging(name: str, *, log_dir: Path | None = None) -> Path | 
         return path
 
     try:
+        # runtime-write-exempt: webapp/ or WR log-dir override
         target_dir.mkdir(parents=True, exist_ok=True)
+        # runtime-write-exempt: webapp/ or WR log-dir override
         handler = RotatingFileHandler(
             path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8", delay=True
         )

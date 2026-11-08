@@ -252,9 +252,11 @@ def launch_sidecar(
 
     node = node_bin or os.environ.get("WR_NODE_BIN", "node")
     child_env = {**os.environ, **(env or {}), "WR_LINKED_DEVICE_DIR": str(buffer_dir)}
+    # runtime-write-exempt: caller-supplied linked-device state dir
     buffer_dir.mkdir(parents=True, exist_ok=True)
     spawn = spawner or _default_spawner
 
+    # runtime-write-exempt: caller-supplied linked-device state dir
     log_fh = (buffer_dir / "sidecar.log").open("ab")
     try:
         proc = spawn(
@@ -276,6 +278,7 @@ def launch_sidecar(
         # copy is no longer needed and must be released (avoids a leaked handle).
         log_fh.close()
 
+    # runtime-write-exempt: caller-supplied linked-device state dir
     _pid_path(buffer_dir).write_text(str(proc.pid), encoding="utf-8")
     return {"launched": True, "pid": proc.pid}
 

@@ -111,6 +111,7 @@ def _expiring_within(cert: x509.Certificate, days: int) -> bool:
 
 
 def _provision(hostname: str) -> None:
+    # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
     CERT_DIR.mkdir(parents=True, exist_ok=True)
     cert_path = CERT_DIR / "cert.pem"
     key_path = CERT_DIR / "key.pem"

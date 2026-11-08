@@ -40,7 +40,9 @@ def ensure_log_handler() -> None:
     ):
         return
     try:
+        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
         _AUTH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
         fh = logging.FileHandler(_AUTH_LOG_PATH, encoding="utf-8")
         fh.setLevel(logging.INFO)
         fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))

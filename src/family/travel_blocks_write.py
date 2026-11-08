@@ -152,7 +152,9 @@ def write_backup(
     guarantee that ordering is to make the backup a precondition that throws.
     """
     path = backup_path(root, calendar_id=calendar_id, event_id=event_id, now=now)
+    # runtime-write-exempt: caller-supplied backup root
     path.parent.mkdir(parents=True, exist_ok=True)
+    # runtime-write-exempt: caller-supplied backup root
     path.write_text(
         json.dumps(resource, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
     )

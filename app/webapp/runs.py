@@ -119,11 +119,13 @@ def new_run_dir(kind: str, run_id: str) -> Path:
     firing while the operator launches from the webapp).
     """
     base = RUNS_DIR / kind
+    # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
     base.mkdir(parents=True, exist_ok=True)
     target = base / run_id
     n = 2
     while True:
         try:
+            # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
             target.mkdir()
             return target
         except FileExistsError:
@@ -398,6 +400,7 @@ def start_run(
         if env_overrides:
             env.update(env_overrides)
 
+        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
         log_fh: IO[bytes] = (run_dir / "output.log").open("wb")
         try:
             proc = subprocess.Popen(

@@ -285,6 +285,7 @@ def write_survey_assets(proposal: SurveyProposal) -> None:
     try:
         for path, content in pending.items():
             temporary = path.with_suffix(path.suffix + ".tmp")
+            # runtime-write-exempt: operator-applied rewrite of tracked prompt assets
             temporary.write_text(content, encoding="utf-8")
             temporary_paths.append(temporary)
         for path in pending:
@@ -292,6 +293,7 @@ def write_survey_assets(proposal: SurveyProposal) -> None:
             replaced.append(path)
     except Exception:
         for path in replaced:
+            # runtime-write-exempt: operator-applied rewrite of tracked prompt assets
             path.write_text(originals[path], encoding="utf-8")
         raise
     finally:

@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs, save_text
 from src.webapp_config import append_auth_token
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,8 @@ def persist_tunnel_url(hostname: str, token: str) -> None:
     if token:
         url = append_auth_token(url, token)
     try:
-        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-        TUNNEL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
-        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-        TUNNEL_URL_FILE.write_text(url + "\n", encoding="utf-8")
+        make_dirs(TUNNEL_URL_FILE.parent)
+        save_text(TUNNEL_URL_FILE, url + "\n")
         logger.info(f"📡 Tunnel URL → {TUNNEL_URL_FILE}")
         logger.info(f"   {url}")
     except OSError as exc:

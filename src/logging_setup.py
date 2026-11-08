@@ -31,6 +31,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs, rotating_file_handler
 
 LOG_DIR_ENV = "WR_LOG_DIR"
 DEFAULT_LOG_DIR = PROJECT_ROOT / "webapp"
@@ -70,10 +71,8 @@ def configure_file_logging(name: str, *, log_dir: Path | None = None) -> Path | 
         return path
 
     try:
-        # runtime-write-exempt: webapp/ or WR log-dir override
-        target_dir.mkdir(parents=True, exist_ok=True)
-        # runtime-write-exempt: webapp/ or WR log-dir override
-        handler = RotatingFileHandler(
+        make_dirs(target_dir)
+        handler = rotating_file_handler(
             path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8", delay=True
         )
     except OSError as exc:

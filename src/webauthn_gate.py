@@ -44,6 +44,7 @@ from webauthn.helpers.structs import (
 
 from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -111,8 +112,7 @@ class WebAuthnGate:
         return list(raw.get("devices") or [])
 
     def _save_devices(self, devices: list[dict[str, Any]]) -> None:
-        # runtime-write-exempt: config/ file or caller-supplied path
-        self._devices_path.parent.mkdir(parents=True, exist_ok=True)
+        make_dirs(self._devices_path.parent)
         atomic_write_text(self._devices_path, json.dumps({"devices": devices}, indent=2))
 
     def list_devices(self) -> list[dict[str, Any]]:

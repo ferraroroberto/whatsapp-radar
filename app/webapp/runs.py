@@ -36,6 +36,7 @@ from typing import IO, Any
 from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
 from src.runresult import parse_result, strip_result_line
+from src.runtime_files import make_dirs, open_for_write
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
@@ -119,14 +120,12 @@ def new_run_dir(kind: str, run_id: str) -> Path:
     firing while the operator launches from the webapp).
     """
     base = RUNS_DIR / kind
-    # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-    base.mkdir(parents=True, exist_ok=True)
+    make_dirs(base)
     target = base / run_id
     n = 2
     while True:
         try:
-            # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-            target.mkdir()
+            make_dirs(target, parents=False, exist_ok=False)
             return target
         except FileExistsError:
             target = base / f"{run_id}-{n}"
@@ -400,8 +399,7 @@ def start_run(
         if env_overrides:
             env.update(env_overrides)
 
-        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-        log_fh: IO[bytes] = (run_dir / "output.log").open("wb")
+        log_fh: IO[bytes] = open_for_write(run_dir / "output.log", "wb")
         try:
             proc = subprocess.Popen(
                 [_python(), str(_LAUNCHER), *argv_tail],

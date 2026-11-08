@@ -39,6 +39,7 @@ from typing import IO, TextIO, cast
 
 from app.webapp import runs
 from src.db.runs import FAMILY_KINDS
+from src.runtime_files import open_for_write
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,7 @@ def _open_record(verb: str, argv: list[str]) -> tuple[Path, IO[bytes]] | None:
     kind = run_kind(verb)
     try:
         run_dir = runs.new_run_dir(kind, runs.new_run_id())
-        # runtime-write-exempt: run dir from runs.new_run_dir under webapp/runs/
-        log: IO[bytes] = (run_dir / "output.log").open("wb")
+        log: IO[bytes] = open_for_write(run_dir / "output.log", "wb")
     except OSError:
         return None
     runs.write_run_json(

@@ -15,6 +15,7 @@ from typing import Any
 
 from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs
 
 
 def project_root() -> Path:
@@ -126,7 +127,6 @@ def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> P
     current = _load_json(target)
     merged = _deep_merge(current, partial)
 
-    # runtime-write-exempt: config/local.json or WR_LOCAL_CONFIG_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
+    make_dirs(target.parent)
     atomic_write_text(target, json.dumps(merged, indent=2))
     return target

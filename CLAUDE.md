@@ -8,41 +8,11 @@ WhatsApp Radar classifies new WhatsApp chat messages and surfaces only actionabl
 
 Fleet standard layout (as in `E:\automation\app-launcher`): UI in `app/`, logic in `src/`, committed config in `config/`, docs in `docs/`, the read-only Node/Baileys connector in `src/sidecar/`. Runs from a checkout, never installed.
 
-```
-whatsapp-radar/
-  app/cli/main.py        # argparse CLI (status|ingest|chats|monitor|ignore|review|scan|gmail-survey|
-                         #   notify|resync|reprocess|calendar-scan|traffic-check|tray)
-  app/webapp/            # FastAPI admin PWA: server.py, middleware.py, manager.py, runs.py,
-                         #   routers/, static/ (vanilla-JS shell)
-  app/tray/tray.py       # pystray surface that owns the webapp lifecycle
-  src/                   # logic, imported as `from src.…`
-    calendar_readonly/ calendar_write/ gmail_readonly/   # portable Google clients (see Layout & Imports)
-    google_oauth_common/ # installed-app OAuth bootstrap the three clients wrap
-    config/ (load_config aggregates one module per subsystem)   models.py  paths.py  ...
-    connector/ (base, factory, fixture, gmail, linked_device, preflight, sidecar)
-    db/ (store.py facade over per-table modules, sync.py/reprocess.py, schema.sql)
-    analysis/ (classifier, pipeline, tripwire, transcription, prompts/, ...)
-    notify/ (base, factory, telegram, alert, delivery)   report/digest.py
-    family/ (calendar_scan, rules, traffic_check, travel_blocks, travel_blocks_write — the only
-             path that deletes from calendars; analysis/reminders.py is the insert-only writer)
-    presence/  traffic/  task_os/
-    sidecar/             # read-only Node/Baileys connector (own package.json, not Python)
-  config/                # committed defaults (default.json) + *.sample templates;
-                         #   webapp_config.json / webauthn_devices.json + .env gitignored
-  scripts/               # helper CLIs + run-e2e.ps1, verify-before-ship.ps1
-  webapp/                # runtime log output + certificates/ + cloudflared.yml (gitignored contents)
-  docs/  tests/ (+ tests/e2e Playwright)
-  launcher.py            # CLI entry point (scripts\wr.bat wraps it)
-  tray.bat  webapp.bat  webapp_tunnel_named.bat  setup.bat   # webapp entry points
-  requirements.txt  requirements-dev.txt  pytest.ini
-  pyproject.toml         # tool config only (ruff/mypy) — no packaging
-```
+Folder by folder, and where new code goes: [`docs/layout.md`](docs/layout.md); the internal structure as a diagram: [`docs/architecture.mmd`](docs/architecture.mmd). In short: the argparse CLI is `app/cli/main.py`, the FastAPI admin PWA `app/webapp/`, the pystray tray `app/tray/`; the connector, store, classifier and notifiers live in `src/`; the Node/Baileys connector is `src/sidecar/` (own `package.json`, not Python). `src/family/travel_blocks_write.py` is the only path that deletes from calendars; `src/analysis/reminders.py` is the insert-only writer.
 
 CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <command>`, or `scripts\wr.bat <command>`.
 
-### Internal architecture
-
-[`docs/architecture.mmd`](docs/architecture.mmd) — hand-authored Mermaid of internal structure. Not auto-generated, not covered by `scripts/verify-before-ship.ps1`: update it in the same PR as any material structural change (connector added, pipeline stage moved, router split).
+Update `docs/architecture.mmd` in the same PR as any material structural change (connector added, pipeline stage moved, router split); it is hand-authored, so `scripts/verify-before-ship.ps1` does not check it.
 
 ### Admin webapp & tray
 
@@ -118,19 +88,15 @@ Gate, from the repo root, with the project venv:
 .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate
 ```
 
-Entirely offline against sanitized fixtures: no WhatsApp credentials, no network, no Telegram. The one exception is the **static ratchet** (`scripts/static_ratchet.py`, vendored; `.fleet.toml [static_ratchet]`, baseline `.static-ratchet-baseline.json`): it fails on a duplicate block (jscpd via `npx`, so **Node is a prerequisite**), an unused import/variable (ruff `F401,F841`) or a likely bug or security pattern (ruff's curated `B` and `S` families, `S113` included) not in the baseline. It reads the whole tree, never path-routed.
+The gate runs offline on sanitized fixtures. The static ratchet is the one exception: it needs Node, because the duplicate-block detector runs through `npx`.
 
-Every ratchet is a vendored `scripts/<name>_ratchet.py` with a `.fleet.toml [<name>_ratchet]` table and a `.<name>-ratchet-baseline.json`; `verify-before-ship.ps1` calls it only through `scripts.<name>_ratchet_gate`, which fails exit 3 (a detector could not run) as NOT CONFIRMED, never a pass or skip. Shrink a baseline with `--update-baseline` in the PR that removes the debt; adding needs `--allow-additions` and shows in review; reword or fix the flagged line rather than raising a baseline. Re-vendor a script only from project-scaffolding. Per ratchet:
+Every ratchet is a vendored `scripts/<name>_ratchet.py` with a `.fleet.toml [<name>_ratchet]` table and a `.<name>-ratchet-baseline.json`, called by `verify-before-ship.ps1` only through its `scripts.<name>_ratchet_gate`. A gate that exits 3 means a detector could not run: NOT CONFIRMED, never a pass. Baselines stay at zero: reword or fix the flagged line, never raise a baseline to get past it. Re-vendor a script only from project-scaffolding. Detail per ratchet: [`docs/verification.md`](docs/verification.md). The ones that bite while editing:
 
-- **docs** — `README.md` size and history markers (issue references, dated or changelog headings) in `README.md` and `docs/**/*.md`; docs you touch state the present-tense why with no `#N` citations.
-- **runtime write** — `code_folders = ["src", "app", "scripts"]`; fails when a file gains a write target (`open`, `write_text`, `mkdir`, a file log handler, `sqlite3.connect`, …) resolving under a code folder, and the gate brackets the pytest stages with `--snapshot`/`--probe`, which fails on any file the test runs leave under a code folder. Runtime output goes under `data/` or the runtime root (`src/runtime_data.py`). A path the check cannot resolve is unknown (exit 3), never clean: build it from the module's own constants, or mark the call `# runtime-write-exempt: <reason>`.
-- **usage track** — every web control carries a constant `data-track` id, every `<dialog>` a constant `data-track-view`, and no tracking id is built from content; the usage log must be vendored, started and mounted (`usage-log-wired`, never baselined). A control you add takes its id in the same change; a deliberate exception carries `<!-- untracked-control-exempt: <reason> -->` (or `//` in JS).
-- **comment** — counts `#NNN` issue references inside code comments per file and fails when one rises; a comment you touch states the present-tense why with no issue number or history narrative.
-- **structure** — `.fleet.toml` `shape = "webapp-tray"` + `extra_roots` + `[structure_ratchet]`; fails on a file over 1,000 lines, a function over 100, a directory over 40 modules, a `src`→`app` import, or a root folder the shape and `extra_roots` do not list, with baselined offenders held at today's size. New code goes where `docs/layout.md` says — Google API code in the portable root packages, not `src/` — so split rather than grow.
-- **instruction** — fails when `CLAUDE.md` or `AGENTS.md` gains a prompt-audit lint hit or passes its size cap.
-- **doc-refs** — fails when `README.md`, `CLAUDE.md` or `docs/**/*.md` names a repo path, `python -m` module or relative link that does not exist; point it at what exists, or list a deliberate pointer to another repo's file in `allow_refs`.
-- **dead-code** — fails when a tracked Python function, class or method that nothing in the repo refers to is not in the baseline; delete the definition or call it; a framework hook it misses goes in `allow` or `entry_decorators`, and every vendored copy must be declared in `[vendored]` first.
-- **conventions** — `rules = ["no-window", "logging-not-print", "no-drive-path", "password-input-vendored", "login-lockout", "subprocess-timeout"]`; fails when a file has more hits of an enabled rule than the baseline records: a subprocess spawn without `creationflags`, a `print` in non-CLI code under `app/` or `src/`, a string literal starting with a drive letter, a blocking `subprocess.run`/`call`/`check_*` with no `timeout=`, or (`must-use`) a bare `requests` call outside `src/pooled_http.py`, a `sqlite3.connect` outside `src/db/connection.py` or an `os.replace` outside `src/atomic_write.py`. Fix the line, or mark a deliberate exception `# <rule>-exempt: <reason>`; `secret-compare` and `git-wrapper` stay off until the repo has the helper they enforce.
+- **runtime write** (`code_folders = ["src", "app", "scripts"]`) — runtime output goes under `data/` or the runtime root (`src/runtime_data.py`). A caller-named path goes through `src/runtime_files.py`, which raises when the path lands in a code folder. A `# runtime-write-exempt: <reason>` marker is for a path fixed from outside, with that reason stated.
+- **usage track** — a new web control takes a constant `data-track` id and a `<dialog>` a `data-track-view` in the same change; a deliberate exception carries `<!-- untracked-control-exempt: <reason> -->` (`//` in JS).
+- **comment, docs** — comments, docstrings and docs state the present-tense why: no `#N` issue references, no history phrases.
+- **structure** — new code goes where `docs/layout.md` says (Google API code in the portable root packages, not `src/`); split rather than grow.
+- **conventions** — `no-window`, `logging-not-print`, `no-drive-path`, `subprocess-timeout`, and `must-use` for `requests`, `sqlite3.connect` and `os.replace` (their helpers are named in `.fleet.toml`). Mark a deliberate exception `# <rule>-exempt: <reason>`.
 
 ## CI expectations
 

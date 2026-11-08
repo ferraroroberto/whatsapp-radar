@@ -42,6 +42,7 @@ from typing import Any
 
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs, open_for_write, save_text
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
@@ -252,12 +253,10 @@ def launch_sidecar(
 
     node = node_bin or os.environ.get("WR_NODE_BIN", "node")
     child_env = {**os.environ, **(env or {}), "WR_LINKED_DEVICE_DIR": str(buffer_dir)}
-    # runtime-write-exempt: caller-supplied linked-device state dir
-    buffer_dir.mkdir(parents=True, exist_ok=True)
+    make_dirs(buffer_dir)
     spawn = spawner or _default_spawner
 
-    # runtime-write-exempt: caller-supplied linked-device state dir
-    log_fh = (buffer_dir / "sidecar.log").open("ab")
+    log_fh = open_for_write(buffer_dir / "sidecar.log", "ab")
     try:
         proc = spawn(
             [node, "index.js"],
@@ -278,8 +277,7 @@ def launch_sidecar(
         # copy is no longer needed and must be released (avoids a leaked handle).
         log_fh.close()
 
-    # runtime-write-exempt: caller-supplied linked-device state dir
-    _pid_path(buffer_dir).write_text(str(proc.pid), encoding="utf-8")
+    save_text(_pid_path(buffer_dir), str(proc.pid))
     return {"launched": True, "pid": proc.pid}
 
 

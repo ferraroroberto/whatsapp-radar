@@ -36,6 +36,7 @@ from src.config import Config, load_config
 from src.connector.gmail import build_gmail_read_client
 from src.gmail_readonly import GmailLabel, GmailMailbox, GmailSearch, GmailSender, NormalizedEmail
 from src.models import StoredMessage
+from src.runtime_files import open_for_write
 
 Progress = Callable[[str], None]
 
@@ -239,8 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         mailbox.close()
 
     if args.output is not None:
-        # runtime-write-exempt: operator-chosen output file
-        with args.output.open("a", encoding="utf-8") as fh:
+        with open_for_write(args.output, "a", encoding="utf-8") as fh:
             for record in records:
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         print(f"Wrote {len(records)} record(s) to {args.output}")

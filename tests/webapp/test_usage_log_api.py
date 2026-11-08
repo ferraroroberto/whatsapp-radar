@@ -54,10 +54,13 @@ def test_events_land_in_the_configured_local_file(usage_db: Path) -> None:
     with sqlite3.connect(usage_db) as conn:
         rows = conn.execute("SELECT kind, view_id, control_id FROM events ORDER BY id").fetchall()
         columns = [r[1] for r in conn.execute("PRAGMA table_info(events)")]
+        public_site = conn.execute("SELECT country, visitor, ip FROM events").fetchall()
     assert rows == [("session_start", None, None), ("view", "activity", None),
                     ("tap", "activity", "settings-open")]
     assert columns == ["id", "ts", "session_id", "kind", "view_id", "control_id",
-                       "device_class", "os_class"]
+                       "device_class", "os_class", "country", "visitor", "ip"]
+    # The vendored table carries the public-site columns; a fleet app never fills them.
+    assert public_site and all(row == (None, None, None) for row in public_site)
 
 
 def test_remote_caller_needs_the_bearer_token(usage_db: Path) -> None:

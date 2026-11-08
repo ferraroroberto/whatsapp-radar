@@ -1,4 +1,4 @@
-# Pre-ship gate on CI (issue #20).
+# Pre-ship gate on CI.
 #
 # Runs the exact same gate as the local `scripts/verify-before-ship.ps1` so the
 # checks run without relying on the developer remembering. The local gate stays
@@ -57,8 +57,8 @@ jobs:
 
       - name: Run pre-ship gate
         # The hosted runner is markedly slower than a local box, and the
-        # WebKit/iPhone e2e leg is the flaky one (issue #64 — it wedged PR #62
-        # for 11+ min). Give every e2e wait budget 3x headroom on CI; local
+        # WebKit/iPhone e2e leg is the flaky one (it has wedged a hosted
+        # runner for 11+ min). Give every e2e wait budget 3x headroom on CI; local
         # runs leave this unset and keep Playwright's native budgets. Paired
         # with a bounded WebKit-only rerun in tests/e2e/conftest.py.
         env:

@@ -111,6 +111,7 @@ class WebAuthnGate:
         return list(raw.get("devices") or [])
 
     def _save_devices(self, devices: list[dict[str, Any]]) -> None:
+        # runtime-write-exempt: config/ file or caller-supplied path
         self._devices_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(self._devices_path, json.dumps({"devices": devices}, indent=2))
 

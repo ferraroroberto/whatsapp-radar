@@ -51,6 +51,8 @@ def recent_keys(within_min: int, *, now: datetime, path: Path | None = None) -> 
 def record_alert(key: str, *, now: datetime, path: Path | None = None) -> None:
     """Append one sent-alert record."""
     target = path or default_path()
+    # runtime-write-exempt: data/family log or caller-supplied path
     target.parent.mkdir(parents=True, exist_ok=True)
+    # runtime-write-exempt: data/family log or caller-supplied path
     with target.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"key": key, "ts": now.isoformat()}, ensure_ascii=False) + "\n")

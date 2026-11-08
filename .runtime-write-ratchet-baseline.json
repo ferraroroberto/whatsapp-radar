@@ -1,22 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/cli/runlog.py", "counts": {"unresolved": 1}},
-    {"key": "app/tray/cloudflared_proc.py", "counts": {"unresolved": 2}},
-    {"key": "app/webapp/routers/auth.py", "counts": {"unresolved": 2}},
-    {"key": "app/webapp/runs.py", "counts": {"unresolved": 4}},
-    {"key": "scripts/gen_tailscale_cert.py", "counts": {"unresolved": 1}},
-    {"key": "scripts/gmail_school_backtest.py", "counts": {"unresolved": 1}},
-    {"key": "src/analysis/gmail_survey.py", "counts": {"unresolved": 2}},
-    {"key": "src/config/_shared.py", "counts": {"unresolved": 2}},
-    {"key": "src/connector/sidecar.py", "counts": {"unresolved": 3}},
-    {"key": "src/db/connection.py", "counts": {"unresolved": 2}},
-    {"key": "src/db/reprocess.py", "counts": {"unresolved": 1}},
-    {"key": "src/family/dedup.py", "counts": {"unresolved": 2}},
-    {"key": "src/family/travel_blocks_write.py", "counts": {"unresolved": 2}},
-    {"key": "src/google_oauth_common/token_store.py", "counts": {"unresolved": 2}},
-    {"key": "src/logging_setup.py", "counts": {"unresolved": 2}},
-    {"key": "src/webapp_config.py", "counts": {"unresolved": 2}},
-    {"key": "src/webauthn_gate.py", "counts": {"unresolved": 2}}
-  ]
+  "entries": []
 }

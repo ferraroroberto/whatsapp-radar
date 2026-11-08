@@ -126,6 +126,7 @@ def save_local_overrides(partial: dict[str, Any], root: Path | None = None) -> P
     current = _load_json(target)
     merged = _deep_merge(current, partial)
 
+    # runtime-write-exempt: config/local.json or WR_LOCAL_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(target, json.dumps(merged, indent=2))
     return target

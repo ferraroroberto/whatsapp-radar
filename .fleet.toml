@@ -7,6 +7,8 @@ icon        = "💬"
 description = "Cut attention load from busy chats."
 tag         = ["uses", "hub"]
 shape       = "webapp-tray"
+# Two typed-folder exceptions stay in the structure baseline, with their reasons in
+# docs/layout.md: src/analysis/prompts (run-time prompt assets) and src/sidecar (a Node package).
 port        = ":8455"
 depends_on  = ["home-automation", "local-llm-hub", "project-scaffolding", "task-os"]
 

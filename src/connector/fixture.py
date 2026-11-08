@@ -14,7 +14,7 @@ from typing import Any
 from src.connector.base import ConnectorStatus
 from src.models import ChatRecord, MessageRecord
 
-_DEFAULT_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "sample_chats.json"
+_DEFAULT_FIXTURE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "sample_chats.json"
 
 
 class FixtureConnector:

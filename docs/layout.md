@@ -8,9 +8,9 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 |---|---|
 | `app/` | UI surfaces: the argparse CLI, the FastAPI admin PWA, the tray. Imports `src/`, never the reverse. |
 | `src/` | The logic: connector, store, classifier, notifiers, family checks. Imported as `from src.…`. |
-| `tests/` | The offline pytest suite (fixture connector only) and the Playwright e2e suite in `tests/e2e/`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
+| `tests/` | The offline pytest suite (fixture connector only), the Playwright e2e suite in `tests/e2e/` and the sanitized sample chats the fixture connector reads, `tests/fixtures/sample_chats.json`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
 | `docs/` | Durable reference, this file included. |
-| `scripts/` | Helper CLIs, the verification gate, and the vendored ratchets with their gate wrappers. |
+| `scripts/` | Helper CLIs, the verification gate, `wr.bat` (the `launcher.py` wrapper) and the vendored ratchets with their gate wrappers. |
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |
 | `assets/` | Tray icon, Stream Deck icon and the Telegram bot avatars. |
 
@@ -18,7 +18,7 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 
 | Path | Holds |
 |---|---|
-| `app/cli/` | `main.py`, the argparse dispatcher behind `launcher.py` and `wr.bat`. |
+| `app/cli/` | `main.py`, the argparse dispatcher behind `launcher.py` and `scripts\wr.bat`. |
 | `app/tray/` | The pystray surface that owns the webapp lifecycle. |
 | `app/webapp/` | FastAPI server (`server.py`), adopt-or-spawn webapp lifecycle (`manager.py`), the vendored HTTP/2 launch module (`serve.py`), auth middleware, run tracking. |
 | `app/webapp/routers/` | One API router per area (chats, config, family, audit, auth, …). |
@@ -38,10 +38,18 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 | `src/presence/`, `src/traffic/`, `src/task_os/` | Clients for the presence, traffic and Task OS integrations. |
 | `src/calendar_readonly/`, `src/calendar_write/`, `src/gmail_readonly/` | Portable Google API clients shared with sibling repos, liftable unchanged. Every import inside them is relative, and they import nothing from the rest of `src/`, `app/` or `scripts/`. |
 | `src/google_oauth_common/` | The installed-app OAuth bootstrap, token store and transport the three clients wrap. Lifted alongside any of them, as a sibling under the same parent package. |
-| `src/fixtures/` | Sanitized sample chats. |
 | `src/sidecar/` | The read-only Node/Baileys connector: `index.js`, its own `package.json`, and a gitignored `node_modules/` from `npm ci`. A separate process, not Python; `src/connector/sidecar.py` launches it, and it finds `auth/` and `data/linked_device/` two levels up at the repo root. |
 | `src/*.py` | Shared leaf modules: models, paths, logging, atomic file writes (`atomic_write.py`, the one `os.replace` caller), runtime data, vendored `runtime_data.py`, `usage_log.py` and `compression.py`. |
 
 **Google API code goes in the portable client packages.** The rest of `src/` consumes them through their public functions (`from src.calendar_readonly import …`); a new Google call extends the matching client, and a new Google surface gets its own sibling package under `src/` that follows the same relative-imports, no-`src`/`app` contract (`docs/gmail-reuse.md`).
 
 Prefer a domain subpackage over a new module at `src/` itself; the module count of a directory is what the ratchet watches.
+
+## Exceptions
+
+Two typed-folder entries stay in `.structure-ratchet-baseline.json`, each with its reason:
+
+- `src/analysis/prompts/` holds plain-text prompt and keyword assets (`.md`, `.txt`) that the classifier reads at run time and that the webapp's Config sheets name by path; they are edited in place by design, so they are not documents (`docs/`) and not test data. They resolve by path from `__file__`.
+- `src/sidecar/` is a separate Node process with its own `package.json` and lockfile. `src/connector/sidecar.py` launches it, and it finds `auth/` and `data/linked_device/` two folders up. The `webapp-tray` shape has no folder for a non-Python package.
+
+A new exception needs its reason here and in `.fleet.toml`.

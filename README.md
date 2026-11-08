@@ -59,22 +59,22 @@ The connector path for personal and group chats is a WhatsApp Web linked-device 
 
 The app runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. Session/auth state lives under the ignored `data/` and `auth/` paths; the message database itself resolves to the fleet runtime-data root (`C:\sqlite\whatsapp-radar\` by default on this machine, overridable via `WR_DB_PATH`, `WHATSAPP_RADAR_DATA_DIR`, or `FLEET_DATA_ROOT` — see `src/runtime_data.py`), which also holds the `reprocess` backups and sits outside this git checkout, so it needs its own backup source rather than git-derived backup.
 
-It runs from a checkout with no install step — `wr.bat <cmd>` is the ergonomic wrapper for `python launcher.py <cmd>`.
+It runs from a checkout with no install step — `scripts\wr.bat <cmd>` is the ergonomic wrapper for `python launcher.py <cmd>`.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 
 # Ingest sanitized fixture chats/messages into local SQLite, then pick chats to monitor.
-.\wr.bat ingest
-.\wr.bat chats
-.\wr.bat monitor 1
-.\wr.bat monitor 3
+.\scripts\wr.bat ingest
+.\scripts\wr.bat chats
+.\scripts\wr.bat monitor 1
+.\scripts\wr.bat monitor 3
 
 # First review classifies the delta and prints one consolidated digest.
-.\wr.bat review --dry-run
+.\scripts\wr.bat review --dry-run
 # Second review with no new messages does nothing and produces no notification.
-.\wr.bat review --dry-run
+.\scripts\wr.bat review --dry-run
 ```
 
 Adding new messages causes only the delta to be reviewed. The per-chat cursor advances only after analysis is persisted, so a classifier error safely reprocesses the same delta next run.
@@ -85,8 +85,8 @@ Adding new messages causes only the delta to be reviewed. The per-chat cursor ad
 `scan` collapses the monitored-message flow — sync → keyword prefilter (Stage 1) → LLM (Stage 2) → digest → deliver — into one run with a full per-run audit trace, and advances each cursor only after that chat's analysis is persisted. `scan --dry-run` replays stored messages with no connector, no delivery and no cursor advance.
 
 ```powershell
-.\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
-.\wr.bat scan --dry-run       # replay stored messages, touch nothing
+.\scripts\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
+.\scripts\wr.bat scan --dry-run       # replay stored messages, touch nothing
 ```
 
 Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOURCES=whatsapp,gmail`; the classifier with `WR_CLASSIFIER` (`stub` offline default, or `hub` / `cascade` — equivalent names for the LLM classifier; the keyword prefilter gates the LLM for every classifier). A run that cannot check its source or reach the classifier fails loudly and holds every cursor. Preflight, the settled-buffer gate, prompt assets and alert memory: [`docs/scan-and-classification.md`](docs/scan-and-classification.md).

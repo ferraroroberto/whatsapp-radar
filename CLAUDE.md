@@ -25,20 +25,20 @@ whatsapp-radar/
     notify/ (base, factory, telegram, alert, delivery)   report/digest.py
     family/ (calendar_scan, rules, traffic_check, travel_blocks, travel_blocks_write — the only
              path that deletes from calendars; analysis/reminders.py is the insert-only writer)
-    presence/  traffic/  task_os/    fixtures/sample_chats.json
+    presence/  traffic/  task_os/
     sidecar/             # read-only Node/Baileys connector (own package.json, not Python)
   config/                # committed defaults (default.json) + *.sample templates;
                          #   webapp_config.json / webauthn_devices.json + .env gitignored
   scripts/               # helper CLIs + run-e2e.ps1, verify-before-ship.ps1
   webapp/                # runtime log output + certificates/ + cloudflared.yml (gitignored contents)
   docs/  tests/ (+ tests/e2e Playwright)
-  launcher.py  wr.bat    # CLI entry points
+  launcher.py            # CLI entry point (scripts\wr.bat wraps it)
   tray.bat  webapp.bat  webapp_tunnel_named.bat  setup.bat   # webapp entry points
   requirements.txt  requirements-dev.txt  pytest.ini
   pyproject.toml         # tool config only (ruff/mypy) — no packaging
 ```
 
-CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <command>`, or `wr.bat <command>`.
+CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <command>`, or `scripts\wr.bat <command>`.
 
 ### Internal architecture
 
@@ -57,7 +57,7 @@ CLI entry points: `python launcher.py <command>`, `python -m app.cli.main <comma
 - `src/` is the logic package; `app/` holds UI surfaces. Import with absolute paths — `from src.config import load_config`, `from src.db import store`. Do **not** reintroduce an installable package or a `whatsapp_radar.` namespace.
 - `src/calendar_readonly/`, `src/calendar_write/`, `src/gmail_readonly/` and their shared `src/google_oauth_common/` bootstrap (installed-app OAuth, plus the token load/refresh and atomic-write steps all three wrap) are portable packages, liftable into another repo unchanged: inside them every import is relative (`from .core`, `from ..google_oauth_common.x`), never `from src.…`, and they import nothing from `src`/`app`/`scripts`. Callers import them as `from src.<package>…`; lifting a client means copying `google_oauth_common/` alongside it under the same parent (`docs/gmail-reuse.md`).
 - Subpackage `__init__.py` files may re-export their own submodules with relative `from .x` imports; everything else (cross-subpackage and `app/` → `src/`) uses `from src.…`.
-- Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
+- Bundled assets (`db/schema.sql`, `analysis/prompts/*`, `tests/fixtures/*.json`) resolve by path relative to `__file__`, never via `importlib.resources` package-data.
 - Out-of-tree script importing `src.*`/`app.*` → the global PYTHONPATH gotcha; prefer `-m <module>` from the repo root.
 
 ## Hard Privacy Rules

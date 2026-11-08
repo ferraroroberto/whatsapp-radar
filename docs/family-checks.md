@@ -272,7 +272,7 @@ Family tab → *Travel blocks* → turn **Write travel blocks** on, leave **Dry 
 Press **Rehearse (dry run)** on the same card, or:
 
 ```powershell
-.\wr.bat calendar-scan --dry-run --force
+.\scripts\wr.bat calendar-scan --dry-run --force
 ```
 
 `--force` is what makes it run regardless of `family.run_hour`; `--dry-run` forces the sweep dry server-side, so this cannot write even if step 5 has already happened.

@@ -15,7 +15,7 @@ The connection is **read-only**: there is no code path that sends a WhatsApp mes
 
 ## CLI surface
 
-Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m app.cli.main <cmd>`.
+Run any command via `scripts\wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m app.cli.main <cmd>`.
 
 | Command | What it does |
 | --- | --- |
@@ -38,16 +38,16 @@ Run any command via `wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m ap
 `scan` collapses the whole flow — sync → keyword prefilter (Stage 1) → LLM (Stage 2) → digest → deliver — into one run, with a full per-run audit trace surfaced read-only in Activity's run sheet. The mechanics — preflight, the settled-buffer gate, and what each guarantees — are documented once in [`scan-and-classification.md`](scan-and-classification.md); this is the day-to-day command reference.
 
 ```powershell
-.\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
-.\wr.bat scan --dry-run       # replay stored messages: no connector, no delivery, no cursor advance
-.\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
+.\scripts\wr.bat scan                 # live: sync all chats, analyze monitored deltas, deliver one digest
+.\scripts\wr.bat scan --dry-run       # replay stored messages: no connector, no delivery, no cursor advance
+.\scripts\wr.bat scan --dry-run --days 7   # dry-run windowed to the last 7 days
 ```
 
 `review` remains for analyzing an already-ingested buffer without a sync; `notify` re-delivers if a send failed (the analysis and cursors are already saved):
 
 ```powershell
-.\wr.bat notify             # re-deliver the latest run's digest
-.\wr.bat notify --run 12    # re-deliver a specific run
+.\scripts\wr.bat notify             # re-deliver the latest run's digest
+.\scripts\wr.bat notify --run 12    # re-deliver a specific run
 ```
 
 ## Choosing the classifier
@@ -64,8 +64,8 @@ The PWA's **Settings (header gear) → How messages are judged** rows open all f
 To derive Gmail rules from the configured whitelist without copying personal mail into Git or logs:
 
 ```powershell
-.\wr.bat gmail-survey                     # 60-day window, at most 100 full samples
-.\wr.bat gmail-survey --days 30 --max-messages 50
+.\scripts\wr.bat gmail-survey                     # 60-day window, at most 100 full samples
+.\scripts\wr.bat gmail-survey --days 30 --max-messages 50
 ```
 
 The command resolves only configured senders/labels, retrieves metadata to print aggregate count/date scope before analysis, then sends one bounded sample to local-llm-hub. Structured output containing configured/sample identifiers, addresses, domains, or URLs is rejected before either asset is replaced. Review `git diff -- src/analysis/prompts` after every survey and never commit personal additions.

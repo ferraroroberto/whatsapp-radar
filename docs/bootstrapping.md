@@ -49,9 +49,9 @@ python -m venv .venv
 Verify the offline path works with **no credentials and no network** (sanitized fixture connector + deterministic stub classifier):
 
 ```powershell
-.\wr.bat ingest
-.\wr.bat chats
-.\wr.bat review --dry-run
+.\scripts\wr.bat ingest
+.\scripts\wr.bat chats
+.\scripts\wr.bat review --dry-run
 ```
 
 You should see a deterministic digest. If this works, the core is sound and everything from here is about pointing it at real data.
@@ -90,7 +90,7 @@ WR_CONNECTOR=linked_device
 Confirm the link:
 
 ```powershell
-.\wr.bat status
+.\scripts\wr.bat status
 ```
 
 Expect `Connector: linked_device (connected=True)`. *Not paired* or *stale* means the sidecar isn't running or isn't paired yet — revisit Step 2.
@@ -98,9 +98,9 @@ Expect `Connector: linked_device (connected=True)`. *Not paired* or *stale* mean
 Then ingest and pick what to watch:
 
 ```powershell
-.\wr.bat ingest                     # pull the buffer into SQLite (idempotent)
-.\wr.bat chats --recent --limit 40  # most recently active first, with ids
-.\wr.bat monitor 3                  # watch chat #3 (baselines its cursor to "now")
+.\scripts\wr.bat ingest                     # pull the buffer into SQLite (idempotent)
+.\scripts\wr.bat chats --recent --limit 40  # most recently active first, with ids
+.\scripts\wr.bat monitor 3                  # watch chat #3 (baselines its cursor to "now")
 ```
 
 Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start — no backlog dump. You can also do all of this from the PWA's **Messages** tab once the webapp is up (Step 5).
@@ -121,7 +121,7 @@ Marking a chat **monitored** baselines its cursor to the latest message, so the 
 Verify delivery end-to-end:
 
 ```powershell
-.\wr.bat scan               # sync → classify the delta → deliver one digest if actionable
+.\scripts\wr.bat scan               # sync → classify the delta → deliver one digest if actionable
 ```
 
 If nothing is actionable, no message is sent — that is correct. See [`manual.md`](manual.md) for the classifier choice (`stub` / `hub` / `cascade`) and tuning.
@@ -190,8 +190,8 @@ Phone access itself (Tailscale, optional Cloudflare named tunnel) is Steps 5–6
 ## 8 — Verify the system is live
 
 ```powershell
-.\wr.bat status                                  # connector connected
-.\wr.bat scan --dry-run                          # replay stored messages, no delivery, no cursor advance
+.\scripts\wr.bat status                                  # connector connected
+.\scripts\wr.bat scan --dry-run                          # replay stored messages, no delivery, no cursor advance
 # open the PWA on the phone → Home's glance card shows channels/messages/scans; Settings → Sources shows a green health dot
 ```
 

@@ -2,7 +2,7 @@
 
 ``PROJECT_ROOT`` lives here rather than in :mod:`app.webapp.routers._helpers`,
 which imports FastAPI: the CLI reuses the webapp's run-record helpers, and
-importing FastAPI on every ``wr.bat status`` just to learn where the repo is
+importing FastAPI on every ``scripts\wr.bat status`` just to learn where the repo is
 would be wasteful. Keeping the anchor in a dependency-free module lets ``src``
 and both ``app`` surfaces share one definition instead of each re-deriving it.
 """

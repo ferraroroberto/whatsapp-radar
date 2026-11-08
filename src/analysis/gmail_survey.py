@@ -268,6 +268,12 @@ def _forbidden_fragments(
     return fragments
 
 
+def _write_asset(path: Path, content: str) -> None:
+    """Write one committed prompt asset; the survey exists to rewrite these tracked files."""
+    # runtime-write-exempt: committed artefact (the tracked prompt assets the operator reviews)
+    path.write_text(content, encoding="utf-8")
+
+
 def write_survey_assets(proposal: SurveyProposal) -> None:
     """Replace both assets atomically per file, rolling back on partial failure."""
     rules_path = roots_file_path("gmail")
@@ -285,16 +291,14 @@ def write_survey_assets(proposal: SurveyProposal) -> None:
     try:
         for path, content in pending.items():
             temporary = path.with_suffix(path.suffix + ".tmp")
-            # runtime-write-exempt: operator-applied rewrite of tracked prompt assets
-            temporary.write_text(content, encoding="utf-8")
+            _write_asset(temporary, content)
             temporary_paths.append(temporary)
         for path in pending:
             path.with_suffix(path.suffix + ".tmp").replace(path)
             replaced.append(path)
     except Exception:
         for path in replaced:
-            # runtime-write-exempt: operator-applied rewrite of tracked prompt assets
-            path.write_text(originals[path], encoding="utf-8")
+            _write_asset(path, originals[path])
         raise
     finally:
         for path in temporary_paths:

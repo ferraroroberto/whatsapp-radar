@@ -23,6 +23,7 @@ from src.config import load_config
 from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
 from src.notify.alert import send_alert
 from src.paths import PROJECT_ROOT
+from src.runtime_files import file_handler, make_dirs
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -40,10 +41,8 @@ def ensure_log_handler() -> None:
     ):
         return
     try:
-        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-        _AUTH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-        fh = logging.FileHandler(_AUTH_LOG_PATH, encoding="utf-8")
+        make_dirs(_AUTH_LOG_PATH.parent)
+        fh = file_handler(_AUTH_LOG_PATH)
         fh.setLevel(logging.INFO)
         fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         auth_logger.addHandler(fh)

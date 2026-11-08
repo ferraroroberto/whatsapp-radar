@@ -100,6 +100,8 @@ allow_refs = ["ferraroroberto/local-llm-hub#128", "task-os#98"]
 [comment_ratchet]
 enabled  = true
 baseline = ".comment-ratchet-baseline.json"
+docstrings      = true
+history_phrases = true
 
 # [structure_ratchet] -- the scaffold's baseline-and-ratchet layout stage. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/structure_ratchet.py through
@@ -125,6 +127,10 @@ baseline = ".structure-ratchet-baseline.json"
 [instruction_ratchet]
 enabled  = true
 baseline = ".instruction-ratchet-baseline.json"
+ci_expectations     = true
+agents_pointer      = true
+claude_md_max_lines = 120
+repeated_text_words = 12
 
 # [doc_refs_ratchet] -- the scaffold's baseline-and-ratchet doc-reference check. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/doc_refs_ratchet.py through

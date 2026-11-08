@@ -21,6 +21,7 @@ from urllib.parse import urlencode, urlparse, urlunparse
 
 from src.atomic_write import atomic_write_text
 from src.paths import PROJECT_ROOT
+from src.runtime_files import make_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +108,7 @@ def load_webapp_config(path: Path | None = None) -> WebappConfig:
 def save_webapp_config(cfg: WebappConfig, path: Path | None = None) -> Path:
     """Atomically write the config back to disk."""
     target = Path(path) if path is not None else DEFAULT_CONFIG_PATH
-    # runtime-write-exempt: config/ file or caller-supplied path
-    target.parent.mkdir(parents=True, exist_ok=True)
+    make_dirs(target.parent)
 
     payload = {
         "enabled": cfg.enabled,

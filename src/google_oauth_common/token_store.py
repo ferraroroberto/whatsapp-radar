@@ -7,9 +7,9 @@ from pathlib import Path
 
 def write_token_atomically(path: Path, token_json: str) -> None:
     """Persist an OAuth token atomically without logging its contents."""
-    # runtime-write-exempt: caller-supplied token path
+    # runtime-write-exempt: portable package, no repo guard; caller-supplied token path
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_suffix(path.suffix + ".tmp")
-    # runtime-write-exempt: caller-supplied token path
+    # runtime-write-exempt: portable package, no repo guard; caller-supplied token path
     temporary_path.write_text(token_json, encoding="utf-8")
     temporary_path.replace(path)

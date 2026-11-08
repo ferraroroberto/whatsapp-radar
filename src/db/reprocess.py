@@ -25,7 +25,6 @@ caller must warn the operator before running.
 
 from __future__ import annotations
 
-import shutil
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -38,6 +37,7 @@ from src.connector.factory import ConnectorBinding
 from src.connector.preflight import ensure_connected
 from src.db import store
 from src.db.sync import PrepareSource, resync
+from src.runtime_files import copy_file
 
 
 @dataclass
@@ -65,8 +65,7 @@ def _backup_db(conn: sqlite3.Connection, db_path: Path) -> Path:
     conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     backup = db_path.with_name(f"{db_path.name}.bak-{stamp}")
-    # runtime-write-exempt: backup beside the caller-supplied db
-    shutil.copy2(db_path, backup)
+    copy_file(db_path, backup)
     return backup
 
 

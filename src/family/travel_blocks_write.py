@@ -70,6 +70,7 @@ from src.family.travel_blocks import (
     travel_block_horizon,
     travel_block_listing_end,
 )
+from src.runtime_files import make_dirs, save_text
 from src.traffic import compute_route
 
 logger = logging.getLogger(__name__)
@@ -152,12 +153,8 @@ def write_backup(
     guarantee that ordering is to make the backup a precondition that throws.
     """
     path = backup_path(root, calendar_id=calendar_id, event_id=event_id, now=now)
-    # runtime-write-exempt: caller-supplied backup root
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # runtime-write-exempt: caller-supplied backup root
-    path.write_text(
-        json.dumps(resource, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    make_dirs(path.parent)
+    save_text(path, json.dumps(resource, ensure_ascii=False, indent=2, sort_keys=True))
     return path
 
 

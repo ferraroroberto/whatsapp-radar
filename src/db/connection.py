@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.models import StoredMessage
+from src.runtime_files import checked, make_dirs
 
 _MESSAGE_COLUMNS = (
     "id, chat_id, source_message_id, message_timestamp, text, sender_label, "
@@ -77,10 +78,9 @@ def _rowid(cur: sqlite3.Cursor) -> int:
 
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open (creating parent dirs) and migrate a database, returning the connection."""
-    # runtime-write-exempt: caller-supplied db path
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    # runtime-write-exempt: caller-supplied db path
-    conn = sqlite3.connect(db_path)
+    make_dirs(db_path.parent)
+    # runtime-write-exempt: caller-supplied db path; checked() raises when it is under a code folder
+    conn = sqlite3.connect(checked(db_path))
     conn.row_factory = sqlite3.Row
     # WAL + NORMAL keeps the many small commits in the review/ingest paths fast
     # while staying durable enough for a local single-writer store.

@@ -39,6 +39,7 @@ from cryptography import x509
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.paths import PROJECT_ROOT  # noqa: E402
+from src.runtime_files import make_dirs  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
 
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
@@ -111,8 +112,7 @@ def _expiring_within(cert: x509.Certificate, days: int) -> bool:
 
 
 def _provision(hostname: str) -> None:
-    # runtime-write-exempt: webapp/ path via imported PROJECT_ROOT
-    CERT_DIR.mkdir(parents=True, exist_ok=True)
+    make_dirs(CERT_DIR)
     cert_path = CERT_DIR / "cert.pem"
     key_path = CERT_DIR / "key.pem"
 

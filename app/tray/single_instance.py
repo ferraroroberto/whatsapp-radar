@@ -4,8 +4,8 @@ CANONICAL, VENDORED VERBATIM from project-scaffolding. Do **not** edit this file
 per-app — it is byte-identical across every fleet tray so a fix made once in the
 scaffold re-propagates everywhere. App-specific values (the mutex *names*) are
 passed in by the caller, never hardcoded here, which is what keeps the file
-identical. Full reasoning: the scaffold's ``docs/windows-tray.md`` (the
-named-mutex gotcha).
+identical. Full reasoning: scaffold ``docs/windows-tray.md`` (gotcha 4) +
+the scaffold's tray lifecycle notes.
 
 Two guarantees, one primitive (a Windows named mutex via ``ctypes``):
 

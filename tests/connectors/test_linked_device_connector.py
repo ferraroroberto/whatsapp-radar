@@ -9,6 +9,9 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+from src.connector import sidecar
 from src.connector.linked_device import LinkedDeviceConnector
 
 
@@ -58,6 +61,44 @@ def test_status_fresh_and_stale(tmp_path: Path) -> None:
     result = LinkedDeviceConnector(tmp_path).status()
     assert result.connected is False
     assert "stale" in result.detail
+
+
+def _heartbeat(*, paired: bool, connected: bool, fresh: bool) -> dict:
+    age = timedelta(seconds=0) if fresh else timedelta(minutes=10)
+    return {
+        "paired": paired,
+        "connected": connected,
+        "last_update": (datetime.now(UTC) - age).isoformat(),
+        "chats": 0,
+        "messages": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("state", "status_fields", "expect_connected"),
+    [
+        (sidecar.STATE_STOPPED, None, False),
+        (sidecar.STATE_NEEDS_QR, {"paired": False, "connected": False, "fresh": True}, False),
+        (sidecar.STATE_STALE, {"paired": True, "connected": True, "fresh": False}, False),
+        (sidecar.STATE_CONNECTING, {"paired": True, "connected": False, "fresh": True}, False),
+        (sidecar.STATE_RUNNING, {"paired": True, "connected": True, "fresh": True}, True),
+    ],
+)
+def test_status_maps_from_sidecar_state(
+    tmp_path: Path,
+    state: str,
+    status_fields: dict | None,
+    expect_connected: bool,
+) -> None:
+    """One derivation: ``status()`` agrees with ``sidecar_state()`` in every state."""
+    if status_fields is not None:
+        _write_buffer(tmp_path, chats=[], messages=[], status=_heartbeat(**status_fields))
+    info = sidecar.sidecar_state(tmp_path)
+    assert info.state == state
+
+    result = LinkedDeviceConnector(tmp_path).status()
+    assert result.connected is expect_connected
+    assert result.detail == info.detail
 
 
 def test_list_chats_last_write_wins(tmp_path: Path) -> None:

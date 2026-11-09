@@ -119,7 +119,7 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
     codebase.
     """
     raw = read_status_file(buffer_dir)
-    has_qr = _qr_path(buffer_dir).is_file()
+    qr_file = _qr_path(buffer_dir).is_file()
     if raw is None:
         return SidecarStateInfo(
             state=STATE_STOPPED,
@@ -127,7 +127,7 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
             paired=False,
             connected=False,
             fresh=False,
-            has_qr=has_qr,
+            has_qr=False,
             chats=0,
             messages=0,
             last_update=None,
@@ -152,6 +152,10 @@ def sidecar_state(buffer_dir: Path) -> SidecarStateInfo:
         # don't present them as buffer totals — the UI shows the truthful *stored*
         # totals + last-sync delta instead.
         state, detail = STATE_RUNNING, "connected — receiving live updates"
+
+    # qr.png outlives pairing (nothing deletes it), so the file alone says nothing:
+    # the QR is current only while an unpaired sidecar is alive and could still scan.
+    has_qr = qr_file and state == STATE_NEEDS_QR and fresh
 
     return SidecarStateInfo(
         state=state,

@@ -2,6 +2,8 @@
 
 The gate commands are in the [README](../README.md#verification); this page is the detail behind them.
 
+The last stdout line of a gate run is `GATE-RESULT: PASS` or `GATE-RESULT: FAIL` on every path that can still run code (a pass, a failed stage, a missing `.venv`, an unhandled error); exit codes stay 0 and 1. Never pipe the gate when its exit code matters (`... | tail -40` reports `tail`'s status), and a caller that cannot avoid a pipe asserts on that line: a run without it is not a pass (`tests/test_gate_result.py`). `-RouteOnly` runs no stage and prints no verdict.
+
 ## E2e routing
 
 The gate's e2e stage is routed by `scripts/classify_e2e.py` against the `[e2e]` table in `.fleet.toml`: a docs-only or backend-only diff skips the browser suite (the gate prints the router's reason), inert assets run the smoke target, a single UI surface runs its slice, and anything else runs the full suite. Uncertainty never narrows it: an unclassified path, an empty diff, a router that exits non-zero, prints no verdict or names an unknown tier all run the full suite and say why (`tests/test_gate_e2e_routing.py`).

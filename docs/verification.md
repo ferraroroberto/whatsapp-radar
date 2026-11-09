@@ -8,6 +8,8 @@ The gate's e2e stage is routed by `scripts/classify_e2e.py` against the `[e2e]` 
 
 The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on a free port and require `playwright install chromium webkit` once.
 
+The e2e suite stays under the fleet budget (`[e2e] test_budget` in `.fleet.toml`, lowered as the suite trims): one test per user-visible flow, route-mocked wherever the flow needs a payload the seeded database cannot produce. A test that needs several payloads runs one phase per visit, calling `reset_page` (`tests/e2e/_audit_runs.py`) between phases so routes and stored UI state never leak forward; a new check on an existing flow joins that flow's test rather than adding a node.
+
 ## Static ratchet
 
 The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`, plus ruff's curated bug (`B`) and security (`S`) families, `S113` included). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.

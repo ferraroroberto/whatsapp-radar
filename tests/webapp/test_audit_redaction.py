@@ -12,7 +12,7 @@ key those modules construct must be classified: renderable, deliberately
 withheld, or never part of a run payload at all. A new key fails this test until
 somebody decides which it is — which is the point. The browser-side proof that
 nothing sensitive actually reaches the DOM lives in
-`tests/e2e/test_audit_payload_redaction.py`, planted-sentinel style.
+`tests/e2e/test_audit.py`, planted-sentinel style.
 
 Offline and static: this reads source, runs nothing.
 """

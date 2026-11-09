@@ -61,9 +61,9 @@ import requests
 
 from src.config import Config
 from src.db import store
+from src.delivery.alert import send_alert
 from src.family import dedup, leg_status, rules
 from src.family.calendar_source import fetch_events_by_person
-from src.notify.alert import send_alert
 from src.presence import PresenceLocation, get_location
 from src.traffic import RouteResult, TrafficReadError, compute_route, delay_status
 

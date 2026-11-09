@@ -11,7 +11,7 @@ so an alert failure can't worsen the situation it's reporting.
 from __future__ import annotations
 
 from src.config import Config
-from src.notify.factory import _dispatch
+from src.delivery.dispatch import dispatch
 
 
 def send_alert(config: Config, text: str) -> tuple[str, str | None]:
@@ -19,7 +19,6 @@ def send_alert(config: Config, text: str) -> tuple[str, str | None]:
 
     ``status`` is ``'sent'`` | ``'skipped'`` (no notifier configured) |
     ``'failed'``. Never raises — callers fire this on a path that is already
-    failing. Every notifier implements ``send_text`` (part of the ``Notifier``
-    contract), so an alert is never silently dropped for a wired notifier.
+    failing.
     """
-    return _dispatch(config, lambda notifier: notifier.send_text(text))
+    return dispatch(config, lambda notifier: notifier.send_text(text))

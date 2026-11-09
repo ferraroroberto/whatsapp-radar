@@ -75,9 +75,9 @@ from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.sync import sync_sources
+from src.delivery.alert import send_alert
+from src.delivery.digest import deliver_digest
 from src.models import StoredMessage
-from src.notify.alert import send_alert
-from src.notify.delivery import deliver_digest
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 

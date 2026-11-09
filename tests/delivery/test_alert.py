@@ -1,4 +1,4 @@
-"""Operational alerts (src/notify/alert.py): best-effort, never raises.
+"""Operational alerts (src/delivery/alert.py): best-effort, never raises.
 
 Covers the three outcomes send_alert can report — skipped (no/!text channel),
 sent (Telegram, urlopen stubbed so no network), and failed (misconfigured) — so
@@ -13,8 +13,8 @@ from typing import Any
 import pytest
 
 from src.config import Config, HubConfig, TelegramConfig
+from src.delivery.alert import send_alert
 from src.notify import telegram as telegram_mod
-from src.notify.alert import send_alert
 
 
 def _config(*, notifier: str, token: str = "t", chat: str = "c") -> Config:

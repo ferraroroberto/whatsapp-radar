@@ -22,8 +22,8 @@ from src.analysis.source_funnel import SourceFunnel, ensure_source_funnel
 from src.analysis.transcription import hold_back_untranscribed
 from src.config import Config
 from src.db import store
+from src.delivery.alert import send_alert
 from src.models import StoredMessage
-from src.notify.alert import send_alert
 from src.progress import Progress, emit
 
 # Funnel/notification status recorded when a run stops because Stage 2 could not

@@ -1,6 +1,7 @@
-"""Telegram delivery: digest rendering, payload, success/failure — all offline.
+"""Telegram delivery through the vendored notifier — all offline.
 
-No real token, chat, or network: urlopen is monkeypatched.
+Covers digest text, payload, success, rejection and chunking; urlopen is monkeypatched, so no
+real token, chat or network is involved.
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ def test_send_success(monkeypatch: pytest.MonkeyPatch) -> None:
         return _fake_response({"ok": True})
 
     monkeypatch.setattr(telegram_mod.urllib.request, "urlopen", fake_urlopen)
-    TelegramNotifier("TOKEN", "CHAT").send(_digest())
+    TelegramNotifier("TOKEN", "CHAT").send_text(_digest().to_telegram_text())
 
     assert "botTOKEN/sendMessage" in captured["url"]
     assert captured["body"]["chat_id"] == "CHAT"
@@ -91,7 +92,7 @@ def test_send_rejected_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(telegram_mod.urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(NotifierError, match="chat not found"):
-        TelegramNotifier("TOKEN", "CHAT").send(_digest())
+        TelegramNotifier("TOKEN", "CHAT").send_text(_digest().to_telegram_text())
 
 
 def test_send_text_under_the_limit_is_one_call(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,7 +109,7 @@ def test_send_text_under_the_limit_is_one_call(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_send_text_over_the_limit_is_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#435: Telegram's `sendMessage` rejects text over 4096 characters — an
+    """Telegram's `sendMessage` rejects text over 4096 characters — an
     unbounded digest (e.g. the first scan after a multi-day outage) must split
     rather than fail delivery outright on every retry.
     """

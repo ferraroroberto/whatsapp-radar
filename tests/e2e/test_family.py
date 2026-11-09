@@ -1,15 +1,16 @@
-"""Family tab: the travel-block sheet's write capability (#268) and run controls
-(#276), and the rule sheets' Done / discard contract (#376).
+"""Family tab: the travel-block sheet's write capability and run controls, and the
+rule sheets' Done / discard contract.
 
-Since #376 the travel blocks live in a sheet opened from the Travel blocks row,
-and every other rule in a sheet opened from its row. The whole point of the
-travel sheet is that a household member's calendar state is
-readable at a glance instead of out of a log — so `unknown` must render as its
-own thing: not a green tick, not a red cross, not an omitted row. #276 adds the
-two run controls and the reasons a live sweep is unavailable. This drives both
-in a real browser against a route-mocked /api/family payload — the state colours in
-both light and dark, the rest in light only (their assertions are theme-free)
-(no DB seeding, no sweep, nothing mutating — hence `live_safe`).
+The travel blocks live in a sheet opened from the Travel blocks row, and every
+other rule in a sheet opened from its row. The whole point of the travel sheet
+is that a household member's calendar state is readable at a glance instead of
+out of a log, so `unknown` must render as its own thing: not a green tick, not a
+red cross, not an omitted row. The two run controls and the reasons a live sweep
+is unavailable are driven the same way: in a real browser against a route-mocked
+/api/family payload, with the state colours checked in both light and dark and
+the rest in light only (their assertions are theme-free). No DB seeding, no
+sweep, nothing mutating, hence `live_safe`. One test per flow, each phase a fresh
+visit.
 
 Every `/api/execution/**` request is aborted by a catch-all route registered
 first, with only the two endpoints under test fulfilled on top of it. No test
@@ -26,11 +27,13 @@ from __future__ import annotations
 import copy
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page, Route, expect
+from playwright.sync_api import Browser, Page, Playwright, Route, expect
 
+from tests.e2e._audit_runs import reset_page
 from tests.e2e._surface import surface
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
@@ -196,17 +199,8 @@ def _color(page: Page, selector: str) -> str:
     )
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
-def test_unknown_write_capability_is_its_own_visible_state(
-    page: Page, base_url: str, color_scheme: str
-) -> None:
+def _unknown_write_capability_is_its_own_visible_state(page: Page, color_scheme: str) -> None:
     page.emulate_media(color_scheme=color_scheme)
-    # Phone-first surface: the badge + its explanatory line have to fit the
-    # narrowest supported width, where a pill next to long text is most likely
-    # to push the pane sideways.
-    page.set_viewport_size({"width": 390, "height": 844})
-    _open_family(page, base_url)
-
     card = page.locator("#familyTravelCard")
     expect(card).to_be_visible()
 
@@ -245,12 +239,10 @@ def test_unknown_write_capability_is_its_own_visible_state(
     # TOUCH-01 / TOUCH-02 / COMP-02 at phone width: the page and the open sheet.
     offenders = _touch_offenders(page, "#paneFamily", "#familyTravelCard")
     assert offenders == [], f"Family touch targets: {offenders}"
-    surface(page, "family.travel-sheet")
 
 
-def test_dry_run_mode_is_unmistakable(page: Page, base_url: str) -> None:
+def _dry_run_mode_is_unmistakable(page: Page) -> None:
     """A sweep that plans but does not write must not read like one that writes."""
-    _open_family(page, base_url)
     banner = page.locator("#familyTravelBlocks .tb-mode")
     expect(banner).to_have_class("tb-mode tb-mode--dry")
     expect(banner).to_contain_text("Dry run")
@@ -339,15 +331,12 @@ def _drive_sweep(
     _show_family(page, base_url)
 
 
-def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base_url: str) -> None:
+def _live_sweep_control_is_unavailable_with_a_stated_reason(page: Page) -> None:
     """Not a silent grey-out: the button is off *and* the card says why.
 
     The stated reason also says what the button is not — a courtesy, never the
     thing standing between a click and a calendar write.
     """
-    page.set_viewport_size({"width": 390, "height": 844})
-    _open_family(page, base_url)
-
     buttons = page.locator("#familyTravelCard .tb-actions > button")
     expect(buttons).to_have_count(2)
     expect(buttons.nth(0)).to_contain_text("Rehearse")
@@ -365,9 +354,7 @@ def test_live_sweep_control_is_unavailable_with_a_stated_reason(page: Page, base
     surface(page, "family.travel-live-blocked")
 
 
-def test_live_sweep_control_is_available_once_every_gate_clears(
-    page: Page, base_url: str
-) -> None:
+def _live_sweep_control_is_available_once_every_gate_clears(page: Page, base_url: str) -> None:
     _open_family(page, base_url, _payload(dry_run=False, live_sweep_blockers=[]))
     buttons = page.locator("#familyTravelCard .tb-actions > button")
     expect(buttons.nth(1)).to_be_enabled()
@@ -375,10 +362,10 @@ def test_live_sweep_control_is_available_once_every_gate_clears(
     surface(page, "family.travel-live-ready")
 
 
-def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
+def _rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
     page: Page, base_url: str
 ) -> None:
-    """One POST of the existing verb — no travel-blocks-only endpoint (#266).
+    """One POST of the existing verb, with no travel-blocks-only endpoint.
 
     And "Last sweep" moves without a page reload, which is the only way the
     operator can tell the run they just asked for is the one they are reading.
@@ -401,7 +388,7 @@ def test_rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card(
     surface(page, "family.travel-rehearsed")
 
 
-def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) -> None:
+def _a_concurrent_run_renders_as_already_running(page: Page, base_url: str) -> None:
     """409 is the single-flight guard working, not a failure."""
     posted: list[dict[str, Any]] = []
     _drive_sweep(page, base_url, posted=posted, run_status=409)
@@ -416,7 +403,7 @@ def test_a_concurrent_run_renders_as_already_running(page: Page, base_url: str) 
     surface(page, "family.travel-already-running")
 
 
-def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:
+def _a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) -> None:
     """`dry_run: null` / `counts: null` must not be painted as a clean sweep."""
     page.set_viewport_size({"width": 390, "height": 844})
     _open_family(page, base_url, _payload(last_sweep={
@@ -436,7 +423,29 @@ def test_a_gated_sweep_reads_as_gated_never_as_zeros(page: Page, base_url: str) 
     surface(page, "family.travel-gated")
 
 
-# ------------------------------------------------ rule sheets (#376)
+def test_travel_block_sheet_states_controls_and_run_outcomes(page: Page, base_url: str) -> None:
+    # Phone-first surface: the badge + its explanatory line have to fit the
+    # narrowest supported width, where a pill next to long text is most likely
+    # to push the pane sideways.
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open_family(page, base_url)
+    for color_scheme in ("dark", "light"):
+        _unknown_write_capability_is_its_own_visible_state(page, color_scheme)
+    surface(page, "family.travel-sheet")
+    _dry_run_mode_is_unmistakable(page)
+    _live_sweep_control_is_unavailable_with_a_stated_reason(page)
+
+    for phase in (
+        _live_sweep_control_is_available_once_every_gate_clears,
+        _rehearse_fires_a_dry_run_calendar_scan_and_refreshes_the_card,
+        _a_concurrent_run_renders_as_already_running,
+        _a_gated_sweep_reads_as_gated_never_as_zeros,
+    ):
+        reset_page(page)
+        phase(page, base_url)
+
+
+# ------------------------------------------------ rule sheets
 
 
 def _family_with_posts(page: Page, base_url: str, posted: list[dict[str, Any]],
@@ -460,7 +469,7 @@ def _family_with_posts(page: Page, base_url: str, posted: list[dict[str, Any]],
     _show_family(page, base_url, travel=False)
 
 
-def test_week_sheet_commits_on_done_and_close_discards(page: Page, base_url: str) -> None:
+def _week_sheet_commits_on_done_and_close_discards(page: Page, base_url: str) -> None:
     """One row, one sheet, one partial POST on Done; Close sends nothing."""
     page.set_viewport_size({"width": 390, "height": 844})
     posted: list[dict[str, Any]] = []
@@ -499,9 +508,7 @@ def test_week_sheet_commits_on_done_and_close_discards(page: Page, base_url: str
     assert [week[d] for d in ("Tue", "Wed", "Thu", "Fri", "Sat", "Sun")] == [""] * 6
 
 
-def test_a_rejected_value_keeps_the_sheet_open_naming_the_field(
-    page: Page, base_url: str
-) -> None:
+def _a_rejected_value_keeps_the_sheet_open_naming_the_field(page: Page, base_url: str) -> None:
     posted: list[dict[str, Any]] = []
     _family_with_posts(page, base_url, posted, reject="kids_home_time must be HH:MM")
 
@@ -518,3 +525,130 @@ def test_a_rejected_value_keeps_the_sheet_open_naming_the_field(
     # The dismissal rule is stated in the sheet itself.
     expect(sheet).to_contain_text("Close discards your changes")
     surface(page, "family.sheet-error")
+
+
+def _open_family_with_two_new_windows(page, base_url: str, scaled: Callable[[float], int]) -> None:
+    page.goto(base_url)
+    page.wait_for_selector("#tabFamily", state="attached")
+    page.locator("#tabFamily").click()
+    page.wait_for_selector("#paneFamily", state="visible")
+
+    page.locator('#paneFamily [data-sheet="windows"]').click()
+    page.wait_for_selector("#familySheet", state="visible")
+    page.wait_for_timeout(scaled(200))
+
+    add_btn = page.locator("#familySheet .button-ghost", has_text="Add childcare window")
+    add_btn.click()
+    add_btn.click()
+    page.wait_for_timeout(scaled(200))
+
+
+def _childcare_windows_flat_and_fit_390px(
+    playwright: Playwright,
+    browser: Browser,
+    base_url: str,
+    scaled: Callable[[float], int],
+) -> None:
+    """Childcare windows render as flat list rows that fit an iPhone, WebKit only.
+
+    A window once rendered as a bordered sub-card nested inside the Rules card, and
+    its Start/End time row overflowed past the right edge at 390px on a real iPhone.
+    WebKit is the native-control regression surface: Chromium's desktop-style
+    `<input type=time>` does not reproduce it. Assertions are structural only
+    (classes, computed styles, bounding boxes), never rule content.
+    """
+    device = dict(playwright.devices["iPhone 13"])
+    device["viewport"] = {"width": 390, "height": 844}
+    context = browser.new_context(**device)
+    page = context.new_page()
+    page.set_default_timeout(scaled(30_000))
+    try:
+        _open_family_with_two_new_windows(page, base_url, scaled)
+
+        windows = page.locator(".family-window")
+        count = windows.count()
+        assert count >= 2, "expected at least the two freshly-added windows"
+
+        # 1. Flatten: no nested-card border on the row itself; a hairline
+        # divider (border-top) separates every window after the first.
+        first_border = page.evaluate(
+            "(el) => getComputedStyle(el).borderTopStyle", windows.nth(0).element_handle()
+        )
+        assert first_border == "none", f"first window should have no border, got {first_border!r}"
+        second_divider = page.evaluate(
+            "(el) => getComputedStyle(el).borderTopStyle", windows.nth(1).element_handle()
+        )
+        assert second_divider == "solid", (
+            f"second window should have a hairline top divider, got {second_divider!r}"
+        )
+
+        # 2. Zero horizontal overflow anywhere in the Family pane or its sheet at 390px.
+        overflowing = page.evaluate(
+            """
+            () => {
+              const vw = window.innerWidth;
+              const bad = [];
+              document.querySelectorAll('#paneFamily *, #familySheet *').forEach((el) => {
+                const r = el.getBoundingClientRect();
+                if (r.width > 0 && r.right > vw + 0.5) {
+                  bad.push({tag: el.tagName, cls: String(el.className), right: r.right});
+                }
+              });
+              return bad;
+            }
+            """
+        )
+        assert overflowing == [], f"horizontal overflow at 390px: {overflowing}"
+        assert page.evaluate("document.documentElement.scrollWidth") == 390
+
+        # 3. Start/End render as a real two-column grid (not stacked) and
+        # both stay within the viewport.
+        times = windows.nth(0).locator(".family-window-times")
+        time_inputs = times.locator("input[type=time]")
+        assert time_inputs.count() == 2
+        start_box = time_inputs.nth(0).bounding_box()
+        end_box = time_inputs.nth(1).bounding_box()
+        assert start_box is not None and end_box is not None
+        assert end_box["x"] > start_box["x"] + start_box["width"] - 1, (
+            "Start/End should sit side by side in a two-column grid"
+        )
+        assert end_box["x"] + end_box["width"] <= 390 + 0.5, (
+            f"End input overflows the 390px viewport: {end_box}"
+        )
+
+        # 4. Bottom clearance: scrolled to the sheet's true end, "+ Add
+        # childcare window" sits fully above the sticky Done footer, and the
+        # footer itself is on screen.
+        page.evaluate(
+            "() => { const d = document.getElementById('familySheet');"
+            " d.scrollTop = d.scrollHeight; }"
+        )
+        page.wait_for_timeout(scaled(200))
+        add_box = page.locator(
+            "#familySheet .button-ghost", has_text="Add childcare window"
+        ).bounding_box()
+        foot_box = page.locator("#familySheetFoot").bounding_box()
+        assert add_box is not None and foot_box is not None
+        assert add_box["y"] + add_box["height"] <= foot_box["y"] + 0.5, (
+            f"add-window button ({add_box}) sits under the Done footer ({foot_box})"
+        )
+        assert foot_box["y"] + foot_box["height"] <= 844 + 0.5, (
+            f"the Done footer ({foot_box}) runs past the 844px viewport"
+        )
+    finally:
+        context.close()
+
+
+def test_rule_sheets_commit_on_done_name_a_rejected_field_and_fit_an_iphone(
+    playwright: Playwright,
+    browser: Browser,
+    page: Page,
+    base_url: str,
+    browser_name: str,
+    scaled: Callable[[float], int],
+) -> None:
+    _week_sheet_commits_on_done_and_close_discards(page, base_url)
+    reset_page(page)
+    _a_rejected_value_keeps_the_sheet_open_naming_the_field(page, base_url)
+    if browser_name == "webkit":
+        _childcare_windows_flat_and_fit_390px(playwright, browser, base_url, scaled)

@@ -1,8 +1,12 @@
-"""App shell: every pane opens with the vendored home-head (#337).
+"""Settings: every pane opens with the vendored home-head, whose gear opens the dialog.
 
 design.md `page-header`: tab title, trailing theme toggle and a Settings gear,
 always both, on every tab; Settings is never a tab. The gear opens the Settings
-dialog: inset groups whose rows open sheets that save on Done (#377).
+dialog: inset groups whose rows open sheets that save on Done. Two flows, each
+phase a fresh visit: the dialog's structure (header, groups, touch floor, the
+rebuild confirmation, a source's reconnect offer) and its sheets' save contract
+(Done sends only the sheet's fields, a rejection keeps the sheet open, the
+passkey enrollment window).
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, Route, expect
 
+from tests.e2e._audit_runs import reset_page
 from tests.e2e._surface import surface
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
@@ -28,7 +33,7 @@ _UNPAINTED = """els => els.map(el => {
 _CLEAR = ["rgba(0, 0, 0, 0)", "0px"]
 
 
-def test_every_pane_has_theme_toggle_and_settings_gear(
+def _every_pane_has_theme_toggle_and_settings_gear(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:
     page.goto(base_url)
@@ -49,7 +54,7 @@ _GROUPS = ["Display", "Sources", "How messages are judged", "Alerts", "Maintenan
            "This install"]
 
 
-def test_gear_opens_settings_with_its_groups(
+def _gear_opens_settings_with_its_groups(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:
     page.goto(base_url)
@@ -102,7 +107,7 @@ _SHORT_CONTROLS = """(roots) => {
 }"""
 
 
-def test_settings_controls_meet_the_touch_floor(
+def _settings_controls_meet_the_touch_floor(
     page: Page, base_url: str, scaled: Callable[[float], int]
 ) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
@@ -147,7 +152,7 @@ def _settings_with_posts(page: Page, base_url: str, posted: list[dict[str, Any]]
     expect(page.locator('#settingsDialog [data-value="hub"]')).not_to_be_empty()
 
 
-def test_a_settings_sheet_sends_only_its_own_fields_on_done(page: Page, base_url: str) -> None:
+def _a_settings_sheet_sends_only_its_own_fields_on_done(page: Page, base_url: str) -> None:
     posted: list[dict[str, Any]] = []
     _settings_with_posts(page, base_url, posted)
     sheet = page.locator("#settingsSheet")
@@ -181,7 +186,7 @@ def test_a_settings_sheet_sends_only_its_own_fields_on_done(page: Page, base_url
     assert sorted(posted[1]) == ["notifier", "telegram_chat_id"]
 
 
-def test_a_rejected_setting_keeps_its_sheet_open(page: Page, base_url: str) -> None:
+def _a_rejected_setting_keeps_its_sheet_open(page: Page, base_url: str) -> None:
     posted: list[dict[str, Any]] = []
     _settings_with_posts(page, base_url, posted, reject="invalid classifier 'e2e'")
     page.locator('#settingsDialog [data-settings-sheet="hub"]').click()
@@ -193,7 +198,7 @@ def test_a_rejected_setting_keeps_its_sheet_open(page: Page, base_url: str) -> N
     surface(page, "settings.sheet-error")
 
 
-def test_rebuild_confirms_in_a_sheet_not_a_native_dialog(page: Page, base_url: str) -> None:
+def _rebuild_confirms_in_a_sheet_not_a_native_dialog(page: Page, base_url: str) -> None:
     native: list[str] = []
     page.on("dialog", lambda d: (native.append(d.type), d.dismiss()))
     page.goto(base_url)
@@ -219,8 +224,7 @@ _ENROLL = {
 }
 
 
-@pytest.mark.parametrize("window_open", [True, False])
-def test_passkey_enrollment_shows_while_its_window_is_open(
+def _passkey_enrollment_shows_while_its_window_is_open(
     page: Page, base_url: str, window_open: bool
 ) -> None:
     native: list[str] = []
@@ -258,3 +262,89 @@ def test_passkey_enrollment_shows_while_its_window_is_open(
     sheet.locator("#webauthnDevices .button-ghost").click()
     expect(sheet.locator("#webauthnDevices .icon-button")).to_have_count(1)
     assert native == []
+
+
+def _sources_card_offers_reconnect_when_offline(
+    page: Page, base_url: str, scaled: Callable[[float], int]
+) -> None:
+    """With an empty sidecar buffer the health card offers a relaunch.
+
+    Asserts the offline affordance *renders*: it never clicks Reconnect, so no
+    Node process is ever spawned.
+    """
+    page.route(
+        "**/api/execution/health",
+        lambda route: route.fulfill(
+            json={
+                "name": "multi-source",
+                "connected": False,
+                "detail": "sanitized e2e status",
+                "sources": [
+                    {
+                        "source": "whatsapp", "name": "fixture", "enabled": True,
+                        "configured": True, "authorized": True, "connected": True,
+                        "detail": "fixture", "stored_channels": 2, "stored_messages": 4,
+                        "monitored_channels": 1, "latest_stored_at": None,
+                        "last_attempt": None, "last_success": None,
+                    },
+                    {
+                        "source": "gmail", "name": "gmail", "enabled": True,
+                        "configured": True, "authorized": True, "connected": True,
+                        "detail": "sanitized", "stored_channels": 1, "stored_messages": 1,
+                        "monitored_channels": 1, "latest_stored_at": None,
+                        "last_attempt": None, "last_success": None, "read_only": True,
+                        "account": "f***@example.test", "token_present": True,
+                        "whitelist": {"senders": [], "labels": []},
+                        "whitelist_valid": True, "history_scope": "Sanitized test scope.",
+                    },
+                ],
+            }
+        ),
+    )
+    page.goto(base_url)
+    page.locator("#tabActivity").click()
+    page.locator("#paneActivity .home-settings").click()
+    expect(page.locator("#settingsDialog")).to_be_visible()
+    # The row names the outage before the sheet is open .
+    row_value = page.locator('#settingsDialog [data-value="src-whatsapp"]')
+    expect(row_value).to_contain_text("Not connected", timeout=scaled(10_000))
+    expect(row_value).to_have_attribute("data-tone", "danger")
+    page.locator('#settingsDialog [data-settings-sheet="source-whatsapp"]').click()
+    expect(page.locator("#sourceSheet")).to_be_visible()
+
+    # The throwaway buffer (conftest) has no status.json → 'stopped' → a red
+    # "Not connected" status word and a visible Reconnect button in the
+    # WhatsApp sheet.
+    expect(page.locator("#execReconnect")).to_be_visible(timeout=scaled(10_000))
+    expect(page.locator("#execReconnectBtn")).to_be_visible()
+    whatsapp = page.locator(".source-status-card", has_text="WhatsApp")
+    expect(whatsapp).to_be_visible()
+    expect(whatsapp.locator(".source-status-state")).to_have_text("Not connected")
+    expect(page.locator("#execSources use[href='#i-mail']")).to_have_count(1)
+    surface(page, "settings.source-reconnect")
+
+
+def test_settings_dialog_header_groups_touch_floor_rebuild_and_reconnect(
+    page: Page, base_url: str, scaled: Callable[[float], int]
+) -> None:
+    _every_pane_has_theme_toggle_and_settings_gear(page, base_url, scaled)
+    reset_page(page)
+    _gear_opens_settings_with_its_groups(page, base_url, scaled)
+    reset_page(page)
+    _settings_controls_meet_the_touch_floor(page, base_url, scaled)
+    reset_page(page)
+    page.set_viewport_size({"width": 1280, "height": 720})
+    _rebuild_confirms_in_a_sheet_not_a_native_dialog(page, base_url)
+    reset_page(page)
+    _sources_card_offers_reconnect_when_offline(page, base_url, scaled)
+
+
+def test_settings_sheets_save_only_their_fields_and_report_a_rejection_and_the_passkey_window(
+    page: Page, base_url: str
+) -> None:
+    _a_settings_sheet_sends_only_its_own_fields_on_done(page, base_url)
+    reset_page(page)
+    _a_rejected_setting_keeps_its_sheet_open(page, base_url)
+    for window_open in (False, True):
+        reset_page(page)
+        _passkey_enrollment_shows_while_its_window_is_open(page, base_url, window_open)

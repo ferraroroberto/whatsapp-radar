@@ -1,4 +1,4 @@
-"""Browser e2e: an unpriced commute leg never reads as a checked route (#283).
+"""Browser e2e: an unpriced commute leg never reads as a checked route.
 
 Two surfaces, one defect. The Audit run list's summary line and the family
 drill-down's funnel cells both counted every entry in a traffic-check payload's
@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e._audit_runs import open_audit_activity
+from tests.e2e._audit_runs import open_audit_activity, reset_page
 from tests.e2e._surface import surface
 
 pytestmark = [pytest.mark.smoke, pytest.mark.live_safe]
@@ -65,13 +65,11 @@ def _open_traffic_run(page: Page, base_url: str, run: dict[str, Any]) -> None:
     page.locator("#activityList .run-fold .action-row-main").first.click()
 
 
-def test_an_all_unpriced_run_never_shows_a_healthy_checked_count(
-    page: Page, base_url: str
-) -> None:
+def _all_unpriced(page: Page, base_url: str) -> None:
     """The headline case: three legs, none of them priced.
 
-    Before #283 this list line read "3 checked · 0 alert(s)" — a coverage number
-    that counted non-coverage, next to a zero alert count that looked reassuring
+    The list line once read "3 checked · 0 alert(s)": a coverage number that
+    counted non-coverage, next to a zero alert count that looked reassuring
     precisely because nothing had been assessed.
     """
     _open_traffic_run(page, base_url, _traffic_run("error", "anchor_in_the_past", "error"))
@@ -83,17 +81,12 @@ def test_an_all_unpriced_run_never_shows_a_healthy_checked_count(
     surface(page, "activity.unpriced-run-list")
 
 
-def test_a_mixed_run_names_the_unpriced_half_in_the_list_and_the_funnel(
-    page: Page, base_url: str
-) -> None:
-    """Some judged, some not — the granularity #270 had to fix on the Dashboard.
-
-    Reporting only the judged half is the same all-clear-over-a-non-fact the
-    unpriced statuses exist to prevent, just at run granularity.
-    """
+def _mixed(page: Page, base_url: str) -> None:
+    """Some judged, some not: reporting only the judged half is the same
+    all-clear-over-a-non-fact the unpriced statuses exist to prevent."""
     _open_traffic_run(page, base_url, _traffic_run("ok", "ok", "error", alerts=1))
 
-    # The day's fold row says it had an alert (#373), in the attention tone.
+    # The day's fold row says it had an alert, in the attention tone.
     fold = page.locator("#activityList .run-fold").first
     expect(fold).to_contain_text("1 traffic check")
     expect(fold.locator(".status-chip")).to_have_text("1 alert")
@@ -113,7 +106,7 @@ def test_a_mixed_run_names_the_unpriced_half_in_the_list_and_the_funnel(
     surface(page, "activity.traffic-run-sheet")
 
 
-def test_a_fully_priced_run_gains_no_noise(page: Page, base_url: str) -> None:
+def _fully_priced(page: Page, base_url: str) -> None:
     """The happy path must not become louder to make the unhappy one honest."""
     _open_traffic_run(page, base_url, _traffic_run("ok", "ok"))
 
@@ -122,14 +115,9 @@ def test_a_fully_priced_run_gains_no_noise(page: Page, base_url: str) -> None:
     expect(row).not_to_contain_text("not priced")
 
 
-def test_a_legacy_payload_without_statuses_still_reads_as_priced(
-    page: Page, base_url: str
-) -> None:
-    """Rows written before #270 carry no `status`, and were genuinely all priced.
-
-    Defaulting them to "not priced" would invent a coverage gap that never
-    existed — a different way of being confidently wrong about the same number.
-    """
+def _legacy_without_statuses(page: Page, base_url: str) -> None:
+    """Rows written before statuses existed carry no `status` and were genuinely
+    all priced; defaulting them to "not priced" would invent a coverage gap."""
     run = _traffic_run("ok", "ok")
     for leg in run["summary"]["checked"]:
         del leg["status"]
@@ -140,7 +128,7 @@ def test_a_legacy_payload_without_statuses_still_reads_as_priced(
     expect(row).not_to_contain_text("not priced")
 
 
-def test_the_split_funnel_fits_a_phone(page: Page, base_url: str) -> None:
+def _split_funnel_fits_a_phone(page: Page, base_url: str) -> None:
     """A fourth funnel cell must not push the row off a 390px viewport."""
     page.set_viewport_size({"width": 390, "height": 844})
     _open_traffic_run(page, base_url, _traffic_run("ok", "error", "anchor_in_the_past"))
@@ -163,3 +151,12 @@ def test_the_split_funnel_fits_a_phone(page: Page, base_url: str) -> None:
         """
     )
     assert overflowing == [], f"split funnel overflows 390px: {overflowing}"
+
+
+def test_traffic_runs_name_what_was_priced_in_the_list_and_the_funnel(
+    page: Page, base_url: str
+) -> None:
+    for phase in (_all_unpriced, _mixed, _fully_priced, _legacy_without_statuses):
+        phase(page, base_url)
+        reset_page(page)
+    _split_funnel_fits_a_phone(page, base_url)

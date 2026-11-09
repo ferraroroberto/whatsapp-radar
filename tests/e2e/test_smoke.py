@@ -5,35 +5,53 @@ from __future__ import annotations
 import re
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page, Response, expect
 
 from tests.e2e._surface import surface
 
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
-def test_shell_loads(page: Page, base_url: str) -> None:
+def test_shell_boots_switches_tabs_and_links_home_into_activity(
+    page: Page, base_url: str
+) -> None:
+    """The PWA shell: boot, the four tabs, a restored tab, then Home's glance card."""
+    # The index must revalidate (iOS Safari serves a stale index.html and then
+    # asks for a `?v=` asset that no longer exists otherwise); this reads the
+    # header through the engine's own network stack.
+    index: dict[str, object] = {}
+
+    def on_response(res: Response) -> None:
+        if not index and res.url.rstrip("/") == base_url.rstrip("/"):
+            index["status"] = res.status
+            index["cache-control"] = res.headers.get("cache-control", "")
+
+    page.on("response", on_response)
     page.goto(base_url)
+    page.remove_listener("response", on_response)
     expect(page).to_have_title("Family Radar")
     expect(page.locator("#tabDashboard")).to_be_visible()
     # Dashboard is the default pane.
     expect(page.locator("#paneDashboard")).to_be_visible()
     expect(page.locator("#paneActivity")).to_be_hidden()
+    assert index.get("status") == 200, f"GET / returned {index.get('status')!r}"
+    cache_control = str(index.get("cache-control", ""))
+    assert "no-cache" in cache_control and "must-revalidate" in cache_control, (
+        f"Cache-Control={cache_control!r} on /; the stale-index fix regressed"
+    )
+    # main.js fetches /api/version on boot and writes it into the page footer,
+    # which is visible on every tab (no settings panel to open).
+    expect(page.locator("#buildReadout")).to_contain_text("Build:")
 
-
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_tab_switching(page: Page, base_url: str) -> None:
-    # Four tabs, Activity second (#373: Run and Audit merged); the fleet nav
-    # allows at most five.
-    page.goto(base_url)
+    # Four tabs, Activity second (Run and Audit merged); the fleet nav allows at
+    # most five.
     tabs = page.locator("nav.tabs [role=tab]")
     expect(tabs).to_have_count(4)
     expect(tabs.nth(1)).to_have_attribute("data-tab", "activity")
     expect(page.locator("#tabExecution, #tabAudit, #tabAck")).to_have_count(0)
-    # Follow-ups are Telegram-only since #374: no in-app card either.
+    # Follow-ups are Telegram-only: no in-app card either.
     expect(page.locator("#ackItems")).to_have_count(0)
-    # Every tab's header line names a fact once its data lands (#374).
+    # Every tab's header line names a fact once its data lands.
     has_words = re.compile(r"\w")
     expect(page.locator("#dashStatus")).to_have_text(has_words)
     surface(page, "home.dashboard")
@@ -55,16 +73,14 @@ def test_tab_switching(page: Page, base_url: str) -> None:
     expect(page.locator("#familyStatus")).to_have_text(has_words)
     surface(page, "family.pane")
 
-
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_a_stored_run_or_audit_tab_opens_activity(page: Page, base_url: str) -> None:
     # An installed PWA that last had Run or Audit open reopens on Activity.
-    page.goto(base_url)
     for old in ("execution", "audit"):
         page.evaluate("k => localStorage.setItem('wa-radar.tab', k)", old)
         page.reload()
         expect(page.locator("#paneActivity")).to_be_visible()
+    page.evaluate("localStorage.clear()")
+
+    _home_glance_links_into_activity(page, base_url)
 
 
 def _card(source: str, kind: str | None, run_id: int | None, status: str | None,
@@ -74,10 +90,8 @@ def _card(source: str, kind: str | None, run_id: int | None, status: str | None,
             "status": status, "alerts": alerts, "summary": summary}
 
 
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_home_glance_card_links_into_activity(page: Page, base_url: str) -> None:
-    """Home is one glance card plus Latest runs (#374): a row per source with
+def _home_glance_links_into_activity(page: Page, base_url: str) -> None:
+    """Home is one glance card plus Latest runs: a row per source with
     exception chips only, a header line naming the worst exception, and every
     row and that line opening the run's sheet in Activity at its scope."""
     dashboard = {
@@ -153,7 +167,9 @@ def test_home_glance_card_links_into_activity(page: Page, base_url: str) -> None
 # toggle, which would flip a real chat's monitored status via a real,
 # un-mocked API call if pointed at the live tray.
 @pytest.mark.smoke
-def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
+def test_inbox_watch_toggle_history_gmail_senders_and_judging_sheets(
+    page: Page, base_url: str
+) -> None:
     page.goto(base_url)
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
@@ -228,6 +244,35 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     surface(page, "chats.gmail-history")
     page.locator("#historyClose").click()
 
+    # Gmail speaks of senders, not WhatsApp "channels", while the not-monitored
+    # bucket keeps the same "Ignored" label as WhatsApp.
+    page.locator("#chatsFilterAll").click()
+    expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
+    expect(page.locator("#chatsCount")).to_contain_text("sender")
+
+    # The discovered sender is promotable via the same watch toggle as WhatsApp.
+    sender_row = page.locator(".chat-row", has_text="Class Newsletter")
+    expect(sender_row).to_be_visible()
+    sender_toggle = sender_row.locator(".chat-watch")
+    sender_before = sender_toggle.get_attribute("aria-pressed")
+    sender_toggle.click()
+    sender_expected = "false" if sender_before == "true" else "true"
+    expect(sender_toggle).to_have_attribute("aria-pressed", sender_expected)
+    surface(page, "chats.gmail-source")
+
+    # Opening the sender shows its messages; the address sits in the subtitle.
+    sender_row.locator(".chat-main").click()
+    expect(page.locator("#historyCard")).to_be_visible()
+    expect(page.locator("#historySubtitle")).to_contain_text("Gmail")
+    expect(page.locator("#historySubtitle")).to_contain_text("newsletter@example.com")
+    surface(page, "chats.gmail-sender-history")
+    page.locator("#historyClose").click()
+    expect(page.locator("#historyCard")).to_be_hidden()
+
+    # Switching back to WhatsApp: the label stays "Ignored" either way.
+    page.locator("#chatsSource").select_option("whatsapp")
+    expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
+
     # How messages are judged: each read-only text opens in its own sheet.
     page.locator("#paneChats .home-settings").click()
     expect(page.locator("#settingsDialog")).to_be_visible()
@@ -246,12 +291,3 @@ def test_chats_tab_toggle_history_and_prompt(page: Page, base_url: str) -> None:
     expect(page.locator("#cfgGmailTaxonomy")).not_to_be_empty()
     surface(page, "settings.taxonomy-sheet")
     page.keyboard.press("Escape")
-
-
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_build_readout_populates(page: Page, base_url: str) -> None:
-    page.goto(base_url)
-    # main.js fetches /api/version on boot and writes it into the page footer,
-    # which is visible on every tab (no settings panel to open).
-    expect(page.locator("#buildReadout")).to_contain_text("Build:")

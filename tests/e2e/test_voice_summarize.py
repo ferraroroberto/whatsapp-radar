@@ -1,8 +1,8 @@
-"""Browser e2e: on-demand Summarize control in the Chats history overlay (#86).
+"""Browser e2e: on-demand Summarize, then Play aloud, in the Chats history overlay.
 
-Route-mocks the hub-backed summarize endpoint (no hub on the e2e runner) and
-asserts the control shows on a long message, fetches, and renders the summary
-inline — while a short message shows no control.
+Route-mocks the hub-backed summarize and TTS endpoints (no hub on the e2e runner)
+and asserts the control shows on a long message only, fetches, renders the
+summary inline, and plays it through Web Audio.
 """
 
 from __future__ import annotations
@@ -60,16 +60,41 @@ def _open_class_4a_history(page: Page, base_url: str) -> None:
 
 @pytest.mark.smoke
 @pytest.mark.live_safe
-def test_summarize_long_message(page: Page, base_url: str) -> None:
-    # Mock the hub round-trip so the test is deterministic and offline.
-    page.route(
-        "**/api/messages/*/summarize",
-        lambda route: route.fulfill(
+def test_summarize_long_message_then_play_it_aloud(page: Page, base_url: str) -> None:
+    page.add_init_script(_AUDIO_MOCK)
+    summarized_ids: list[str] = []
+    spoken_ids: list[str] = []
+
+    def fulfill_summarize(route: Any) -> None:
+        match = re.search(r"/api/messages/(\d+)/summarize", route.request.url)
+        if match:
+            summarized_ids.append(match.group(1))
+        route.fulfill(
             status=200,
             content_type="application/json",
             body='{"message_id": 1, "summary": "Send the signed form and 12 euros by Thursday."}',
+        )
+
+    def capture_speech(route: Any) -> None:
+        # The client sends only the message id: the server resolves
+        # language/voice from that message's own stored context.
+        spoken_ids.append(str((route.request.post_data_json or {}).get("message_id", "")))
+        route.fulfill(
+            status=200,
+            content_type="audio/L16",
+            headers={"X-Sample-Rate": "24000"},
+            body=_PCM,
+        )
+
+    # Mock the hub round-trips so the test is deterministic and offline.
+    page.route("**/api/messages/*/summarize", fulfill_summarize)
+    page.route(
+        "**/api/tts/health",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body='{"available": true}'
         ),
     )
+    page.route("**/api/tts/speak", capture_speech)
     _open_class_4a_history(page, base_url)
 
     # The long message carries a Summarize control; the short ones do not.
@@ -83,46 +108,6 @@ def test_summarize_long_message(page: Page, base_url: str) -> None:
     expect(summary).to_contain_text("Send the signed form and 12 euros by Thursday.")
     surface(page, "chats.summary")
 
-
-@pytest.mark.smoke
-@pytest.mark.live_safe
-def test_play_summary_aloud_streams_pcm_through_web_audio(page: Page, base_url: str) -> None:
-    page.add_init_script(_AUDIO_MOCK)
-    summarized_ids: list[str] = []
-    spoken_ids: list[str] = []
-
-    def fulfill_summarize(route: Any) -> None:
-        match = re.search(r"/api/messages/(\d+)/summarize", route.request.url)
-        if match:
-            summarized_ids.append(match.group(1))
-        route.fulfill(
-            status=200,
-            content_type="application/json",
-            body='{"message_id": 1, "summary": "Send the signed form by Thursday."}',
-        )
-
-    page.route("**/api/messages/*/summarize", fulfill_summarize)
-    page.route(
-        "**/api/tts/health",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json", body='{"available": true}'
-        ),
-    )
-
-    def capture_speech(route: Any) -> None:
-        # The client now sends only the message id (#157) — the server resolves
-        # language/voice from that message's own stored context.
-        spoken_ids.append(str((route.request.post_data_json or {}).get("message_id", "")))
-        route.fulfill(
-            status=200,
-            content_type="audio/L16",
-            headers={"X-Sample-Rate": "24000"},
-            body=_PCM,
-        )
-
-    page.route("**/api/tts/speak", capture_speech)
-    _open_class_4a_history(page, base_url)
-    page.locator(".summarize-action").click()
     speak = page.locator(".summary-speech-action")
     expect(speak).to_be_visible()
     speak.click()

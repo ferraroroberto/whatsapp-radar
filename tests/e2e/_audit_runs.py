@@ -29,3 +29,9 @@ def open_audit_activity(page: Page, base_url: str, run: dict[str, Any], scope: s
     page.goto(base_url)
     page.locator("#tabActivity").click()
     page.locator(f'#activityScope [data-scope="{scope}"]').click()
+
+
+def reset_page(page: Page) -> None:
+    """Drop every route and stored UI state, so the next phase of a test starts as a new visit."""
+    page.unroute_all(behavior="ignoreErrors")
+    page.evaluate("localStorage.clear()")

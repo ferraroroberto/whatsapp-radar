@@ -263,7 +263,7 @@ static_browsers       = ["chromium"]
 full_pytest_target    = "tests/e2e"
 # Ratchet at the current collected-node size (pytest --collect-only tests/e2e);
 # lower it as the suite trims, never raise it without deleting tests first.
-test_budget           = 58
+test_budget           = 14
 
 # Inert image/font/manifest assets under the static tree -> smoke is enough.
 [[e2e.rule]]

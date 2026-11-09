@@ -102,6 +102,8 @@ function rowChips(item) {
   // Its own chip: the process ended without recording a result — not
   // in progress, and not a failure anyone observed.
   else if (item.status === 'abandoned') chips.push(statusChip('Abandoned', 'attention'));
+  // Finished, but a chat or a source reported an error: it must not read as clean.
+  else if (item.status === 'completed_with_errors') chips.push(statusChip('With errors', 'attention'));
   else if (isRunning(item.status)) chips.push(statusChip('Running', 'neutral'));
   if (item.mode === 'dry_run') chips.push(statusChip('Dry run', 'neutral'));
   const r = item.run;

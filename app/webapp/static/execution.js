@@ -33,7 +33,7 @@ function notify() { for (const fn of listeners) fn(); }
 // together through setSwitch — the one write path).
 function stageOn(btn) { return btn.getAttribute('aria-checked') === 'true'; }
 
-export function isRunning(status) { return status === 'running' || status === 'pending'; }
+export function isRunning(status) { return status === 'running'; }
 
 export function isBusy() {
   const ex = execState();

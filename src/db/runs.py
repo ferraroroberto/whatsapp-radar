@@ -11,19 +11,40 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from src.db.connection import _now, _rowid
+from src.process_liveness import pid_state
 
 logger = logging.getLogger(__name__)
 
+STATUS_RUNNING = "running"
+STATUS_COMPLETED = "completed"
+#: Finished, but a chat or a source reported an error along the way.
+STATUS_COMPLETED_WITH_ERRORS = "completed_with_errors"
+STATUS_FAILED = "failed"
 #: A run whose process ended before it recorded a result. Its own terminal
 #: state — neither ``failed`` (no error was observed) nor ``completed`` (no result
 #: was recorded) — so the Run list stops showing it as in progress without
 #: claiming an outcome nobody saw.
 STATUS_ABANDONED = "abandoned"
+
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {STATUS_COMPLETED, STATUS_COMPLETED_WITH_ERRORS, STATUS_FAILED, STATUS_ABANDONED}
+)
+RUN_STATUSES: frozenset[str] = TERMINAL_STATUSES | {STATUS_RUNNING}
+
+#: The legal moves of a run row: ``running`` ends in exactly one terminal status,
+#: and a terminal status never changes again (a late finaliser must not rewrite
+#: what an earlier one recorded).
+LEGAL_TRANSITIONS: dict[str, frozenset[str]] = {
+    STATUS_RUNNING: TERMINAL_STATUSES,
+    **{status: frozenset[str]() for status in TERMINAL_STATUSES},
+}
 
 #: The one-shot family checks. They share ``review_runs`` with the message
 #: pipeline but never touch the message store, so every list that must treat them
@@ -35,7 +56,7 @@ FAMILY_KINDS: tuple[str, ...] = ("traffic-check", "calendar-scan")
 #: its result within seconds (slowest observed ~160 s, a Routes call per leg), so
 #: a row still ``running`` long past that has no process behind it. A kind absent
 #: here (``scan`` / ``process`` can legitimately run for many minutes, and nothing
-#: bounds them) is never reconciled — its age cannot establish that it is dead.
+#: bounds them) is never reconciled by age — only by its owner process being gone.
 STALE_RUNNING_AFTER: dict[str, timedelta] = {
     kind: timedelta(minutes=30) for kind in FAMILY_KINDS
 }
@@ -47,13 +68,103 @@ def start_run(
     params_json: str | None = None,
     kind: str = "scan",
 ) -> int:
+    """Open a ``running`` row owned by this process.
+
+    ``owner_pid`` is what lets a later process prove the run is dead; a row
+    written without one (every row from before the column existed) is never
+    judged by it.
+    """
     cur = conn.execute(
-        "INSERT INTO review_runs (started_at, status, mode, params_json, kind) "
-        "VALUES (?, 'running', ?, ?, ?)",
-        (_now(), mode, params_json, kind),
+        "INSERT INTO review_runs (started_at, status, mode, params_json, kind, owner_pid) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (_now(), STATUS_RUNNING, mode, params_json, kind, os.getpid()),
     )
     conn.commit()
     return _rowid(cur)
+
+
+@dataclass(frozen=True)
+class RunFunnel:
+    """A message run's counters and delivery status, written with its final status."""
+
+    chats_synced: int
+    messages_synced: int
+    chats_monitored: int
+    stage1_passed: int
+    stage2_llm_calls: int
+    actionable: int
+    notification_status: str
+    transcriptions: int = 0
+    source_funnel_json: str | None = None
+
+    def assignments(self) -> dict[str, object]:
+        return {
+            "chats_synced": self.chats_synced,
+            "messages_synced": self.messages_synced,
+            "chats_monitored": self.chats_monitored,
+            "stage1_passed": self.stage1_passed,
+            "stage2_llm_calls": self.stage2_llm_calls,
+            "transcriptions": self.transcriptions,
+            "actionable": self.actionable,
+            "notification_status": self.notification_status,
+            "source_funnel_json": self.source_funnel_json,
+        }
+
+
+def _update_running(conn: sqlite3.Connection, run_id: int, columns: dict[str, object]) -> bool:
+    """One ``UPDATE`` of a run row that is still ``running``; True if it matched.
+
+    Column names come from code in this module, never from a caller's input.
+    """
+    sets = ", ".join(f"{name} = ?" for name in columns)
+    cur = conn.execute(
+        f"UPDATE review_runs SET {sets} WHERE id = ? AND status = ?",  # noqa: S608
+        (*columns.values(), run_id, STATUS_RUNNING),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def finalize_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    status: str,
+    *,
+    error: str | None = None,
+    summary_json: str | None = None,
+    chats_reviewed: int | None = None,
+    funnel: RunFunnel | None = None,
+) -> bool:
+    """Move a ``running`` run to ``status``; True if this call moved it.
+
+    The only writer of a terminal status. It matches ``status = 'running'``, so a
+    late finaliser can never overwrite what an earlier one recorded, and it writes
+    the status, ``completed_at``, error, counters and delivery status in one
+    statement, so a crash cannot leave a ``completed`` row without its
+    ``notification_status``. ``completed_at`` stays NULL for ``abandoned``: nobody
+    observed when (or whether) the run ended, and a timestamp would assert that.
+    """
+    if status not in LEGAL_TRANSITIONS[STATUS_RUNNING]:
+        raise ValueError(f"{status!r} is not a terminal run status")
+    columns: dict[str, object] = {
+        "status": status,
+        "completed_at": None if status == STATUS_ABANDONED else _now(),
+        "error": error,
+    }
+    if summary_json is not None:
+        columns["summary_json"] = summary_json
+    if chats_reviewed is not None:
+        columns["chats_reviewed"] = chats_reviewed
+    if funnel is not None:
+        columns.update(funnel.assignments())
+    if _update_running(conn, run_id, columns):
+        return True
+    row = conn.execute("SELECT status FROM review_runs WHERE id = ?", (run_id,)).fetchone()
+    logger.info(
+        "ℹ️ run %s not moved to %s: %s",
+        run_id, status, f"already {row['status']}" if row else "no such run",
+    )
+    return False
 
 
 def finish_run_summary(
@@ -62,77 +173,28 @@ def finish_run_summary(
     status: str,
     summary_json: str | None,
     error: str | None = None,
-) -> None:
+) -> bool:
     """Finalize a run whose outcome is a structured payload, not a funnel.
 
     The family checks (traffic-check / calendar-scan) record their whole result
     here so a scheduled run is as inspectable as a webapp-launched one.
     """
-    conn.execute(
-        "UPDATE review_runs SET completed_at = ?, status = ?, summary_json = ?, error = ? "
-        "WHERE id = ?",
-        (_now(), status, summary_json, error, run_id),
+    return finalize_run(conn, run_id, status, error=error, summary_json=summary_json)
+
+
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    status: str,
+    chats_reviewed: int,
+    error: str | None = None,
+    *,
+    funnel: RunFunnel | None = None,
+) -> bool:
+    """Finalize a message run; pass ``funnel`` to write its counters in the same commit."""
+    return finalize_run(
+        conn, run_id, status, error=error, chats_reviewed=chats_reviewed, funnel=funnel
     )
-    conn.commit()
-
-
-def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
-    """Mark a still-``running`` run abandoned; True if this call changed it.
-
-    Guarded on ``status = 'running'`` so a run that finalized itself between the
-    caller's read and this write is never overwritten. ``completed_at`` stays NULL:
-    nobody observed when (or whether) it ended, and a timestamp would assert that.
-    """
-    cur = conn.execute(
-        "UPDATE review_runs SET status = ?, error = ? WHERE id = ? AND status = 'running'",
-        (STATUS_ABANDONED, error, run_id),
-    )
-    conn.commit()
-    return cur.rowcount > 0
-
-
-def reconcile_stale_runs(conn: sqlite3.Connection, *, now: datetime | None = None) -> list[int]:
-    """Move runs that can no longer be running to ``abandoned``; returns their ids.
-
-    The rule is age: a ``running`` row of a kind in :data:`STALE_RUNNING_AFTER`
-    older than that kind's bound. Anything the rule cannot establish is left
-    exactly as it is — a kind with no bound, a row younger than its bound (a live
-    check), a ``started_at`` that does not parse. Run it on webapp startup and before
-    each family check opens its own row, so a killed or restarted process is
-    swept up by the next one. One info line per reconciled run.
-    """
-    now = now or datetime.now(UTC)
-    reconciled: list[int] = []
-    placeholders = ",".join("?" for _ in STALE_RUNNING_AFTER)
-    rows = conn.execute(
-        "SELECT id, kind, started_at FROM review_runs "
-        f"WHERE status = 'running' AND kind IN ({placeholders}) ORDER BY id",
-        tuple(STALE_RUNNING_AFTER),
-    ).fetchall()
-    for row in rows:
-        try:
-            started = datetime.fromisoformat(str(row["started_at"]))
-        except ValueError:
-            continue
-        if started.tzinfo is None:
-            started = started.replace(tzinfo=UTC)
-        limit = STALE_RUNNING_AFTER[row["kind"]]
-        age = now - started
-        if age < limit:
-            continue
-        minutes = int(age.total_seconds() // 60)
-        reason = (
-            f"abandoned: still running {minutes} min after it started "
-            f"(limit {int(limit.total_seconds() // 60)} min); "
-            "the process ended without recording a result"
-        )
-        if abandon_run(conn, int(row["id"]), reason):
-            reconciled.append(int(row["id"]))
-            logger.info(
-                "ℹ️ run %s (%s, started %s) reconciled running -> %s after %d min",
-                row["id"], row["kind"], row["started_at"], STATUS_ABANDONED, minutes,
-            )
-    return reconciled
 
 
 def record_run_funnel(
@@ -148,26 +210,95 @@ def record_run_funnel(
     notification_status: str,
     transcriptions: int = 0,
     source_funnel_json: str | None = None,
-) -> None:
-    """Persist a run's funnel counters and final notification status."""
-    conn.execute(
-        "UPDATE review_runs SET chats_synced = ?, messages_synced = ?, chats_monitored = ?, "
-        "stage1_passed = ?, stage2_llm_calls = ?, transcriptions = ?, actionable = ?, "
-        "notification_status = ?, source_funnel_json = ? WHERE id = ?",
-        (
-            chats_synced,
-            messages_synced,
-            chats_monitored,
-            stage1_passed,
-            stage2_llm_calls,
-            transcriptions,
-            actionable,
-            notification_status,
-            source_funnel_json,
-            run_id,
-        ),
+) -> bool:
+    """Snapshot a still-``running`` run's counters ahead of its final status."""
+    funnel = RunFunnel(
+        chats_synced=chats_synced,
+        messages_synced=messages_synced,
+        chats_monitored=chats_monitored,
+        stage1_passed=stage1_passed,
+        stage2_llm_calls=stage2_llm_calls,
+        actionable=actionable,
+        notification_status=notification_status,
+        transcriptions=transcriptions,
+        source_funnel_json=source_funnel_json,
     )
-    conn.commit()
+    return _update_running(conn, run_id, funnel.assignments())
+
+
+def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
+    """Mark a still-``running`` run abandoned; True if this call changed it."""
+    return finalize_run(conn, run_id, STATUS_ABANDONED, error=error)
+
+
+def _stale_by_age(row: sqlite3.Row, now: datetime) -> str | None:
+    """The abandon reason when the row outlived its kind's bound, else None.
+
+    None also covers a kind with no bound and a ``started_at`` that does not
+    parse: what the age cannot establish is left alone.
+    """
+    limit = STALE_RUNNING_AFTER.get(row["kind"])
+    if limit is None:
+        return None
+    try:
+        started = datetime.fromisoformat(str(row["started_at"]))
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    age = now - started
+    if age < limit:
+        return None
+    return (
+        f"abandoned: still running {int(age.total_seconds() // 60)} min after it started "
+        f"(limit {int(limit.total_seconds() // 60)} min); "
+        "the process ended without recording a result"
+    )
+
+
+def _stale_by_owner(row: sqlite3.Row) -> str | None:
+    """The abandon reason when the row's owner process is proven gone, else None.
+
+    A row with no recorded owner, a live owner, or an owner the probe cannot
+    classify is left alone: a reused pid keeps a dead run at ``running`` (the old
+    behaviour), which is the safe side of the rule.
+    """
+    owner = row["owner_pid"]
+    if owner is None or pid_state(int(owner)) is not False:
+        return None
+    return f"abandoned: its process (pid {owner}) ended without recording a result"
+
+
+def reconcile_stale_runs(conn: sqlite3.Connection, *, now: datetime | None = None) -> list[int]:
+    """Move runs that can no longer be running to ``abandoned``; returns their ids.
+
+    Two rules, each applied to a ``running`` row. Age: a kind in
+    :data:`STALE_RUNNING_AFTER` older than that kind's bound. Owner: any kind
+    whose recorded ``owner_pid`` is proven not to be a live process, which is the
+    only proof available for ``scan`` / ``process``, whose age establishes nothing.
+    Anything neither rule can establish is left exactly as it is. Run it on webapp
+    startup and before each run opens its own row, so a killed or restarted
+    process is swept up by the next one. One info line per reconciled run.
+    """
+    now = now or datetime.now(UTC)
+    reconciled: list[int] = []
+    rows = conn.execute(
+        "SELECT id, kind, started_at, owner_pid FROM review_runs "
+        "WHERE status = ? ORDER BY id",
+        (STATUS_RUNNING,),
+    ).fetchall()
+    for row in rows:
+        reason = _stale_by_age(row, now) or _stale_by_owner(row)
+        if reason is None:
+            continue
+        if abandon_run(conn, int(row["id"]), reason):
+            reconciled.append(int(row["id"]))
+            logger.info(
+                "ℹ️ run %s (%s, started %s) reconciled %s -> %s: %s",
+                row["id"], row["kind"], row["started_at"],
+                STATUS_RUNNING, STATUS_ABANDONED, reason,
+            )
+    return reconciled
 
 
 # The kinds that carry a message-pipeline digest/funnel. Family checks
@@ -206,21 +337,6 @@ def last_run_started_at(conn: sqlite3.Connection, kind: str) -> str | None:
         (kind,),
     ).fetchone()
     return str(row["started_at"]) if row else None
-
-
-def finish_run(
-    conn: sqlite3.Connection,
-    run_id: int,
-    status: str,
-    chats_reviewed: int,
-    error: str | None = None,
-) -> None:
-    conn.execute(
-        "UPDATE review_runs SET completed_at = ?, status = ?, chats_reviewed = ?, error = ? "
-        "WHERE id = ?",
-        (_now(), status, chats_reviewed, error, run_id),
-    )
-    conn.commit()
 
 
 def insert_analysis_item(

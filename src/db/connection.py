@@ -60,6 +60,7 @@ _REVIEW_RUNS_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("actionable", "INTEGER NOT NULL DEFAULT 0"),
     ("notification_status", "TEXT"),
     ("source_funnel_json", "TEXT"),
+    ("owner_pid", "INTEGER"),
 )
 
 

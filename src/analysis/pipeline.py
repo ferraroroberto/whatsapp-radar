@@ -30,6 +30,7 @@ are complete regardless of which classifier runs.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -81,7 +82,9 @@ from src.models import StoredMessage
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
 
-Mode = Literal["live", "dry_run", "process"]
+logger = logging.getLogger(__name__)
+
+Mode =Literal["live", "dry_run", "process"]
 
 _NOT_ACTIONABLE = AnalysisResult(
     action_required=False,
@@ -211,18 +214,21 @@ def _abort_offline(
         "No messages were checked. Restore at least one enabled source.",
     )
     emit(progress, f"• offline alert: {alert_status}")
-    store.finish_run(conn, outcome.run_id, "failed", 0)
-    store.record_run_funnel(
+    store.finish_run(
         conn,
         outcome.run_id,
-        chats_synced=0,
-        messages_synced=0,
-        chats_monitored=0,
-        stage1_passed=0,
-        stage2_llm_calls=0,
-        actionable=0,
-        notification_status="offline",
-        source_funnel_json=source_funnels_json(outcome.source_funnels),
+        store.STATUS_FAILED,
+        0,
+        funnel=store.RunFunnel(
+            chats_synced=0,
+            messages_synced=0,
+            chats_monitored=0,
+            stage1_passed=0,
+            stage2_llm_calls=0,
+            actionable=0,
+            notification_status="offline",
+            source_funnel_json=source_funnels_json(outcome.source_funnels),
+        ),
     )
     return outcome
 
@@ -312,23 +318,24 @@ def _run_tripwire(
     return result
 
 
-def _begin_scan(
+def _open_scan_run(
     conn: sqlite3.Connection,
     config: Config,
     *,
     mode: Mode,
     days: int | None,
-    classifier: TracedClassifier | None,
-    calendar_client: CalendarWriteClient | None,
     progress: Progress | None,
-) -> tuple[ScanOutcome, TracedClassifier, CalendarWriteClient | None]:
-    """Start the run row and resolve the Stage-2 classifier and reminder client."""
+) -> ScanOutcome:
+    """Start the run row; everything after this is covered by :func:`scan`'s exit handling."""
     emit(
         progress,
         "▶ process starting — analyzing monitored chats since last cursor"
         if mode == "process"
         else f"▶ scan [{mode}] starting" + (f" (last {days} days)" if days else ""),
     )
+    # A run killed before it could finalize its row cannot clean up after itself,
+    # so each run first sweeps the rows whose owner process is gone.
+    store.reconcile_stale_runs(conn)
     run_id = store.start_run(
         conn, mode=mode, params_json=json.dumps({"days": days}),
         kind="process" if mode == "process" else "scan",
@@ -336,6 +343,18 @@ def _begin_scan(
     outcome = ScanOutcome(run_id=run_id, mode=mode)
     for source in config.sources:
         ensure_source_funnel(outcome.source_funnels, source)
+    return outcome
+
+
+def _resolve_stage2(
+    config: Config,
+    *,
+    mode: Mode,
+    classifier: TracedClassifier | None,
+    calendar_client: CalendarWriteClient | None,
+    progress: Progress | None,
+) -> tuple[TracedClassifier, CalendarWriteClient | None]:
+    """Resolve the Stage-2 classifier and the reminder client."""
     stage2 = classifier if classifier is not None else build_stage2_classifier(
         config.classifier, config.hub, config.children
     )
@@ -348,7 +367,7 @@ def _begin_scan(
             calendar_client = build_calendar_client(config.calendar)
         except (FileNotFoundError, RuntimeError) as exc:
             emit(progress, f"⚠ calendar reminders disabled: {exc}")
-    return outcome, stage2, calendar_client
+    return stage2, calendar_client
 
 
 def _live_bindings(
@@ -663,26 +682,29 @@ def _finish_scan(
         send_classifier_abort_alert(
             config, abort_error, unanalysed or [], progress=progress
         )
-        run_status = "failed"
+        run_status = store.STATUS_FAILED
     else:
         run_status = (
-            "completed_with_errors"
+            store.STATUS_COMPLETED_WITH_ERRORS
             if outcome.errors or outcome.source_errors
-            else "completed"
+            else store.STATUS_COMPLETED
         )
-    store.finish_run(conn, run_id, run_status, outcome.chats_with_delta)
-    store.record_run_funnel(
+    store.finish_run(
         conn,
         run_id,
-        chats_synced=outcome.chats_synced,
-        messages_synced=outcome.messages_synced,
-        chats_monitored=outcome.chats_monitored,
-        stage1_passed=outcome.stage1_passed,
-        stage2_llm_calls=outcome.stage2_llm_calls,
-        actionable=outcome.actionable,
-        notification_status=outcome.notification_status,
-        transcriptions=outcome.transcriptions,
-        source_funnel_json=source_funnels_json(outcome.source_funnels),
+        run_status,
+        outcome.chats_with_delta,
+        funnel=store.RunFunnel(
+            chats_synced=outcome.chats_synced,
+            messages_synced=outcome.messages_synced,
+            chats_monitored=outcome.chats_monitored,
+            stage1_passed=outcome.stage1_passed,
+            stage2_llm_calls=outcome.stage2_llm_calls,
+            actionable=outcome.actionable,
+            notification_status=outcome.notification_status,
+            transcriptions=outcome.transcriptions,
+            source_funnel_json=source_funnels_json(outcome.source_funnels),
+        ),
     )
     emit(
         progress,
@@ -725,8 +747,53 @@ def scan(
     digest is still built and traced, but withheld rather than sent. It has no
     effect on ``dry_run`` mode, which already never delivers.
     """
-    outcome, stage2, calendar_client = _begin_scan(
-        conn, config, mode=mode, days=days, classifier=classifier,
+    outcome = _open_scan_run(conn, config, mode=mode, days=days, progress=progress)
+    try:
+        return _run_scan(
+            conn, config, outcome,
+            mode=mode, days=days, connector=connector, connectors=connectors,
+            classifier=classifier, calendar_client=calendar_client,
+            deliver=deliver, progress=progress,
+        )
+    except Exception as exc:
+        # The row must not stay ``running``: record the failure, then let it
+        # propagate so the process still exits non-zero with its traceback.
+        logger.error("❌ %s run %s failed unexpectedly: %r", mode, outcome.run_id, exc)
+        store.finalize_run(
+            conn, outcome.run_id, store.STATUS_FAILED,
+            error=f"{type(exc).__name__}: {exc}", chats_reviewed=outcome.chats_with_delta,
+        )
+        raise
+    except BaseException as exc:
+        # Interrupt / termination: nobody observed an outcome, so neither
+        # ``failed`` nor ``completed`` is true.
+        logger.warning(
+            "⚠️ %s run %s interrupted (%s); recording it abandoned",
+            mode, outcome.run_id, type(exc).__name__,
+        )
+        store.abandon_run(
+            conn, outcome.run_id, f"abandoned: interrupted ({type(exc).__name__})"
+        )
+        raise
+
+
+def _run_scan(
+    conn: sqlite3.Connection,
+    config: Config,
+    outcome: ScanOutcome,
+    *,
+    mode: Mode,
+    days: int | None,
+    connector: MessageConnector | None,
+    connectors: list[ConnectorBinding] | None,
+    classifier: TracedClassifier | None,
+    calendar_client: CalendarWriteClient | None,
+    deliver: bool,
+    progress: Progress | None,
+) -> ScanOutcome:
+    """The body of :func:`scan` once its run row is open."""
+    stage2, calendar_client = _resolve_stage2(
+        config, mode=mode, classifier=classifier,
         calendar_client=calendar_client, progress=progress,
     )
     successful_sources: set[str] = set()

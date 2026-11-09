@@ -32,7 +32,6 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import Callable
@@ -42,6 +41,7 @@ from typing import Any
 
 from src.connector.linked_device import is_heartbeat_fresh, read_status_file
 from src.paths import PROJECT_ROOT
+from src.process_liveness import process_alive
 from src.runtime_files import make_dirs, open_for_write, save_text
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 
@@ -170,33 +170,6 @@ def _pid_path(buffer_dir: Path) -> Path:
     return buffer_dir / "sidecar.pid"
 
 
-def _process_alive(pid: int) -> bool:
-    """Best-effort check that a PID is a live process (cross-platform, never raises)."""
-    if pid <= 0:
-        return False
-    try:
-        if sys.platform == "win32":
-            import ctypes  # local import: Windows-only
-
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            STILL_ACTIVE = 259
-            handle = ctypes.windll.kernel32.OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION, False, pid
-            )
-            if not handle:
-                return False
-            try:
-                code = ctypes.c_ulong()
-                ok = ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
-                return bool(ok) and code.value == STILL_ACTIVE
-            finally:
-                ctypes.windll.kernel32.CloseHandle(handle)
-        os.kill(pid, 0)
-        return True
-    except (OSError, ValueError, AttributeError):
-        return False
-
-
 def _tracked_pid_alive(buffer_dir: Path) -> bool:
     """True if the PID file we wrote points at a still-running process."""
     pid_file = _pid_path(buffer_dir)
@@ -206,7 +179,7 @@ def _tracked_pid_alive(buffer_dir: Path) -> bool:
         pid = int(pid_file.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return False
-    return _process_alive(pid)
+    return process_alive(pid)
 
 
 def is_running(buffer_dir: Path) -> bool:

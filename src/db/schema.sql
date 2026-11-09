@@ -108,7 +108,8 @@ CREATE TABLE IF NOT EXISTS review_runs (
     actionable          INTEGER NOT NULL DEFAULT 0,      -- chats with an actionable verdict
     notification_status TEXT,                            -- 'sent'|'failed'|'skipped'|'dry_run'|'none'
     source_funnel_json  TEXT,                            -- truthful per-source counters/status
-    error               TEXT
+    error               TEXT,
+    owner_pid           INTEGER                          -- pid of the process that opened the row; NULL on older rows
 );
 
 -- Per-run, per-chat audit trail: the complete decision record for one chat in one

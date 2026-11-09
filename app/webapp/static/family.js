@@ -836,8 +836,7 @@ async function pollSweep() {
   }
   const record = (data.runs || []).find(function (r) { return r.run_id === sweep.runId; });
   const active = !!(data.active && data.active.run_id === sweep.runId);
-  const running = active
-    || (record && (record.status === 'running' || record.status === 'pending'));
+  const running = active || (record && record.status === 'running');
   if (running || (!record && sweep.ticks < SWEEP_MISSING_TICKS)) {
     sweep.ticks += 1;
     scheduleSweepPoll();

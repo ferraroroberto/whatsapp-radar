@@ -428,7 +428,7 @@ def _cmd_family_check(
         payload = runner(config, now=now, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError) as exc:
         _progress(f"❌ {kind} failed: {exc}")
-        store.finish_run_summary(conn, run_id, "failed", None, error=str(exc))
+        store.finish_run_summary(conn, run_id, store.STATUS_FAILED, None, error=str(exc))
         _emit_result({"kind": kind, "status": "error", "error": str(exc), "run_id": run_id})
         return 1
     except Exception as exc:
@@ -437,7 +437,7 @@ def _cmd_family_check(
         # exits non-zero with its traceback.
         logger.error("❌ %s run %s failed unexpectedly: %r", kind, run_id, exc)
         store.finish_run_summary(
-            conn, run_id, "failed", None, error=f"{type(exc).__name__}: {exc}"
+            conn, run_id, store.STATUS_FAILED, None, error=f"{type(exc).__name__}: {exc}"
         )
         raise
     except BaseException as exc:
@@ -475,7 +475,9 @@ def _cmd_family_check(
             + f", {payload.get('alerts', 0)} alert(s)"
             + (" [dry-run]" if dry_run else "")
         )
-    status = "failed" if payload.get("status") == "error" else "completed"
+    status = (
+        store.STATUS_FAILED if payload.get("status") == "error" else store.STATUS_COMPLETED
+    )
     store.finish_run_summary(
         conn,
         run_id,
@@ -484,7 +486,7 @@ def _cmd_family_check(
         error=payload.get("error"),
     )
     _emit_result(payload)
-    return 1 if status == "failed" else 0
+    return 1 if status == store.STATUS_FAILED else 0
 
 
 def main(argv: list[str] | None = None) -> int:

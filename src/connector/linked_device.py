@@ -94,24 +94,12 @@ class LinkedDeviceConnector:
         return self.status()
 
     def status(self) -> ConnectorStatus:
-        raw = read_status_file(self._dir)
-        if raw is None:
-            return ConnectorStatus(
-                name="linked_device",
-                connected=False,
-                detail="sidecar not started (no status.json) — run the Node sidecar",
-            )
-        fresh = is_heartbeat_fresh(raw.get("last_update"))
-        connected = bool(raw.get("connected")) and bool(raw.get("paired")) and fresh
-        if not raw.get("paired"):
-            detail = "not paired — scan the QR printed by the sidecar"
-        elif not fresh:
-            detail = "sidecar heartbeat stale — process may have stopped"
-        else:
-            # The sidecar's counters are per-session, not buffer totals — don't
-            # present them as "buffered" (stored totals are surfaced from the DB).
-            detail = "connected — receiving live updates"
-        return ConnectorStatus(name="linked_device", connected=connected, detail=detail)
+        # Imported here because the supervisor imports this module's heartbeat
+        # helpers at load time; a top-level import would be circular.
+        from src.connector.sidecar import sidecar_state
+
+        info = sidecar_state(self._dir)
+        return ConnectorStatus(name="linked_device", connected=info.is_live, detail=info.detail)
 
     # --- read surface ------------------------------------------------------
 

@@ -64,6 +64,29 @@ def test_state_needs_qr_when_unpaired(tmp_path: Path) -> None:
     assert not info.is_relaunchable  # a QR scan is required, not a relaunch
 
 
+def test_qr_is_not_current_after_pairing(tmp_path: Path) -> None:
+    """qr.png outlives pairing; a paired sidecar must not offer it again."""
+    (tmp_path / "qr.png").write_bytes(b"\x89PNG")
+    _write_status(tmp_path, paired=True, connected=True, last_update=_fresh())
+    assert sidecar.sidecar_state(tmp_path).has_qr is False
+    _write_status(tmp_path, paired=True, connected=False, last_update=_fresh())
+    assert sidecar.sidecar_state(tmp_path).has_qr is False
+
+
+def test_qr_is_not_current_when_sidecar_exited_unpaired(tmp_path: Path) -> None:
+    """A logged-out sidecar whose process is gone cannot complete a scan."""
+    (tmp_path / "qr.png").write_bytes(b"\x89PNG")
+    _write_status(tmp_path, paired=False, connected=False, last_update=_old())
+    info = sidecar.sidecar_state(tmp_path)
+    assert info.state == sidecar.STATE_NEEDS_QR
+    assert info.has_qr is False
+
+
+def test_qr_is_not_current_without_status(tmp_path: Path) -> None:
+    (tmp_path / "qr.png").write_bytes(b"\x89PNG")
+    assert sidecar.sidecar_state(tmp_path).has_qr is False
+
+
 def test_state_stale_when_heartbeat_old(tmp_path: Path) -> None:
     _write_status(tmp_path, paired=True, connected=True, last_update=_old(), chats=5, messages=9)
     info = sidecar.sidecar_state(tmp_path)

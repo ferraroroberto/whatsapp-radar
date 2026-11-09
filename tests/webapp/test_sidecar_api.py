@@ -54,6 +54,20 @@ def test_status_reports_running(client: TestClient, tmp_path: Path) -> None:
     assert body["is_live"] is True
 
 
+def test_status_does_not_offer_stale_qr_after_pairing(
+    client: TestClient, tmp_path: Path
+) -> None:
+    (tmp_path / "qr.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    now = datetime.now(UTC).isoformat()
+    _write_status(tmp_path, paired=False, connected=False, last_update=now)
+    assert client.get("/api/sidecar/status").json()["has_qr"] is True
+
+    _write_status(tmp_path, paired=True, connected=False, last_update=now)
+    body = client.get("/api/sidecar/status").json()
+    assert body["state"] == "connecting"
+    assert body["has_qr"] is False
+
+
 def test_start_launches_via_supervisor(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

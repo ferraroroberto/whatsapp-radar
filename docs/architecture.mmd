@@ -178,18 +178,22 @@ flowchart TB
   end
   SCAN --> DIGEST
 
-  subgraph notify["src/notify/"]
-    NFACTORY["factory.py — build_notifier(none | telegram)"]
-    DELIVERY["delivery.py — deliver_digest"]
+  subgraph delivery["src/delivery/"]
+    DELIVERY["digest.py — deliver_digest"]
     ALERT["alert.py — send_alert (preflight/pipeline failures)"]
-    TELEGRAM["telegram.py — TelegramNotifier"]
+    DISPATCH["dispatch.py — build the configured notifier, never raises"]
+  end
+  subgraph notify["src/notify/ (vendored)"]
+    NFACTORY["factory.py — build_notifier(none | telegram)"]
+    TELEGRAM["telegram.py — TelegramNotifier.send_text, chunked"]
   end
   DIGEST --> DELIVERY
-  DELIVERY --> NFACTORY
+  DELIVERY --> DISPATCH
+  DISPATCH --> NFACTORY
   NFACTORY --> TELEGRAM
   PREFLIGHT --> ALERT
   TRIPWIRE -->|opt-in weekly nudge| ALERT
-  ALERT --> NFACTORY
+  ALERT --> DISPATCH
 
   subgraph config["src/config/ + config/"]
     CONFIGPY["Config — default.json -> local.json -> WR_* env/.env\n(package: __init__.py + one module per subsystem)"]

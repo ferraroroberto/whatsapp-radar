@@ -1,29 +1,25 @@
 """Telegram delivery via the Bot API.
 
-Sends the consolidated digest to a single configured chat using the Bot API
-``sendMessage`` endpoint. Uses the standard library only (``urllib``) so the
-project takes on no extra dependency for one HTTPS POST.
+Sends a plain-text message to a single configured chat using the Bot API
+``sendMessage`` endpoint, split into several calls when it exceeds Telegram's
+per-message limit. Uses the standard library only (``urllib``) so a
+consuming app takes on no extra dependency for one HTTPS POST.
 
-The bot token and chat id are secrets: they come from ignored config
-(``WR_TELEGRAM_BOT_TOKEN`` / ``WR_TELEGRAM_CHAT_ID`` or ``config/local.json``)
-and are never committed.
+The bot token and chat id are secrets: they come from the consuming app's
+ignored config and are never committed.
 """
 
 from __future__ import annotations
 
 import json
-import urllib.error
 import urllib.request
 
 from src.notify.base import NotifierError
-from src.report.digest import Digest
 
 _API = "https://api.telegram.org/bot{token}/sendMessage"
 _TIMEOUT_SECONDS = 15
-
-# Telegram's `sendMessage` API doc: "Text of the message to be sent, 1-4096
-# characters" — an unbounded digest (e.g. the first scan after a multi-day
-# outage) exceeds this and every retry fails identically.
+# The Bot API documents the ``text`` parameter as "1-4096 characters"; a longer
+# message is rejected, and a retry of the identical text fails the same way.
 _MAX_MESSAGE_CHARS = 4096
 
 
@@ -31,9 +27,8 @@ def _chunk_text(text: str, limit: int) -> list[str]:
     """Split ``text`` into pieces of at most ``limit`` characters, exactly.
 
     Cuts at (and keeps) the last newline at or before ``limit`` so a line is
-    never split mid-word and ``"".join(_chunk_text(text, limit)) == text`` —
-    no content lost at a chunk boundary. A single line longer than ``limit``
-    is hard-cut as a last resort.
+    never split when it fits, and ``"".join(_chunk_text(text, limit)) == text``.
+    A single line longer than ``limit`` is hard-cut as a last resort.
     """
     if len(text) <= limit:
         return [text]
@@ -50,32 +45,29 @@ def _chunk_text(text: str, limit: int) -> list[str]:
 
 
 class TelegramNotifier:
-    """A :class:`Notifier` that delivers the digest text to one Telegram chat."""
+    """A :class:`~src.notify.base.Notifier` that delivers text to one Telegram chat."""
 
     def __init__(self, bot_token: str, chat_id: str) -> None:
         if not bot_token or not chat_id:
-            raise NotifierError(
-                "Telegram notifier needs WR_TELEGRAM_BOT_TOKEN and WR_TELEGRAM_CHAT_ID"
-            )
+            raise NotifierError("Telegram notifier needs both a bot token and a chat id")
         self._token = bot_token
         self._chat_id = chat_id
-
-    def send(self, digest: Digest) -> None:
-        self.send_text(digest.to_telegram_text())
 
     def send_text(self, text: str) -> None:
         """Deliver a plain-text message to the configured chat.
 
-        Used both for the digest and for out-of-band operational alerts (e.g. a
-        scan aborted because the WhatsApp source went offline), so a scheduled
-        run that would otherwise look green still reaches the operator. Sent as
-        one or more ``sendMessage`` calls, chunked under Telegram's per-message
-        limit — a single oversized digest must not fail delivery outright.
+        Text over Telegram's 4096-character limit is sent as several messages,
+        cut at line breaks where possible, with no content lost between them.
+        Delivery stops at the first failing piece.
+
+        Raises :class:`NotifierError` on any transport, decode, or Bot-API
+        rejection so the caller can retry, log, or swallow it as appropriate.
         """
-        for chunk in _chunk_text(text, _MAX_MESSAGE_CHARS):
-            self._send_one(chunk)
+        for piece in _chunk_text(text, _MAX_MESSAGE_CHARS):
+            self._send_one(piece)
 
     def _send_one(self, text: str) -> None:
+        """POST one ``sendMessage`` call; ``text`` is already within the limit."""
         payload = json.dumps({"chat_id": self._chat_id, "text": text}).encode("utf-8")
         request = urllib.request.Request(
             _API.format(token=self._token),
@@ -86,9 +78,15 @@ class TelegramNotifier:
         try:
             with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
                 body = json.loads(response.read().decode("utf-8"))
-        except urllib.error.URLError as exc:
+        except OSError as exc:
+            # URLError / HTTPError, and the bare TimeoutError / ConnectionError
+            # urllib lets escape once the request is sent and the response is
+            # being read.
             raise NotifierError(f"Telegram request failed: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise NotifierError("Telegram returned a non-JSON response") from exc
+        except ValueError as exc:
+            # JSONDecodeError and UnicodeDecodeError are both ValueErrors.
+            raise NotifierError("Telegram returned a non-JSON or undecodable response") from exc
+        if not isinstance(body, dict):
+            raise NotifierError("Telegram returned a non-object JSON response")
         if not body.get("ok"):
             raise NotifierError(f"Telegram rejected the message: {body.get('description')}")

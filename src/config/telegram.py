@@ -7,14 +7,11 @@ owns them. Precedence: ``WR_TELEGRAM_*`` env > webapp_config > local.json/defaul
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from typing import Any
 
+from src.notify.config import TelegramConfig
 
-@dataclass(frozen=True)
-class TelegramConfig:
-    bot_token: str
-    chat_id: str
+__all__ = ["TelegramConfig", "parse"]
 
 
 def parse(raw: dict[str, Any]) -> TelegramConfig:

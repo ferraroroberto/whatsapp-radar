@@ -72,3 +72,16 @@ def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 def ingested_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
     ingest_all(conn, FixtureConnector())
     return conn
+
+
+@pytest.fixture(autouse=True)
+def no_real_telegram(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the Bot API endpoint at an unresolvable host so no test can send a message.
+
+    A test that exercises delivery stubs ``urlopen`` (so the endpoint never matters);
+    one that forgets to gets a connection failure surfaced as ``NotifierError``
+    instead of a real message to the operator's chat.
+    """
+    from src.notify import telegram as telegram_mod
+
+    monkeypatch.setattr(telegram_mod, "_API", "http://telegram.invalid/bot{token}/sendMessage")

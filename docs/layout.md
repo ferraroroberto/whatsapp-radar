@@ -8,7 +8,7 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 |---|---|
 | `app/` | UI surfaces: the argparse CLI, the FastAPI admin PWA, the tray. Imports `src/`, never the reverse. |
 | `src/` | The logic: connector, store, classifier, notifiers, family checks. Imported as `from src.…`. |
-| `tests/` | The offline pytest suite (fixture connector only), the Playwright e2e suite in `tests/e2e/` and the sanitized sample chats the fixture connector reads, `tests/fixtures/sample_chats.json`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
+| `tests/` | The offline pytest suite (fixture connector only), the Playwright e2e suite in `tests/e2e/` and the sanitized sample chats the fixture connector reads, `tests/fixtures/sample_chats.json`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/delivery/`, `tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
 | `docs/` | Durable reference, this file included. |
 | `scripts/` | Helper CLIs, the verification gate, `wr.bat` (the `launcher.py` wrapper) and the vendored ratchets with their gate wrappers. |
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |
@@ -32,7 +32,8 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 | `src/connector/` | The connector boundary: base contract, factory, fixture, linked-device, sidecar and Gmail sources, preflight. |
 | `src/db/` | SQLite: `store.py` facade over per-table modules, sync, reprocess, retention, `schema.sql`. |
 | `src/analysis/` | Classifier, pipeline, tripwire, transcription, summaries, prompts. |
-| `src/notify/` | Notification channels and delivery, retryable independently of analysis. |
+| `src/notify/` | The vendored Telegram notifier from project-scaffolding (`send_text`, chunked past 4096 characters): copied verbatim, never edited here. |
+| `src/delivery/` | Digest and alert delivery on the vendored notifier: `deliver_digest` records the notifications row, `send_alert` is the best-effort alert, `dispatch` builds the configured notifier. Retryable independently of analysis. |
 | `src/report/` | The digest. |
 | `src/family/` | Calendar scan, rules, traffic check and travel blocks (planner in `travel_blocks.py` over `travel_blocks_model.py`, `travel_blocks_reconcile.py` and `travel_blocks_pricing.py`). `travel_blocks_write.py` is the only path that deletes from calendars; `src/analysis/reminders.py` is the only other writer and is insert-only (routine-prep reminders created by `scan`). |
 | `src/presence/`, `src/traffic/`, `src/task_os/` | Clients for the presence, traffic and Task OS integrations. |

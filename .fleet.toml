@@ -61,13 +61,7 @@ webapp_serve = { src = "app/webapp/serve.py", sha = "41ca8abd5a2755a06bd8a620a72
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "c5535ac326c398df8f44486f386ff0e0b6d4c61c", dest = "scripts/instruction_frontmatter.py" }
 instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "c5535ac326c398df8f44486f386ff0e0b6d4c61c", dest = "scripts/instruction_repeats.py" }
 single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
-
-# A deliberate local fork of a scaffold component: it stays out of [vendored] so no wave
-# overwrites it. Each entry names the scaffold path, why this repo diverges, and the upstream
-# issue offering the generic part; drop the entry once the scaffold ships it or the repo
-# re-vendors.
-[vendored_forks]
-notify = { src = "src/notify", reason = "digest-aware: Notifier.send(digest), deliver_digest, send_alert and a Config-bound factory, none of which fit the domain-free scaffold package; send_text also chunks past Telegram's 4096-character limit", upstream = "ferraroroberto/project-scaffolding#683" }
+notify = { src = "src/notify", sha = "5eb0f90147d417b55afef214ad53b9d08e62dc09", dest = "src/notify" }
 
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet.py, which fails on a

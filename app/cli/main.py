@@ -36,13 +36,13 @@ from src.db import store
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.runs import FAMILY_KINDS
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
+from src.delivery import deliver_digest
+from src.delivery.alert import send_alert
 from src.family import calendar_scan, traffic_check
 from src.family.leg_status import count_legs
 from src.family.travel_blocks_report import format_travel_blocks_progress
 from src.gmail_readonly import GmailReadError
 from src.logging_setup import configure_file_logging
-from src.notify import deliver_digest
-from src.notify.alert import send_alert
 from src.report.digest import Digest, build_digest
 from src.runresult import format_result
 

@@ -24,11 +24,11 @@ from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
 
 from src.config import Config
+from src.delivery.alert import send_alert
 from src.family import rules
 from src.family.calendar_source import fetch_events_by_person
 from src.family.travel_blocks import scan_window_days
 from src.family.travel_blocks_write import run_travel_blocks
-from src.notify.alert import send_alert
 from src.presence import PresenceLocation, get_location
 from src.traffic import TrafficReadError, compute_route
 

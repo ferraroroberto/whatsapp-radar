@@ -170,6 +170,12 @@ def _home_glance_links_into_activity(page: Page, base_url: str) -> None:
 def test_inbox_watch_toggle_history_gmail_senders_and_judging_sheets(
     page: Page, base_url: str
 ) -> None:
+    _whatsapp_chats_toggle_and_open_their_history(page, base_url)
+    _gmail_email_history_and_sender_promotion(page)
+    _judging_texts_open_in_read_only_sheets(page)
+
+
+def _whatsapp_chats_toggle_and_open_their_history(page: Page, base_url: str) -> None:
     page.goto(base_url)
     page.locator("#tabChats").click()
     expect(page.locator("#paneChats")).to_be_visible()
@@ -230,6 +236,8 @@ def test_inbox_watch_toggle_history_gmail_senders_and_judging_sheets(
     page.locator("#historyClose").click()
     expect(page.locator("#historyCard")).to_be_hidden()
 
+
+def _gmail_email_history_and_sender_promotion(page: Page) -> None:
     # Source selector isolates Gmail and the email overlay exposes subject/body/
     # thread evidence with an unmistakable source badge.
     page.locator("#chatsSource").select_option("gmail")
@@ -273,6 +281,8 @@ def test_inbox_watch_toggle_history_gmail_senders_and_judging_sheets(
     page.locator("#chatsSource").select_option("whatsapp")
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
 
+
+def _judging_texts_open_in_read_only_sheets(page: Page) -> None:
     # How messages are judged: each read-only text opens in its own sheet.
     page.locator("#paneChats .home-settings").click()
     expect(page.locator("#settingsDialog")).to_be_visible()

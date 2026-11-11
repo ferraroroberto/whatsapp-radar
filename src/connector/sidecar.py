@@ -100,10 +100,16 @@ class SidecarStateInfo:
         """True when relaunching the process could recover it without a new QR."""
         return self.state in (STATE_STOPPED, STATE_STALE, STATE_CONNECTING)
 
+    @property
+    def is_linking(self) -> bool:
+        """True while a launched process is still pairing, so a reconnect would only restart it."""
+        return self.state == STATE_CONNECTING
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["is_live"] = self.is_live
         data["is_relaunchable"] = self.is_relaunchable
+        data["linking"] = self.is_linking
         return data
 
 

@@ -5,12 +5,23 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 
+#: How one source's sync ended inside a run.
+SYNC_SKIPPED = "skipped"
+SYNC_SUCCESS = "success"
+SYNC_FAILED = "failed"
+SYNC_STATUSES: frozenset[str] = frozenset({SYNC_SKIPPED, SYNC_SUCCESS, SYNC_FAILED})
+
+
+def sync_status_of(*, ok: bool) -> str:
+    """The sync status of a source whose sync was attempted."""
+    return SYNC_SUCCESS if ok else SYNC_FAILED
+
 
 @dataclass
 class SourceFunnel:
     """One source's truthful path through a scan or process run."""
 
-    sync_status: str = "skipped"
+    sync_status: str = SYNC_SKIPPED
     sync_error: str | None = None
     chats_synced: int = 0
     messages_synced: int = 0

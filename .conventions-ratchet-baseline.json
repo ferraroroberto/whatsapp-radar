@@ -1,13 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/webapp/static/activity.js", "counts": {"state-literal": 5}},
-    {"key": "app/webapp/static/chats.js", "counts": {"state-literal": 4}},
-    {"key": "app/webapp/static/dashboard.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/execution.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/family.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/format.js", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/static/state.js", "counts": {"state-literal": 1}},
-    {"key": "src/sidecar/index.js", "counts": {"state-literal": 2}}
-  ]
+  "entries": []
 }

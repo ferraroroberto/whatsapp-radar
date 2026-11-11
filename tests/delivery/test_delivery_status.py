@@ -19,6 +19,7 @@ from src.db.delivery_status import (
     SEND_STATUSES,
     require_send_status,
     run_delivery_ok,
+    withheld_status,
 )
 
 
@@ -65,3 +66,23 @@ def test_a_run_funnel_refuses_an_unknown_delivery_status() -> None:
             chats_synced=0, messages_synced=0, chats_monitored=0, stage1_passed=0,
             stage2_llm_calls=0, actionable=0, notification_status="bogus",
         )
+
+
+@pytest.mark.parametrize(
+    ("dry_run", "deliver", "has_actionable", "expected"),
+    [
+        (True, True, True, DELIVERY_DRY_RUN),
+        (True, True, False, DELIVERY_DRY_RUN),
+        (False, False, True, DELIVERY_DRY_RUN),
+        (False, False, False, DELIVERY_NONE),
+        (False, True, False, DELIVERY_NONE),
+        (False, True, True, None),
+    ],
+)
+def test_a_digest_is_due_only_for_a_live_delivering_run_with_something_to_say(
+    dry_run: bool, deliver: bool, has_actionable: bool, expected: str | None
+) -> None:
+    assert (
+        withheld_status(dry_run=dry_run, deliver=deliver, has_actionable=has_actionable)
+        == expected
+    )

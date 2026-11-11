@@ -11,6 +11,9 @@
  * Chat names / message text go in via textContent only (privacy). */
 
 import { els, state } from './state.js';
+import {
+  LOAD_PHASE, isAbandoned, isCompletedWithErrors, isFailed, isRunning,
+} from './statuses.js';
 import { jsonApi, toast } from './api.js';
 import {
   actionRow, fmtLocalDateTime, fmtRelative, kindIcon, kindLabel, legPricing,
@@ -22,7 +25,7 @@ import {
   actionMeta, funnelCells, isFamilyKind, modeLabel, paramsSummary, renderFamilyTrace,
   renderMessageTrace,
 } from './run-trace.js';
-import { busyLine, fetchExecution, isRunning, killRun, onExecutionChange, runSelection } from './execution.js';
+import { busyLine, fetchExecution, killRun, onExecutionChange, runSelection } from './execution.js';
 import { setTab } from './tabs.js';
 
 function ax() { return state.activity; }
@@ -98,12 +101,12 @@ function execSummaryBits(rec) {
 // Exception chips only: no OK, no Live.
 function rowChips(item) {
   const chips = [];
-  if (item.status === 'failed') chips.push(statusChip('Failed', 'danger'));
+  if (isFailed(item.status)) chips.push(statusChip('Failed', 'danger'));
   // Its own chip: the process ended without recording a result — not
   // in progress, and not a failure anyone observed.
-  else if (item.status === 'abandoned') chips.push(statusChip('Abandoned', 'attention'));
+  else if (isAbandoned(item.status)) chips.push(statusChip('Abandoned', 'attention'));
   // Finished, but a chat or a source reported an error: it must not read as clean.
-  else if (item.status === 'completed_with_errors') chips.push(statusChip('With errors', 'attention'));
+  else if (isCompletedWithErrors(item.status)) chips.push(statusChip('With errors', 'attention'));
   else if (isRunning(item.status)) chips.push(statusChip('Running', 'neutral'));
   if (item.mode === 'dry_run') chips.push(statusChip('Dry run', 'neutral'));
   const r = item.run;
@@ -182,8 +185,8 @@ function foldRow(key, items, label) {
   const alerts = items.reduce(function (n, it) {
     return n + ((it.run && it.run.summary && it.run.summary.alerts) || 0);
   }, 0);
-  const failed = items.filter(function (it) { return it.status === 'failed'; }).length;
-  const abandoned = items.filter(function (it) { return it.status === 'abandoned'; }).length;
+  const failed = items.filter(function (it) { return isFailed(it.status); }).length;
+  const abandoned = items.filter(function (it) { return isAbandoned(it.status); }).length;
   // One trailing item: the alert chip when the day had one, then the chevron.
   const chevron = document.createElement('span');
   chevron.className = 'run-fold-chevron';
@@ -296,7 +299,7 @@ export function renderList() {
   const box = els.activityList;
   if (!a.loaded) return;
   box.textContent = '';
-  box.dataset.state = 'ready';
+  box.dataset.state = LOAD_PHASE.READY;
   const items = listItems();
   const gapByRunId = new Map();
   if (a.scope === 'messages') {
@@ -367,7 +370,7 @@ function renderHeader() {
   if (busy) { renderHeadStatus(els.activityStatus, [], busy); return; }
   const runs = ax().headerRuns;
   const scans = runs.filter(function (r) { return r.kind === 'scan' && r.mode !== 'dry_run'; });
-  if (scans.length && scans[0].status === 'failed') {
+  if (scans.length && isFailed(scans[0].status)) {
     renderHeadStatus(els.activityStatus, [{ text: 'Last scan failed', tone: 'danger' }]);
     return;
   }
@@ -403,7 +406,7 @@ async function fetchRuns(append) {
     renderHeader();
   } catch (_) {
     if (request !== a.request || a.loaded) return;
-    els.activityList.dataset.state = 'error';
+    els.activityList.dataset.state = LOAD_PHASE.ERROR;
     els.activityList.textContent = '';
     const p = document.createElement('p');
     p.className = 'muted small activity-loading';
@@ -439,7 +442,7 @@ function presetScope(scope) {
   for (const b of els.activityScope.querySelectorAll('.segmented-item')) {
     b.setAttribute('aria-pressed', String(b.dataset.scope === scope));
   }
-  els.activityList.dataset.state = 'loading';
+  els.activityList.dataset.state = LOAD_PHASE.LOADING;
   return true;
 }
 
@@ -699,7 +702,7 @@ async function fetchFiltered(append) {
   const request = ++a.filteredRequest;
   const previous = a.filtered.length > 0;
   const offset = append ? a.filtered.length : 0;
-  els.auditFilteredCard.dataset.state = previous ? 'ready' : 'loading';
+  els.auditFilteredCard.dataset.state = previous ? LOAD_PHASE.READY : LOAD_PHASE.LOADING;
   els.auditFilteredStatus.hidden = false;
   els.auditFilteredStatus.textContent = append
     ? 'Reading more filtered decisions…'
@@ -712,13 +715,13 @@ async function fetchFiltered(append) {
     a.filtered = append ? a.filtered.concat(data.items || []) : (data.items || []);
     a.filteredTotal = data.total || 0;
     a.filteredHasMore = !!data.has_more;
-    els.auditFilteredCard.dataset.state = a.filtered.length ? 'ready' : 'empty';
+    els.auditFilteredCard.dataset.state = a.filtered.length ? LOAD_PHASE.READY : LOAD_PHASE.EMPTY;
     els.auditFilteredStatus.hidden = true;
     renderFiltered();
     renderList();
   } catch (_) {
     if (request !== a.filteredRequest) return;
-    els.auditFilteredCard.dataset.state = previous ? 'stale' : 'error';
+    els.auditFilteredCard.dataset.state = previous ? LOAD_PHASE.STALE : LOAD_PHASE.ERROR;
     els.auditFilteredStatus.textContent = previous
       ? 'Showing the previous list · live data unavailable'
       : 'Filtered decisions are unavailable. Try again.';

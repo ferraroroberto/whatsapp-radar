@@ -64,6 +64,7 @@ from src.analysis.source_funnel import (
     ensure_source_funnel,
     source_funnels_dict,
     source_funnels_json,
+    sync_status_of,
 )
 from src.analysis.trace import write_trace
 from src.analysis.transcription import run_transcription_phase
@@ -76,11 +77,10 @@ from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
 from src.db.delivery_status import (
     DELIVERY_CLASSIFIER_OFFLINE,
-    DELIVERY_DRY_RUN,
-    DELIVERY_NONE,
     DELIVERY_OFFLINE,
     DELIVERY_SENT,
     run_delivery_ok,
+    withheld_status,
 )
 from src.db.sync import sync_sources
 from src.delivery.alert import send_alert
@@ -184,7 +184,7 @@ def _sync(
     outcome.messages_synced += delta.messages_added
     for result in synced.results:
         source_funnel = ensure_source_funnel(outcome.source_funnels, result.source)
-        source_funnel.sync_status = "success" if result.ok else "failed"
+        source_funnel.sync_status = sync_status_of(ok=result.ok)
         source_funnel.sync_error = result.error
         source_funnel.chats_synced = result.delta.chats_seen
         source_funnel.messages_synced = result.delta.messages_added
@@ -668,21 +668,14 @@ def _finish_scan(
     digest = build_digest(conn, run_id)
     outcome.digest = digest
 
-    delivered = False
-    if mode == "dry_run":
-        outcome.notification_status = DELIVERY_DRY_RUN
-    elif not deliver:
-        # The ``process`` verb's own ``--dry-run``: cursors already advanced
-        # above, but the digest is withheld rather than sent.
-        outcome.notification_status = (
-            DELIVERY_DRY_RUN if digest.has_actionable_items else DELIVERY_NONE
-        )
-    elif digest.has_actionable_items:
-        status, _ = deliver_digest(conn, config, run_id, digest)
-        outcome.notification_status = status
-        delivered = True
+    withheld = withheld_status(
+        dry_run=mode == "dry_run", deliver=deliver, has_actionable=digest.has_actionable_items
+    )
+    delivered = withheld is None
+    if withheld is None:
+        outcome.notification_status, _ = deliver_digest(conn, config, run_id, digest)
     else:
-        outcome.notification_status = DELIVERY_NONE
+        outcome.notification_status = withheld
 
     if abort_error is not None:
         outcome.aborted = True

@@ -210,4 +210,8 @@ def test_activity_view_gives_abandoned_its_own_badge() -> None:
     js = (Path(__file__).resolve().parents[2] / "app/webapp/static/activity.js").read_text(
         encoding="utf-8"
     )
-    assert "'abandoned'" in js and "statusChip('Abandoned'" in js
+    statuses = (Path(__file__).resolve().parents[2] / "app/webapp/static/statuses.js").read_text(
+        encoding="utf-8"
+    )
+    assert "ABANDONED: 'abandoned'" in statuses
+    assert "isAbandoned(item.status)) chips.push(statusChip('Abandoned'" in js

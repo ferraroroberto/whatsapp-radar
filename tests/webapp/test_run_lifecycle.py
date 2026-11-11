@@ -355,7 +355,9 @@ def test_pid_state_proves_a_finished_process_gone() -> None:
 def test_activity_chips_completed_with_errors_and_pending_is_not_running() -> None:
     static = REPO / "app/webapp/static"
     activity = (static / "activity.js").read_text(encoding="utf-8")
-    assert "'completed_with_errors'" in activity
-    assert "statusChip('With errors', 'attention')" in activity
+    assert "COMPLETED_WITH_ERRORS: 'completed_with_errors'" in (
+        static / "statuses.js"
+    ).read_text(encoding="utf-8")
+    assert "isCompletedWithErrors(item.status)) chips.push(statusChip('With errors'" in activity
     for name in ("execution.js", "family.js"):
         assert "'pending'" not in (static / name).read_text(encoding="utf-8")

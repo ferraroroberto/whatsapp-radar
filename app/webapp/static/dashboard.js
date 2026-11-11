@@ -16,6 +16,7 @@
  * via textContent only — never innerHTML. */
 
 import { els, state } from './state.js';
+import { LOAD_PHASE, isFailed, isRunning } from './statuses.js';
 import { fetchQuiet, jsonApi } from './api.js';
 import {
   actionRow, fmtLocalDateTime, fmtNum, fmtRelative, SOURCE_ICON, SOURCE_LABEL,
@@ -24,7 +25,7 @@ import {
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setTab } from './tabs.js';
 import { openRunInActivity, runRowFor } from './activity.js';
-import { fetchHealth, isRunning } from './execution.js';
+import { fetchHealth } from './execution.js';
 import { openPasskeys } from './config.js';
 import { onWebauthnChange } from './webauthn.js';
 import { icon } from './_vendored/icons/icons.js';
@@ -64,7 +65,7 @@ function glanceChips(source, c, live) {
   const chips = [];
   if (live === 'down') chips.push(statusChip('Offline', 'danger'));
   if (!c || !c.started_at) return chips;
-  if (c.status === 'failed') chips.push(statusChip('Failed', 'danger'));
+  if (isFailed(c.status)) chips.push(statusChip('Failed', 'danger'));
   else if (isRunning(c.status)) chips.push(statusChip('Running', 'neutral'));
   if (c.alerts > 0) {
     if (source === 'traffic') chips.push(statusChip(c.alerts + (c.alerts === 1 ? ' alert' : ' alerts'), 'attention'));
@@ -107,7 +108,7 @@ function glanceRow(source) {
 // The most severe exception across the sources, else one muted fact.
 function renderHeader() {
   const offline = GLANCE.find(function (s) { return liveness(s) === 'down'; });
-  const failed = GLANCE.find(function (s) { const c = card(s); return c && c.status === 'failed'; });
+  const failed = GLANCE.find(function (s) { const c = card(s); return c && isFailed(c.status); });
   const btn = els.dashStatus;
   const w = state.webauthn || {};
   let target = null;
@@ -141,7 +142,7 @@ function renderHeader() {
 // `ready` only once /api/dashboard has landed: the rows paint earlier with a
 // placeholder, and the phone-load probe's ready_selector keys on this state.
 function renderGlance() {
-  els.dashGlance.dataset.state = state.dashboard ? 'ready' : 'loading';
+  els.dashGlance.dataset.state = state.dashboard ? LOAD_PHASE.READY : LOAD_PHASE.LOADING;
   els.dashGlance.textContent = '';
   for (const source of GLANCE) els.dashGlance.appendChild(glanceRow(source));
   renderHeader();

@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import IO, TextIO, cast
 
 from app.webapp import runs
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, STATUS_RUNNING
 from src.runtime_files import open_for_write
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ def _open_record(verb: str, argv: list[str]) -> tuple[Path, IO[bytes]] | None:
         run_dir,
         kind=kind,
         run_id=run_dir.name,
-        status="running",
+        status=STATUS_RUNNING,
         started_at=runs.now_iso(),
         argv=argv,
         origin="cli",

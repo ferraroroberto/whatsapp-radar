@@ -53,6 +53,7 @@ The connector path for personal and group chats is a WhatsApp Web linked-device 
 | [`docs/webapp.md`](docs/webapp.md) | the admin PWA tab by tab, its endpoints, running it, logs, usage log, the Tailscale HTTPS cert |
 | [`docs/family-checks.md`](docs/family-checks.md) | the family checks and travel blocks in full — behaviour, every knob, and the rollout runbook |
 | [`docs/verification.md`](docs/verification.md) | e2e routing, the static ratchet, design capture, CI |
+| [`docs/status-vocabularies.md`](docs/status-vocabularies.md) | the declared lifecycle words (run, delivery, transcription), their owner modules and the copies the PWA and sidecar keep |
 | [`docs/architecture.mmd`](docs/architecture.mmd) | internal module map |
 
 ## Running offline (no personal data)

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from src.db.connection import _now, _rowid
+from src.db.delivery_status import DELIVERY_SENT, DELIVERY_STATUSES, require_send_status
 from src.process_liveness import pid_state
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,10 @@ class RunFunnel:
     notification_status: str
     transcriptions: int = 0
     source_funnel_json: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.notification_status not in DELIVERY_STATUSES:
+            raise ValueError(f"{self.notification_status!r} is not a delivery status")
 
     def assignments(self) -> dict[str, object]:
         return {
@@ -534,7 +539,8 @@ def actionable_items_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqli
 def record_notification(
     conn: sqlite3.Connection, run_id: int, channel: str, status: str, error: str | None = None
 ) -> int:
-    sent_at = _now() if status == "sent" else None
+    require_send_status(status)
+    sent_at = _now() if status == DELIVERY_SENT else None
     cur = conn.execute(
         "INSERT INTO notifications (run_id, channel, status, sent_at, error) "
         "VALUES (?, ?, ?, ?, ?)",

@@ -33,8 +33,6 @@ function notify() { for (const fn of listeners) fn(); }
 // together through setSwitch — the one write path).
 function stageOn(btn) { return btn.getAttribute('aria-checked') === 'true'; }
 
-export function isRunning(status) { return status === 'running'; }
-
 export function isBusy() {
   const ex = execState();
   return !!ex.active || ex.queue.length > 0 || firing;
@@ -446,7 +444,7 @@ function renderReconnect(s) {
     els.execReconnectBtn.textContent = 'Reconnect WhatsApp';
     els.execQr.hidden = true;
   }
-  els.execReconnectBtn.disabled = (s.state === 'connecting');
+  els.execReconnectBtn.disabled = s.linking;
 }
 
 async function reconnectSidecar() {

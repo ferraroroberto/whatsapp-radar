@@ -32,6 +32,8 @@ import { mkdirSync, appendFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { VOICE_STATUS } from "./voice-status.js";
+
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -239,11 +241,11 @@ async function appendMessage(m, sock) {
     try {
       const meta = await downloadVoiceAudio(m, sock, msgId, norm.audio);
       record.media_path = meta.relPath;
-      record.transcription_status = "pending";
+      record.transcription_status = VOICE_STATUS.PENDING;
       record.raw.voice = { seconds: meta.seconds, ptt: meta.ptt, mimetype: meta.mimetype };
     } catch (e) {
       console.error(`⚠️ Could not download voice note ${msgId}:`, e?.message || e);
-      record.transcription_status = "failed";
+      record.transcription_status = VOICE_STATUS.FAILED;
     }
   }
 

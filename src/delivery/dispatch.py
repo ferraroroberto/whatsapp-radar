@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.config import Config
+from src.db.delivery_status import DELIVERY_FAILED, DELIVERY_SENT, DELIVERY_SKIPPED
 from src.notify import Notifier, NotifierError, build_notifier
 
 
@@ -20,11 +21,11 @@ def dispatch(config: Config, send: Callable[[Notifier], None]) -> tuple[str, str
     try:
         notifier = build_notifier(config.notifier, config.telegram)
     except (NotifierError, ValueError) as exc:
-        return "failed", str(exc)
+        return DELIVERY_FAILED, str(exc)
     if notifier is None:
-        return "skipped", "no notifier (none)"
+        return DELIVERY_SKIPPED, "no notifier (none)"
     try:
         send(notifier)
     except NotifierError as exc:
-        return "failed", str(exc)
-    return "sent", None
+        return DELIVERY_FAILED, str(exc)
+    return DELIVERY_SENT, None

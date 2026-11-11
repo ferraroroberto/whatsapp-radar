@@ -22,7 +22,12 @@ def test_ready_selector_names_the_data_state_of_the_glance_card() -> None:
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     assert re.search(r'id="dashGlance"[^>]*data-state="loading"', index)
     dashboard = (STATIC / "dashboard.js").read_text(encoding="utf-8")
-    assert "els.dashGlance.dataset.state = state.dashboard ? 'ready' : 'loading'" in dashboard
+    assert (
+        "els.dashGlance.dataset.state = state.dashboard ? LOAD_PHASE.READY : LOAD_PHASE.LOADING"
+        in dashboard
+    )
+    statuses = (STATIC / "statuses.js").read_text(encoding="utf-8")
+    assert "READY: 'ready'" in statuses and "LOADING: 'loading'" in statuses
     assert "liClass: 'glance-row'" in dashboard
 
 

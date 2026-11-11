@@ -6,6 +6,8 @@
  * 09:43. These helpers parse the timestamp and format it in the browser's LOCAL
  * time zone, with a string-slice fallback for any value that won't parse. */
 
+import { SYNC_STATUS } from './statuses.js';
+
 function _pad(n) { return String(n).padStart(2, '0'); }
 
 // Per-kind display label and row glyph, so a run is named and drawn
@@ -275,7 +277,7 @@ export function renderSourceFunnels(box, sources) {
     const values = document.createElement('p');
     values.className = 'source-funnel-values';
     values.textContent = [
-      'sync ' + (f.sync_status || 'skipped'),
+      'sync ' + (f.sync_status || SYNC_STATUS.SKIPPED),
       (f.messages_synced || 0) + ' synced',
       (f.monitored_channels || 0) + ' monitored',
       (f.messages_checked || 0) + ' checked',
@@ -287,11 +289,11 @@ export function renderSourceFunnels(box, sources) {
     ].join(' · ');
     const explanation = document.createElement('p');
     explanation.className = 'source-funnel-values';
-    if (f.sync_status === 'failed') explanation.textContent = 'Connector failed; cached messages were held and no cursor advanced.';
+    if (f.sync_status === SYNC_STATUS.FAILED) explanation.textContent = 'Connector failed; cached messages were held and no cursor advanced.';
     else if (!f.monitored_channels) explanation.textContent = 'Nothing monitored, so no messages could enter Stage 1.';
     else if (!f.channels_with_delta) explanation.textContent = 'No new delta in monitored channels.';
     else if (f.stage1_rejected && !f.llm_calls) explanation.textContent = 'Stage 1 deterministically rejected every delta; the LLM was not called.';
-    else if (!f.messages_synced && f.sync_status === 'success') explanation.textContent = 'Sync succeeded with no new matching messages.';
+    else if (!f.messages_synced && f.sync_status === SYNC_STATUS.SUCCESS) explanation.textContent = 'Sync succeeded with no new matching messages.';
     else explanation.textContent = 'Source completed with the counters shown above.';
     card.append(title, values, explanation);
     box.appendChild(card);

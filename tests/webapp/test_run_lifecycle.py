@@ -73,6 +73,7 @@ def test_no_run_status_literal_is_left_in_the_pipeline_or_the_cli() -> None:
 # --- the guarded finaliser ----------------------------------------------------
 
 
+# state-machine-proof: run-lifecycle
 @pytest.mark.parametrize("first", ["abandoned", "completed"])
 def test_finalizer_refuses_to_overwrite_a_terminal_row(
     conn: sqlite3.Connection, first: str, caplog: pytest.LogCaptureFixture
@@ -354,7 +355,9 @@ def test_pid_state_proves_a_finished_process_gone() -> None:
 def test_activity_chips_completed_with_errors_and_pending_is_not_running() -> None:
     static = REPO / "app/webapp/static"
     activity = (static / "activity.js").read_text(encoding="utf-8")
-    assert "'completed_with_errors'" in activity
-    assert "statusChip('With errors', 'attention')" in activity
+    assert "COMPLETED_WITH_ERRORS: 'completed_with_errors'" in (
+        static / "statuses.js"
+    ).read_text(encoding="utf-8")
+    assert "isCompletedWithErrors(item.status)) chips.push(statusChip('With errors'" in activity
     for name in ("execution.js", "family.js"):
         assert "'pending'" not in (static / name).read_text(encoding="utf-8")

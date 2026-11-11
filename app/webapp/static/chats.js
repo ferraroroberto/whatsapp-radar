@@ -12,6 +12,7 @@
  * monitor toggle. All chat-derived text goes in via textContent. */
 
 import { els, state, CHATS_RENDER_CAP } from './state.js';
+import { LOAD_PHASE, VOICE_STATUS } from './statuses.js';
 import { jsonApi, readToken, toast } from './api.js';
 import { actionRow, fmtLocalDateTime, fmtNum, fmtRelative } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
@@ -74,7 +75,7 @@ function gmailSenderAddress(c) {
 }
 
 export async function fetchChats() {
-  state.tripwire.phase = 'loading';
+  state.tripwire.phase = LOAD_PHASE.LOADING;
   const results = await Promise.allSettled([
     jsonApi('/api/chats'),
     jsonApi('/api/chats/tripwire'),
@@ -87,9 +88,9 @@ export async function fetchChats() {
     state.tripwire.hits = data.hits || [];
     state.tripwire.windowDays = data.window_days || 7;
     state.tripwire.truncated = !!data.truncated;
-    state.tripwire.phase = state.tripwire.hits.length ? 'ready' : 'empty';
+    state.tripwire.phase = state.tripwire.hits.length ? LOAD_PHASE.READY : LOAD_PHASE.EMPTY;
   } else {
-    state.tripwire.phase = state.tripwire.hits.length ? 'stale' : 'error';
+    state.tripwire.phase = state.tripwire.hits.length ? LOAD_PHASE.STALE : LOAD_PHASE.ERROR;
   }
   render();
 }
@@ -178,7 +179,7 @@ function tripwireScopeNote() {
   const tw = state.tripwire;
   return 'Stage 1 only · last ' + tw.windowDays + ' days'
     + (tw.truncated ? ' · bounded scan' : '')
-    + (tw.phase === 'stale' ? ' · showing the last successful check' : '');
+    + (tw.phase === LOAD_PHASE.STALE ? ' · showing the last successful check' : '');
 }
 
 function tripwireHit(chatId) {
@@ -198,13 +199,13 @@ function renderTripwire() {
   tw.hits = hits;
   els.tripwireList.textContent = '';
 
-  if (!hits.length && tw.phase !== 'error') {
+  if (!hits.length && tw.phase !== LOAD_PHASE.ERROR) {
     els.tripwireCard.hidden = true;
     return;
   }
   els.tripwireCard.hidden = false;
-  els.tripwireMeta.hidden = tw.phase !== 'error';
-  if (tw.phase === 'error') {
+  els.tripwireMeta.hidden = tw.phase !== LOAD_PHASE.ERROR;
+  if (tw.phase === LOAD_PHASE.ERROR) {
     els.tripwireMeta.textContent = 'Could not check recent unmonitored chats.';
     return;
   }
@@ -302,7 +303,7 @@ async function setStatus(chat, status) {
       state.tripwire.hits = state.tripwire.hits.filter(function (hit) {
         return hit.id !== chat.id;
       });
-      if (!state.tripwire.hits.length) state.tripwire.phase = 'empty';
+      if (!state.tripwire.hits.length) state.tripwire.phase = LOAD_PHASE.EMPTY;
     }
     toast(status === 'monitored'
       ? (res.baselined ? 'Now monitoring — baselined to new messages.' : 'Now monitoring.')
@@ -537,10 +538,10 @@ function voicePlayer(id) {
 // What to show for a voice note: the transcript when done, else an honest label
 // for its transcription state (pending / failed / skipped / not enabled).
 function voiceText(m) {
-  if (m.transcription_status === 'done' && m.text) return m.text;
-  if (m.transcription_status === 'failed') return '[voice note — transcription failed]';
-  if (m.transcription_status === 'skipped_old') return '[voice note — not transcribed]';
-  if (m.transcription_status === 'pending') return '[voice note — awaiting transcription]';
+  if (m.transcription_status === VOICE_STATUS.DONE && m.text) return m.text;
+  if (m.transcription_status === VOICE_STATUS.FAILED) return '[voice note — transcription failed]';
+  if (m.transcription_status === VOICE_STATUS.SKIPPED_OLD) return '[voice note — not transcribed]';
+  if (m.transcription_status === VOICE_STATUS.PENDING) return '[voice note — awaiting transcription]';
   return m.text != null ? m.text : '[voice note]';
 }
 

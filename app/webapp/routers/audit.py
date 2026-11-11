@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
+from src.db.delivery_status import DELIVERY_OFFLINE
 from src.db.runs import FAMILY_KINDS
 
 router = APIRouter()
@@ -88,7 +89,10 @@ def _coverage_gaps(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     gaps: list[dict[str, Any]] = []
     offline_runs: list[sqlite3.Row] = []
     for row in rows:
-        offline = row["status"] == "failed" and row["notification_status"] == "offline"
+        offline = (
+            row["status"] == store.STATUS_FAILED
+            and row["notification_status"] == DELIVERY_OFFLINE
+        )
         if offline:
             offline_runs.append(row)
             continue

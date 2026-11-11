@@ -130,7 +130,7 @@ def _calendar_source(cfg: Any, recent_runs: list[sqlite3.Row]) -> dict[str, Any]
         (
             row["started_at"]
             for row in recent_runs
-            if row["kind"] == "calendar-scan" and row["status"] == "completed"
+            if row["kind"] == "calendar-scan" and row["status"] == store.STATUS_COMPLETED
         ),
         None,
     )

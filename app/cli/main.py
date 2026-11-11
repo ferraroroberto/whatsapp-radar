@@ -28,11 +28,16 @@ from app.cli import runlog, stack_watchdog
 from src.analysis.classifier import build_stage2_classifier
 from src.analysis.gmail_survey import run_gmail_survey
 from src.analysis.pipeline import Mode, scan, scan_outcome_to_dict
-from src.analysis.review import CLASSIFIER_OFFLINE_STATUS
 from src.config import Config, load_config
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
+from src.db.delivery_status import (
+    DELIVERY_FAILED,
+    DELIVERY_NONE,
+    DELIVERY_SKIPPED,
+    run_delivery_ok,
+)
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
 from src.db.runs import FAMILY_KINDS
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
@@ -139,8 +144,7 @@ def _cmd_review(conn: sqlite3.Connection, config: Config, dry_run: bool) -> int:
     _emit_result(scan_outcome_to_dict(outcome))
     return (
         1
-        if outcome.aborted
-        or outcome.notification_status in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+        if outcome.aborted or not run_delivery_ok(outcome.notification_status)
         else 0
     )
 
@@ -166,8 +170,7 @@ def _cmd_scan(
     return (
         1
         if outcome.aborted
-        or outcome.notification_status
-        in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+        or not run_delivery_ok(outcome.notification_status)
         or outcome.source_errors
         else 0
     )
@@ -245,10 +248,10 @@ def _deliver(
 ) -> tuple[str, int]:
     """Deliver a run's digest, recording the outcome. Returns (status, exit_code)."""
     status, detail = deliver_digest(conn, config, run_id, digest)
-    if status == "failed":
+    if status == DELIVERY_FAILED:
         print(f"Delivery failed (retry with 'wr notify'): {detail}", file=sys.stderr)
         return status, 1
-    if status == "skipped":
+    if status == DELIVERY_SKIPPED:
         print("Notifier is 'none' — digest recorded as skipped (set WR_NOTIFIER=telegram).",
               file=sys.stderr)
         return status, 0
@@ -267,7 +270,7 @@ def _cmd_notify(conn: sqlite3.Connection, config: Config, run_id: int | None) ->
     if not digest.has_actionable_items:
         _progress(f"notify: run {rid} has no actionable items — nothing to deliver")
         _emit_result(
-            {"kind": "notify", "ok": True, "run_id": rid, "notification_status": "none"}
+            {"kind": "notify", "ok": True, "run_id": rid, "notification_status": DELIVERY_NONE}
         )
         return 0
     _progress(f"▶ message starting — delivering digest for run {rid}")
@@ -276,7 +279,7 @@ def _cmd_notify(conn: sqlite3.Connection, config: Config, run_id: int | None) ->
     _emit_result(
         {
             "kind": "notify",
-            "ok": status != "failed",
+            "ok": status != DELIVERY_FAILED,
             "run_id": rid,
             "notification_status": status,
             "telegram_text": digest.to_telegram_text(),

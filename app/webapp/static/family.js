@@ -14,6 +14,7 @@
  * in via textContent/value only. */
 
 import { els, state } from './state.js';
+import { isFailed, isRunning } from './statuses.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
 import { fmtLocalDateTime, travelStatusLabel } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
@@ -836,7 +837,7 @@ async function pollSweep() {
   }
   const record = (data.runs || []).find(function (r) { return r.run_id === sweep.runId; });
   const active = !!(data.active && data.active.run_id === sweep.runId);
-  const running = active || (record && record.status === 'running');
+  const running = active || (record && isRunning(record.status));
   if (running || (!record && sweep.ticks < SWEEP_MISSING_TICKS)) {
     sweep.ticks += 1;
     scheduleSweepPoll();
@@ -869,7 +870,7 @@ async function finishSweep(record) {
   if (!record) {
     setSweep({ tone: 'error', message: 'The run left the queue but no record could be read — '
       + 'open the run in Activity to see what it did.' });
-  } else if (record.status === 'failed' || record.error) {
+  } else if (isFailed(record.status) || record.error) {
     // The record's own `error` is often empty for a webapp-launched run (the
     // captured output carries the detail), so always name where to go look.
     setSweep({ tone: 'error', message: 'The calendar sync failed'

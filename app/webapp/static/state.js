@@ -8,6 +8,8 @@
  * below; Settings is a modal, not a tab.
  */
 
+import { LOAD_PHASE } from './statuses.js';
+
 export const APP_PREFIX = 'wa-radar'; // localStorage namespace (token, theme, text size)
 export const TOKEN_KEY = APP_PREFIX + '.token';
 export const THEME_KEY = APP_PREFIX + '.theme';
@@ -26,7 +28,7 @@ export const state = {
   chatsSearch: '',
   tripwire: {
     hits: [],
-    phase: 'loading',  // 'loading' | 'ready' | 'empty' | 'stale' | 'error'
+    phase: LOAD_PHASE.LOADING,
     windowDays: 7,
     truncated: false,
   },

@@ -395,3 +395,33 @@ extensions = ["bat", "sh"]
 name   = "run-lifecycle"
 module = "src/db/runs.py"
 type   = "RUN_STATUSES"
+
+[[state_machines]]
+name   = "delivery-status"
+module = "src/db/delivery_status.py"
+type   = "DELIVERY_STATUSES"
+derive = "run_delivery_ok"
+
+[[state_machines]]
+name   = "transcription-status"
+module = "src/db/transcription_status.py"
+type   = "TRANSCRIPTION_STATUSES"
+derive = "awaiting_transcript"
+
+# The PWA's words are copies of the backend's (tests/webapp/test_status_vocabulary.py fails on
+# drift); LOAD_PHASE is its own: the data-state of a panel that loads data.
+[[state_machines]]
+name   = "run-status-ui"
+module = "app/webapp/static/statuses.js"
+type   = "RUN_STATUS"
+derive = "isRunning"
+
+[[state_machines]]
+name   = "load-phase"
+module = "app/webapp/static/statuses.js"
+type   = "LOAD_PHASE"
+
+[[state_machines]]
+name   = "voice-status-sidecar"
+module = "src/sidecar/voice-status.js"
+type   = "VOICE_STATUS"

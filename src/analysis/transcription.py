@@ -46,16 +46,18 @@ import requests
 
 from src.config import Config, TranscriptionConfig
 from src.db import store
+from src.db.transcription_status import (
+    TRANSCRIPTION_DONE,
+    TRANSCRIPTION_FAILED,
+    TRANSCRIPTION_SKIPPED_OLD,
+    awaiting_transcript,
+)
 from src.models import StoredMessage
 from src.pooled_http import SESSION as POOLED_SESSION
 from src.progress import Progress, emit
 from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
-
-# Statuses for a voice note that has been downloaded but not yet transcribed —
-# its real text is still pending, so it must not be analysed as a placeholder.
-_UNTRANSCRIBED = ("pending", "failed")
 
 # Maps ``(audio_path, language)`` to transcript text. Injectable so the scan phase
 # is testable with no network; the default implementation hits the hub. ``language``
@@ -126,7 +128,7 @@ def hold_back_untranscribed(messages: list[StoredMessage]) -> list[StoredMessage
         (
             m.id
             for m in messages
-            if m.transcription_status in _UNTRANSCRIBED and m.media_path
+            if awaiting_transcript(m.transcription_status) and m.media_path
         ),
         default=None,
     )
@@ -321,7 +323,7 @@ def _sweep_and_skip_stale(
         conn, within_days=window, failed_within_days=failed_window, now=now
     ):
         _delete_audio(buffer_dir, row["media_path"])
-        store.mark_transcription(conn, int(row["id"]), status="skipped_old")
+        store.mark_transcription(conn, int(row["id"]), status=TRANSCRIPTION_SKIPPED_OLD)
         outcome.skipped_old += 1
 
 
@@ -379,7 +381,7 @@ def run_transcription_phase(
             # (store.mark_transcription), so the note surfaces as its
             # "[voice note]" placeholder immediately and the cursor moves on.
             logger.warning("⚠️ voice note %s: audio file missing (%s)", msg_id, audio)
-            store.mark_transcription(conn, msg_id, status="skipped_old")
+            store.mark_transcription(conn, msg_id, status=TRANSCRIPTION_SKIPPED_OLD)
             outcome.skipped_old += 1
             continue
         language = _resolve_language(conn, cfg, int(row["chat_id"]), lang_cache)
@@ -401,12 +403,12 @@ def run_transcription_phase(
             break
         except Exception as exc:  # noqa: BLE001 — isolate: one failure can't block the rest
             logger.warning("⚠️ voice note %s transcription failed: %s", msg_id, exc)
-            store.mark_transcription(conn, msg_id, status="failed")
+            store.mark_transcription(conn, msg_id, status=TRANSCRIPTION_FAILED)
             outcome.failed += 1
             continue
         keep_media = retain_days > 0
         store.mark_transcription(
-            conn, msg_id, status="done", transcript=transcript, keep_media=keep_media
+            conn, msg_id, status=TRANSCRIPTION_DONE, transcript=transcript, keep_media=keep_media
         )
         if not keep_media:
             _delete_audio(buffer_dir, row["media_path"])

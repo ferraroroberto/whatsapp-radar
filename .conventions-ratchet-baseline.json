@@ -1,22 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/cli/main.py", "counts": {"state-literal": 6}},
-    {"key": "app/cli/runlog.py", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/routers/audit.py", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/routers/auth.py", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/routers/execution.py", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/runs.py", "counts": {"state-literal": 3}},
-    {"key": "app/webapp/static/activity.js", "counts": {"state-literal": 5}},
-    {"key": "app/webapp/static/chats.js", "counts": {"state-literal": 4}},
-    {"key": "app/webapp/static/dashboard.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/execution.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/family.js", "counts": {"state-literal": 2}},
-    {"key": "app/webapp/static/format.js", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/static/state.js", "counts": {"state-literal": 1}},
-    {"key": "src/analysis/pipeline.py", "counts": {"state-literal": 4}},
-    {"key": "src/analysis/transcription.py", "counts": {"state-literal": 2}},
-    {"key": "src/db/messages.py", "counts": {"state-literal": 1}},
-    {"key": "src/sidecar/index.js", "counts": {"state-literal": 2}}
-  ]
+  "entries": []
 }

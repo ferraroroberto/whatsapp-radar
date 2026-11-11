@@ -13,6 +13,11 @@ from datetime import UTC, datetime, timedelta
 
 from src.db.chats import family_member_ids
 from src.db.connection import _MESSAGE_COLUMNS, _now, _to_stored
+from src.db.transcription_status import (
+    TRANSCRIPTION_DONE,
+    TRANSCRIPTION_SKIPPED_OLD,
+    require_transcription_status,
+)
 from src.models import MessageRecord, StoredMessage, TaskExportContext
 
 
@@ -513,23 +518,29 @@ def mark_transcription(
     ``text`` and ``media_path`` intact so the next live scan retries. ``'skipped_old'``
     just clears ``media_path``.
     """
+    require_transcription_status(status, transcript)
     row = conn.execute(
         "SELECT text, raw_json FROM messages WHERE id = ?", (message_id,)
     ).fetchone()
     if row is None:
         return
-    if status == "done" and transcript is not None:
+    if status == TRANSCRIPTION_DONE and transcript is not None:
         media_clause = "" if keep_media else "media_path = NULL, "
         conn.execute(
-            f"UPDATE messages SET text = ?, transcription_status = 'done', "
+            f"UPDATE messages SET text = ?, transcription_status = ?, "
             f"{media_clause}summary = NULL, raw_json = ? WHERE id = ?",
-            (transcript, _merge_placeholder(row["raw_json"], row["text"]), message_id),
+            (
+                transcript,
+                TRANSCRIPTION_DONE,
+                _merge_placeholder(row["raw_json"], row["text"]),
+                message_id,
+            ),
         )
-    elif status == "skipped_old":
+    elif status == TRANSCRIPTION_SKIPPED_OLD:
         conn.execute(
-            "UPDATE messages SET transcription_status = 'skipped_old', media_path = NULL "
+            "UPDATE messages SET transcription_status = ?, media_path = NULL "
             "WHERE id = ?",
-            (message_id,),
+            (TRANSCRIPTION_SKIPPED_OLD, message_id),
         )
     else:  # 'failed' (or any non-terminal state) — keep text + audio for retry
         conn.execute(

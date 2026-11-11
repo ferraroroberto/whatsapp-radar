@@ -165,7 +165,11 @@ flowchart TB
     STORE["store.py — re-export facade over\nconnection/chats/messages/runs/dashboard/\nsync_log/tripwire/reprocess_support/retention.py"]
     SYNC["sync.py — ingest_chats / resync\n+ Gmail unmonitored-sender retention prune"]
     REPROCESS["reprocess.py — full rebuild, preserves operator state"]
+    STATUSES["runs.py / delivery_status.py / transcription_status.py —
+the declared status vocabularies, one owner each"]
   end
+  STORE --> STATUSES
+  DISPATCH --> STATUSES
   FANOUT --> SYNC
   SYNC --> STORE
   REPROCESS --> STORE

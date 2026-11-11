@@ -1,9 +1,6 @@
 {
   "version": 1,
   "entries": [
-    {"key": "app/cli/runlog.py", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/routers/execution.py", "counts": {"state-literal": 1}},
-    {"key": "app/webapp/runs.py", "counts": {"state-literal": 3}},
     {"key": "app/webapp/static/activity.js", "counts": {"state-literal": 5}},
     {"key": "app/webapp/static/chats.js", "counts": {"state-literal": 4}},
     {"key": "app/webapp/static/dashboard.js", "counts": {"state-literal": 2}},

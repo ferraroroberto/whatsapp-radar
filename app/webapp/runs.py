@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import IO, Any
 
 from src.atomic_write import atomic_write_text
+from src.db.runs import STATUS_COMPLETED, STATUS_FAILED, STATUS_RUNNING
 from src.paths import PROJECT_ROOT
 from src.runresult import parse_result, strip_result_line
 from src.runtime_files import make_dirs, open_for_write
@@ -322,7 +323,7 @@ def prune_runs(budget_s: float | None = None) -> None:
                 continue
             run_dir = kind_dir / name
             record = read_run(run_dir)
-            if record.get("status") == "running" and not _is_stale_running(run_dir, record):
+            if record.get("status") == STATUS_RUNNING and not _is_stale_running(run_dir, record):
                 continue
             try:
                 shutil.rmtree(run_dir)
@@ -381,7 +382,7 @@ def start_run(
             run_dir,
             kind=kind,
             run_id=rid,
-            status="running",
+            status=STATUS_RUNNING,
             started_at=now_iso(),
             argv=argv_tail,
             origin="webapp",
@@ -414,7 +415,7 @@ def start_run(
         except OSError as exc:
             log_fh.close()
             write_run_json(
-                run_dir, status="failed", finished_at=now_iso(), error=f"spawn failed: {exc}"
+                run_dir, status=STATUS_FAILED, finished_at=now_iso(), error=f"spawn failed: {exc}"
             )
             raise
 
@@ -442,7 +443,7 @@ def finalize_record(run_dir: Path, exit_code: int | None) -> None:
     """
     result = parse_result(read_output_tail(run_dir))
     fields: dict[str, Any] = {
-        "status": "completed" if exit_code == 0 else "failed",
+        "status": STATUS_COMPLETED if exit_code == 0 else STATUS_FAILED,
         "exit_code": exit_code,
         "finished_at": now_iso(),
     }

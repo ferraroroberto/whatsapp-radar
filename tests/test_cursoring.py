@@ -9,9 +9,9 @@ from pathlib import Path
 from src.analysis.classifier import ClassificationOutcome, ClassifierUnavailable, StubClassifier
 from src.analysis.contract import ContractError
 from src.analysis.pipeline import scan
-from src.analysis.review import CLASSIFIER_OFFLINE_STATUS
 from src.config import Config, HubConfig, TelegramConfig
 from src.db import store
+from src.delivery.status import DELIVERY_CLASSIFIER_OFFLINE
 from src.models import StoredMessage
 from tests.helpers import append_message, chat_id_by_source
 
@@ -191,12 +191,12 @@ def test_review_aborts_and_finalizes_run_when_classifier_is_unreachable(
     outcome = _review(ingested_conn, tmp_path, UnreachableClassifier())
 
     assert calls == 1  # stopped once, not once per monitored chat
-    assert outcome.notification_status == CLASSIFIER_OFFLINE_STATUS
+    assert outcome.notification_status == DELIVERY_CLASSIFIER_OFFLINE
     assert outcome.errors and outcome.errors[0][0] == chat_id
     run = store.review_run(ingested_conn, outcome.run_id)
     assert run is not None
     assert run["status"] == "failed"
-    assert run["notification_status"] == CLASSIFIER_OFFLINE_STATUS
+    assert run["notification_status"] == DELIVERY_CLASSIFIER_OFFLINE
 
     # Cursors held: a recovered hub reprocesses the whole backlog next run.
     assert ingested_conn.execute(

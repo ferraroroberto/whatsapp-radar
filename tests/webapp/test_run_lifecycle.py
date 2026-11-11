@@ -73,6 +73,7 @@ def test_no_run_status_literal_is_left_in_the_pipeline_or_the_cli() -> None:
 # --- the guarded finaliser ----------------------------------------------------
 
 
+# state-machine-proof: run-lifecycle
 @pytest.mark.parametrize("first", ["abandoned", "completed"])
 def test_finalizer_refuses_to_overwrite_a_terminal_row(
     conn: sqlite3.Connection, first: str, caplog: pytest.LogCaptureFixture

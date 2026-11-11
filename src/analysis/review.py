@@ -26,11 +26,6 @@ from src.delivery.alert import send_alert
 from src.models import StoredMessage
 from src.progress import Progress, emit
 
-# Funnel/notification status recorded when a run stops because Stage 2 could not
-# reach the hub. Distinct from ``"offline"`` (the *source* was unreachable) so the
-# audit trail names which end of the pipeline failed.
-CLASSIFIER_OFFLINE_STATUS = "classifier_offline"
-
 
 def send_classifier_abort_alert(
     config: Config,

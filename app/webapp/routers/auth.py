@@ -21,6 +21,7 @@ from app.webapp.middleware import is_pc_itself
 from app.webapp.routers._helpers import maybe_json
 from src.config import load_config
 from src.delivery.alert import send_alert
+from src.delivery.status import DELIVERY_FAILED
 from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
 from src.paths import PROJECT_ROOT
 from src.runtime_files import file_handler, make_dirs
@@ -62,7 +63,7 @@ def _send_login_alert(alert: LockoutAlert) -> None:
     def send() -> None:
         # Config is read here, not at boot, so the current chat id and token apply.
         status, detail = send_alert(load_config(), text)
-        if status == "failed":
+        if status == DELIVERY_FAILED:
             logger.warning(f"⚠️  login alert not delivered: {detail}")
 
     threading.Thread(target=send, name="login-alert", daemon=True).start()

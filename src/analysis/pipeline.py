@@ -52,7 +52,6 @@ from src.analysis.reminders import (
     is_eligible,
 )
 from src.analysis.review import (
-    CLASSIFIER_OFFLINE_STATUS,
     advance_family_cursors,
     hold_back_if_transcribing,
     note_delta_funnel,
@@ -78,6 +77,14 @@ from src.db import store
 from src.db.sync import sync_sources
 from src.delivery.alert import send_alert
 from src.delivery.digest import deliver_digest
+from src.delivery.status import (
+    DELIVERY_CLASSIFIER_OFFLINE,
+    DELIVERY_DRY_RUN,
+    DELIVERY_NONE,
+    DELIVERY_OFFLINE,
+    DELIVERY_SENT,
+    run_delivery_ok,
+)
 from src.models import StoredMessage
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
@@ -205,7 +212,7 @@ def _abort_offline(
     and best-effort alerts the notification channel so a scheduled run that would
     otherwise look green still reaches the operator.
     """
-    outcome.notification_status = "offline"
+    outcome.notification_status = DELIVERY_OFFLINE
     outcome.errors.append((0, str(exc)))
     emit(progress, f"✗ aborted — all enabled sources offline: {exc}")
     alert_status, _ = send_alert(
@@ -226,7 +233,7 @@ def _abort_offline(
             stage1_passed=0,
             stage2_llm_calls=0,
             actionable=0,
-            notification_status="offline",
+            notification_status=DELIVERY_OFFLINE,
             source_funnel_json=source_funnels_json(outcome.source_funnels),
         ),
     )
@@ -310,7 +317,7 @@ def _run_tripwire(
         "Chats worth monitoring to review and promote them.",
     )
     outcome.tripwire_nudge_status = status
-    if status == "sent":
+    if status == DELIVERY_SENT:
         store.mark_tripwire_nudge_sent(conn, now.isoformat(timespec="seconds"))
         emit(progress, "• tripwire weekly nudge: sent")
     else:
@@ -663,22 +670,24 @@ def _finish_scan(
 
     delivered = False
     if mode == "dry_run":
-        outcome.notification_status = "dry_run"
+        outcome.notification_status = DELIVERY_DRY_RUN
     elif not deliver:
         # The ``process`` verb's own ``--dry-run``: cursors already advanced
         # above, but the digest is withheld rather than sent.
-        outcome.notification_status = "dry_run" if digest.has_actionable_items else "none"
+        outcome.notification_status = (
+            DELIVERY_DRY_RUN if digest.has_actionable_items else DELIVERY_NONE
+        )
     elif digest.has_actionable_items:
         status, _ = deliver_digest(conn, config, run_id, digest)
         outcome.notification_status = status
         delivered = True
     else:
-        outcome.notification_status = "none"
+        outcome.notification_status = DELIVERY_NONE
 
     if abort_error is not None:
         outcome.aborted = True
         if not delivered:
-            outcome.notification_status = CLASSIFIER_OFFLINE_STATUS
+            outcome.notification_status = DELIVERY_CLASSIFIER_OFFLINE
         send_classifier_abort_alert(
             config, abort_error, unanalysed or [], progress=progress
         )
@@ -862,8 +871,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
     return {
         "kind": "process" if outcome.mode == "process" else "scan",
         "ok": (
-            outcome.notification_status
-            not in ("failed", "offline", CLASSIFIER_OFFLINE_STATUS)
+            run_delivery_ok(outcome.notification_status)
             and not outcome.aborted
             and not outcome.source_errors
         ),

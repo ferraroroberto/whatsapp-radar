@@ -398,6 +398,6 @@ type   = "RUN_STATUSES"
 
 [[state_machines]]
 name   = "delivery-status"
-module = "src/delivery/status.py"
+module = "src/db/delivery_status.py"
 type   = "DELIVERY_STATUSES"
 derive = "run_delivery_ok"

@@ -25,8 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
+from src.db.delivery_status import DELIVERY_OFFLINE
 from src.db.runs import FAMILY_KINDS
-from src.delivery.status import DELIVERY_OFFLINE
 
 router = APIRouter()
 

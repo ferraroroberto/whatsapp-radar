@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.config import Config
-from src.delivery.status import DELIVERY_FAILED, DELIVERY_SENT, DELIVERY_SKIPPED
+from src.db.delivery_status import DELIVERY_FAILED, DELIVERY_SENT, DELIVERY_SKIPPED
 from src.notify import Notifier, NotifierError, build_notifier
 
 

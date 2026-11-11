@@ -11,7 +11,7 @@ from src.analysis.contract import ContractError
 from src.analysis.pipeline import scan
 from src.config import Config, HubConfig, TelegramConfig
 from src.db import store
-from src.delivery.status import DELIVERY_CLASSIFIER_OFFLINE
+from src.db.delivery_status import DELIVERY_CLASSIFIER_OFFLINE
 from src.models import StoredMessage
 from tests.helpers import append_message, chat_id_by_source
 

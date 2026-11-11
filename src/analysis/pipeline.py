@@ -74,10 +74,7 @@ from src.connector.base import ConnectorStatus, MessageConnector
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.preflight import ConnectorOffline, preflight
 from src.db import store
-from src.db.sync import sync_sources
-from src.delivery.alert import send_alert
-from src.delivery.digest import deliver_digest
-from src.delivery.status import (
+from src.db.delivery_status import (
     DELIVERY_CLASSIFIER_OFFLINE,
     DELIVERY_DRY_RUN,
     DELIVERY_NONE,
@@ -85,6 +82,9 @@ from src.delivery.status import (
     DELIVERY_SENT,
     run_delivery_ok,
 )
+from src.db.sync import sync_sources
+from src.delivery.alert import send_alert
+from src.delivery.digest import deliver_digest
 from src.models import StoredMessage
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item

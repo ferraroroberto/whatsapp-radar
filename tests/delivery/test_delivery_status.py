@@ -7,7 +7,7 @@ import sqlite3
 import pytest
 
 from src.db import store
-from src.delivery.status import (
+from src.db.delivery_status import (
     DELIVERY_CLASSIFIER_OFFLINE,
     DELIVERY_DRY_RUN,
     DELIVERY_FAILED,

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from src.db.connection import _now, _rowid
-from src.delivery.status import DELIVERY_SENT, DELIVERY_STATUSES, require_send_status
+from src.db.delivery_status import DELIVERY_SENT, DELIVERY_STATUSES, require_send_status
 from src.process_liveness import pid_state
 
 logger = logging.getLogger(__name__)

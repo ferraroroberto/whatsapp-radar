@@ -837,3 +837,27 @@ class _StaticConnector:
 
     def stop(self) -> None:
         return None
+
+
+# state-machine-proof: transcription-status
+def test_a_transcription_write_outside_the_declared_statuses_is_refused(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    chat_id = store.upsert_chat(conn, ChatRecord(source_chat_id="c-v", display_name="Class 4A"))
+    _voice_note(conn, chat_id, msg_id="v1", buffer_dir=tmp_path, when=datetime.now(UTC))
+    row_id = int(conn.execute("SELECT id FROM messages").fetchone()["id"])
+
+    with pytest.raises(ValueError):
+        store.mark_transcription(conn, row_id, status="bogus")
+    with pytest.raises(ValueError):  # 'done' without its transcript would read as transcribed
+        store.mark_transcription(conn, row_id, status="done")
+
+    row = conn.execute("SELECT transcription_status, text FROM messages").fetchone()
+    assert (row["transcription_status"], row["text"]) == ("pending", "[voice note]")
+
+
+def test_only_pending_and_failed_notes_are_awaiting_a_transcript() -> None:
+    from src.db.transcription_status import TRANSCRIPTION_STATUSES, awaiting_transcript
+
+    assert {s for s in TRANSCRIPTION_STATUSES if awaiting_transcript(s)} == {"pending", "failed"}
+    assert awaiting_transcript(None) is False

@@ -401,3 +401,9 @@ name   = "delivery-status"
 module = "src/db/delivery_status.py"
 type   = "DELIVERY_STATUSES"
 derive = "run_delivery_ok"
+
+[[state_machines]]
+name   = "transcription-status"
+module = "src/db/transcription_status.py"
+type   = "TRANSCRIPTION_STATUSES"
+derive = "awaiting_transcript"

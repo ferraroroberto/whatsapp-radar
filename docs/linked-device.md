@@ -71,4 +71,4 @@ The open questions when this connector was designed, answered by the implementat
 
 - History depth is bounded by what WhatsApp syncs to a freshly linked device; very old history may be unavailable.
 - Group sender labels come from `pushName`, falling back to a humanized participant JID when a history-synced message carries none; they are local-only and never committed.
-- The sidecar is a long-running process. For unattended use it is supervised via App Launcher (see [`bootstrapping.md`](bootstrapping.md) Step 7); started by hand it is `cd sidecar && npm start`.
+- The sidecar is a long-running process. For unattended use it is supervised via App Launcher (see [`bootstrapping.md`](bootstrapping.md) Step 7); started by hand it is `cd src/sidecar && npm start`.

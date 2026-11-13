@@ -87,7 +87,7 @@ export function familyKindCells(kind, payload) {
   }
   const cells = [
     { label: 'Conflicts', value: (p.conflicts || []).length },
-    { label: 'Missing loc.', value: (p.missing_locations || p.unknown_locations || []).length },
+    { label: 'Missing loc.', value: (p.missing_locations || []).length },
     { label: 'Status', value: p.status },
   ];
   return cells.concat(travelBlockCells(p.travel_blocks));

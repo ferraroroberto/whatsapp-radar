@@ -27,6 +27,7 @@ from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
 from src.db.delivery_status import DELIVERY_OFFLINE
 from src.db.runs import FAMILY_KINDS
+from src.family.scan_summary import normalize_scan_summary
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ def _run_list_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": int(row["id"]),
         "kind": row["kind"],
-        "summary": loads_json_column(row["summary_json"]),
+        "summary": normalize_scan_summary(loads_json_column(row["summary_json"])),
         "mode": row["mode"],
         "status": row["status"],
         "params": loads_json_column(row["params_json"]),

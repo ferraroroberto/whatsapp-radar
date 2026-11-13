@@ -39,6 +39,7 @@ from src.connector.gmail import GmailConnector
 from src.db import store
 from src.db.runs import FAMILY_KINDS
 from src.demand_snapshot import DemandSnapshot
+from src.family.scan_summary import normalize_scan_summary
 
 router = APIRouter()
 
@@ -378,7 +379,7 @@ def _db_run_record(row: sqlite3.Row) -> dict[str, Any]:
     rid = int(row["id"])
     kind = row["kind"]
     if kind in FAMILY_KINDS:
-        result = loads_json_column(row["summary_json"])
+        result = normalize_scan_summary(loads_json_column(row["summary_json"]))
     else:
         result = {
             "kind": kind,

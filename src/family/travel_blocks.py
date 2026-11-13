@@ -91,7 +91,6 @@ from src.family.travel_blocks_pricing import (
     price_legs,
 )
 from src.family.travel_blocks_reconcile import (
-    _PROTECT_DETAIL,
     DELETE_REASON_DUPLICATE,
     DELETE_REASON_ORPHANED,
     DELETE_REASON_REPLACED,
@@ -109,6 +108,7 @@ from src.family.travel_blocks_reconcile import (
     parse_existing_block,
     reconcile,
 )
+from src.family.travel_blocks_report import plan_lines
 from src.traffic import compute_route
 
 logger = logging.getLogger(__name__)
@@ -841,72 +841,15 @@ def empty_plan(status: str, dry_run: bool) -> TravelBlockPlan:
 
 
 def log_plan(plan: TravelBlockPlan, *, log: logging.Logger | None = None) -> None:
-    """Log the complete plan at INFO — one line per leg, plus a counted summary.
+    """Log the complete plan — one line per leg, plus a counted summary.
 
-    The per-leg lines are the rehearsal required before any live write is
-    allowed: origins, destinations, minutes and time boxes, readable straight
-    from the run's output log. Unpriced legs are logged at WARNING with their
-    reason so they can never be mistaken for legs that needed no block.
+    The lines come from :func:`~src.family.travel_blocks_report.plan_lines`, the
+    same builder the CLI prints from the persisted payload. They are the
+    rehearsal required before any live write is allowed: origins, destinations,
+    minutes and time boxes, readable straight from the run's output log. Unpriced
+    legs log at WARNING so they can never be mistaken for legs that needed no
+    block.
     """
     out = log or logger
-    if plan.status != STATUS_OK:
-        out.info("ℹ️ travel blocks: %s — no plan computed, no Routes calls", plan.status)
-        return
-    for leg in plan.adds:
-        out.info(
-            "ℹ️ travel block [add] %s %s — “%s”: %s → %s, %s-%s (%d min)",
-            leg.person,
-            leg.leg,
-            plan.summary_of(leg.calendar_id, leg.source_event_id),
-            leg.origin,
-            leg.destination,
-            leg.start.strftime("%a %d %b %H:%M"),
-            leg.end.strftime("%H:%M"),
-            leg.minutes,
-        )
-    for pending in plan.deletes:
-        out.info(
-            "ℹ️ travel block [delete: %s] %s on %s — %s leg of source event %s (starts %s)",
-            pending.reason,
-            pending.block.event_id,
-            pending.block.calendar_id,
-            pending.block.leg or "?",
-            pending.block.source_event_id or "?",
-            pending.block.start or "?",
-        )
-    for spared in plan.protected:
-        block = spared.block
-        out.info(
-            "ℹ️ travel block [protected: %s] %s on %s — %s leg of source event %s (starts %s) "
-            "left exactly as it is: %s, and a fact this sweep did not establish is never "
-            "applied as a delete",
-            spared.reason,
-            block.event_id,
-            block.calendar_id,
-            block.leg or "?",
-            block.source_event_id or "?",
-            block.start or "?",
-            _PROTECT_DETAIL.get(spared.reason, "nothing this sweep established says it is stale"),
-        )
-    for failure in plan.failures:
-        out.warning(
-            "⚠️ travel block unpriced (%s) %s %s — “%s”: %s. No block planned: this is a "
-            "failure to establish the drive, not a decision that none is needed",
-            failure.reason,
-            failure.person,
-            failure.leg,
-            plan.summary_of(failure.calendar_id, failure.source_event_id),
-            failure.detail,
-        )
-    out.info(
-        "%s travel blocks: %d add(s), %d delete(s), %d kept, %d left alone, %d unpriced leg(s), "
-        "%d Routes call(s)%s",
-        "⚠️" if plan.failures else "✅",
-        len(plan.adds),
-        len(plan.deletes),
-        len(plan.keeps),
-        len(plan.protected),
-        len(plan.failures),
-        plan.routes_calls,
-        " [dry-run]" if plan.dry_run else "",
-    )
+    for line in plan_lines(plan.to_payload()):
+        out.log(line.level, line.text)

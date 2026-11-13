@@ -70,6 +70,11 @@ from src.family.travel_blocks import (
     travel_block_horizon,
     travel_block_listing_end,
 )
+from src.family.travel_blocks_model import (
+    NOT_WRITABLE,
+    WRITABLE,
+    WRITE_CAPABILITY_UNKNOWN,
+)
 from src.runtime_files import make_dirs, save_text
 from src.traffic import compute_route
 
@@ -77,13 +82,9 @@ logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------- write capability
 
-#: The three states a per-calendar write-capability probe can end in. ``UNKNOWN``
-#: is not a shade of either other one: an unresolved probe is not permission, and
-#: it is not a refusal either. It is skipped like a refusal and *reported* like
-#: the unestablished fact it is (global ``CLAUDE.md``).
-WRITABLE = "writable"
-NOT_WRITABLE = "not_writable"
-WRITE_CAPABILITY_UNKNOWN = "unknown"
+# The three per-calendar write-capability states (``WRITABLE`` / ``NOT_WRITABLE`` /
+# ``WRITE_CAPABILITY_UNKNOWN``) live in the model layer, where the report that
+# prints them can reach them; they stay importable from here.
 
 #: Google's ``accessRole`` values that permit event creation on a calendar.
 _WRITING_ROLES = frozenset({"owner", "writer"})

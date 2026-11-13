@@ -39,6 +39,14 @@ MARKER_FILTER = f"{MARKER_KEY}={MARKER_VALUE}"
 #: every existing block's stored hash mismatch and the reconcile re-issues it.
 SCHEMA_VERSION = "1"
 
+#: The three states a per-calendar write-capability probe can end in. ``UNKNOWN``
+#: is not a shade of either other one: an unresolved probe is not permission, and
+#: it is not a refusal either. It is skipped like a refusal and *reported* like
+#: the unestablished fact it is (global ``CLAUDE.md``).
+WRITABLE = "writable"
+NOT_WRITABLE = "not_writable"
+WRITE_CAPABILITY_UNKNOWN = "unknown"
+
 LEG_OUTBOUND = "outbound"
 LEG_RETURN = "return"
 

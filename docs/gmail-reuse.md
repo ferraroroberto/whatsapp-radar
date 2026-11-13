@@ -55,7 +55,7 @@ First complete the Google Cloud registration in [`gmail-bootstrap.md`](gmail-boo
 From the consumer application's root, naming the package through its parent (`src` here):
 
 ```powershell
-python -m src.gmail_readonly.oauth `
+.\.venv\Scripts\python.exe -m src.gmail_readonly.oauth `
   --credentials auth\gmail\credentials.json `
   --token auth\gmail\token.json
 ```
@@ -110,7 +110,7 @@ git -C E:\automation\whatsapp-radar archive <commit-sha> src/gmail_readonly src/
 Copy `tests/test_gmail_readonly.py` separately and run it in the consumer:
 
 ```powershell
-python -m pytest tests\test_gmail_readonly.py
+.\.venv\Scripts\python.exe -m pytest tests\test_gmail_readonly.py
 ```
 
 To prove the consumer has not drifted, compare both with the canonical checkout:

@@ -21,6 +21,7 @@ from app.webapp.server import create_app
 from src.db import store
 from src.models import ChatRecord, MessageRecord
 from src.webapp_config import WebappConfig
+from tests.helpers import insert_message
 
 LOOPBACK = ("127.0.0.1", 5555)
 REMOTE = ("203.0.113.5", 5555)
@@ -41,7 +42,7 @@ def _seed(conn: sqlite3.Connection) -> tuple[int, int]:
     store.set_chat_status(conn, mon, "monitored")
 
     for i in range(3):
-        store.insert_message(
+        insert_message(
             conn,
             mon,
             MessageRecord(
@@ -52,7 +53,7 @@ def _seed(conn: sqlite3.Connection) -> tuple[int, int]:
             ),
         )
     for i in range(2):
-        store.insert_message(
+        insert_message(
             conn,
             disc,
             MessageRecord(
@@ -90,7 +91,7 @@ def test_recent_messages_limit_and_order(conn: sqlite3.Connection) -> None:
         conn, ChatRecord(source_chat_id="c", display_name="C", chat_type="group")
     )
     for i in range(5):
-        store.insert_message(
+        insert_message(
             conn,
             chat,
             MessageRecord(
@@ -111,7 +112,7 @@ def test_recent_messages_keyset_pagination(conn: sqlite3.Connection) -> None:
         conn, ChatRecord(source_chat_id="c", display_name="C", chat_type="group")
     )
     for i in range(5):
-        store.insert_message(
+        insert_message(
             conn,
             chat,
             MessageRecord(
@@ -204,7 +205,7 @@ def test_tripwire_endpoint_surfaces_recent_discovered_matches(
     chat_id = store.upsert_chat(
         conn, ChatRecord(source_chat_id="candidate", display_name="Class reminders")
     )
-    store.insert_message(
+    insert_message(
         conn,
         chat_id,
         MessageRecord(
@@ -256,7 +257,7 @@ def test_gmail_history_exposes_only_safe_email_fields(tmp_path: Path) -> None:
         conn,
         ChatRecord("sender-example", "School Updates", chat_type="email", source="gmail"),
     )
-    store.insert_message(
+    insert_message(
         conn,
         channel,
         MessageRecord(
@@ -295,8 +296,7 @@ def _seed_voice(conn: sqlite3.Connection, buffer: Path, *, media_path: str | Non
     row retains its path (playable). ``None`` models a swept/never-downloaded note.
     """
     chat = store.upsert_chat(conn, ChatRecord(source_chat_id="v", display_name="Class 4A Group"))
-    # insert_messages (plural) persists transcription_status + media_path; the
-    # singular insert_message omits them.
+    # insert_messages persists transcription_status + media_path.
     store.insert_messages(
         conn,
         chat,

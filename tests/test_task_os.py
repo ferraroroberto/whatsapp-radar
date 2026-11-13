@@ -20,6 +20,7 @@ from src.db import store
 from src.models import ChatRecord, MessageRecord, TaskExportContext
 from src.task_os import client as task_os_client
 from src.webapp_config import WebappConfig
+from tests.helpers import insert_message
 
 LOOPBACK = ("127.0.0.1", 5555)
 
@@ -117,12 +118,12 @@ def _seed_db(db: Path) -> dict[str, int]:
     chat = store.upsert_chat(
         conn, ChatRecord(source_chat_id="c", display_name="Class 4A Group", chat_type="group")
     )
-    store.insert_message(
+    insert_message(
         conn, chat,
         MessageRecord(source_message_id="m1", message_timestamp="2026-06-10T10:00:00+00:00",
                       text="Please bring the signed form tomorrow.", sender_label="Teacher"),
     )
-    store.insert_message(
+    insert_message(
         conn, chat,
         MessageRecord(source_message_id="m2", message_timestamp="2026-06-10T10:01:00+00:00",
                       text=None, sender_label="Parent", message_type="voice"),

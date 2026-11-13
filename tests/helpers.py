@@ -14,12 +14,17 @@ from src.db import store
 from src.models import ChatRecord, MessageRecord
 
 
+def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:
+    """Insert one message idempotently; True if a new row was created."""
+    return store.insert_messages(conn, chat_id, [msg]) > 0
+
+
 def ingest_all(conn: sqlite3.Connection, connector: FixtureConnector) -> None:
     connector.connect()
     for chat in connector.list_chats():
         chat_id = store.upsert_chat(conn, chat)
         for msg in connector.fetch_messages(chat.source_chat_id):
-            store.insert_message(conn, chat_id, msg)
+            insert_message(conn, chat_id, msg)
 
 
 def chat_id_by_source(conn: sqlite3.Connection, source_chat_id: str) -> int:
@@ -44,7 +49,7 @@ def append_message(
     whose send-time predates it).
     """
     chat_id = chat_id_by_source(conn, source_chat_id)
-    store.insert_message(
+    insert_message(
         conn,
         chat_id,
         MessageRecord(

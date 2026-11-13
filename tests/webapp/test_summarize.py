@@ -19,6 +19,7 @@ from src.analysis import summarize as summarize_client
 from src.db import store
 from src.models import ChatRecord, MessageRecord
 from src.webapp_config import WebappConfig
+from tests.helpers import insert_message
 
 LOOPBACK = ("127.0.0.1", 5555)
 
@@ -84,12 +85,12 @@ def _seed_db(db: Path) -> dict[str, int]:
     chat = store.upsert_chat(
         conn, ChatRecord(source_chat_id="c", display_name="Class 4A Group", chat_type="group")
     )
-    store.insert_message(
+    insert_message(
         conn, chat,
         MessageRecord(source_message_id="m1", message_timestamp="2026-06-10T10:00:00+00:00",
                       text=_LONG, sender_label="Teacher"),
     )
-    store.insert_message(
+    insert_message(
         conn, chat,
         MessageRecord(source_message_id="m2", message_timestamp="2026-06-10T10:01:00+00:00",
                       text=_SHORT, sender_label="Parent"),
@@ -229,7 +230,7 @@ def test_message_summary_context_none_for_missing_and_blank_text(tmp_path: Path)
         chat = store.upsert_chat(
             conn, ChatRecord(source_chat_id="c", display_name="Class 4A Group")
         )
-        store.insert_message(
+        insert_message(
             conn, chat,
             MessageRecord(source_message_id="blank", message_timestamp="2026-06-10T10:00:00+00:00",
                           text="   ", sender_label="Parent"),

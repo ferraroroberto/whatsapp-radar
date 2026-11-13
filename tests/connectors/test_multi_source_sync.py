@@ -17,6 +17,7 @@ from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.db.sync import sync_sources
 from src.models import ChatRecord, MessageRecord, StoredMessage
+from tests.helpers import insert_message
 
 # A fixed, small offset from "now" rather than a hardcoded absolute past
 # timestamp: sync_sources's default Gmail retention prune (30 days) is
@@ -210,7 +211,7 @@ def test_failed_source_is_logged_and_its_cursor_does_not_advance(
         ),
     )
     store.set_chat_status(conn, gmail_id, "monitored")
-    store.insert_message(
+    insert_message(
         conn,
         gmail_id,
         MessageRecord(

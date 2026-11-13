@@ -22,7 +22,7 @@ from src.db.reprocess import reprocess
 from src.db.sync import resync
 from src.models import ChatRecord, MessageRecord
 from src.webapp_config import WebappConfig
-from tests.helpers import chat_id_by_source, review
+from tests.helpers import chat_id_by_source, insert_message, review
 
 LOOPBACK = ("127.0.0.1", 5555)
 
@@ -167,7 +167,7 @@ def _seed_family_db(db: Path) -> tuple[int, int]:
     child = store.upsert_chat(
         conn, ChatRecord(source_chat_id="c", display_name="+44987", chat_type="dm")
     )
-    store.insert_message(
+    insert_message(
         conn,
         parent,
         MessageRecord(
@@ -177,7 +177,7 @@ def _seed_family_db(db: Path) -> tuple[int, int]:
             sender_label="Office",
         ),
     )
-    store.insert_message(
+    insert_message(
         conn,
         child,
         MessageRecord(

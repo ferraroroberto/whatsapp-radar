@@ -202,35 +202,6 @@ def finish_run(
     )
 
 
-def record_run_funnel(
-    conn: sqlite3.Connection,
-    run_id: int,
-    *,
-    chats_synced: int,
-    messages_synced: int,
-    chats_monitored: int,
-    stage1_passed: int,
-    stage2_llm_calls: int,
-    actionable: int,
-    notification_status: str,
-    transcriptions: int = 0,
-    source_funnel_json: str | None = None,
-) -> bool:
-    """Snapshot a still-``running`` run's counters ahead of its final status."""
-    funnel = RunFunnel(
-        chats_synced=chats_synced,
-        messages_synced=messages_synced,
-        chats_monitored=chats_monitored,
-        stage1_passed=stage1_passed,
-        stage2_llm_calls=stage2_llm_calls,
-        actionable=actionable,
-        notification_status=notification_status,
-        transcriptions=transcriptions,
-        source_funnel_json=source_funnel_json,
-    )
-    return _update_running(conn, run_id, funnel.assignments())
-
-
 def abandon_run(conn: sqlite3.Connection, run_id: int, error: str) -> bool:
     """Mark a still-``running`` run abandoned; True if this call changed it."""
     return finalize_run(conn, run_id, STATUS_ABANDONED, error=error)

@@ -16,6 +16,7 @@ from app.webapp.server import create_app
 from src.db import store
 from src.models import ChatRecord, MessageRecord
 from src.webapp_config import WebappConfig
+from tests.helpers import insert_message
 
 LOOPBACK = ("127.0.0.1", 5555)
 REMOTE = ("203.0.113.5", 5555)
@@ -39,7 +40,7 @@ def _seed(conn: sqlite3.Connection) -> None:
     store.set_chat_status(conn, c, "ignored")
 
     for i in range(3):
-        store.insert_message(
+        insert_message(
             conn,
             a,
             MessageRecord(
@@ -50,7 +51,7 @@ def _seed(conn: sqlite3.Connection) -> None:
             ),
         )
     for i in range(2):
-        store.insert_message(
+        insert_message(
             conn,
             b,
             MessageRecord(
@@ -62,9 +63,7 @@ def _seed(conn: sqlite3.Connection) -> None:
         )
 
     run_id = store.start_run(conn, mode="live")
-    store.record_run_funnel(
-        conn,
-        run_id,
+    funnel = store.RunFunnel(
         chats_synced=3,
         messages_synced=5,
         chats_monitored=2,
@@ -73,7 +72,7 @@ def _seed(conn: sqlite3.Connection) -> None:
         actionable=1,
         notification_status="sent",
     )
-    store.finish_run(conn, run_id, "completed", chats_reviewed=2)
+    store.finish_run(conn, run_id, "completed", chats_reviewed=2, funnel=funnel)
     store.insert_analysis_item(
         conn,
         run_id,
@@ -149,17 +148,17 @@ def test_messages_per_chat_folds_linked_family(conn: sqlite3.Connection) -> None
     )
     store.set_chat_status(conn, parent, "monitored")
     store.set_chat_status(conn, other, "monitored")
-    store.insert_message(
+    insert_message(
         conn, parent,
         MessageRecord(source_message_id="p1", message_timestamp="2026-06-01T10:00:00+00:00",
                       text="old", sender_label="O"),
     )
-    store.insert_message(
+    insert_message(
         conn, child,
         MessageRecord(source_message_id="c1", message_timestamp="2026-06-07T12:00:00+00:00",
                       text="new", sender_label="O"),
     )
-    store.insert_message(
+    insert_message(
         conn, other,
         MessageRecord(source_message_id="o1", message_timestamp="2026-06-05T09:00:00+00:00",
                       text="hi", sender_label="X"),
@@ -224,9 +223,7 @@ def test_last_activity_cards_distill_each_kind(tmp_path: Path) -> None:
     conn = store.connect(db)
     # A message-pipeline scan carrying a per-source funnel for WhatsApp + Gmail.
     rid = store.start_run(conn, mode="live", kind="scan")
-    store.record_run_funnel(
-        conn,
-        rid,
+    funnel = store.RunFunnel(
         chats_synced=2,
         messages_synced=12,
         chats_monitored=3,
@@ -241,7 +238,7 @@ def test_last_activity_cards_distill_each_kind(tmp_path: Path) -> None:
             }
         ),
     )
-    store.finish_run(conn, rid, "completed", chats_reviewed=3)
+    store.finish_run(conn, rid, "completed", chats_reviewed=3, funnel=funnel)
     # A traffic check that raised one delay alert.
     tid = store.start_run(conn, mode="live", kind="traffic-check")
     store.finish_run_summary(

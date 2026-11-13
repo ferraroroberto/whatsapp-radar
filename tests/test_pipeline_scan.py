@@ -26,7 +26,7 @@ from src.connector.fixture import FixtureConnector
 from src.db import store
 from src.models import ChatRecord, MessageRecord, StoredMessage
 from src.notify import telegram as telegram_mod
-from tests.helpers import OfflineConnector, chat_id_by_source
+from tests.helpers import OfflineConnector, chat_id_by_source, insert_message
 
 _ACTIONABLE_JSON = json.dumps(
     {
@@ -296,7 +296,7 @@ def test_dry_run_days_windows_the_replay(conn: sqlite3.Connection, tmp_path: Pat
     chat_id = store.upsert_chat(conn, ChatRecord(source_chat_id="c-win", display_name="Window"))
     store.set_chat_status(conn, chat_id, "monitored")
     now = datetime.now(UTC)
-    store.insert_message(
+    insert_message(
         conn, chat_id,
         MessageRecord(
             source_message_id="old",
@@ -304,7 +304,7 @@ def test_dry_run_days_windows_the_replay(conn: sqlite3.Connection, tmp_path: Pat
             text="hello",
         ),
     )
-    store.insert_message(
+    insert_message(
         conn, chat_id,
         MessageRecord(
             source_message_id="recent",
@@ -534,7 +534,7 @@ def test_discovered_tripwire_hits_never_reach_stage2(
 ) -> None:
     _monitor(ingested_conn, "chat-building")  # monitored, but only small talk
     now = datetime.now(UTC).isoformat(timespec="seconds")
-    store.insert_message(
+    insert_message(
         ingested_conn,
         chat_id_by_source(ingested_conn, "chat-class-4a"),
         MessageRecord("tripwire-recent", now, "Urgent payment deadline", "Teacher"),
@@ -571,7 +571,7 @@ def test_tripwire_weekly_nudge_is_opt_in_and_cadenced(
     monkeypatch.setattr("src.analysis.pipeline.send_alert", fake_alert)
     base = _config(tmp_path)
     now = datetime.now(UTC).isoformat(timespec="seconds")
-    store.insert_message(
+    insert_message(
         ingested_conn,
         chat_id_by_source(ingested_conn, "chat-class-4a"),
         MessageRecord("tripwire-nudge", now, "Urgent payment deadline", "Teacher"),

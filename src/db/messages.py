@@ -34,22 +34,11 @@ def message_source_ids(conn: sqlite3.Connection, chat_id: int) -> set[str]:
     return {row["source_message_id"] for row in rows}
 
 
-def insert_message(conn: sqlite3.Connection, chat_id: int, msg: MessageRecord) -> bool:
-    """Insert a message idempotently. Returns True if a new row was created.
-
-    Delegates to :func:`insert_messages` so there is one column list (and one
-    idempotent-insert SQL statement) to maintain between the single-message and
-    batch paths — the single-message call just pays its own commit.
-    """
-    return insert_messages(conn, chat_id, [msg]) > 0
-
-
 def insert_messages(conn: sqlite3.Connection, chat_id: int, msgs: list[MessageRecord]) -> int:
     """Bulk-insert messages idempotently in one transaction. Returns rows created.
 
     The ingest path can deliver tens of thousands of messages; committing per row
-    (as :func:`insert_message` does for the single-message review path) is far too
-    slow at that scale, so this batches the whole chat into one commit.
+    is far too slow at that scale, so this batches the whole chat into one commit.
     """
     import json
 

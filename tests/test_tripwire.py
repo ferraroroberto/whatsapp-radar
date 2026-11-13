@@ -9,6 +9,7 @@ from src.analysis.tripwire import scan_tripwire
 from src.config import TripwireConfig
 from src.db import store
 from src.models import ChatRecord, MessageRecord
+from tests.helpers import insert_message
 
 
 def _message(
@@ -18,7 +19,7 @@ def _message(
     text: str,
     sent_at: datetime,
 ) -> None:
-    store.insert_message(
+    insert_message(
         conn,
         chat_id,
         MessageRecord(

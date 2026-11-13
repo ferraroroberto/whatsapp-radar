@@ -47,6 +47,7 @@ from playwright.sync_api import Playwright, sync_playwright
 from src.subprocess_flags import NO_WINDOW
 from tests.e2e._e2e_live_guard import require_disposable_instance
 from tests.e2e._surface import pytest_collection_modifyitems as _surface_collection
+from tests.helpers import insert_message
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ def _seed_whatsapp_chats(conn: sqlite3.Connection) -> None:
     )
     store.set_chat_status(conn, mon, "monitored")
     for i in range(3):
-        store.insert_message(
+        insert_message(
             conn,
             mon,
             MessageRecord(
@@ -210,7 +211,7 @@ def _seed_whatsapp_chats(conn: sqlite3.Connection) -> None:
     # One long message so the on-demand Summarize control (#86) has something
     # to attach to (it only shows past SUMMARIZE_MIN_CHARS). Sanitized/invented
     # content per the privacy rule — never real WhatsApp data.
-    store.insert_message(
+    insert_message(
         conn,
         mon,
         MessageRecord(
@@ -242,7 +243,7 @@ def _seed_gmail_chats(conn: sqlite3.Connection) -> None:
         ),
     )
     store.set_chat_status(conn, gmail, "monitored")
-    store.insert_message(
+    insert_message(
         conn,
         gmail,
         MessageRecord(
@@ -269,7 +270,7 @@ def _seed_gmail_chats(conn: sqlite3.Connection) -> None:
             source="gmail",
         ),
     )
-    store.insert_message(
+    insert_message(
         conn,
         discovered,
         MessageRecord(

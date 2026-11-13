@@ -16,6 +16,7 @@ from src.connector.factory import ConnectorBinding
 from src.db import store
 from src.db.sync import sync_sources
 from src.models import ChatRecord, MessageRecord
+from tests.helpers import insert_message
 
 NOW = datetime(2026, 7, 19, tzinfo=UTC)
 
@@ -39,7 +40,7 @@ def _add_chat(conn: sqlite3.Connection, source: str, source_chat_id: str, status
 
 
 def _add_msg(conn: sqlite3.Connection, chat_id: int, mid: str, days_ago: int) -> None:
-    store.insert_message(
+    insert_message(
         conn,
         chat_id,
         MessageRecord(
@@ -136,7 +137,7 @@ def test_sync_prunes_unmonitored_gmail_and_logs_detail(conn: sqlite3.Connection)
     monitored = _add_chat(conn, "gmail", "sender:keep@example.com", "monitored")
     # Absolute-ancient vs a message inside any plausible window, so the assertion is
     # independent of the wall clock the sync's prune reads.
-    store.insert_message(
+    insert_message(
         conn,
         unmonitored,
         MessageRecord(
@@ -145,7 +146,7 @@ def test_sync_prunes_unmonitored_gmail_and_logs_detail(conn: sqlite3.Connection)
             text="ancient",
         ),
     )
-    store.insert_message(
+    insert_message(
         conn,
         monitored,
         MessageRecord(
@@ -155,7 +156,7 @@ def test_sync_prunes_unmonitored_gmail_and_logs_detail(conn: sqlite3.Connection)
         ),
     )
     recent = (datetime.now(UTC) - timedelta(days=1)).isoformat()
-    store.insert_message(
+    insert_message(
         conn,
         unmonitored,
         MessageRecord(source_message_id="recent", message_timestamp=recent, text="recent"),
@@ -180,7 +181,7 @@ def test_sync_prunes_unmonitored_gmail_and_logs_detail(conn: sqlite3.Connection)
 
 def test_reprocess_retention_days_zero_skips_prune(conn: sqlite3.Connection) -> None:
     unmonitored = _add_chat(conn, "gmail", "sender:news@example.com", "discovered")
-    store.insert_message(
+    insert_message(
         conn,
         unmonitored,
         MessageRecord(

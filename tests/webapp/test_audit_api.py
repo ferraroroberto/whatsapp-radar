@@ -18,6 +18,7 @@ from app.webapp.server import create_app
 from src.db import store
 from src.models import ChatRecord, MessageRecord
 from src.webapp_config import WebappConfig
+from tests.helpers import insert_message
 
 LOOPBACK = ("127.0.0.1", 5555)
 REMOTE = ("203.0.113.5", 5555)
@@ -40,7 +41,7 @@ def _seed_chats(conn: sqlite3.Connection) -> tuple[int, int]:
     store.set_chat_status(conn, a, "monitored")
     store.set_chat_status(conn, b, "monitored")
     for i in range(2):
-        store.insert_message(
+        insert_message(
             conn,
             a,
             MessageRecord(
@@ -55,9 +56,7 @@ def _seed_chats(conn: sqlite3.Connection) -> tuple[int, int]:
 
 def _seed_run(conn: sqlite3.Connection) -> int:
     run_id = store.start_run(conn, mode="live", params_json=json.dumps({"days": 7}))
-    store.record_run_funnel(
-        conn,
-        run_id,
+    funnel = store.RunFunnel(
         chats_synced=2,
         messages_synced=2,
         chats_monitored=2,
@@ -81,7 +80,7 @@ def _seed_run(conn: sqlite3.Connection) -> int:
             }
         ),
     )
-    store.finish_run(conn, run_id, "completed", chats_reviewed=2)
+    store.finish_run(conn, run_id, "completed", chats_reviewed=2, funnel=funnel)
     return run_id
 
 
@@ -204,9 +203,7 @@ def test_audit_groups_contiguous_offline_scans_into_coverage_gap(tmp_path: Path)
 
     def add_scan(started_at: str, *, offline: bool) -> int:
         run_id = store.start_run(conn, mode="live", kind="scan")
-        store.record_run_funnel(
-            conn,
-            run_id,
+        funnel = store.RunFunnel(
             chats_synced=0,
             messages_synced=0,
             chats_monitored=0,
@@ -220,6 +217,7 @@ def test_audit_groups_contiguous_offline_scans_into_coverage_gap(tmp_path: Path)
             run_id,
             "failed" if offline else "completed",
             chats_reviewed=0,
+            funnel=funnel,
         )
         conn.execute(
             "UPDATE review_runs SET started_at = ?, completed_at = ? WHERE id = ?",

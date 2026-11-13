@@ -150,6 +150,9 @@ baseline = ".doc-refs-ratchet-baseline.json"
 # App Launcher's gitignored runtime registries, named in the docs as that repo's files,
 # and the loopback ports of the sibling services the docs call (hub, home-automation, task-os).
 allow_refs = ["config/apps.json", "config/jobs.json", ":8000", ":8447", ":8448"]
+# The sidecar lives in src/sidecar/; a shell command naming the old root folder passes the
+# path check (it is no link), so the retired-term list is what catches it.
+retired = [{ term = "cd sidecar", why = "the sidecar lives in src/sidecar/; use `cd src/sidecar`" }]
 
 # [dead_code_ratchet] -- the scaffold's baseline-and-ratchet dead-code check. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/dead_code_ratchet.py through

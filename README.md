@@ -96,7 +96,7 @@ Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOUR
 
 The fixture path above needs no credentials. To run against real chats and deliver digests to Telegram, follow the from-zero runbook in [`docs/bootstrapping.md`](docs/bootstrapping.md), then [`docs/manual.md`](docs/manual.md) for day-to-day operation. In short:
 
-1. Pair a WhatsApp **linked device** with the read-only Node sidecar (`cd sidecar && npm install && npm start`, then scan the QR). It writes a local buffer under the ignored `data/linked_device/`.
+1. Pair a WhatsApp **linked device** with the read-only Node sidecar (`cd src/sidecar && npm install && npm start`, then scan the QR). It writes a local buffer under the ignored `data/linked_device/`.
 2. Set `WR_CONNECTOR=linked_device` and leave `WR_SOURCES=whatsapp`. `wr ingest` / `chats` / `monitor` / `review` / `scan` / `resync` / `reprocess --confirm` then run unchanged against real data. `scan`, `resync`, and `reprocess` are also launchable as plain processes from App Launcher's Jobs tab, and appear live in the webapp's Activity tab.
 3. For delivery, create a Telegram bot, set `WR_NOTIFIER=telegram` plus `WR_TELEGRAM_BOT_TOKEN` / `WR_TELEGRAM_CHAT_ID`, and `wr review` delivers one consolidated digest. `wr notify` re-delivers a run if a send failed.
 

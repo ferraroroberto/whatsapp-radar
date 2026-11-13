@@ -83,7 +83,7 @@ Use a model that answers with JSON directly (the default `claude_sonnet` does). 
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `status` shows *sidecar not started* | Node sidecar isn't running | Start it (`cd sidecar && npm start`) or use Reconnect in Settings → Sources → WhatsApp |
+| `status` shows *sidecar not started* | Node sidecar isn't running | Start it (`cd src/sidecar && npm start`) or use Reconnect in Settings → Sources → WhatsApp |
 | `status` shows *not paired* | QR not scanned yet | Scan the QR (sidecar terminal, or Settings → Sources → WhatsApp) |
 | `status` shows *stale* | Sidecar process stopped/crashed | Restart `npm start`, or let a live `scan` self-heal it |
 | `ingest` finds 0 chats | History not synced yet | Wait a moment after pairing, re-run `ingest` |

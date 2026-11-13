@@ -61,7 +61,7 @@ You should see a deterministic digest. If this works, the core is sound and ever
 The Node sidecar speaks the WhatsApp Web protocol (Baileys) and writes everything it sees to a local buffer; the Python core only reads that buffer.
 
 ```powershell
-cd sidecar
+cd src\sidecar
 npm install
 npm start        # or: node index.js
 ```

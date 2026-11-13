@@ -17,6 +17,7 @@ from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
 from src.db.runs import FAMILY_KINDS
 from src.family.leg_status import count_legs
+from src.family.scan_summary import scan_counts
 
 router = APIRouter()
 
@@ -114,9 +115,7 @@ def _calendar_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     if row is None:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
-    conflicts = len(result.get("conflicts") or [])
-    # Stored rows may carry the legacy key unknown_locations; read both.
-    missing = len(result.get("missing_locations") or result.get("unknown_locations") or [])
+    conflicts, missing = scan_counts(result)
     alerts = conflicts + missing
     if result.get("status") == "disabled":
         summary, alerts = "scan disabled", 0

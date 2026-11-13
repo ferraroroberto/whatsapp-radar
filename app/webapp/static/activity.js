@@ -116,7 +116,7 @@ function rowChips(item) {
       chips.push(statusChip(s.alerts + (s.alerts === 1 ? ' alert' : ' alerts'), 'attention'));
     } else if (item.kind === 'calendar-scan') {
       const conflicts = (s.conflicts || []).length;
-      const missing = (s.missing_locations || s.unknown_locations || []).length;
+      const missing = (s.missing_locations || []).length;
       if (conflicts) chips.push(statusChip(conflicts + (conflicts === 1 ? ' conflict' : ' conflicts'), 'attention'));
       if (missing) chips.push(statusChip(missing + ' missing location' + (missing === 1 ? '' : 's'), 'attention'));
     } else if (r.funnel && r.funnel.actionable > 0) {

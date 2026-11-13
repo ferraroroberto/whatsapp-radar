@@ -28,7 +28,6 @@ where the writing happens, never only here.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Sequence
 from typing import Any
@@ -36,22 +35,23 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.webapp.routers._helpers import get_conn
+from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.config import Config, load_config, save_local_overrides
 from src.db import store
 from src.db.runs import FAMILY_KINDS
 from src.family.leg_status import count_legs
+from src.family.scan_summary import scan_counts
 from src.family.travel_blocks import (
     STATUS_DISABLED,
     STATUS_NO_HOME_ADDRESS,
     STATUS_NO_ROUTES_API_KEY,
 )
-from src.family.travel_blocks_write import (
-    APPLY_NO_WRITE_TOKEN,
+from src.family.travel_blocks_model import (
     NOT_WRITABLE,
     WRITABLE,
     WRITE_CAPABILITY_UNKNOWN,
 )
+from src.family.travel_blocks_write import APPLY_NO_WRITE_TOKEN
 
 router = APIRouter()
 
@@ -133,13 +133,10 @@ def _summary_json(row: sqlite3.Row) -> dict[str, Any]:
 
     One parser for all three readers of the column (the recent-runs list, the
     traffic alert count, the travel-block section) so a malformed payload
-    degrades identically everywhere instead of raising in whichever one grew
-    its own ``json.loads``.
+    degrades identically everywhere. It is :func:`loads_json_column` plus the
+    dict-only guard.
     """
-    try:
-        result = json.loads(row["summary_json"]) if row["summary_json"] else {}
-    except (ValueError, TypeError):
-        return {}
+    result = loads_json_column(row["summary_json"])
     return result if isinstance(result, dict) else {}
 
 
@@ -168,11 +165,7 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         summary["unpriced"] = unpriced
         summary["alerts"] = result.get("alerts")
     else:
-        summary["conflicts"] = len(result.get("conflicts") or [])
-        # Stored rows may carry the legacy key unknown_locations; read both.
-        summary["missing_locations"] = len(
-            result.get("missing_locations") or result.get("unknown_locations") or []
-        )
+        summary["conflicts"], summary["missing_locations"] = scan_counts(result)
     return summary
 
 

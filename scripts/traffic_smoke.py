@@ -2,35 +2,24 @@
 
     .\\.venv\\Scripts\\python.exe -m scripts.traffic_smoke --origin "..." --dest "..."
 
-Reads the key from ``--api-key``, else the ``traffic.api_key`` in the ignored
-``config/local.json``, else the ``GOOGLE_MAPS_API_KEY`` environment variable.
+Reads the key from ``--api-key``, else the one the scheduled check uses
+(``load_config().traffic.api_key``: ``WR_TRAFFIC_API_KEY``, then
+``GOOGLE_MAPS_API_KEY``, then ``traffic.api_key`` in the config files), so the
+smoke check exercises the same key as the runtime.
 Prints one line: free-flow vs. traffic minutes, the delay, and the status.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import sys
-from pathlib import Path
 
+from src.config import load_config
 from src.traffic import TrafficReadError, compute_route
 
 
 def _resolve_api_key(explicit: str) -> str:
-    if explicit:
-        return explicit
-    local = Path("config/local.json")
-    if local.is_file():
-        try:
-            raw = json.loads(local.read_text(encoding="utf-8"))
-            key = str((raw.get("traffic") or {}).get("api_key") or "")
-            if key:
-                return key
-        except (OSError, json.JSONDecodeError):
-            pass
-    return os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    return explicit or load_config().traffic.api_key
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -7,6 +7,7 @@ The probes now come from memory; the database-derived fields stay live.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ from starlette.testclient import TestClient
 from app.webapp.routers import execution as execution_router
 from app.webapp.server import create_app
 from src.config import Config, HubConfig, TelegramConfig
+from src.config.gmail import GmailConfig
 from src.connector.base import ConnectorStatus
 from src.connector.factory import ConnectorBinding
 from src.db import store
@@ -53,6 +55,7 @@ def _config(tmp_path: Path, **overrides: Any) -> Config:
         notifier="none",
         telegram=TelegramConfig("", ""),
         linked_device_dir=tmp_path / "buffer",
+        gmail=GmailConfig(token_path=tmp_path / "token.json"),
         **overrides,
     )
 
@@ -89,6 +92,37 @@ def test_a_config_change_rebuilds_instead_of_serving_the_old_probe(
     client: TestClient = probe["client"]
     client.get("/api/execution/health")
     probe["cfg"] = _config(tmp_path, sources=("whatsapp", "gmail"))
+    body = client.get("/api/execution/health").json()
+    assert probe["connector"].connects == 2
+    assert body["sources"][0]["detail"] == "probe 2"
+
+
+def _write_token(path: Path, *, refresh: str, access: str) -> None:
+    payload = {"client_id": "fake-client", "refresh_token": refresh, "token": access}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_an_access_token_refresh_keeps_serving_the_snapshot(
+    probe: dict[str, Any], tmp_path: Path
+) -> None:
+    token = tmp_path / "token.json"
+    _write_token(token, refresh="grant-1", access="access-1")
+    client: TestClient = probe["client"]
+    client.get("/api/execution/health")
+    # A probe rewriting the token with a fresh access token is not a new grant.
+    _write_token(token, refresh="grant-1", access="access-2")
+    client.get("/api/execution/health")
+    assert probe["connector"].connects == 1
+
+
+def test_a_reauthorized_token_rebuilds_the_snapshot(
+    probe: dict[str, Any], tmp_path: Path
+) -> None:
+    token = tmp_path / "token.json"
+    _write_token(token, refresh="grant-1", access="access-1")
+    client: TestClient = probe["client"]
+    client.get("/api/execution/health")
+    _write_token(token, refresh="grant-2", access="access-3")
     body = client.get("/api/execution/health").json()
     assert probe["connector"].connects == 2
     assert body["sources"][0]["detail"] == "probe 2"

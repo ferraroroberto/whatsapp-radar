@@ -24,8 +24,11 @@ a second request returns 409.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 import threading
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -205,6 +208,24 @@ _PROBE_STALE_S = 300.0
 _probe_init_lock = threading.Lock()
 
 
+def _token_grant(token: Path) -> str:
+    """A digest of the OAuth grant the token file holds, or ``""`` when there is none.
+
+    It covers the refresh token and client, not the file's mtime: every probe
+    rewrites the file when the hour-long access token expires, and keying on
+    that rewrite made the next read rebuild inline, network round trips and all.
+    Re-authorizing issues a new refresh token, so it still changes the digest.
+    """
+    try:
+        data = json.loads(token.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    grant = f"{data.get('client_id', '')}\n{data.get('refresh_token', '')}"
+    return hashlib.sha256(grant.encode("utf-8")).hexdigest()
+
+
 def _probe_key() -> str:
     """Fingerprint of everything a probe result depends on.
 
@@ -212,9 +233,8 @@ def _probe_key() -> str:
     token changes it, so the next read rebuilds instead of serving the old state.
     """
     cfg = load_config()
-    token = cfg.gmail.token_path
-    token_stamp = token.stat().st_mtime_ns if token.is_file() else 0
-    return repr((cfg.sources, cfg.connector, cfg.linked_device_dir, cfg.gmail, token_stamp))
+    grant = _token_grant(cfg.gmail.token_path)
+    return repr((cfg.sources, cfg.connector, cfg.linked_device_dir, cfg.gmail, grant))
 
 
 def _probe_all() -> _Probed:

@@ -15,6 +15,7 @@ import { wireSettings } from './config.js';
 import { fetchExecution, fetchSettingsHealth, renderSettingsStatus, wireExecution } from './execution.js';
 import { fetchActivity, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
+import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 
 // --------------------------------------------------------- build identity
 async function fetchVersion() {
@@ -105,4 +106,5 @@ wireActivity();
 wireDashboard();
 wireFamily();
 
+initBuildWatch({ fetchJson: jsonApi });
 boot();

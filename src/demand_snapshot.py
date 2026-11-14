@@ -19,6 +19,10 @@ _log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+# An inline rebuild is the one path where a reader waits on the upstream; one
+# this slow is logged with its cause so a latency spike can be traced to it.
+_SLOW_INLINE_S = 1.0
+
 
 class DemandSnapshot(Generic[T]):
     def __init__(
@@ -58,7 +62,13 @@ class DemandSnapshot(Generic[T]):
             hit = self._fresh(key)
             if hit is not None:
                 return hit
-            return self._rebuild(key), 0.0
+            reason = self._miss_reason(key)
+            started = time.monotonic()
+            value = self._rebuild(key)
+            elapsed = time.monotonic() - started
+            if elapsed >= _SLOW_INLINE_S:
+                _log.info(f"🐢 {self._name} rebuilt inline ({reason}) in {elapsed:.1f}s")
+            return value, 0.0
 
     def close(self) -> None:
         with self._state:
@@ -71,6 +81,13 @@ class DemandSnapshot(Generic[T]):
         if value is None or built_for != key or age > self._stale_s:
             return None
         return value, age
+
+    def _miss_reason(self, key: str) -> str:
+        if self._value is None:
+            return "cold"
+        if self._built_for != key:
+            return "key changed"
+        return "stale"
 
     def _rebuild(self, key: str) -> T:
         value = self._build()

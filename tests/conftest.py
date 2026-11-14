@@ -19,6 +19,13 @@ from tests.helpers import ingest_all
 # (whose module-level `create_app()` attaches the file logger) — so the suite never
 # writes into the real `webapp/` log directory (#351). Empty string disables it.
 os.environ.setdefault("WR_LOG_DIR", "")
+
+# The login password hash (src/password.py) is read on every login, so a run
+# must never see the live config/app_password.json: point it at a file that
+# does not exist. Assigned, not defaulted, so no outer value reaches the live
+# file; servers the suite spawns inherit it.
+_PASSWORD_DIR = Path(tempfile.mkdtemp(prefix="whatsapp-radar-password-"))
+os.environ["APP_PASSWORD_FILE"] = str(_PASSWORD_DIR / "app_password.json")
 # Same reason for the usage log (#386): `create_app()` mounts it at import, and it must
 # not land in the real fleet runtime-data directory.
 _usage_dir = Path(tempfile.mkdtemp(prefix="wr-usage-"))

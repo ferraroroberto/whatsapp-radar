@@ -125,7 +125,7 @@ A FastAPI + vanilla-JS PWA on port **8455** with four tabs — Home, Activity, I
 | `tray.bat --restart` | kills only this repo's tray + reclaims `:8455` by PID (scoped to this `.venv` — never a blanket `pythonw` kill), then relaunches |
 | `webapp.bat` | standalone server, no tray (headless / dev iteration) |
 
-Secrets — bearer token, login password, passkey state, and the Telegram token/chat id — live in the gitignored `config/webapp_config.json` (`config/webapp_config.sample.json` is the template); `WR_TELEGRAM_*` env still overrides it. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`. HTTPS: `scripts\gen_tailscale_cert.py` provisions the cert ([`docs/webapp.md`](docs/webapp.md#https-certificate-tailscale)).
+Secrets — bearer token, passkey state, and the Telegram token/chat id — live in the gitignored `config/webapp_config.json`; the login password is stored only as a salted hash in the gitignored `config/app_password.json` (set with `python -m src.password set`, the vendored `src/password.py`) (`config/webapp_config.sample.json` is the template); `WR_TELEGRAM_*` env still overrides it. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`. HTTPS: `scripts\gen_tailscale_cert.py` provisions the cert ([`docs/webapp.md`](docs/webapp.md#https-certificate-tailscale)).
 
 ## Family checks (calendar conflicts, traffic, travel blocks)
 

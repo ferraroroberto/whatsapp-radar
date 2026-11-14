@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_chat_order
     ON messages (chat_id, message_timestamp, id);
 
+-- The dashboard's unscanned-backlog count (`ingested_at > last scan`); without it
+-- that COUNT walks every message on each poll.
+CREATE INDEX IF NOT EXISTS idx_messages_ingested_at
+    ON messages (ingested_at);
+
 -- Per-chat review cursor. Advanced ONLY after analysis state is persisted.
 CREATE TABLE IF NOT EXISTS chat_review_state (
     chat_id                        INTEGER PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,

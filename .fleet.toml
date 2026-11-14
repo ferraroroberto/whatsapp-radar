@@ -24,6 +24,7 @@ switch = { src = "app/webapp/static/_vendored/switch", sha = "5d460bd1d9d44eed95
 home-head = { src = "app/webapp/static/_vendored/home-head", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/webapp/static/_vendored/home-head" }
 text-size = { src = "app/webapp/static/_vendored/text-size", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/text-size" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "3b708fd3c54ab7b93b08d489406c405762c83c41", dest = "app/webapp/static/_vendored/toast" }
+build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "8c59c65b62896a7c0b9a1df4c45794c2c2320c42", dest = "app/webapp/static/_vendored/build-watch" }
 button = { src = "app/webapp/static/_vendored/button", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/webapp/static/_vendored/button" }
 modal = { src = "app/webapp/static/_vendored/modal", sha = "713b1d1e36989440679ec4e415ff149b14d96c81", dest = "app/webapp/static/_vendored/modal" }
 sign-in = { src = "app/webapp/static/_vendored/sign-in", sha = "2564e67904b9dc6e397f19cb0cc3634f33cc7d59", dest = "app/webapp/static/_vendored/sign-in" }

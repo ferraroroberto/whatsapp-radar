@@ -7,7 +7,6 @@ in ``webapp/auth.log`` (separate from the main log so a phone-side review is eas
 
 from __future__ import annotations
 
-import hmac
 import logging
 import threading
 import time
@@ -19,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.webapp.middleware import is_pc_itself
 from app.webapp.routers._helpers import maybe_json
+from src import password
 from src.config import load_config
 from src.db.delivery_status import DELIVERY_FAILED
 from src.delivery.alert import send_alert
@@ -90,9 +90,9 @@ async def login(request: Request) -> dict[str, Any]:
         raise HTTPException(
             status_code=429, detail="too many attempts", headers=retry_after_header(wait)
         )
-    if not cfg.auth_password:
+    if not password.is_configured(legacy=cfg.auth_password):
         auth_logger.info(
-            f"⚠️  Login attempt from {client_host} but no auth_password configured"
+            f"⚠️  Login attempt from {client_host} but no password configured"
         )
         raise HTTPException(status_code=503, detail="password auth not configured")
     if not cfg.auth_token:
@@ -102,9 +102,7 @@ async def login(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="bearer token not configured")
     body = await maybe_json(request)
     presented = str(body.get("password") or "")
-    if not presented or not hmac.compare_digest(
-        presented.encode("utf-8"), cfg.auth_password.encode("utf-8")
-    ):
+    if not password.check_password(presented, legacy=cfg.auth_password):
         auth_logger.warning(
             f"🚨 Failed password attempt from {client_host} "
             f"(presented: {len(presented)} chars)"

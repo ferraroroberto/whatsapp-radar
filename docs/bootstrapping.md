@@ -133,7 +133,7 @@ The phone-first admin PWA (FastAPI + vanilla JS) runs on **:8455**. Provision a 
 ```powershell
 .\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py  # provision HTTPS (one-time; auto-renews after)
 .\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON (loopback still bypasses)
-.\.venv\Scripts\python.exe scripts\set_password.py PW  # optional: add a memorable login password
+.\.venv\Scripts\python.exe -m src.password set     # optional: add a memorable login password (prompts)
 .\tray.bat                                             # adopt-or-spawn the webapp behind a tray icon (daily use)
 ```
 
@@ -201,7 +201,7 @@ Build confirmation: `GET /api/version` returns `{git_sha, built_at, asset_hash}`
 
 | What | When | How |
 | --- | --- | --- |
-| Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `scripts\set_password.py` |
+| Bearer token / login password | On suspected compromise only | `scripts\gen_token.py` / `python -m src.password set` |
 | Telegram bot token | On leak only | Re-issue via BotFather, update `config\webapp_config.json` (or `WR_TELEGRAM_*`) |
 | Sidecar re-pair | Only after a phone-side logout | Delete `auth/`, re-run the sidecar, scan the QR (or re-pair from Settings → Sources → WhatsApp) |
 | Baileys (sidecar) updates | Occasionally — it tracks an unofficial protocol | `cd src/sidecar && npm update`; the buffer contract isolates churn to `src/sidecar/index.js` |

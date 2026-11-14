@@ -63,3 +63,6 @@ Thumbs.db
 # Private, uncommitted local context/spec files (household spec for #160, etc.)
 _local/
 .proof/
+
+# The app password hash (src/password.py)
+config/app_password.json

@@ -101,8 +101,10 @@ Settings is the header gear on every pane, never a tab: a dialog laid out as the
 
 # Optional hardening / access:
 .\.venv\Scripts\python.exe scripts\gen_token.py        # turn the bearer gate ON
-.\.venv\Scripts\python.exe scripts\set_password.py PW  # add a login password
+.\.venv\Scripts\python.exe -m src.password set     # add a login password (prompts twice)
 ```
+
+The login password is stored only as a salted hash in `config/app_password.json` (git-ignored), through the vendored `src/password.py` every fleet app shares; any non-empty password works. Until it has been set, an older plaintext `auth_password` in `webapp_config.json` still signs in; after, that value is ignored and can be deleted.
 
 Restart matrix:
 

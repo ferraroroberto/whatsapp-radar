@@ -15,6 +15,7 @@ from starlette.testclient import TestClient
 
 from app.webapp.routers._helpers import STATIC_DIR
 from app.webapp.server import create_app
+from src import password
 from src.static_versioning import compute_asset_hashes
 from src.webapp_config import WebappConfig
 
@@ -192,6 +193,14 @@ def test_login_success_and_failure() -> None:
         assert ok.status_code == 200
         assert ok.json()["token"] == "thetoken"
         assert c.post("/api/login", json={"password": "wrong"}).status_code == 401
+
+
+def test_stored_hash_replaces_the_legacy_password(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(password.ENV_VAR, str(tmp_path / "app_password.json"))
+    password.set_password("4321")
+    with _client(REMOTE, token="thetoken", password="hunter2") as c:
+        assert c.post("/api/login", json={"password": "4321"}).json()["token"] == "thetoken"
+        assert c.post("/api/login", json={"password": "hunter2"}).status_code == 401
 
 
 def test_non_ascii_password_and_token_are_compared_without_a_server_error() -> None:

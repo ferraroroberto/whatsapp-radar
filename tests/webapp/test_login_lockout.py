@@ -6,6 +6,7 @@ sleeps and nothing is sent.
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
@@ -31,16 +32,15 @@ class FakeClock:
 
 
 class FakeNotifier:
-    """Stands in for ``send_alert``: records each text and wakes the waiting test."""
+    """Stands in for the Telegram notifier: records each text and wakes the waiting test."""
 
     def __init__(self) -> None:
         self.texts: list[str] = []
         self.sent = threading.Event()
 
-    def __call__(self, _config: Any, text: str) -> tuple[str, str | None]:
+    def send_text(self, text: str) -> None:
         self.texts.append(text)
         self.sent.set()
-        return "sent", None
 
 
 @pytest.fixture
@@ -51,8 +51,7 @@ def clock() -> FakeClock:
 @pytest.fixture
 def notifier(monkeypatch: pytest.MonkeyPatch) -> FakeNotifier:
     fake = FakeNotifier()
-    monkeypatch.setattr(auth, "send_alert", fake)
-    monkeypatch.setattr(auth, "load_config", lambda: object())
+    monkeypatch.setattr(auth, "_alert_notifier", lambda: fake)
     return fake
 
 
@@ -119,3 +118,33 @@ def test_a_tunnelled_request_from_a_loopback_peer_is_still_locked_out(
     with _client(LOOPBACK, clock) as c:
         assert [_wrong(c, headers=edge).status_code for _ in range(6)] == [401] * 6
         assert _wrong(c, headers=edge).status_code == 429
+
+
+class _AlertOutcome(logging.Handler):
+    """Sets ``seen`` when the alert thread logs its outcome."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.seen = threading.Event()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+        self.seen.set()
+
+
+def test_no_alert_channel_is_reported_unconfigured(
+    clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth, "_alert_notifier", lambda: None)
+    outcome = _AlertOutcome()
+    alert_log = logging.getLogger("src.login_alert")
+    alert_log.addHandler(outcome)
+    try:
+        with _client(REMOTE, clock) as c:
+            for _ in range(3):
+                _wrong(c)
+        assert outcome.seen.wait(5)
+    finally:
+        alert_log.removeHandler(outcome)
+    assert "unconfigured" in outcome.messages[0] and "3 wrong passwords" in outcome.messages[0]

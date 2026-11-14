@@ -2,6 +2,7 @@
 /app/tray/single_instance.py
 /app/webapp/serve.py
 /app/webapp/static/_vendored/action-row
+/app/webapp/static/_vendored/build-watch
 /app/webapp/static/_vendored/button
 /app/webapp/static/_vendored/card
 /app/webapp/static/_vendored/disclosure
@@ -41,6 +42,7 @@
 /scripts/usage_track_ratchet.py
 /scripts/usage_track_scan.py
 /src/compression.py
+/src/login_alert.py
 /src/login_lockout.py
 /src/notify
 /src/password.py

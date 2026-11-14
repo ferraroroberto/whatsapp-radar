@@ -8,7 +8,6 @@ in ``webapp/auth.log`` (separate from the main log so a phone-side review is eas
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -20,9 +19,9 @@ from app.webapp.middleware import is_pc_itself
 from app.webapp.routers._helpers import maybe_json
 from src import password
 from src.config import load_config
-from src.db.delivery_status import DELIVERY_FAILED
-from src.delivery.alert import send_alert
-from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
+from src.login_alert import build_login_alert
+from src.login_lockout import LoginLockout, retry_after_header
+from src.notify import Notifier, build_notifier
 from src.paths import PROJECT_ROOT
 from src.runtime_files import file_handler, make_dirs
 from src.webapp_config import WebappConfig
@@ -55,23 +54,17 @@ def ensure_log_handler() -> None:
 _APP_NAME = "Family Radar"
 
 
-def _send_login_alert(alert: LockoutAlert) -> None:
-    """Tell the owner someone is guessing the password, off the request thread."""
-    held = f" (+{alert.suppressed} more held back)" if alert.suppressed else ""
-    text = f"🚨 {_APP_NAME}: {alert.failures} wrong passwords in a row from {alert.key}{held}"
-
-    def send() -> None:
-        # Config is read here, not at boot, so the current chat id and token apply.
-        status, detail = send_alert(load_config(), text)
-        if status == DELIVERY_FAILED:
-            logger.warning(f"⚠️  login alert not delivered: {detail}")
-
-    threading.Thread(target=send, name="login-alert", daemon=True).start()
+def _alert_notifier() -> Notifier | None:
+    """The configured notifier, read per alert so the current chat id and token apply."""
+    config = load_config()
+    return build_notifier(config.notifier, config.telegram)
 
 
 def build_login_lockout(clock: Callable[[], float] = time.monotonic) -> LoginLockout:
     """The one per-app lock-out; ``create_app`` stores it on ``app.state``."""
-    return LoginLockout(on_alert=_send_login_alert, clock=clock)
+    # Looked up per alert, so tests can replace the notifier source.
+    on_alert = build_login_alert(_APP_NAME, lambda: _alert_notifier())
+    return LoginLockout(on_alert=on_alert, clock=clock)
 
 
 router = APIRouter()

@@ -120,6 +120,13 @@ def _migrate_review_runs(conn: sqlite3.Connection) -> None:
     # Idempotent — new process runs are written with kind='process' directly.
     if "kind" not in existing:
         conn.execute("UPDATE review_runs SET kind = 'process' WHERE mode = 'review'")
+    # Created here, not in schema.sql, because that script runs before this
+    # migration adds `kind` to an older table. It lets the per-kind "newest runs"
+    # window read each kind in id order instead of sorting the whole table; the
+    # chatty traffic-check kind dominates its size.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_review_runs_kind_id ON review_runs (kind, id DESC)"
+    )
 
 
 def _migrate_chats(conn: sqlite3.Connection) -> None:

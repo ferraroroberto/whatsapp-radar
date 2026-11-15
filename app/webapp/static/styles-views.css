@@ -175,6 +175,7 @@
    control; the open run is a sheet on a phone and a right-hand pane on a wide
    pointer screen (design.md layout.wide). */
 .activity-scope { margin: 0 0 var(--gap); }
+.activity-filter { margin: 0 0 var(--gap); }
 /* Reserve the first screen while the list reads, so rows arriving never shift
    the scope control or the header above it. */
 .activity-list[data-state="loading"],

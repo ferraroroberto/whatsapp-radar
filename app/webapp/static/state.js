@@ -57,6 +57,7 @@ export const state = {
     hasMore: false,
     request: 0,            // discard out-of-order responses after fast scope changes
     loaded: false,
+    search: '',            // the filter field's text, matched against the loaded rows
     headerRuns: [],        // newest message runs, for the header line on any scope
     openDays: {},          // traffic day key -> true while that day's fold is open
     open: null,            // {kind, runId, dbId} the run sheet shows, or null
@@ -186,6 +187,7 @@ export const els = {
   activityStatus: document.getElementById('activityStatus'),
   activityRunNow: document.getElementById('activityRunNow'),
   activityScope: document.getElementById('activityScope'),
+  activitySearch: document.getElementById('activitySearch'),
   activityList: document.getElementById('activityList'),
   activityEmpty: document.getElementById('activityEmpty'),
   activityMore: document.getElementById('activityMore'),

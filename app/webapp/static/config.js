@@ -4,7 +4,8 @@
  * value and opens a sheet (edit-sheet.js) holding the real control at 44px.
  *
  * A sheet commits on Done with a partial POST /api/config holding only its own
- * fields (connector/sources/classifier/notifier/hub → config/local.json,
+ * fields (connector/sources/classifier/notifier/hub/task-os auto-export →
+ * config/local.json,
  * Telegram → webapp_config.json); a rejection names the value and keeps the
  * sheet open; Close, the backdrop and Esc discard. The bot token is never
  * echoed: its sheet says set or not set, and a token goes out only when one is
@@ -70,6 +71,8 @@ const sourceSheet = sheetHost({
 // ----------------------------------------------------------- row values
 
 function settings() { return (state.config && state.config.settings) || {}; }
+function taskOs() { return (state.config && state.config.task_os) || {}; }
+function taskOsReady(tos) { return Boolean(tos.enabled && tos.token_configured); }
 
 function renderRows() {
   const s = settings();
@@ -82,6 +85,12 @@ function renderRows() {
     setRowValue(els.settingsDialog, 'delivery', s.notifier || '—');
   }
   setRowValue(els.settingsDialog, 'hub', (s.hub && s.hub.model) || '—');
+  const tos = taskOs();
+  if (tos.auto_export && !taskOsReady(tos)) {
+    setRowValue(els.settingsDialog, 'task-os', 'Not configured', 'attention');
+  } else {
+    setRowValue(els.settingsDialog, 'task-os', tos.auto_export ? 'Automatic' : 'Manual');
+  }
   renderSourceRows();
   renderInstallRows();
 }
@@ -237,6 +246,19 @@ const SHEETS = {
       body.append(valueRow('Bot token', tok.configured ? 'set ' + (tok.hint || '') : 'not set'));
       body.append(fieldRow('New bot token', passwordInput(
         tok.configured ? 'leave blank to keep' : 'not set', function (v) { d.token = v; })));
+    },
+  },
+  'task-os': {
+    title: 'Task-OS',
+    help: 'After each run, actionable messages go to the Task-OS Inbox on their own. '
+      + 'Off, each one waits for Send to Task-OS in the chat.',
+    where: LOCAL_CONFIG,
+    draft: function () { return { on: Boolean(taskOs().auto_export) }; },
+    payload: function (d) { return { task_os_auto_export: d.on }; },
+    render: function (body, d) {
+      body.append(switchRow('Send automatically', d.on, function (v) { d.on = v; }));
+      body.append(valueRow('Export', taskOsReady(taskOs())
+        ? 'ready' : 'not configured: set task_os.enabled and WR_TASK_OS_TOKEN'));
     },
   },
   hub: {

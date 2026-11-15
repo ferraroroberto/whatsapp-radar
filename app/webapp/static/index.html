@@ -202,6 +202,11 @@
             <button type="button" class="segmented-item" aria-pressed="false" data-scope="calendar">Calendar</button>
             <button type="button" class="segmented-item" aria-pressed="false" data-scope="traffic">Traffic</button>
           </div>
+          <label class="action-row-filter activity-filter">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <input id="activitySearch" type="search" placeholder="Filter runs" autocomplete="off"
+                   aria-label="Filter loaded runs by kind, status or time">
+          </label>
           <div id="activityList" class="activity-list" aria-label="Runs" data-state="loading">
             <p class="muted small activity-loading">Reading runs…</p>
           </div>

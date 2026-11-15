@@ -76,6 +76,12 @@ def _gap_marker_phase(page: Page, base_url: str) -> None:
     expect(rows.nth(1).locator(".status-chip")).to_have_count(0)
     expect(page.locator("#activityStatus")).to_have_text("Last scan failed")
     expect(page.locator("#activityStatus")).to_have_attribute("data-tone", "danger")
+    # The filter field narrows the loaded rows and says so when nothing matches.
+    page.locator("#activitySearch").fill("zzz-no-such-run")
+    expect(rows).to_have_count(0)
+    expect(page.locator("#activityEmpty")).to_contain_text("No loaded runs match")
+    page.locator("#activitySearch").fill("")
+    expect(rows).to_have_count(2)
     surface(page, "activity.coverage-gap")
 
 

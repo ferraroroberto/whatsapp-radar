@@ -274,6 +274,12 @@ function listItems() {
   return items;
 }
 
+// What the filter field matches: the row's title, status, time and context line.
+function matchesSearch(item, query) {
+  const hay = [kindLabel(item.kind), item.status, whenLabel(item.started_at), ...item.bits];
+  return hay.join(' ').toLowerCase().includes(query);
+}
+
 // A day group: an overline heading over one full-bleed action-list card. A
 // null label is a headless group (the Filtered-out fold at the end).
 function groupSection(label) {
@@ -300,7 +306,9 @@ export function renderList() {
   if (!a.loaded) return;
   box.textContent = '';
   box.dataset.state = LOAD_PHASE.READY;
-  const items = listItems();
+  const query = a.search.trim().toLowerCase();
+  const items = query ? listItems().filter(function (it) { return matchesSearch(it, query); })
+    : listItems();
   const gapByRunId = new Map();
   if (a.scope === 'messages') {
     for (const gap of a.coverageGaps) for (const id of gap.run_ids || []) gapByRunId.set(id, gap);
@@ -340,12 +348,14 @@ export function renderList() {
     }
     box.appendChild(g.section);
   }
-  if (a.scope === 'messages') {
+  if (a.scope === 'messages' && !query) {
     const g = groupSection(null);
     g.ul.appendChild(filteredFoldRow());
     box.appendChild(g.section);
   }
   els.activityEmpty.hidden = items.length > 0;
+  els.activityEmpty.querySelector('.empty-state-message').textContent =
+    query ? 'No loaded runs match.' : 'No runs here yet.';
   els.activityMore.hidden = !a.hasMore;
   // Self-skips are hidden from the list but must stay visible in count:
   // traffic-check's cadence window and calendar-scan's run_hour.
@@ -768,6 +778,10 @@ export function wireActivity() {
     if (btn) setScope(btn.dataset.scope);
   });
   els.activityMore.addEventListener('click', function () { fetchRuns(true).catch(function () {}); });
+  els.activitySearch.addEventListener('input', function () {
+    ax().search = els.activitySearch.value;
+    renderList();
+  });
 
   // Run sheet: the close button, the backdrop and Esc all end in 'close'.
   els.runSheetClose.addEventListener('click', closeRun);

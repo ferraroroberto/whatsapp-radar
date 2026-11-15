@@ -280,12 +280,12 @@ function row(c) {
     trail: watch,
   });
   const when = document.createElement('span');
-  when.className = 'chat-when';
+  when.className = 'chat-when action-row-meta-tail';
   when.textContent = c.last_message_at ? fmtRelative(c.last_message_at) : '—';
   const preview = document.createElement('span');
-  preview.className = 'chat-preview';
+  preview.className = 'chat-preview action-row-meta-text';
   preview.textContent = c.last_message_text ? String(c.last_message_text) : '';
-  meta.append(when, preview);
+  meta.append(preview, when);
 
   if (hist.chatId === c.id) li.classList.add('is-open');
   return li;

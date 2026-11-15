@@ -432,6 +432,16 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
   color: var(--muted);
 }
 .chat-avatar .chat-avatar-source .icon { width: var(--icon-inline); height: var(--icon-inline); }
+/* The preview is the chat's own words, so it wraps to two lines rather than
+   take a one-line ellipsis that can land on a figure in the text. */
+.chat-row .chat-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
 .chat-row .chat-watch,
 .tripwire-promote { --icon-btn-box: var(--row-sm); }
 .chat-row .chat-watch .icon,

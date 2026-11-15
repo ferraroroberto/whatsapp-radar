@@ -84,7 +84,9 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Capture alert texts; calendar fetch defaults to an empty week."""
     outbox: list[str] = []
 
-    def fake_send(config: Config, text: str) -> tuple[str, str | None]:
+    def fake_send(
+        config: Config, text: str, *, run_id: int | None = None
+    ) -> tuple[str, str | None]:
         outbox.append(text)
         return "sent", None
 
@@ -107,6 +109,22 @@ def test_all_clear_is_still_sent(sent: list[str]) -> None:
     assert len(sent) == 1
     assert "Everything is fine" in sent[0]
     assert "Calendar sync" in sent[0]
+
+
+def test_summary_links_to_its_run(
+    sent: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_ids: list[int | None] = []
+
+    def fake_send(
+        config: Config, text: str, *, run_id: int | None = None
+    ) -> tuple[str, str | None]:
+        run_ids.append(run_id)
+        return "sent", None
+
+    monkeypatch.setattr(calendar_scan, "send_alert", fake_send)
+    calendar_scan.run_calendar_scan(_config(), now=DAY_NOW, dry_run=False, run_id=31)
+    assert run_ids == [31]
 
 
 def test_findings_sent_with_missing_location_ask(

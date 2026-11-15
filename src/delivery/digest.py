@@ -13,6 +13,7 @@ import sqlite3
 from src.config import Config
 from src.db import store
 from src.delivery.dispatch import dispatch
+from src.delivery.links import with_run_link
 from src.report.digest import Digest
 
 
@@ -26,7 +27,7 @@ def deliver_digest(
     message on failure/skip, else ``None``. The notifier chunks a digest past
     Telegram's per-message limit itself.
     """
-    text = digest.to_telegram_text()
+    text = with_run_link(config, digest.to_telegram_text(), run_id)
     status, detail = dispatch(config, lambda notifier: notifier.send_text(text))
     store.record_notification(conn, run_id, config.notifier, status, detail)
     return status, detail

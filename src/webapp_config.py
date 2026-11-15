@@ -55,6 +55,10 @@ class WebappConfig:
     webauthn_rp_id: str = ""
     webauthn_rp_name: str = "Family Radar"
     webauthn_origin: str = ""
+    # Origin the phone opens, prefixed to the run links in Telegram messages.
+    # Empty falls back to ``webauthn_origin`` (the same address the phone
+    # already uses); both empty sends messages without a link.
+    public_base_url: str = ""
     # Telegram delivery secrets.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
@@ -93,6 +97,7 @@ def load_webapp_config(path: Path | None = None) -> WebappConfig:
         webauthn_rp_id=str(raw.get("webauthn_rp_id", "")),
         webauthn_rp_name=str(raw.get("webauthn_rp_name", "Family Radar")),
         webauthn_origin=str(raw.get("webauthn_origin", "")),
+        public_base_url=str(raw.get("public_base_url", "")),
         telegram_bot_token=str(raw.get("telegram_bot_token", "")),
         telegram_chat_id=str(raw.get("telegram_chat_id", "")),
         sender_voice_genders={
@@ -121,6 +126,7 @@ def save_webapp_config(cfg: WebappConfig, path: Path | None = None) -> Path:
         "webauthn_rp_id": cfg.webauthn_rp_id,
         "webauthn_rp_name": cfg.webauthn_rp_name,
         "webauthn_origin": cfg.webauthn_origin,
+        "public_base_url": cfg.public_base_url,
         "telegram_bot_token": cfg.telegram_bot_token,
         "telegram_chat_id": cfg.telegram_chat_id,
         "sender_voice_genders": cfg.sender_voice_genders,
@@ -160,6 +166,9 @@ def _validate(cfg: WebappConfig) -> None:
         raise ValueError(f"port out of range: {cfg.port}")
     if cfg.server not in ("hypercorn", "uvicorn"):
         raise ValueError(f"invalid server: {cfg.server!r}")
+    base = cfg.public_base_url.strip()
+    if base and urlparse(base).scheme not in ("http", "https"):
+        raise ValueError(f"public_base_url must start with http:// or https://: {base!r}")
     if cfg.default_voice_gender not in _VALID_VOICE_GENDERS:
         raise ValueError(f"invalid default_voice_gender: {cfg.default_voice_gender!r}")
     for sender, gender in cfg.sender_voice_genders.items():

@@ -47,7 +47,9 @@ def _status(conn: sqlite3.Connection, run_id: int) -> str:
 def _patch_traffic_runner(monkeypatch: pytest.MonkeyPatch, exc: BaseException) -> None:
     import src.family.traffic_check as traffic_check
 
-    def boom(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def boom(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         raise exc
 
     monkeypatch.setattr(traffic_check, "run_traffic_check", boom)
@@ -111,7 +113,9 @@ def test_a_killed_check_is_swept_up_by_the_next_fire(
 
     monkeypatch.setattr(
         traffic_check, "run_traffic_check",
-        lambda config, *, now, dry_run: {"kind": "traffic-check", "status": "ok", "alerts": 0},
+        lambda config, *, now, dry_run, run_id=None: {
+            "kind": "traffic-check", "status": "ok", "alerts": 0
+        },
     )
     # Dry run: skips the cadence self-skip, which would otherwise be exercised here.
     assert cli.main(["traffic-check", "--dry-run"]) == 0

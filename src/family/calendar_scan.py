@@ -261,8 +261,13 @@ def calendar_run_hour_skip_reason(config: Config, *, now: datetime) -> str | Non
     )
 
 
-def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
-    """Run one calendar sync. ``dry_run`` never sends anything."""
+def run_calendar_scan(
+    config: Config, *, now: datetime, dry_run: bool, run_id: int | None = None
+) -> dict[str, Any]:
+    """Run one calendar sync. ``dry_run`` never sends anything.
+
+    ``run_id`` is the run row its summary links to.
+    """
     family = config.family
     if not family.enabled and not dry_run:
         return {"kind": "calendar-scan", "status": "disabled", "conflicts": [],
@@ -324,7 +329,7 @@ def run_calendar_scan(config: Config, *, now: datetime, dry_run: bool) -> dict[s
     elif quiet and not conflicts:
         summary["status"] = "suppressed_quiet_hours"
     else:
-        status, detail = send_alert(config, text)
+        status, detail = send_alert(config, text, run_id=run_id)
         summary["status"] = status
         if detail:
             summary["detail"] = detail

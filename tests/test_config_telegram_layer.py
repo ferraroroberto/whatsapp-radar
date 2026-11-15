@@ -64,3 +64,33 @@ def test_falls_back_to_default_when_webapp_empty(
     cfg = load_config(root)
     assert cfg.telegram.bot_token == "from-default"
     assert cfg.telegram.chat_id == "from-default"
+
+
+def test_public_base_url_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env > ``public_base_url`` > the passkey origin; a trailing slash is dropped."""
+    root = _root_with_default(tmp_path, "b", "c")
+    monkeypatch.delenv("WR_PUBLIC_BASE_URL", raising=False)
+
+    def webapp(**fields: str) -> None:
+        monkeypatch.setattr(
+            "src.webapp_config.load_webapp_config", lambda: WebappConfig(**fields)
+        )
+
+    webapp()
+    assert load_config(root).public_base_url == ""
+    webapp(webauthn_origin="https://pc.example.ts.net:8455")
+    assert load_config(root).public_base_url == "https://pc.example.ts.net:8455"
+    webapp(webauthn_origin="https://a.example", public_base_url="https://b.example/")
+    assert load_config(root).public_base_url == "https://b.example"
+    monkeypatch.setenv("WR_PUBLIC_BASE_URL", "https://c.example")
+    assert load_config(root).public_base_url == "https://c.example"
+
+
+def test_public_base_url_must_be_http(tmp_path: Path) -> None:
+    from src.webapp_config import load_webapp_config
+
+    path = tmp_path / "webapp_config.json"
+    path.write_text(json.dumps({"public_base_url": "ftp://x"}), encoding="utf-8")
+    # An invalid value is rejected on load rather than put in a message.
+    with pytest.raises(ValueError, match="public_base_url"):
+        load_webapp_config(path)

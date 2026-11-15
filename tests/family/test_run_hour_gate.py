@@ -54,7 +54,9 @@ def _stub_scan(monkeypatch: pytest.MonkeyPatch) -> list[datetime]:
 
     calls: list[datetime] = []
 
-    def fake(config: Any, *, now: datetime, dry_run: bool) -> dict[str, Any]:
+    def fake(
+        config: Any, *, now: datetime, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         calls.append(now)
         return {
             "kind": "calendar-scan", "status": "ok", "conflicts": [],
@@ -151,7 +153,9 @@ def test_the_traffic_check_is_untouched_by_the_hour_gate(
 
     calls: list[datetime] = []
 
-    def fake(config: Any, *, now: datetime, dry_run: bool) -> dict[str, Any]:
+    def fake(
+        config: Any, *, now: datetime, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         calls.append(now)
         return {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
 

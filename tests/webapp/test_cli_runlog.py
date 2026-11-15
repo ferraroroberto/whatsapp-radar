@@ -50,7 +50,9 @@ def _stub_traffic_check(
 ) -> None:
     import src.family.traffic_check as traffic_check
 
-    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def fake_runner(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         print("probing route 1")  # a progress line only the log can show
         return dict(payload, dry_run=dry_run)
 
@@ -142,7 +144,9 @@ def test_failed_run_records_the_failure_and_its_reason(
     monkeypatch.setenv("WR_DB_PATH", str(tmp_path / "family.sqlite3"))
     import src.family.traffic_check as traffic_check
 
-    def boom(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def boom(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         raise RuntimeError("routes api down")
 
     monkeypatch.setattr(traffic_check, "run_traffic_check", boom)
@@ -202,7 +206,9 @@ def test_self_skipped_run_is_visible_and_distinct_from_an_error(
     db = tmp_path / "family.sqlite3"
     monkeypatch.setenv("WR_DB_PATH", str(db))
 
-    def never_called(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def never_called(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         raise AssertionError("the runner must not run when the cadence self-skips")
 
     import src.family.traffic_check as traffic_check

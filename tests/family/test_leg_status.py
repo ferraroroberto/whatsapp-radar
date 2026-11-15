@@ -110,7 +110,9 @@ def _run_traffic_cli(
 ) -> int:
     monkeypatch.setenv("WR_DB_PATH", str(tmp_path / "family.sqlite3"))
 
-    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def fake_runner(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         return payload
 
     monkeypatch.setattr(traffic_check, "run_traffic_check", fake_runner)

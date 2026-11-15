@@ -316,6 +316,8 @@ class _TrafficSweep:
     now: datetime
     dry_run: bool
     recent: set[str]
+    # The run row the alerts link to; None when the check runs outside a run record.
+    run_id: int | None = None
     checked: list[dict[str, Any]] = field(default_factory=list)
     alerts: int = 0
     # Leave-now candidates ready to fire, grouped by the parts of the message
@@ -433,7 +435,7 @@ class _TrafficSweep:
         # Only a delivered alert may suppress the next one: a
         # failed/skipped send must stay retryable, so it records no
         # dedup key and carries its status into the entry instead.
-        send_status, send_detail = send_alert(self.config, text)
+        send_status, send_detail = send_alert(self.config, text, run_id=self.run_id)
         if send_status == "sent":
             dedup.record_alert(key, now=self.now)
             self.recent.add(key)
@@ -482,7 +484,9 @@ class _TrafficSweep:
                 # more time than they do.
                 eta_min = max(item["eta_min"] for item in items)
                 send_status, send_detail = send_alert(
-                    self.config, _leave_now_text(people, summary, eta_min, event_start)
+                    self.config,
+                    _leave_now_text(people, summary, eta_min, event_start),
+                    run_id=self.run_id,
                 )
                 if send_status != "sent":
                     # Not delivered: no dedup key, so the next run retries.
@@ -533,8 +537,13 @@ def traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str
     return None
 
 
-def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[str, Any]:
-    """Run one traffic-jam check. ``dry_run`` never sends or records anything."""
+def run_traffic_check(
+    config: Config, *, now: datetime, dry_run: bool, run_id: int | None = None
+) -> dict[str, Any]:
+    """Run one traffic-jam check. ``dry_run`` never sends or records anything.
+
+    ``run_id`` is the run row its alerts link to.
+    """
     traffic = config.traffic
     if not traffic.enabled and not dry_run:
         return {"kind": "traffic-check", "status": "disabled", "checked": [], "alerts": 0}
@@ -573,7 +582,7 @@ def run_traffic_check(config: Config, *, now: datetime, dry_run: bool) -> dict[s
             traffic.dedup_window_min, traffic.lookahead_hours, dedup_window_min,
         )
     sweep = _TrafficSweep(
-        config, now, dry_run, dedup.recent_keys(dedup_window_min, now=now)
+        config, now, dry_run, dedup.recent_keys(dedup_window_min, now=now), run_id=run_id
     )
     with requests.Session() as session:
         for leg in legs:

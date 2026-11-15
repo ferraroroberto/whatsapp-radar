@@ -428,7 +428,7 @@ def _cmd_family_check(
         runner = traffic_check.run_traffic_check
     try:
         logger.info("🌐 %s run %s: running the check", kind, run_id)
-        payload = runner(config, now=now, dry_run=dry_run)
+        payload = runner(config, now=now, dry_run=dry_run, run_id=run_id)
     except (FileNotFoundError, RuntimeError) as exc:
         _progress(f"❌ {kind} failed: {exc}")
         store.finish_run_summary(conn, run_id, store.STATUS_FAILED, None, error=str(exc))

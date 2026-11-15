@@ -13,7 +13,7 @@ import { fetchDashboard, wireDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { wireSettings } from './config.js';
 import { fetchExecution, fetchSettingsHealth, renderSettingsStatus, wireExecution } from './execution.js';
-import { fetchActivity, wireActivity } from './activity.js';
+import { fetchActivity, openLinkedRun, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 
@@ -74,6 +74,7 @@ async function boot() {
   }
   await fetchWebauthnStatus();
   await fetchDashboard();
+  await openLinkedRun();
 
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});

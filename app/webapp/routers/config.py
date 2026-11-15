@@ -2,7 +2,8 @@
 
 Read-only views of the LLM system prompt and the keyword roots — both are
 edited in their source files by design, never from the app. Editable: the safe
-runtime knobs (connector, classifier, notifier, hub model) which persist to the
+runtime knobs (connector, classifier, notifier, hub model, task-os
+auto-export) which persist to the
 gitignored ``config/local.json`` host-override layer, plus the Telegram delivery
 secrets which persist to ``config/webapp_config.json``.
 
@@ -41,6 +42,7 @@ class ConfigUpdate(BaseModel):
     hub_model: str | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
+    task_os_auto_export: bool | None = None
 
 
 def _read_roots_text() -> str:
@@ -123,6 +125,13 @@ async def get_config() -> dict[str, Any]:
             "token": _mask(wcfg.telegram_bot_token),
             "chat_id": wcfg.telegram_chat_id,
         },
+        # The token itself stays in .env; the phone only needs to know whether
+        # auto-export would actually fire.
+        "task_os": {
+            "auto_export": cfg.task_os.auto_export,
+            "enabled": cfg.task_os.enabled,
+            "token_configured": bool(cfg.task_os.token),
+        },
         "options": {
             "connector": sorted(_VALID_CONNECTORS),
             "sources": sorted(_VALID_SOURCES),
@@ -172,6 +181,8 @@ async def update_config(payload: ConfigUpdate) -> dict[str, Any]:
         hub["model"] = payload.hub_model
     if hub:
         overrides["hub"] = hub
+    if payload.task_os_auto_export is not None:
+        overrides["task_os"] = {"auto_export": payload.task_os_auto_export}
     if overrides:
         save_local_overrides(overrides)
 

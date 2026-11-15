@@ -566,6 +566,8 @@ def test_get_config_masks_token(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tok == {"configured": True, "hint": "…cret"}
     assert "123456789secret" not in str(body)
     assert body["telegram"]["chat_id"] == "42"
+    # task-os readiness without the token itself.
+    assert set(body["task_os"]) == {"auto_export", "enabled", "token_configured"}
 
 
 def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -600,6 +602,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
                 "telegram_chat_id": "99",
                 # blank token must NOT be forwarded to update_webapp_config
                 "telegram_bot_token": "",
+                "task_os_auto_export": True,
             },
         )
         assert res.status_code == 200
@@ -609,6 +612,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     assert saved_local["classifier"] == "cascade"
     assert saved_local["notifier"] == "telegram"
     assert saved_local["hub"] == {"base_url": "http://127.0.0.1:8000", "model": "claude_sonnet"}
+    assert saved_local["task_os"] == {"auto_export": True}
     # chat_id forwarded; blank token suppressed.
     assert saved_tg == {"telegram_chat_id": "99"}
 

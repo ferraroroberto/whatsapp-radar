@@ -94,7 +94,8 @@
   "task_os": {
     "enabled": false,
     "base_url": "http://127.0.0.1:8448",
-    "timeout_s": 6
+    "timeout_s": 6,
+    "auto_export": false
   },
   "children": [],
   "tts": {

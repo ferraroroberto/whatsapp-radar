@@ -2,7 +2,8 @@
 
 Read-through, one-way cross-repo dependency: this package POSTs one message to
 task-os's ``POST /api/tasks`` (the "WhatsApp side" of task-os's task creation) when the operator
-taps Send to Task-OS in the Chats overlay. The one seam is
+taps Send to Task-OS in the Chats overlay, or on its own after a scan when
+``task_os.auto_export`` is on (:mod:`src.task_os.auto_export`). The one seam is
 :func:`src.task_os.client.export_message`; task-os just receives — nothing here
 reads task-os state back.
 """

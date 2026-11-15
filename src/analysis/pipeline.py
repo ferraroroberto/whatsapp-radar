@@ -88,6 +88,7 @@ from src.delivery.digest import deliver_digest
 from src.models import StoredMessage
 from src.progress import Progress, emit
 from src.report.digest import Digest, DigestItem, build_digest, render_item
+from src.task_os.auto_export import export_actionable
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,8 @@ class ScanOutcome:
     stage1_passed: int = 0
     stage2_llm_calls: int = 0
     actionable: int = 0
+    # Messages sent to task-os's Inbox by ``task_os.auto_export`` this run.
+    tasks_exported: int = 0
     tripwire_scanned: int = 0
     tripwire_hits: int = 0
     tripwire_truncated: bool = False
@@ -635,6 +638,11 @@ def _analyze_chat(
     )
 
     final_action, telegram_text = _tally_verdict(outcome, source_funnel, chat, result)
+    # live + process only, like reminders: dry-run must stay free of side effects.
+    if final_action == "actionable" and mode in ("live", "process"):
+        outcome.tasks_exported += export_actionable(
+            conn, config.task_os, delta, result.evidence_message_ids
+        )
     write_trace(
         conn, run_id, chat_id,
         source=source, signal=signal, delta=delta, outcome=co, result=result,
@@ -880,6 +888,7 @@ def scan_outcome_to_dict(outcome: ScanOutcome) -> dict[str, Any]:
             "stage1_passed": outcome.stage1_passed,
             "stage2_llm_calls": outcome.stage2_llm_calls,
             "actionable": outcome.actionable,
+            "tasks_exported": outcome.tasks_exported,
         },
         "notification_status": outcome.notification_status,
         "tripwire": {

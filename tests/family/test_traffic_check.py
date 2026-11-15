@@ -65,7 +65,7 @@ def _config(*, presence_enabled: bool = True) -> Config:
 def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Stub the four seams; capture the compute_route calls and sent alerts."""
     state: dict[str, Any] = {
-        "route_calls": [], "sent": [], "events": {}, "route": None,
+        "route_calls": [], "sent": [], "run_ids": [], "events": {}, "route": None,
         "send_result": ("sent", None), "recorded": [],
     }
 
@@ -84,8 +84,11 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         state["route_calls"].append({"origin": origin, "destination": destination, **kw})
         return state["route"] or RouteResult(normal_s=600, traffic_s=600)
 
-    def fake_send(config: Config, text: str) -> tuple[str, str | None]:
+    def fake_send(
+        config: Config, text: str, *, run_id: int | None = None
+    ) -> tuple[str, str | None]:
         state["sent"].append(text)
+        state["run_ids"].append(run_id)
         return state["send_result"]
 
     monkeypatch.setattr(traffic_check, "fetch_events_by_person", fake_fetch)
@@ -180,9 +183,10 @@ def test_back_to_back_infeasible_is_flagged_and_alerts(
         lambda *a, **kw: PresenceUnavailable("roberto", "disabled"),
     )
     payload = traffic_check.run_traffic_check(
-        _config(presence_enabled=False), now=NOW, dry_run=False
+        _config(presence_enabled=False), now=NOW, dry_run=False, run_id=17
     )
 
+    assert harness["run_ids"] == [17]  # the alert links to its run's sheet
     entry = next(e for e in payload["checked"] if e["event"] == "Lunch")
     assert entry["location_source"] == "calendar_inference"
     assert entry["origin"] == WORK and entry["gap_min"] == 10

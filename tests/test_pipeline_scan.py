@@ -564,7 +564,9 @@ def test_tripwire_weekly_nudge_is_opt_in_and_cadenced(
 
     alerts: list[str] = []
 
-    def fake_alert(_config: Config, text: str) -> tuple[str, None]:
+    def fake_alert(
+        _config: Config, text: str, *, run_id: int | None = None
+    ) -> tuple[str, None]:
         alerts.append(text)
         return "sent", None
 

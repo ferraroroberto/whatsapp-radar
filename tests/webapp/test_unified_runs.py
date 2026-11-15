@@ -113,7 +113,9 @@ def _run_family_cli(
     db = tmp_path / "family.sqlite3"
     monkeypatch.setenv("WR_DB_PATH", str(db))
 
-    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def fake_runner(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         return dict(payload, dry_run=dry_run)
 
     import src.family.calendar_scan as calendar_scan
@@ -158,7 +160,9 @@ def test_cli_traffic_check_failure_recorded(
     db = tmp_path / "family.sqlite3"
     monkeypatch.setenv("WR_DB_PATH", str(db))
 
-    def boom(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def boom(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         raise RuntimeError("routes api down")
 
     import src.family.traffic_check as traffic_check
@@ -219,7 +223,9 @@ def test_cli_traffic_check_self_skips_within_cadence(
     """A **live** fire within the cadence window self-skips (#170)."""
     db = _arm_cadence_window(tmp_path, monkeypatch)
 
-    def never_called(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def never_called(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         raise AssertionError("runner must not be called on a cadence self-skip")
 
     import src.family.traffic_check as traffic_check
@@ -254,7 +260,9 @@ def test_cli_traffic_check_dry_run_never_cadence_skipped(
     payload = {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
     calls: list[bool] = []
 
-    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def fake_runner(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         calls.append(dry_run)
         return dict(payload, dry_run=dry_run)
 
@@ -306,7 +314,9 @@ def test_cli_traffic_check_runs_when_cadence_elapsed(
 
     payload = {"kind": "traffic-check", "status": "ok", "checked": [], "alerts": 0}
 
-    def fake_runner(config: Any, *, now: Any, dry_run: bool) -> dict[str, Any]:
+    def fake_runner(
+        config: Any, *, now: Any, dry_run: bool, run_id: int | None = None
+    ) -> dict[str, Any]:
         return dict(payload, dry_run=dry_run)
 
     import src.family.traffic_check as traffic_check

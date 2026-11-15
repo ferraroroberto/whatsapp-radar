@@ -199,6 +199,43 @@ def test_activity_list_gap_marker_filtered_out_drill_and_skipped_line(
     _skipped_line_phase(page, base_url)
 
 
+@pytest.mark.smoke
+@pytest.mark.live_safe
+def test_run_link_opens_that_runs_sheet_and_leaves_the_url_clean(
+    page: Page, base_url: str
+) -> None:
+    """A Telegram link (`/?run=<id>`) lands on the run's sheet at the run's scope."""
+    run = {
+        "id": 9, "kind": "traffic-check", "summary": None, "mode": "live",
+        "status": "completed", "params": None,
+        "started_at": "2026-08-21T12:00:00+00:00",
+        "completed_at": "2026-08-21T12:01:00+00:00",
+        "notification_status": "none", "error": None, "sources": {}, "funnel": {},
+    }
+    page.route(
+        "**/api/audit/runs?*",
+        lambda route: route.fulfill(json={"runs": [run], "coverage_gaps": []}),
+    )
+    page.route("**/api/audit/runs/9", lambda route: route.fulfill(json={"run": run, "traces": []}))
+    page.route(
+        "**/api/audit/runs/404",
+        lambda route: route.fulfill(status=404, json={"detail": "run not found"}),
+    )
+
+    page.goto(f"{base_url}/?run=9")
+
+    expect(page.locator("#runSheetCard")).to_be_visible()
+    expect(page.locator("#runSheetTitle")).to_contain_text("#9")
+    expect(page.locator('#activityScope [data-scope="traffic"]')).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    assert "run=" not in page.url
+
+    # A purged run says so instead of opening an empty sheet.
+    page.goto(f"{base_url}/?run=404")
+    expect(page.locator("#toast")).to_contain_text("no longer available")
+
+
 # ------------------------------------------- travel-block sweep record (#276)
 
 # A calendar-scan whose payload carries a full travel-block sweep. Sanitized:

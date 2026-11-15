@@ -27,6 +27,7 @@ from src.config import family as _family
 from src.config import gmail as _gmail
 from src.config import hub as _hub
 from src.config import presence as _presence
+from src.config import public_url as _public_url
 from src.config import task_os as _task_os
 from src.config import telegram as _telegram
 from src.config import traffic as _traffic
@@ -130,6 +131,9 @@ class Config:
     # ``config/local.json``. Used to resolve which child a Gmail school-source
     # email concerns (Stage-2 hint injection, HubClassifier._build_user_prompt).
     children: tuple[ChildProfile, ...] = ()
+    # Origin of the admin PWA, prefixed to the run links in Telegram messages;
+    # empty sends messages without one.
+    public_base_url: str = ""
 
 
 def load_config(root: Path | None = None) -> Config:
@@ -212,4 +216,5 @@ def load_config(root: Path | None = None) -> Config:
         presence=presence,
         task_os=task_os,
         children=children,
+        public_base_url=_public_url.parse(),
     )

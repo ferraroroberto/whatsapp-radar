@@ -219,6 +219,7 @@ def _abort_offline(
         config,
         f"⚠️ Family Radar: live scan aborted — all sources offline ({exc}). "
         "No messages were checked. Restore at least one enabled source.",
+        run_id=outcome.run_id,
     )
     emit(progress, f"• offline alert: {alert_status}")
     store.finish_run(

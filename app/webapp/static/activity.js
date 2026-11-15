@@ -466,6 +466,26 @@ export function openRunInActivity(ref) {
   openRun(ref);
 }
 
+/* A Telegram message links to /?run=<id>: open that run's sheet at its scope.
+ * The param is dropped first so a reload or a shared URL does not reopen it. */
+export async function openLinkedRun() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('run');
+  if (raw === null) return;
+  params.delete('run');
+  const query = params.toString();
+  window.history.replaceState(
+    {}, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
+  if (!/^\d+$/.test(raw)) return;
+  try {
+    const found = await jsonApi(`/api/audit/runs/${raw}`);
+    openRunInActivity({ kind: found.run.kind, dbId: Number(raw) });
+  } catch (exc) {
+    if (String(exc.message) === 'auth required') return;
+    toast(exc.status === 404 ? 'That run is no longer available.' : 'Could not open that run.', 'error');
+  }
+}
+
 // Activity's run row for another tab's list (Home's Latest runs).
 export function runRowFor(run, onOpen) {
   return runRow({ ...auditItem(run), onOpen: onOpen });

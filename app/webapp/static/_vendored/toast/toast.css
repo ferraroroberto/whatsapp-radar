@@ -8,9 +8,14 @@
  * The one transient message for a user-initiated command. It is the nav bar's
  * glass (same fill, hairline and blur), centred above the floating nav. Only a
  * real error tints; success, info and warning stay neutral.
+ *
+ * `.sheet-toast` is the same toast raised inside an open modal <dialog>
+ * (showToast's `opts.host`): the page's own toast sits under a dialog's top
+ * layer, so a sheet that confirms an action carries its own.
  */
 
-.toast {
+.toast,
+.sheet-toast {
   position: fixed;
   left: 50%;
   /* Sits `toast.offsetAboveNav` (8px) above the floating nav so the nav never
@@ -49,8 +54,23 @@
   z-index: 400;
 }
 
-.toast[hidden] {
+.toast[hidden],
+.sheet-toast[hidden] {
   display: none;
+}
+
+/* Inside a sheet the toast is placed against the sheet, not the viewport: it
+   lives in the modal's sticky `.detail-actions` footer (the positioned
+   ancestor), so it rides just above the footer's buttons, inset by the
+   footer's 18px padding and centred, and its max width is the sheet's. */
+.sheet-toast {
+  position: absolute;
+  inset-inline: 18px;
+  bottom: calc(100% + 8px);
+  transform: none;
+  width: fit-content;
+  max-width: none;
+  margin-inline: auto;
 }
 
 /* The only tinted variant: a real error. An opaque `danger`-over-black fill,
@@ -60,6 +80,30 @@
    contrast under 4.5:1 (2.55:1 over a white page). 75% danger / 25% black
    keeps white text above 4.5:1 in both themes whatever is behind it
    (tests/test_toast_contrast.py). */
+/* With an action (showToast's `opts.action`, one Undo) the message and its
+   button sit on one row, the button inset to the toast's edge like the
+   build-watch prompt's Reload. `hidden` must still win over the flex. */
+.toast.has-action,
+.sheet-toast.has-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 18px;
+  text-align: start;
+  text-wrap: pretty;
+}
+
+.toast.has-action[hidden],
+.sheet-toast.has-action[hidden] {
+  display: none;
+}
+
+.toast-action {
+  flex: none;
+  min-height: var(--hit-min, 44px);
+}
+
+.sheet-toast.error,
 .toast.error {
   background: color-mix(in srgb, var(--deficit) 75%, black);
   border-color: var(--deficit);

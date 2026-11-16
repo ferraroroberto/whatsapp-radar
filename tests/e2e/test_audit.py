@@ -66,7 +66,8 @@ def _gap_marker_phase(page: Page, base_url: str) -> None:
     gap = page.locator("#activityList .audit-gap-li")
     expect(gap).to_have_count(1)
     expect(gap).to_contain_text("Coverage gap")
-    expect(gap).to_contain_text("5 days · 3 scans offline")
+    # Each figure is its own meta tail, so an ellipsis never cuts it.
+    expect(gap.locator(".action-row-meta-tail")).to_have_text(["5 days", "3 scans"])
     rows = page.locator("#activityList .run-row")
     expect(rows).to_have_count(2)
     # Exceptions only: a Failed chip in the danger tone, nothing on the OK run,

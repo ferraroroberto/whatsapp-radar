@@ -92,9 +92,8 @@ function glanceRow(source) {
     haspopup: ran,
     leading: avatar,
     title: SOURCE_LABEL[source],
-    meta: !state.dashboard
-      ? '—'
-      : ran ? fmtRelative(c.started_at) + (c.summary ? ' · ' + c.summary : '') : 'no run yet',
+    meta: !state.dashboard ? '—' : ran ? fmtRelative(c.started_at) : 'no run yet',
+    tail: state.dashboard && ran && c.summary ? c.summary : [],
     onClick: ran ? function () {
       openRunInActivity({ kind: c.kind, dbId: c.db_run_id });
     } : undefined,

@@ -15,6 +15,7 @@
  * `doneLabel` / `danger` / `rule` (the footer line) in place of a payload. */
 
 import { toast } from './api.js';
+import { setMeta } from './format.js';
 import { setSwitch, switchEl } from './_vendored/switch/switch.js';
 
 function el(tag, cls, text) {
@@ -113,10 +114,11 @@ export { el };
 
 // An inset row's value (Family, Settings): every `[data-value=key]`
 // under `scope` reads `text`, toned by the status tone map when it needs
-// attention.
-export function setRowValue(scope, key, text, tone) {
+// attention. A `tail` (string or array) splits an `.action-row-meta` into its
+// truncating words and the figures kept whole beside them.
+export function setRowValue(scope, key, text, tone, tail) {
   for (const node of scope.querySelectorAll('[data-value="' + key + '"]')) {
-    node.textContent = text;
+    setMeta(node, text, tail);
     if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
   }
 }

@@ -192,6 +192,32 @@ export function fmtLocalDateTime(ts, { withYear = true } = {}) {
   return `${date} ${_pad(d.getHours())}:${_pad(d.getMinutes())}`;
 }
 
+/* Fills an `.action-row-meta` line. Without `tail` the words are plain text
+ * (the vendored two-line wrap). With `tail` (a string or an array of strings)
+ * the line splits: the words truncate on one line in `.action-row-meta-text`
+ * and each figure sits whole in its own `.action-row-meta-tail`, so an
+ * ellipsis never cuts a count, status or time. */
+export function setMeta(meta, words, tail) {
+  meta.textContent = '';
+  if (tail === undefined) {
+    meta.textContent = words === undefined ? '' : words;
+    return;
+  }
+  const text = document.createElement('span');
+  text.className = 'action-row-meta-text';
+  if (words) {
+    text.textContent = words;
+    text.title = words;
+  }
+  meta.appendChild(text);
+  for (const part of [].concat(tail)) {
+    const figure = document.createElement('span');
+    figure.className = 'action-row-meta-tail';
+    figure.textContent = part;
+    meta.appendChild(figure);
+  }
+}
+
 /* Shared action-row builder (design.md "action-row" contract): the
  * `<li class="action-row">` > `.action-row-main` > `.action-row-text` >
  * title + meta skeleton shared by every call site (activity.js,
@@ -205,7 +231,8 @@ export function fmtLocalDateTime(ts, { withYear = true } = {}) {
  * main), title/meta (text; omit to leave the node empty for the caller to
  * fill in), titleAttr (a tooltip on the title span), disabled (button only),
  * haspopup (sets aria-haspopup="dialog"), expanded (sets aria-expanded when
- * not undefined), onClick, trail (a single DOM node appended as main's
+ * not undefined), onClick, tail (a string or array of figures kept whole
+ * beside the truncating `meta` words, see setMeta), trail (a single DOM node appended as main's
  * sibling, or an array of nodes wrapped in one `.action-row-trail` span —
  * omit for no trailing slot). Returns `{li, main, text, title, meta}`. */
 export function actionRow(opts) {
@@ -228,7 +255,7 @@ export function actionRow(opts) {
   if (opts.titleAttr) title.title = opts.titleAttr;
   const meta = document.createElement('span');
   meta.className = opts.metaClass ? 'action-row-meta ' + opts.metaClass : 'action-row-meta';
-  if (opts.meta !== undefined) meta.textContent = opts.meta;
+  if (opts.meta !== undefined || opts.tail !== undefined) setMeta(meta, opts.meta, opts.tail);
   text.append(title, meta);
   main.appendChild(text);
   li.appendChild(main);

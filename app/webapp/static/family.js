@@ -16,7 +16,7 @@
 import { els, state } from './state.js';
 import { isFailed, isRunning } from './statuses.js';
 import { fetchQuiet, jsonApi, toast } from './api.js';
-import { fmtLocalDateTime, travelStatusLabel } from './format.js';
+import { fmtLocalDateTime, setMeta, travelStatusLabel } from './format.js';
 import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { icon } from './_vendored/icons/icons.js';
@@ -101,8 +101,8 @@ function renderHeader(d) {
 
 // ----------------------------------------------------------- page values
 
-function setValue(key, text, tone) {
-  setRowValue(els.paneFamily, key, text, tone);
+function setValue(key, text, tone, tail) {
+  setRowValue(els.paneFamily, key, text, tone, tail);
 }
 
 function personLabel(person) {
@@ -143,10 +143,10 @@ function renderValues() {
   const names = d.calendars.map(function (c) { return c.label || c.person; }).join(', ');
   const tokenMissing = d.calendars.length > 0 && !d.token_present;
 
-  setValue('home', f.home_address || 'Not set');
-  setValue('calendars', (tokenMissing ? 'Token missing · ' : '') + (names || 'None configured'),
-    tokenMissing ? 'danger' : null);
-  setValue('scan', f.assessment_days + 'd conflict · ' + f.unknown_scan_days + 'd unknown pre-check');
+  setValue('home', f.home_address || 'Not set', null, []);
+  setValue('calendars', names || 'None configured', tokenMissing ? 'danger' : null,
+    tokenMissing ? ['Token missing'] : []);
+  setValue('scan', '', null, [f.assessment_days + 'd conflict', f.unknown_scan_days + 'd unknown pre-check']);
 
   setValue('duty', dutySummary(f.responsible_by_weekday || {}));
   setValue('kids', f.kids_home_time || 'Not set');
@@ -906,8 +906,8 @@ function renderTraffic() {
   const t = lastData && lastData.traffic;
   if (!t) return;
   setSwitch(els.execTrafficEnabled, !!t.enabled);
-  els.execTrafficStatus.textContent =
-    'Last check ' + trafficWhen(t.last_check) + ' · last alert ' + trafficWhen(t.last_alert);
+  setMeta(els.execTrafficStatus, '',
+    ['Checked ' + trafficWhen(t.last_check), 'alert ' + trafficWhen(t.last_alert)]);
 }
 
 // ---------------------------------------------------------------- boot

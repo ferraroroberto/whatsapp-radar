@@ -165,7 +165,7 @@ function renderPicker() {
     const { li } = actionRow({
       liClass: 'link-pick-row',
       title: picker.deps.chatLabel(c),
-      meta: fmtNum(c.count) + ' msgs · ' + fmtLocalDateTime(c.last_message_at),
+      tail: [fmtNum(c.count) + ' msgs', fmtLocalDateTime(c.last_message_at)],
       onClick: function () { doLink(picker.child, c); },
     });
     els.linkPickerList.appendChild(li);

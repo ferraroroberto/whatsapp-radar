@@ -69,6 +69,10 @@ function whenLabel(ts) {
   return dayGroup(dayKey(ts)) === 'Earlier' ? full : full.slice(6);
 }
 
+// The funnel filler for a run that found nothing; a row with an exception chip
+// drops it so the time and the real counts keep the narrow line.
+const QUIET_BIT = '0 actionable';
+
 // The one muted context line after the time: the funnel's last numbers.
 function summaryBits(item) {
   const r = item.run;
@@ -85,7 +89,7 @@ function summaryBits(item) {
   }
   // A non-zero actionable count is the row's chip, so the line does not repeat it.
   const f = r.funnel || {};
-  const quiet = f.actionable ? [] : ['0 actionable'];
+  const quiet = f.actionable ? [] : [QUIET_BIT];
   if (item.kind === 'process') return [f.chats_reviewed + ' reviewed', ...quiet];
   return [f.messages_synced + ' new', ...quiet];
 }
@@ -145,7 +149,8 @@ function runRow(item) {
     leading: glyph(kindIcon(item.kind)),
     haspopup: true,
     title: kindLabel(item.kind),
-    meta: [whenLabel(item.started_at), ...item.bits].join(' · '),
+    meta: whenLabel(item.started_at),
+    tail: chips.length ? item.bits.filter(function (b) { return b !== QUIET_BIT; }) : item.bits,
     onClick: function () {
       (item.onOpen || openRun)({ kind: item.kind, dbId: item.dbId, runId: item.runId });
     },
@@ -158,23 +163,27 @@ function runRow(item) {
   return li;
 }
 
-// A connector outage collapses its offline scans into one marker.
+// A connector outage collapses its offline scans into one marker. The phone
+// line has room for the day range and two counts, so the exact times and the
+// recovery sit in the row's tooltip.
 function gapRow(gap) {
   const dayWord = gap.duration_days === 1 ? 'day' : 'days';
   const scanWord = gap.failed_runs === 1 ? 'scan' : 'scans';
   const recovery = gap.recovered_at
-    ? ` · recovered ${fmtLocalDateTime(gap.recovered_at)}`
-    : ' · recovery not yet recorded';
+    ? `recovered ${fmtLocalDateTime(gap.recovered_at)}`
+    : 'recovery not yet recorded';
+  const day = function (ts) { return fmtLocalDateTime(ts, { withYear: false }).slice(0, 5); };
   const { li } = actionRow({
     tag: 'div',
     liClass: 'audit-gap-li',
     leading: glyph('triangle-alert'),
     title: 'Coverage gap',
-    meta: `${fmtLocalDateTime(gap.started_at)} to ${fmtLocalDateTime(gap.ended_at)}`
-      + ` · ${gap.duration_days} ${dayWord} · ${gap.failed_runs} ${scanWord} offline${recovery}`,
+    meta: `${day(gap.started_at)} to ${day(gap.ended_at)}`,
+    tail: [`${gap.duration_days} ${dayWord}`, `${gap.failed_runs} ${scanWord}`],
     trail: [statusChip('Offline', 'danger')],
     trailClass: 'run-chips',
   });
+  li.title = `${fmtLocalDateTime(gap.started_at)} to ${fmtLocalDateTime(gap.ended_at)} · ${recovery}`;
   return li;
 }
 
@@ -197,9 +206,8 @@ function foldRow(key, items, label) {
     expanded: expanded,
     leading: glyph('car'),
     title: `${label} · ${items.length} traffic check${items.length === 1 ? '' : 's'}`,
-    meta: (alerts ? `${alerts} alert${alerts === 1 ? '' : 's'}` : 'no alerts')
-      + (failed ? ` · ${failed} failed` : '')
-      + (abandoned ? ` · ${abandoned} abandoned` : ''),
+    tail: [alerts ? `${alerts} alert${alerts === 1 ? '' : 's'}` : 'no alerts']
+      .concat(failed ? [`${failed} failed`] : [], abandoned ? [`${abandoned} abandoned`] : []),
     onClick: function () {
       ax().openDays[key] = !expanded;
       renderList();
@@ -218,7 +226,8 @@ function filteredFoldRow() {
     haspopup: true,
     leading: glyph('eye'),
     title: 'Filtered out',
-    meta: `${a.filteredTotal} reviewed without an alert · last ${a.filteredDays} days`,
+    meta: 'without an alert',
+    tail: [`${a.filteredTotal} reviewed`, `last ${a.filteredDays} days`],
     onClick: openFiltered,
   });
   return li;

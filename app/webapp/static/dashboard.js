@@ -86,14 +86,18 @@ function glanceRow(source) {
   // Static sprite markup only — never user content — so innerHTML is safe here.
   avatar.innerHTML = icon(SOURCE_ICON[source].slice(3));
   const chips = glanceChips(source, c, live);
+  const words = !state.dashboard ? '—' : ran ? fmtRelative(c.started_at) : 'no run yet';
+  const summary = state.dashboard && ran && c.summary ? c.summary : '';
   const { li } = actionRow({
     liClass: 'glance-row',
     disabled: !ran,
     haspopup: ran,
     leading: avatar,
     title: SOURCE_LABEL[source],
-    meta: !state.dashboard ? '—' : ran ? fmtRelative(c.started_at) : 'no run yet',
-    tail: state.dashboard && ran && c.summary ? c.summary : [],
+    // An exception chip leaves too little width for the time and a multi-part
+    // summary on one line, so that row keeps the plain two-line wrap.
+    meta: chips.length ? [words, summary].filter(Boolean).join(' · ') : words,
+    tail: chips.length ? undefined : summary || [],
     onClick: ran ? function () {
       openRunInActivity({ kind: c.kind, dbId: c.db_run_id });
     } : undefined,

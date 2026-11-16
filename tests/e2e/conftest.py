@@ -22,6 +22,11 @@ Three run modes (issue #225, guard vendored from project-scaffolding's
   unmocked test can't silently start hitting the live backend.
 * **Offline (nothing set, no tray up).** The suite skips, keeping plain
   ``pytest`` fully offline.
+
+Loopback discipline (``_port_pool.py``, ``_serve_keepalive.py``): tests share one
+browser context per engine, the autobooted server holds idle connections for a
+minute, and a failure on ``net::ERR_ADDRESS_IN_USE`` is reported as
+``PORT POOL EXHAUSTED`` — the host's port pool, not the page.
 """
 
 from __future__ import annotations
@@ -36,16 +41,21 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Playwright, sync_playwright
+import requests
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
+from src.pooled_http import pooled_request
 from src.subprocess_flags import NO_WINDOW
 from tests.e2e._e2e_live_guard import require_disposable_instance
+from tests.e2e._port_pool import (  # noqa: F401 — the report hooks pytest looks for here
+    pytest_runtest_makereport,
+    pytest_terminal_summary,
+    reset_context,
+)
 from tests.e2e._surface import pytest_collection_modifyitems as _surface_collection
 from tests.helpers import insert_message
 
@@ -81,11 +91,12 @@ def _timeout_scale() -> float:
 
 
 def _reachable(port: int, *, timeout: float = 0.3) -> bool:
+    # One pooled keep-alive session: each readiness poll reuses a socket instead of
+    # leaving a closed connection in TIME_WAIT.
     url = f"http://127.0.0.1:{port}/healthz"
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
-            return resp.status == 200
-    except (urllib.error.URLError, OSError):
+        return pooled_request("GET", url, timeout=timeout).status_code == 200
+    except requests.RequestException:
         return False
 
 
@@ -361,7 +372,7 @@ def base_url() -> Iterator[str]:
         [
             sys.executable,
             "-m",
-            "app.webapp.serve",
+            "tests.e2e._serve_keepalive",
             "--host",
             "127.0.0.1",
             "--port",
@@ -441,6 +452,67 @@ def playwright() -> Iterator[Playwright]:
         yield pw
     finally:
         pw.stop()
+
+
+class _SharedContext:
+    """One browser context per engine, created on first use and replaceable.
+
+    A fresh context starts with an empty HTTP cache and closes its connections to
+    the app on teardown, each closed connection leaving a loopback ephemeral port in
+    TIME_WAIT (see ``_port_pool.py``). Tests share one context so consecutive pages
+    reuse its keep-alive sockets; ``reset_context`` keeps them isolated from each
+    other, and ``discard`` retires a context a failed test may have left wedged.
+    """
+
+    def __init__(self, browser: Browser, context_args: dict[str, object]) -> None:
+        self._browser = browser
+        self._args = context_args
+        self._context: BrowserContext | None = None
+
+    def get(self) -> BrowserContext:
+        if self._context is None:
+            self._context = self._browser.new_context(**self._args)  # type: ignore[arg-type]
+        return self._context
+
+    def discard(self) -> None:
+        context, self._context = self._context, None
+        if context is not None:
+            with contextlib.suppress(Exception):
+                context.close()
+
+
+@pytest.fixture(scope="session")
+def _shared_context(
+    browser: Browser, browser_context_args: dict[str, object]
+) -> Iterator[_SharedContext]:
+    shared = _SharedContext(browser, browser_context_args)
+    try:
+        yield shared
+    finally:
+        shared.discard()
+
+
+@pytest.fixture
+def page(request: pytest.FixtureRequest, _shared_context: _SharedContext) -> Iterator[Page]:
+    """pytest-playwright's ``page``, opened in the engine's shared context.
+
+    Same fixture name as the plugin's own, so every test gets it without change. A test
+    that needs its own viewport or device builds one with ``browser.new_context``.
+    """
+    context = _shared_context.get()
+    page = context.new_page()
+    try:
+        yield page
+    finally:
+        failed = any(
+            (report := getattr(request.node, f"rep_{phase}", None)) is not None and report.failed
+            for phase in ("setup", "call")
+        )
+        if failed:
+            _shared_context.discard()
+        else:
+            reset_context(context, page)
+            page.close()
 
 
 @pytest.fixture(scope="session")

@@ -12,6 +12,24 @@ The offline suite needs no browsers; the e2e smoke tests self-boot the webapp on
 
 The e2e suite stays under the fleet budget (`[e2e] test_budget` in `.fleet.toml`, lowered as the suite trims): one test per user-visible flow, route-mocked wherever the flow needs a payload the seeded database cannot produce. A test that needs several payloads runs one phase per visit, calling `reset_page` (`tests/e2e/_audit_runs.py`) between phases so routes and stored UI state never leak forward; a new check on an existing flow joins that flow's test rather than adding a node.
 
+### Keeping the e2e run off the loopback port pool
+
+Every closed loopback connection leaves an (ephemeral port, server port) pair in TIME_WAIT for minutes, and on Windows a `connect()` that lands on a drained pool fails as `net::ERR_ADDRESS_IN_USE` (Playwright's own Node-side client words it `connect ENOBUFS`) on a page that is fine. A second gate on the same host adds its own pairs. The harness keeps its share small in three ways (`tests/e2e/conftest.py`, `tests/e2e/_port_pool.py`, `tests/e2e/_serve_keepalive.py`):
+
+- **The server holds idle connections for a minute.** The disposable webapp is launched through `tests.e2e._serve_keepalive`, which raises hypercorn's idle keep-alive timeout from 5 s to 60 s. The app polls every 15 s, so with the default a browser sitting on a page for a few seconds reopened a connection per poll; WebKit did it for most of its pairs. The vendored `serve.py` and the real app keep their defaults.
+- **One browser context per engine.** The `page` fixture opens each test's page in a shared per-engine context and resets storage, routes, cookies and permissions after the test, so consecutive tests reuse its keep-alive sockets and HTTP cache. A context whose test failed is closed and replaced. A case that needs its own viewport or device builds one with `browser.new_context` and closes it. The readiness poll reuses one pooled session (`src/pooled_http.py`).
+- **A drained pool is named.** A failure whose text carries `ERR_ADDRESS_IN_USE` or `connect ENOBUFS` leads with `PORT POOL EXHAUSTED` and the run ends with a section of that name listing the tests, so the gate output reads as a host-capacity problem: wait a few minutes and re-run instead of debugging the page (`tests/e2e_harness/test_port_pool.py`).
+
+Never change the machine's dynamic port range or `TcpTimedWaitDelay` to make a suite pass; both are host-level settings.
+
+To measure, sample `netstat -ano -p tcp` every 200 ms on a thread while the suite runs and count the distinct new loopback pairs in TIME_WAIT whose server end is the port the run's webapp listens on, leaving out the host's own background traffic (other local apps, a few hundred pairs per minute on this machine). Measured on the full run (Chromium and WebKit, 15 tests each), the same probe on the same host:
+
+| New loopback TIME_WAIT pairs to the run's webapp | Before | After |
+| --- | --- | --- |
+| Full run | 218 | 10, 10 |
+| Chromium alone | 58 | 9 |
+| WebKit alone | 131 | 7 |
+
 ## Static ratchet
 
 The static ratchet compares the tree with the committed `.static-ratchet-baseline.json` and fails only on a *new* finding (jscpd duplicates via `npx`, so Node is required and the first run needs network; ruff `F401,F841`, plus ruff's curated bug (`B`) and security (`S`) families, `S113` included). Existing debt is baselined, not fixed; shrink the baseline with `scripts\static_ratchet.py --update-baseline` in the PR that removes debt. A detector that cannot run fails the gate as NOT CONFIRMED. Procedure and limits: project-scaffolding's `docs/static-ratchet.md`.

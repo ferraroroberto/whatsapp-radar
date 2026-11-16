@@ -18,6 +18,7 @@ browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "c6f84a1e2677f10ec7
 surface_capture = { src = "tests/e2e/_surface.py", sha = "5c4d3a7947dae8b3b4a028bf636c0f052ea3b1f7", dest = "tests/e2e/_surface.py" }
 runtime_data = { src = "src/runtime_data.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/runtime_data.py" }
 classify_e2e = { src = "scripts/classify_e2e.py", sha = "3f15581f2188895a27f5a32083f7f7cdb7e93648", dest = "scripts/classify_e2e.py" }
+color-scheme = { src = "app/webapp/static/_vendored/color-scheme", sha = "90ac7687bf9bc756d73a3b0f4e64cd692d88617e", dest = "app/webapp/static/_vendored/color-scheme" }
 nav = { src = "app/webapp/static/_vendored/nav", sha = "cb9fff9130453c781146f2cdf5083d83fb43b0df", dest = "app/webapp/static/_vendored/nav" }
 select-native = { src = "app/webapp/static/_vendored/select-native", sha = "6c8ae06472edc4c7448a767656060cd2b79cefe9", dest = "app/webapp/static/_vendored/select-native" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }

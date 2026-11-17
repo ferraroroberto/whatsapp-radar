@@ -1,7 +1,8 @@
 /* Inbox: inspect and monitor WhatsApp and Gmail channels.
  *
- * One scope switch (Monitored | Ignored | All) and one filter field (a name
- * search with the source as a chip inside it); "All" is capped at
+ * One filter field (a name search) and one Filters & sort button whose sheet
+ * holds the status switch (Monitored | Ignored | All) and the source filter,
+ * with the count of non-default values on the button; "All" is capped at
  * CHATS_RENDER_CAP rows so a ~900-chat account stays usable on a phone. Each
  * chat is one vendored action-row: an initial avatar with a source mark, the
  * name, and one line of relative time plus the last message's preview, with a
@@ -727,7 +728,23 @@ export function wireChats() {
   els.chatsFilterMonitored.addEventListener('click', function () { setFilter('monitored'); });
   els.chatsFilterIgnored.addEventListener('click', function () { setFilter('ignored'); });
   els.chatsFilterAll.addEventListener('click', function () { setFilter('all'); });
-  els.chatsSource.addEventListener('change', function () { setSourceFilter(els.chatsSource.value); });
+  els.chatsSourceAll.addEventListener('click', function () { setSourceFilter('all'); });
+  els.chatsSourceWhatsapp.addEventListener('click', function () { setSourceFilter('whatsapp'); });
+  els.chatsSourceGmail.addEventListener('click', function () { setSourceFilter('gmail'); });
+  syncFilterControls();
+  els.chatsFiltersOpen.addEventListener('click', function () { els.chatsFiltersSheet.showModal(); });
+  els.chatsFiltersClose.addEventListener('click', function () { els.chatsFiltersSheet.close(); });
+  els.chatsFiltersDone.addEventListener('click', function () { els.chatsFiltersSheet.close(); });
+  // Native <dialog>: a click on the element itself is the ::backdrop.
+  els.chatsFiltersSheet.addEventListener('click', function (ev) {
+    if (ev.target === els.chatsFiltersSheet) els.chatsFiltersSheet.close();
+  });
+  els.chatsFiltersClear.addEventListener('click', function () {
+    state.chatsFilter = DEFAULT_STATUS;
+    state.chatsSourceFilter = DEFAULT_SOURCE;
+    syncFilterControls();
+    render();
+  });
   els.chatsSearch.addEventListener('input', function () {
     state.chatsSearch = els.chatsSearch.value;
     render();
@@ -756,14 +773,40 @@ export function wireChats() {
 
 function setSourceFilter(source) {
   state.chatsSourceFilter = source;
-  els.chatsSource.value = source;
+  syncFilterControls();
   render();
 }
 
 function setFilter(filter) {
   state.chatsFilter = filter;
-  els.chatsFilterMonitored.setAttribute('aria-pressed', String(filter === 'monitored'));
-  els.chatsFilterIgnored.setAttribute('aria-pressed', String(filter === 'ignored'));
-  els.chatsFilterAll.setAttribute('aria-pressed', String(filter === 'all'));
+  syncFilterControls();
   render();
+}
+
+// The sheet's segments, Clear and the trigger's badge all follow the two
+// filter values in state.
+const DEFAULT_STATUS = 'monitored';
+const DEFAULT_SOURCE = 'all';
+const STATUS_LABEL = { monitored: 'Monitored', ignored: 'Ignored', all: 'All' };
+const SOURCE_LABEL = { all: 'All sources', whatsapp: 'WhatsApp', gmail: 'Gmail' };
+
+function syncFilterControls() {
+  const status = state.chatsFilter;
+  const source = state.chatsSourceFilter;
+  els.chatsFilterMonitored.setAttribute('aria-pressed', String(status === 'monitored'));
+  els.chatsFilterIgnored.setAttribute('aria-pressed', String(status === 'ignored'));
+  els.chatsFilterAll.setAttribute('aria-pressed', String(status === 'all'));
+  els.chatsSourceAll.setAttribute('aria-pressed', String(source === 'all'));
+  els.chatsSourceWhatsapp.setAttribute('aria-pressed', String(source === 'whatsapp'));
+  els.chatsSourceGmail.setAttribute('aria-pressed', String(source === 'gmail'));
+
+  const active = [];
+  if (status !== DEFAULT_STATUS) active.push('status ' + STATUS_LABEL[status]);
+  if (source !== DEFAULT_SOURCE) active.push('source ' + SOURCE_LABEL[source]);
+  els.chatsFiltersBadge.textContent = String(active.length);
+  els.chatsFiltersBadge.hidden = !active.length;
+  els.chatsFiltersClear.disabled = !active.length;
+  els.chatsFiltersOpen.setAttribute('aria-label', active.length
+    ? 'Filters & sort, ' + active.length + ' active: ' + active.join(', ')
+    : 'Filters & sort');
 }

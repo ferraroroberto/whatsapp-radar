@@ -368,26 +368,49 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .detail-header h2:has(+ .detail-status) { flex: none; }
 
 /* =================================================================== chats */
-/* One scope switch and one filter field over one vendored action-row list; the
-   chat sheet is a dialog on a phone and a right-hand pane at layout.wide. */
-.chats-toolbar { margin: 0 0 var(--gap); }
-.chats-filter { margin: 0 0 var(--gap); }
-/* The source filter is a chip inside the field (design.md: a scope's narrowing
-   filter is a field chip, never a second segmented row). */
-.chats-source-chip {
-  flex: none;
-  height: 30px;
-  max-width: 45%;
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-pill);
-  background: var(--neutral-soft);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--font-label);
-  font-weight: 600;
-  cursor: pointer;
+/* One filter field and one Filters & sort button over one vendored action-row
+   list; the chat sheet is a dialog on a phone and a right-hand pane at
+   layout.wide. */
+.chats-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--gap);
 }
+.chats-filter { flex: 1; min-width: 0; margin: 0; }
+/* The trigger is a 44px square beside the 44px field; the badge counts the
+   non-default filters, so filtered-out chats never vanish silently. */
+.chats-filters-btn { --icon-btn-box: var(--row-sm); }
+.filter-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-fill);
+  color: var(--accent-fg);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-sizing: border-box;
+}
+.filter-badge[hidden] { display: none; }
+/* Filters & sort sheet: title and footer stay put while the body scrolls, so
+   the primary action is reachable at any viewport height. */
+.detail-dialog[open]:has(.filters-card) { overflow: hidden; display: flex; flex-direction: column; }
+.filters-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+  overflow: hidden;
+}
+.filters-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.filters-actions { display: flex; gap: var(--space-sm); position: static; flex: none; }
+.filters-actions .detail-save-btn { width: auto; flex: 1; }
 #chatsCount { margin: 0 2px var(--space-sm); }
 .chats-list-card { margin: 0 0 var(--gap); }
 .worth-look .card.action-list { margin: 0; }

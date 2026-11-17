@@ -175,6 +175,11 @@ def test_inbox_watch_toggle_history_gmail_senders_and_judging_sheets(
     _judging_texts_open_in_read_only_sheets(page)
 
 
+def _open_filters_sheet(page: Page) -> None:
+    page.locator("#chatsFiltersOpen").click()
+    expect(page.locator("#chatsFiltersSheet")).to_be_visible()
+
+
 def _whatsapp_chats_toggle_and_open_their_history(page: Page, base_url: str) -> None:
     page.goto(base_url)
     page.locator("#tabChats").click()
@@ -184,10 +189,18 @@ def _whatsapp_chats_toggle_and_open_their_history(page: Page, base_url: str) -> 
     # test must be order-independent: use the "All" filter (every chat shows
     # regardless of status) and assert the toggle label simply *flips*, whatever
     # the starting state left by a prior run.
+    _open_filters_sheet(page)
     page.locator("#chatsFilterAll").click()
-    # The status scope is the segmented control: the raised segment is the state.
+    # The status switch is a segmented control: the raised segment is the state.
     expect(page.locator("#chatsFilterAll")).to_have_attribute("aria-pressed", "true")
     expect(page.locator("#chatsFilterMonitored")).to_have_attribute("aria-pressed", "false")
+    # One non-default filter: the trigger's badge counts it and its name spells it out.
+    expect(page.locator("#chatsFiltersBadge")).to_have_text("1")
+    expect(page.locator("#chatsFiltersOpen")).to_have_attribute(
+        "aria-label", "Filters & sort, 1 active: status All"
+    )
+    page.locator("#chatsFiltersDone").click()
+    expect(page.locator("#chatsFiltersSheet")).to_be_hidden()
     row = page.locator(".chat-row", has_text="School Parents Group")
     expect(row).to_be_visible()
     toggle = row.locator(".chat-watch")
@@ -201,9 +214,13 @@ def _whatsapp_chats_toggle_and_open_their_history(page: Page, base_url: str) -> 
     expect(row.locator(".chat-avatar")).to_be_visible()
     expect(row.locator(".source-badge")).to_have_count(0)
     expect(row).not_to_contain_text("msgs")
-    # Inbox opens on one scope switch and one filter field; no card heading.
+    # Inbox opens on one filter field and one Filters & sort button; the status
+    # switch and the source filter sit in the sheet, not above the list.
     expect(page.locator("#paneChats .card-title")).to_have_count(0)
     expect(page.locator("#chatsSearch")).to_be_visible()
+    expect(page.locator("#chatsFiltersOpen")).to_be_visible()
+    expect(page.locator("#chatsFilter")).to_be_hidden()
+    expect(page.locator("#chatsSource")).to_be_hidden()
 
     # The chat sheet (read-only) for the seeded chat that has messages.
     page.locator(".chat-main", has_text="Class 4A Group").first.click()
@@ -240,7 +257,10 @@ def _whatsapp_chats_toggle_and_open_their_history(page: Page, base_url: str) -> 
 def _gmail_email_history_and_sender_promotion(page: Page) -> None:
     # Source selector isolates Gmail and the email overlay exposes subject/body/
     # thread evidence with an unmistakable source badge.
-    page.locator("#chatsSource").select_option("gmail")
+    _open_filters_sheet(page)
+    page.locator("#chatsSourceGmail").click()
+    expect(page.locator("#chatsSourceGmail")).to_have_attribute("aria-pressed", "true")
+    page.locator("#chatsFiltersDone").click()
     # The count line shows only while the filter narrows the list.
     expect(page.locator("#chatsCount")).to_contain_text("match")
     gmail_row = page.locator(".chat-row", has_text="School Updates")
@@ -254,8 +274,10 @@ def _gmail_email_history_and_sender_promotion(page: Page) -> None:
 
     # Gmail speaks of senders, not WhatsApp "channels", while the not-monitored
     # bucket keeps the same "Ignored" label as WhatsApp.
+    _open_filters_sheet(page)
     page.locator("#chatsFilterAll").click()
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
+    page.locator("#chatsFiltersDone").click()
     expect(page.locator("#chatsCount")).to_contain_text("sender")
 
     # The discovered sender is promotable via the same watch toggle as WhatsApp.
@@ -278,8 +300,10 @@ def _gmail_email_history_and_sender_promotion(page: Page) -> None:
     expect(page.locator("#historyCard")).to_be_hidden()
 
     # Switching back to WhatsApp: the label stays "Ignored" either way.
-    page.locator("#chatsSource").select_option("whatsapp")
+    _open_filters_sheet(page)
+    page.locator("#chatsSourceWhatsapp").click()
     expect(page.locator("#chatsFilterIgnored")).to_have_text("Ignored")
+    page.locator("#chatsFiltersDone").click()
 
 
 def _judging_texts_open_in_read_only_sheets(page: Page) -> None:

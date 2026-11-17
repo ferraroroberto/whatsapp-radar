@@ -132,27 +132,22 @@
           <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
         </button>
       </div>
-      <!-- One scope switch and one filter field over one fleet row: the
-           source filter is a chip inside the field, never a second row. -->
+      <!-- One filter field and one Filters & sort button over the list: the
+           status switch and the source filter live in the sheet (#chatsFiltersSheet). -->
       <div class="chats-layout">
         <div class="chats-main">
-          <div class="chats-toolbar">
-            <div id="chatsFilter" class="segmented" data-track="chats.filter" role="group" aria-label="Message status filter">
-              <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
-              <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
-              <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
-            </div>
+          <div class="chats-controls">
+            <label class="action-row-filter chats-filter">
+              <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+              <input id="chatsSearch" type="search" placeholder="Search by name" autocomplete="off"
+                     aria-label="Search chats by name">
+            </label>
+            <button data-track="chats.filters-open" id="chatsFiltersOpen" type="button" class="icon-button chats-filters-btn"
+                    aria-haspopup="dialog" aria-label="Filters &amp; sort">
+              <svg class="icon" aria-hidden="true"><use href="#i-sliders-horizontal"></use></svg>
+              <span id="chatsFiltersBadge" class="filter-badge" aria-hidden="true" hidden></span>
+            </button>
           </div>
-          <label class="action-row-filter chats-filter">
-            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
-            <input id="chatsSearch" type="search" placeholder="Search by name" autocomplete="off"
-                   aria-label="Search chats by name">
-            <select data-track="chats.source" id="chatsSource" class="chats-source-chip" aria-label="Message source">
-              <option value="all">All sources</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="gmail">Gmail</option>
-            </select>
-          </label>
           <!-- Worth a look: chats whose recent messages match their source's
                Stage-1 rules, shown above the list only when there is something. -->
           <section id="tripwireCard" class="run-group worth-look" aria-live="polite" hidden>
@@ -823,6 +818,36 @@
           <p class="empty-state-message">Nothing was filtered out in this period.</p>
         </div>
         <button data-track="filtered-sheet.more" id="auditFilteredMore" type="button" class="button-ghost btn-block btn-touch" hidden>Load more</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Filters & sort: the Inbox's status switch and source filter, each
+       applying as it changes. -->
+  <dialog data-track-view="chats-filters" id="chatsFiltersSheet" class="detail-dialog">
+    <div class="detail-card filters-card" aria-labelledby="chatsFiltersTitle">
+      <div class="detail-header">
+        <h2 id="chatsFiltersTitle" tabindex="-1">Filters &amp; sort</h2>
+        <button data-track="chats-filters.close" id="chatsFiltersClose" type="button" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+      </div>
+      <div class="filters-body">
+        <p class="field-label" id="chatsFilterLabel">Status</p>
+        <div id="chatsFilter" class="segmented" data-track="chats.filter" role="group" aria-labelledby="chatsFilterLabel">
+          <button id="chatsFilterMonitored" type="button" class="segmented-item" aria-pressed="true" data-filter="monitored">Monitored</button>
+          <button id="chatsFilterIgnored" type="button" class="segmented-item" aria-pressed="false" data-filter="ignored">Ignored</button>
+          <button id="chatsFilterAll" type="button" class="segmented-item" aria-pressed="false" data-filter="all">All</button>
+        </div>
+        <p class="field-label" id="chatsSourceLabel">Message source</p>
+        <div id="chatsSource" class="segmented" data-track="chats.source" role="group" aria-labelledby="chatsSourceLabel">
+          <button id="chatsSourceAll" type="button" class="segmented-item" aria-pressed="true" data-source="all">All sources</button>
+          <button id="chatsSourceWhatsapp" type="button" class="segmented-item" aria-pressed="false" data-source="whatsapp">WhatsApp</button>
+          <button id="chatsSourceGmail" type="button" class="segmented-item" aria-pressed="false" data-source="gmail">Gmail</button>
+        </div>
+      </div>
+      <div class="detail-actions filters-actions">
+        <button data-track="chats-filters.clear" id="chatsFiltersClear" type="button" class="button-ghost" disabled>Clear</button>
+        <button data-track="chats-filters.done" id="chatsFiltersDone" type="button" class="button-primary detail-save-btn">Done</button>
       </div>
     </div>
   </dialog>

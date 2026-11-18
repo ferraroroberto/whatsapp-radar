@@ -530,7 +530,6 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 }
 /* Settings dialog: wider than the default 440px modal so the prompt
    and settings editors have room; the dialog itself scrolls (modal.css). */
-.detail-dialog:has(.settings-card) { width: min(640px, 92vw); }
 .detail-header .detail-close, .detail-header .icon-button { margin-left: var(--space-sm); }
 .detail-header h2 {
   flex: 1;

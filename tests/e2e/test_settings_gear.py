@@ -63,17 +63,11 @@ def _gear_opens_settings_with_its_groups(
     page.locator("#paneActivity .home-settings").click()
     dialog = page.locator("#settingsDialog")
     expect(dialog).to_be_visible()
-    expect(dialog.locator("#settingsTitle")).to_be_visible()
-    # The header line (#374): a source that should be up and is not, else the
-    # build; the title never truncates beside it.
-    status = dialog.locator("#settingsStatus")
-    expect(status).to_have_text(re.compile(r"offline$|^Build: "))
-    assert dialog.locator("#settingsTitle").evaluate(
-        "el => el.scrollWidth <= el.clientWidth"
-    ), "Settings title truncates beside its status line"
+    # The full Settings page: its own title and close in the page head.
+    expect(dialog.locator("#settingsTitle")).to_have_text("Settings")
     # The six groups (#377), and no file path or stage number in any label.
-    expect(dialog.locator(".overline")).to_have_text(_GROUPS)
-    labels = dialog.locator(".action-row-title").all_inner_texts()
+    expect(dialog.locator(".settings-group-label")).to_have_text(_GROUPS)
+    labels = dialog.locator(".settings-row-label").all_inner_texts()
     assert labels and not [x for x in labels if "/" in x or re.search(r"stage", x, re.I)], labels
     assert dialog.locator("#settingsClose").evaluate_all(_UNPAINTED) == [_CLEAR]
     surface(page, "settings.dialog")
@@ -242,7 +236,8 @@ def _passkey_enrollment_shows_while_its_window_is_open(
     if not window_open:
         expect(home).not_to_have_text("Passkey enrollment open")
         page.locator("#paneDashboard .home-settings").click()
-        expect(page.locator("#settingsStatus")).not_to_have_text("Passkey enrollment open")
+        passkeys = page.locator('#settingsDialog [data-value="passkeys"]')
+        expect(passkeys).not_to_contain_text("enrollment open")
         page.locator('#settingsDialog [data-settings-sheet="passkeys"]').click()
         expect(page.locator("#enrollDeviceBtn")).to_have_count(0)
         return
@@ -252,7 +247,8 @@ def _passkey_enrollment_shows_while_its_window_is_open(
     home.click()
     sheet = page.locator("#settingsSheet")
     expect(sheet).to_be_visible()
-    expect(page.locator("#settingsStatus")).to_have_text("Passkey enrollment open")
+    passkeys = page.locator('#settingsDialog [data-value="passkeys"]')
+    expect(passkeys).to_contain_text("enrollment open")
     expect(page.locator("#enrollDeviceBtn")).to_be_visible()
     surface(page, "settings.passkeys-sheet")
     # Removal confirms inside the sheet; Cancel puts the row back.

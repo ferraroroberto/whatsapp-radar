@@ -15,7 +15,6 @@
 import { els, state } from './state.js';
 import { fetchQuiet, jsonApi, readToken, toast } from './api.js';
 import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from './format.js';
-import { renderHeadStatus } from './_vendored/home-head/home-head.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { patchFamily } from './family.js';
 import { setRowValue } from './edit-sheet.js';
@@ -214,25 +213,6 @@ function isLiveSource(s) {
   return s.source === 'whatsapp' && ex.sidecar ? !!ex.sidecar.is_live : !!s.connected;
 }
 
-// The Settings header line: a source that should be up and is not,
-// else an open passkey enrollment window, else the build the PWA is
-// running.
-export function renderSettingsStatus() {
-  const ex = execState();
-  const down = (ex.sourceHealth || []).find(function (s) { return s.enabled && !isLiveSource(s); });
-  const w = state.webauthn || {};
-  if (down) {
-    renderHeadStatus(els.settingsStatus, [{
-      text: (SOURCE_LABEL[down.source] || down.source) + ' offline',
-      tone: 'danger',
-    }]);
-  } else if (w.configured && w.enrollment_open) {
-    renderHeadStatus(els.settingsStatus, [{ text: 'Passkey enrollment open', tone: 'attention' }]);
-  } else {
-    renderHeadStatus(els.settingsStatus, [], els.buildReadout.textContent);
-  }
-}
-
 // A sync row's source: the connector stamps Gmail; everything else is the
 // WhatsApp connector (fixture or linked device).
 function syncSource(row) {
@@ -267,7 +247,6 @@ export function renderSourceRows() {
 }
 
 function renderSourceHealth() {
-  renderSettingsStatus();
   renderSourceRows();
   const ex = execState();
   els.execSources.textContent = '';

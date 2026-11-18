@@ -88,7 +88,6 @@ export const els = {
   settingsDialog: document.getElementById('settingsDialog'),
   settingsClose: document.getElementById('settingsClose'),
   textSizeControl: document.getElementById('textSizeControl'),
-  settingsStatus: document.getElementById('settingsStatus'),
   // Home: header line, glance card, Latest runs; the source counts card
   // lives in Settings.
   dashStatus: document.getElementById('dashStatus'),

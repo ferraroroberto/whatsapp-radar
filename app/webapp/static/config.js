@@ -15,7 +15,7 @@
 import { APP_PREFIX, els, state } from './state.js';
 import { fetchQuiet, jsonApi } from './api.js';
 import {
-  fetchSettingsHealth, rebuildCache, renderSettingsStatus, renderSourceRows, renderSyncs,
+  fetchSettingsHealth, rebuildCache, renderSourceRows, renderSyncs,
 } from './execution.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
 import {
@@ -336,13 +336,11 @@ export function wireSettings() {
   bindTextSize(els.textSizeControl, APP_PREFIX);
   els.settingsClose.addEventListener('click', function () { els.settingsDialog.close(); });
   els.settingsDialog.addEventListener('click', function (ev) {
-    if (ev.target === els.settingsDialog) { els.settingsDialog.close(); return; }
     const row = ev.target.closest('[data-settings-sheet]');
     if (row) openRow(row.dataset.settingsSheet);
   });
   onWebauthnChange(function () {
     renderInstallRows();
-    renderSettingsStatus();
     if (!ruleSheet.isOpen(SHEETS.passkeys)) return;
     if (passkeyShape() !== passkeysShape) ruleSheet.render();
     else updatePasskeyStatus();

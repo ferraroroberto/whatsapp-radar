@@ -12,7 +12,7 @@ import { fetchWebauthnStatus } from './webauthn.js';
 import { fetchDashboard, wireDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { wireSettings } from './config.js';
-import { fetchExecution, fetchSettingsHealth, renderSettingsStatus, wireExecution } from './execution.js';
+import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
 import { fetchActivity, openLinkedRun, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
@@ -24,7 +24,6 @@ async function fetchVersion() {
   try {
     const body = await jsonApi('/api/version');
     els.buildReadout.textContent = buildReadoutText(body.git_sha || 'unknown', body.built_at || '');
-    renderSettingsStatus();
   } catch (exc) {
     els.buildReadout.textContent = '';
     // An auth failure must reach boot(): it stops there, before any poll timer is

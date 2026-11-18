@@ -49,6 +49,7 @@
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/action-row/action-row.css">
   <link rel="stylesheet" href="/static/_vendored/row-menu/row-menu.css">
+  <link rel="stylesheet" href="/static/_vendored/settings-group/settings-group.css">
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/styles-views.css">
   <title>Family Radar</title>
@@ -419,190 +420,134 @@
     </footer>
   </main>
 
-  <!-- Settings: opened by the home-head gear on every pane. Settings is
-       never a tab (fleet nav contract). The cards keep their ids, so
-       config.js / execution.js wire them unchanged. -->
-  <dialog data-track-view="settings" id="settingsDialog" class="detail-dialog">
-    <div class="detail-card settings-card" aria-labelledby="settingsTitle">
-      <div class="detail-header">
-        <h2 id="settingsTitle">Settings</h2>
-        <span id="settingsStatus" class="detail-status" role="status" aria-live="polite">&nbsp;</span>
-        <button data-track="settings.close" id="settingsClose" type="button" class="icon-button detail-close" aria-label="Close">
-          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
-      </div>
-      <!-- Settings: inset groups, as Family. Each row shows its current
-           value (filled by config.js / execution.js / webauthn.js) and opens a
-           sheet — #settingsSheet, or #sourceSheet for a source — that commits
-           on Done; Text size applies inline. -->
-      <section class="run-group inset-group" aria-labelledby="settingsDisplayTitle">
-        <h3 id="settingsDisplayTitle" class="overline">Display</h3>
-        <div id="textSizeCard" class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row">
-              <div class="action-row-main inset-static">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-type"></use></svg>
-                <span class="action-row-title">Text size</span>
-              </div>
-              <span class="action-row-trail">
-                <span class="segmented" id="textSizeControl" role="group" aria-label="Text size">
-                  <button data-track="settings.textsize-small" type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
-                  <button data-track="settings.textsize-default" type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
-                  <button data-track="settings.textsize-large" type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
-                </span>
-              </span>
-            </li>
-          </ul>
+  <!-- Settings: the vendored full page, opened by the home-head gear on
+       every pane over the current tab. Settings is never a tab (fleet nav
+       contract). The rows keep their ids and data-value keys, so config.js /
+       execution.js wire them unchanged. -->
+  <dialog data-track-view="settings" id="settingsDialog" class="settings-page" aria-labelledby="settingsTitle">
+    <header class="settings-page-head">
+      <h2 class="settings-page-title" id="settingsTitle">Settings</h2>
+      <button data-track="settings.close" id="settingsClose" type="button" class="icon-button settings-page-close" aria-label="Close settings">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
+    </header>
+    <!-- Inset groups (the vendored settings-group). Each row shows its current
+         value (filled by config.js / execution.js / webauthn.js) and opens a
+         sheet — #settingsSheet, or #sourceSheet for a source — that commits
+         on Done; Text size applies inline. -->
+    <div class="settings-page-body">
+      <h3 class="settings-group-label" id="settingsDisplayTitle">Display</h3>
+      <section id="textSizeCard" class="card settings-group" aria-labelledby="settingsDisplayTitle">
+        <div class="settings-row">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-type"></use></svg>
+          <span class="settings-row-label">Text size</span>
+          <span class="segmented" id="textSizeControl" role="group" aria-label="Text size">
+            <button data-track="settings.textsize-small" type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+            <button data-track="settings.textsize-default" type="button" class="segmented-item" aria-pressed="false" data-textsize="default">Default</button>
+            <button data-track="settings.textsize-large" type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+          </span>
         </div>
       </section>
 
-      <section class="run-group inset-group" aria-labelledby="settingsSourcesTitle">
-        <h3 id="settingsSourcesTitle" class="overline">Sources</h3>
-        <div class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-whatsapp" data-track="settings:source-whatsapp" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-message-circle"></use></svg>
-                <span class="action-row-title">WhatsApp</span>
-                <span class="inset-row-value" data-value="src-whatsapp"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-gmail" data-track="settings:source-gmail" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-mail"></use></svg>
-                <span class="action-row-title">Gmail</span>
-                <span class="inset-row-value" data-value="src-gmail"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="source-calendar" data-track="settings:source-calendar" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
-                <span class="action-row-title">Calendar</span>
-                <span class="inset-row-value" data-value="src-calendar"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-          </ul>
-        </div>
+      <h3 class="settings-group-label" id="settingsSourcesTitle">Sources</h3>
+      <section class="card settings-group" aria-labelledby="settingsSourcesTitle">
+        <button type="button" class="settings-row" data-settings-sheet="source-whatsapp" data-track="settings:source-whatsapp" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-message-circle"></use></svg>
+          <span class="settings-row-label">WhatsApp</span>
+          <span class="settings-row-value" data-value="src-whatsapp"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="source-gmail" data-track="settings:source-gmail" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-mail"></use></svg>
+          <span class="settings-row-label">Gmail</span>
+          <span class="settings-row-value" data-value="src-gmail"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="source-calendar" data-track="settings:source-calendar" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-calendar-days"></use></svg>
+          <span class="settings-row-label">Calendar</span>
+          <span class="settings-row-value" data-value="src-calendar"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
       </section>
 
-      <section class="run-group inset-group" aria-labelledby="settingsJudgedTitle">
-        <h3 id="settingsJudgedTitle" class="overline">How messages are judged</h3>
-        <div class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="classifier" data-track="settings:classifier" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-radar"></use></svg>
-                <span class="action-row-title">Classifier</span>
-                <span class="inset-row-value" data-value="classifier"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="rules-whatsapp" data-track="settings:rules-whatsapp" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
-                <span class="action-row-title">Keyword rules · WhatsApp</span>
-                <span class="inset-row-value"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="rules-gmail" data-track="settings:rules-gmail" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-search"></use></svg>
-                <span class="action-row-title">Keyword rules · Gmail</span>
-                <span class="inset-row-value"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="taxonomy" data-track="settings:taxonomy" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
-                <span class="action-row-title">Gmail survey taxonomy</span>
-                <span class="inset-row-value"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="instructions" data-track="settings:instructions" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
-                <span class="action-row-title">Instructions to the model</span>
-                <span class="inset-row-value"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-          </ul>
-        </div>
+      <h3 class="settings-group-label" id="settingsJudgedTitle">How messages are judged</h3>
+      <section class="card settings-group" aria-labelledby="settingsJudgedTitle">
+        <button type="button" class="settings-row" data-settings-sheet="classifier" data-track="settings:classifier" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-radar"></use></svg>
+          <span class="settings-row-label">Classifier</span>
+          <span class="settings-row-value" data-value="classifier"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="rules-whatsapp" data-track="settings:rules-whatsapp" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+          <span class="settings-row-label">Keyword rules · WhatsApp</span>
+          <span class="settings-row-value"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="rules-gmail" data-track="settings:rules-gmail" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+          <span class="settings-row-label">Keyword rules · Gmail</span>
+          <span class="settings-row-value"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="taxonomy" data-track="settings:taxonomy" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+          <span class="settings-row-label">Gmail survey taxonomy</span>
+          <span class="settings-row-value"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="instructions" data-track="settings:instructions" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-scroll-text"></use></svg>
+          <span class="settings-row-label">Instructions to the model</span>
+          <span class="settings-row-value"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
       </section>
 
-      <section class="run-group inset-group" aria-labelledby="settingsAlertsTitle">
-        <h3 id="settingsAlertsTitle" class="overline">Alerts</h3>
-        <div class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="delivery" data-track="settings:delivery" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
-                <span class="action-row-title">Delivery</span>
-                <span class="inset-row-value" data-value="delivery"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="task-os" data-track="settings:task-os" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-check"></use></svg>
-                <span class="action-row-title">Task-OS</span>
-                <span class="inset-row-value" data-value="task-os"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="hub" data-track="settings:hub" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-link"></use></svg>
-                <span class="action-row-title">Model hub</span>
-                <span class="inset-row-value" data-value="hub"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-          </ul>
-        </div>
+      <h3 class="settings-group-label" id="settingsAlertsTitle">Alerts</h3>
+      <section class="card settings-group" aria-labelledby="settingsAlertsTitle">
+        <button type="button" class="settings-row" data-settings-sheet="delivery" data-track="settings:delivery" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-send-horizontal"></use></svg>
+          <span class="settings-row-label">Delivery</span>
+          <span class="settings-row-value" data-value="delivery"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="task-os" data-track="settings:task-os" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-check"></use></svg>
+          <span class="settings-row-label">Task-OS</span>
+          <span class="settings-row-value" data-value="task-os"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <button type="button" class="settings-row" data-settings-sheet="hub" data-track="settings:hub" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-link"></use></svg>
+          <span class="settings-row-label">Model hub</span>
+          <span class="settings-row-value" data-value="hub"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
       </section>
 
-      <section class="run-group inset-group" aria-labelledby="settingsMaintenanceTitle">
-        <h3 id="settingsMaintenanceTitle" class="overline">Maintenance</h3>
-        <div class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row inset-row--danger">
-              <button type="button" id="execReprocess" class="action-row-main" data-settings-sheet="rebuild" data-track="settings:rebuild" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
-                <span class="action-row-title">Rebuild message cache</span>
-                <span class="inset-row-value"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-          </ul>
-        </div>
+      <h3 class="settings-group-label" id="settingsMaintenanceTitle">Maintenance</h3>
+      <section class="card settings-group" aria-labelledby="settingsMaintenanceTitle">
+        <button type="button" id="execReprocess" class="settings-row" data-settings-sheet="rebuild" data-track="settings:rebuild" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+          <span class="settings-row-label">Rebuild message cache</span>
+          <span class="settings-row-value"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
       </section>
 
-      <section class="run-group inset-group" aria-labelledby="settingsInstallTitle">
-        <h3 id="settingsInstallTitle" class="overline">This install</h3>
-        <div class="card action-list">
-          <ul class="action-rows">
-            <li class="action-row inset-row">
-              <button type="button" class="action-row-main" data-settings-sheet="passkeys" data-track="settings:passkeys" aria-haspopup="dialog">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-lock"></use></svg>
-                <span class="action-row-title">Passkeys</span>
-                <span class="inset-row-value" data-value="passkeys"></span>
-                <svg class="icon inset-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
-              </button>
-            </li>
-            <li class="action-row inset-row">
-              <div class="action-row-main inset-static">
-                <svg class="icon inset-row-glyph" aria-hidden="true"><use href="#i-history"></use></svg>
-                <span class="action-row-title">Build</span>
-                <span class="inset-row-value" data-value="build"></span>
-              </div>
-            </li>
-          </ul>
+      <h3 class="settings-group-label" id="settingsInstallTitle">This install</h3>
+      <section class="card settings-group" aria-labelledby="settingsInstallTitle">
+        <button type="button" class="settings-row" data-settings-sheet="passkeys" data-track="settings:passkeys" aria-haspopup="dialog">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-lock"></use></svg>
+          <span class="settings-row-label">Passkeys</span>
+          <span class="settings-row-value" data-value="passkeys"></span>
+          <svg class="icon settings-row-chevron" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </button>
+        <div class="settings-row">
+          <svg class="icon settings-row-icon" aria-hidden="true"><use href="#i-history"></use></svg>
+          <span class="settings-row-label">Build</span>
+          <span class="settings-row-value" data-value="build"></span>
         </div>
       </section>
     </div>
@@ -611,15 +556,17 @@
   <!-- Settings sheets: one shell filled per row by config.js. Done
        commits a partial POST /api/config; the close button, the backdrop and
        Esc discard the sheet's edits. -->
-  <dialog data-track-view="settings-sheet" id="settingsSheet" class="detail-dialog edit-sheet">
+  <dialog data-track-view="settings-sheet" id="settingsSheet" class="detail-dialog settings-sheet edit-sheet">
     <div class="detail-card" aria-labelledby="settingsSheetTitle">
       <div class="detail-header">
         <h2 id="settingsSheetTitle"></h2>
         <button data-track="settings-sheet.close" id="settingsSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
-      <div id="settingsSheetBody"></div>
-      <p id="settingsSheetError" class="sheet-error" role="alert" hidden></p>
+      <div class="settings-sheet-body">
+        <div id="settingsSheetBody"></div>
+        <p id="settingsSheetError" class="sheet-error" role="alert" hidden></p>
+      </div>
       <div id="settingsSheetFoot" class="detail-actions">
         <button data-track="settings-sheet.done" id="settingsSheetDone" type="button" class="button-primary detail-save-btn">Done</button>
         <p class="sheet-rule">Done saves. Close discards your changes.</p>
@@ -631,28 +578,30 @@
        counts, health, Reconnect + pairing QR and recent syncs that
        execution.js and dashboard.js keep writing in place. `data-source` picks
        whose entries show. -->
-  <dialog data-track-view="source-sheet" id="sourceSheet" class="detail-dialog edit-sheet" data-source="whatsapp">
+  <dialog data-track-view="source-sheet" id="sourceSheet" class="detail-dialog settings-sheet edit-sheet" data-source="whatsapp">
     <div class="detail-card" aria-labelledby="sourceSheetTitle">
       <div class="detail-header">
         <h2 id="sourceSheetTitle"></h2>
         <button data-track="source-sheet.close" id="sourceSheetClose" type="button" class="icon-button detail-close" aria-label="Close">
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
-      <div id="sourceSheetBody"></div>
-      <p id="sourceSheetError" class="sheet-error" role="alert" hidden></p>
-      <p class="field-label">Stored</p>
-      <div id="dashSources" class="source-summary-list"></div>
-      <p class="field-label">Health</p>
-      <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
-      <div id="execReconnect" class="exec-reconnect" data-source="whatsapp" hidden>
-        <p id="execReconnectMsg" class="muted small"></p>
-        <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
-        <button id="execReconnectBtn" type="button" data-track="source.reconnect" class="button-tint btn-block">Reconnect WhatsApp</button>
-      </div>
-      <div class="source-syncs">
-        <p class="field-label">Recent syncs</p>
-        <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
-        <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+      <div class="settings-sheet-body">
+        <div id="sourceSheetBody"></div>
+        <p id="sourceSheetError" class="sheet-error" role="alert" hidden></p>
+        <p class="field-label">Stored</p>
+        <div id="dashSources" class="source-summary-list"></div>
+        <p class="field-label">Health</p>
+        <div id="execSources" class="source-status-list" aria-label="Message source status"></div>
+        <div id="execReconnect" class="exec-reconnect" data-source="whatsapp" hidden>
+          <p id="execReconnectMsg" class="muted small"></p>
+          <img id="execQr" class="exec-qr" alt="WhatsApp pairing QR code" hidden>
+          <button id="execReconnectBtn" type="button" data-track="source.reconnect" class="button-tint btn-block">Reconnect WhatsApp</button>
+        </div>
+        <div class="source-syncs">
+          <p class="field-label">Recent syncs</p>
+          <ul id="execSyncs" class="card-list exec-syncs" aria-label="Recent syncs"></ul>
+          <p id="execSyncsEmpty" class="muted small" hidden>No syncs yet — run Sync to pull new messages.</p>
+        </div>
       </div>
       <div id="sourceSheetFoot" class="detail-actions">
         <button data-track="source-sheet.done" id="sourceSheetDone" type="button" class="button-primary detail-save-btn">Done</button>

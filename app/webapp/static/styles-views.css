@@ -345,8 +345,12 @@
 .audit-msg-badge.muted { color: var(--muted); }
 .audit-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 
+/* Settings: the Text size segmented control is its row's one trailing item,
+   on the card's inner edge like every other (the vendored settings-group). */
+.settings-row > .segmented { flex: none; margin-left: auto; }
+
 /* ------------------------------------ inset groups + editing sheets
-   Family's and Settings' shape: the run-group overline over an
+   Family's shape (Settings is the vendored settings-group): the run-group overline over an
    action-list card whose rows read glyph + label + current value + chevron at
    the 52px row height; a row that edits something opens a sheet
    (edit-sheet.js). Two-line rows keep the action-row meta line. App-side

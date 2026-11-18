@@ -110,7 +110,7 @@ The connection is **read-only by construction** — no send, react, or read-rece
 
 ## Admin Webapp (phone-first PWA)
 
-A FastAPI + vanilla-JS PWA on port **8455** with four tabs — Home, Activity, Inbox (messages), Family — and a Settings dialog behind the header gear. Auth is a bearer token (loopback bypasses it), an optional login password and WebAuthn passkeys, over a Tailscale-issued HTTPS cert. Tab-by-tab behaviour, every endpoint, logs and the usage log: [`docs/webapp.md`](docs/webapp.md).
+A FastAPI + vanilla-JS PWA on port **8455** with four tabs — Home, Activity, Inbox (messages), Family — and a full Settings page behind the header gear. Auth is a bearer token (loopback bypasses it), an optional login password and WebAuthn passkeys, over a Tailscale-issued HTTPS cert. Tab-by-tab behaviour, every endpoint, logs and the usage log: [`docs/webapp.md`](docs/webapp.md).
 
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons

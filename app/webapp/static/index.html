@@ -64,7 +64,7 @@
        tab a fixed slice of a phone's width and ellipsizes anything longer, so
        "Dashboard"/"Messages"/"Follow-ups" rendered as "Dashbo…"/"Messag…"/
        "Follow-…". The pane headings keep the full words. -->
-  <nav class="tabs" role="tablist" aria-label="Sections" data-active-tab="dashboard">
+  <nav class="tabs" data-surface="chrome.nav" role="tablist" aria-label="Sections" data-active-tab="dashboard">
     <button id="tabDashboard" type="button" class="tab active" data-tab="dashboard"
             role="tab" aria-selected="true" aria-controls="paneDashboard">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
@@ -88,7 +88,7 @@
   </nav>
 
   <main class="app">
-    <section id="paneDashboard" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
+    <section id="paneDashboard" data-surface="home.pane" class="pane" role="tabpanel" aria-labelledby="tabDashboard">
       <!-- Page header (vendored home-head): the tab's name, a context line naming
            the most severe exception (a link into its run in Activity), else one
            muted fact, theme toggle and Settings gear. -->
@@ -119,7 +119,7 @@
       </section>
     </section>
 
-    <section id="paneChats" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
+    <section id="paneChats" data-surface="inbox.pane" class="pane" role="tabpanel" aria-labelledby="tabChats" hidden>
       <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
       <div class="card home-head">
         <span class="home-title">
@@ -151,7 +151,7 @@
           </div>
           <!-- Worth a look: chats whose recent messages match their source's
                Stage-1 rules, shown above the list only when there is something. -->
-          <section id="tripwireCard" class="run-group worth-look" aria-live="polite" hidden>
+          <section id="tripwireCard" data-surface="inbox.tripwire" class="run-group worth-look" aria-live="polite" hidden>
             <h3 id="tripwireTitle" class="overline">Worth a look</h3>
             <p id="tripwireMeta" class="muted small" hidden></p>
             <div class="card action-list">
@@ -167,11 +167,12 @@
             <p class="empty-state-message">No message channels match these filters.</p>
           </div>
         </div>
-        <aside id="chatsDetailPane" class="card chats-detail-pane" aria-label="Chat" hidden></aside>
+        <!-- duplicate-surface-exempt: the wide-screen rendering of the chat sheet; one id, one entry -->
+        <aside id="chatsDetailPane" data-surface="inbox.history" class="card chats-detail-pane" aria-label="Chat" hidden></aside>
       </div>
     </section>
 
-    <section id="paneActivity" class="pane" role="tabpanel" aria-labelledby="tabActivity" hidden>
+    <section id="paneActivity" data-surface="activity.pane" class="pane" role="tabpanel" aria-labelledby="tabActivity" hidden>
       <!-- Page header (vendored home-head): the tab's name, a status line naming
            the most severe exception (else one muted fact), the Run-now action,
            theme toggle and Settings gear. The status span is always present so
@@ -214,11 +215,12 @@
           <button id="activityMore" type="button" data-track="activity.load-more" class="button-ghost btn-block btn-touch" hidden>Load more</button>
           <p id="activitySkipped" class="muted small activity-skipped" hidden></p>
         </div>
-        <aside id="activityDetailPane" class="card activity-detail-pane" aria-label="Run detail" hidden></aside>
+        <!-- duplicate-surface-exempt: the wide-screen rendering of the run sheet; one id, one entry -->
+        <aside id="activityDetailPane" data-surface="activity.run-sheet" class="card activity-detail-pane" aria-label="Run detail" hidden></aside>
       </div>
     </section>
 
-    <section id="paneFamily" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
+    <section id="paneFamily" data-surface="family.pane" class="pane" role="tabpanel" aria-labelledby="tabFamily" hidden>
       <!-- Page header (vendored home-head): tab title, theme toggle, Settings gear — on every pane. -->
       <div class="card home-head">
         <span class="home-title">
@@ -412,7 +414,7 @@
       </section>
     </section>
 
-    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="toast" data-surface="chrome.toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <!-- Build identity (vendored page-foot): last child of .app, outside the panes. -->
     <footer class="page-foot">
@@ -424,7 +426,7 @@
        every pane over the current tab. Settings is never a tab (fleet nav
        contract). The rows keep their ids and data-value keys, so config.js /
        execution.js wire them unchanged. -->
-  <dialog data-track-view="settings" id="settingsDialog" class="settings-page" aria-labelledby="settingsTitle">
+  <dialog data-surface="settings.page" data-track-view="settings" id="settingsDialog" class="settings-page" aria-labelledby="settingsTitle">
     <header class="settings-page-head">
       <h2 class="settings-page-title" id="settingsTitle">Settings</h2>
       <button data-track="settings.close" id="settingsClose" type="button" class="icon-button settings-page-close" aria-label="Close settings">
@@ -556,7 +558,7 @@
   <!-- Settings sheets: one shell filled per row by config.js. Done
        commits a partial POST /api/config; the close button, the backdrop and
        Esc discard the sheet's edits. -->
-  <dialog data-track-view="settings-sheet" id="settingsSheet" class="detail-dialog settings-sheet edit-sheet">
+  <dialog data-surface="settings.sheet" data-track-view="settings-sheet" id="settingsSheet" class="detail-dialog settings-sheet edit-sheet">
     <div class="detail-card" aria-labelledby="settingsSheetTitle">
       <div class="detail-header">
         <h2 id="settingsSheetTitle"></h2>
@@ -578,7 +580,7 @@
        counts, health, Reconnect + pairing QR and recent syncs that
        execution.js and dashboard.js keep writing in place. `data-source` picks
        whose entries show. -->
-  <dialog data-track-view="source-sheet" id="sourceSheet" class="detail-dialog settings-sheet edit-sheet" data-source="whatsapp">
+  <dialog data-surface="settings.source-sheet" data-track-view="source-sheet" id="sourceSheet" class="detail-dialog settings-sheet edit-sheet" data-source="whatsapp">
     <div class="detail-card" aria-labelledby="sourceSheetTitle">
       <div class="detail-header">
         <h2 id="sourceSheetTitle"></h2>
@@ -613,7 +615,8 @@
   <!-- Run sheet: one detail for every run, opened from an Activity row.
        A phone shows it as this sheet; a wide screen moves #runSheetCard into
        the Activity pane's right-hand column instead (activity.js). -->
-  <dialog data-track-view="run-sheet" id="runSheet" class="detail-dialog run-sheet-dialog">
+  <!-- duplicate-surface-exempt: the phone rendering of the run sheet; one id, one entry -->
+  <dialog data-surface="activity.run-sheet" data-track-view="run-sheet" id="runSheet" class="detail-dialog run-sheet-dialog">
     <div id="runSheetCard" class="detail-card run-sheet" aria-labelledby="runSheetTitle">
       <div class="detail-header">
         <h2 id="runSheetTitle"></h2>
@@ -649,7 +652,7 @@
 
   <!-- Run now: manual runs are rare, so the controls fold behind the
        Activity header action. Behaviour is execution.js's queue, unchanged. -->
-  <dialog data-track-view="run-now" id="runNowSheet" class="detail-dialog">
+  <dialog data-surface="activity.run-now" data-track-view="run-now" id="runNowSheet" class="detail-dialog">
     <div class="detail-card run-now-card" aria-labelledby="runNowTitle">
       <div class="detail-header">
         <h2 id="runNowTitle">Run now</h2>
@@ -711,7 +714,7 @@
        travel-block sheet (its sweep controls poll in place, so it keeps its
        own nodes). Done commits through POST /api/family; the close button,
        the backdrop and Esc discard the sheet's edits. -->
-  <dialog data-track-view="family-sheet" id="familySheet" class="detail-dialog edit-sheet">
+  <dialog data-surface="family.sheet" data-track-view="family-sheet" id="familySheet" class="detail-dialog edit-sheet">
     <div class="detail-card" aria-labelledby="familySheetTitle">
       <div class="detail-header">
         <h2 id="familySheetTitle"></h2>
@@ -727,7 +730,7 @@
     </div>
   </dialog>
 
-  <dialog data-track-view="family-travel-sheet" id="familyTravelSheet" class="detail-dialog edit-sheet">
+  <dialog data-surface="family.travel" data-track-view="family-travel-sheet" id="familyTravelSheet" class="detail-dialog edit-sheet">
     <div id="familyTravelCard" class="detail-card" aria-labelledby="familyTravelTitle">
       <div class="detail-header">
         <h2 id="familyTravelTitle">Travel blocks</h2>
@@ -746,7 +749,7 @@
 
   <!-- Filtered out: opened from the fold row at the end of
        Activity's Messages list. -->
-  <dialog data-track-view="filtered-sheet" id="filteredSheet" class="detail-dialog">
+  <dialog data-surface="activity.filtered" data-track-view="filtered-sheet" id="filteredSheet" class="detail-dialog">
     <div class="detail-card filtered-card" aria-labelledby="filteredTitle">
       <div class="detail-header">
         <h2 id="filteredTitle">Filtered out</h2>
@@ -773,7 +776,7 @@
 
   <!-- Filters & sort: the Inbox's status switch and source filter, each
        applying as it changes. -->
-  <dialog data-track-view="chats-filters" id="chatsFiltersSheet" class="detail-dialog">
+  <dialog data-surface="inbox.filters" data-track-view="chats-filters" id="chatsFiltersSheet" class="detail-dialog">
     <div class="detail-card filters-card" aria-labelledby="chatsFiltersTitle">
       <div class="detail-header">
         <h2 id="chatsFiltersTitle" tabindex="-1">Filters &amp; sort</h2>
@@ -801,7 +804,8 @@
     </div>
   </dialog>
 
-  <dialog data-track-view="history" id="historyOverlay" class="detail-dialog">
+  <!-- duplicate-surface-exempt: the phone rendering of the chat sheet; one id, one entry -->
+  <dialog data-surface="inbox.history" data-track-view="history" id="historyOverlay" class="detail-dialog">
     <div id="historyCard" class="detail-card history-card" aria-labelledby="historyTitle">
       <!-- One labelled menu and the close: no overlapping hit areas. -->
       <div class="detail-header history-header">
@@ -816,13 +820,13 @@
           <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
       </div>
       <p id="historyTripwire" class="muted small history-tripwire" hidden></p>
-      <div id="historyLinkPanel" class="link-panel" hidden></div>
+      <div id="historyLinkPanel" data-surface="inbox.link-panel" class="link-panel" hidden></div>
       <div id="historyBody" class="history-body"></div>
       <p id="historyEmpty" class="muted small" hidden>No messages stored for this channel.</p>
     </div>
   </dialog>
 
-  <dialog data-track-view="link-picker" id="linkPickerOverlay" class="detail-dialog">
+  <dialog data-surface="inbox.link-picker" data-track-view="link-picker" id="linkPickerOverlay" class="detail-dialog">
     <div class="detail-card history-card" aria-labelledby="linkPickerTitle">
       <div class="detail-header">
         <h2 id="linkPickerTitle">Link to…</h2>

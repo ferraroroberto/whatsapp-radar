@@ -1,0 +1,1035 @@
+# UX surface map: the single source for docs/ux-surface-map.md.
+#
+# Every screen, drill-in, menu, sheet, dialog, popover, Settings row, state, gesture and key a person can
+# reach in WhatsApp Radar, one entry per surface. The convention is project-scaffolding's
+# docs/ux-surface-map.md. Edit this file, never the generated page; then run
+# `python scripts/ux_surface_map.py`.
+#
+# A change that adds, removes, renames or reshapes a user-visible surface updates its entry here in the same
+# change, adds or removes the matching `data-surface` attribute in the code, and regenerates the page.
+
+app: whatsapp-radar
+
+notes: |
+  The checklist of everything a person can see and do in the admin PWA: every tab, sheet, dialog, menu and Settings row, with how it is reached, what is on it and what each control does. [Webapp](webapp.md) tells the story of the tabs in prose; this page is the exhaustive index, so a layout change can check every surface and not only the ones a reviewer happens to open.
+
+  **Ids.** `<area>.<surface>`, lowercase words joined by `.` or `-`, the same form the e2e `surface(page, "<id>")` hook takes. One id names one surface even when it is drawn two ways (the run sheet is a sheet on a phone and a right-hand pane on a wide screen). The surface's root element carries the same id as `data-surface`; the vendored row menu builds its own element, so its call site stamps the id on what `attach` returns. The entries marked `none` are drawn inside another surface's root (the Settings and Family sheets share one dialog shell each) or are not elements at all, so this map and the e2e walk hold them, not the ratchet.
+
+  ## Ground rules
+
+  **Four destinations, one gear.** The nav is Home · Activity · Inbox · Family. Settings is the gear in each tab's header, one tap from every tab, and is never a tab. The theme toggle sits beside it.
+
+  **Layout bands** (the same markup, three placements):
+
+  | Band | Condition | Nav | Run and chat detail |
+  | --- | --- | --- | --- |
+  | Phone | a touch pointer, up to 520px | a floating pill at the bottom, hidden under a sheet | a full-screen sheet |
+  | Narrow or mid window | a mouse below 1100px, or a touch device wider than 520px | a segmented bar pinned at the top | a full-screen sheet |
+  | Wide | 1100px and up with a mouse | a left rail | a right-hand pane beside the list |
+
+  **Sheets commit on Done.** Every edit sheet in Settings and Family holds one draft: Done saves it (a straight close when nothing changed, a toast on success, the server's message inside the sheet on a rejection), while the close button, the backdrop and Esc discard it. Text size, the theme toggle and the three switches on the Family tab apply the moment they change.
+
+  **Read-only by design.** The app ingests, classifies and notifies; nothing here sends, replies to or reacts to a WhatsApp or Gmail message.
+
+  **Where state lives.** The theme, text size and last tab live in this browser's `localStorage`; every rule, source switch and household setting lives on the server and comes back on the next load.
+
+  **Gating.** Sheets that depend on a configured service say so in place: the Delivery sheet reads the bot token as not set, Task-OS reads not configured, the Calendar sheet says nothing can be checked without a token, and the Traffic sheet warns when no Routes API key is set. Passkey enrolment opens only while the tray's enrolment window is open.
+
+  ## Keyboard map
+
+  | Key | Does |
+  | --- | --- |
+  | Tab / Shift+Tab | moves between controls |
+  | Left / Right (Up / Down) on the nav | moves between the four tabs |
+  | Home / End on the nav | first and last tab |
+  | Esc | closes the open menu, then the open sheet, discarding its draft |
+  | Arrows, Home, End in a menu | moves between the items |
+
+walk:
+  date: 2026-11-18
+  build: ee83c2c
+  widths: [390, 1280]
+  themes: [light, dark]
+
+areas:
+  - id: chrome
+    title: Chrome
+    notes: The nav, the toast, the sign-in sheet and the update banner, present on every tab.
+  - id: home
+    title: Home
+  - id: activity
+    title: Activity
+  - id: inbox
+    title: Inbox
+  - id: family
+    title: Family
+  - id: settings
+    title: Settings
+  - id: keys
+    title: Keys
+
+surfaces:
+  - id: chrome.nav
+    area: chrome
+    title: Nav
+    root: data-surface
+    reach:
+      - always on screen
+    holds:
+      - four tabs in order, Home, Activity, Inbox, Family, each a glyph and a short label
+    does:
+      - switches the visible tab and remembers it for the next visit
+      - Left, Right, Up, Down, Home and End move between the tabs
+    states:
+      - the active tab is filled
+      - an open sheet hides the floating pill on a phone
+    why: labels stay at six characters or fewer, because the floating pill gives each tab a fixed slice of a phone's width and truncates a longer one
+    phone: a floating pill at the bottom
+    desktop: a segmented bar pinned at the top, and a left rail from 1100px with a mouse
+    links:
+      - to: home.pane
+        via: Home tab
+      - to: activity.pane
+        via: Activity tab
+      - to: inbox.pane
+        via: Inbox tab
+      - to: family.pane
+        via: Family tab
+
+  - id: chrome.toast
+    area: chrome
+    title: Toast
+    root: data-surface
+    reach:
+      - appears after a save, an unlink, a copy or a failed action
+    holds:
+      - one line of neutral text, tinted only when it reports an error
+    does:
+      - disappears on its own
+    states:
+      - error, for example a failed save or a failed link
+
+  - id: app.update-banner
+    area: chrome
+    title: Update banner
+    root: data-surface
+    reach:
+      - appears when the server reports a newer build than the one the page loaded
+    holds:
+      - the line New version available and a Reload button
+    does:
+      - Reload loads the new build
+    why: the vendored build-watch component builds it, so its id is fixed in the component and every fleet app lists it
+
+  - id: shared.login
+    area: chrome
+    title: Sign-in sheet
+    root: data-surface
+    reach:
+      - opens by itself when a request is refused for a missing or stale credential
+    holds:
+      - a password field and a Sign in button
+    does:
+      - Sign in stores the credential and reloads the data
+    states:
+      - error, when the password is refused
+    why: the vendored sign-in component builds the sheet, so its id is fixed in the component and every fleet app lists it
+
+  - id: home.pane
+    area: home
+    title: Home
+    root: data-surface
+    reach:
+      - the Home tab
+      - the first visit lands here
+    holds:
+      - the header with the tab name, a status line, the theme toggle and the Settings gear
+      - one row per source, WhatsApp, Gmail, Calendar and Traffic, with its last run and health
+      - a Latest runs list and an All activity button
+    does:
+      - the status line names the most severe exception and opens that run in Activity, or opens Passkeys while the enrolment window is open
+      - a source row opens its last run in Activity
+      - a Latest runs row opens that run in Activity
+      - All activity switches to the Activity tab
+      - the theme toggle flips light and dark
+      - the gear opens Settings
+    states:
+      - loading, each source row is drawn at once with a dash so nothing shifts
+      - a source offline or a failed run turns the status line red and the row's chip to Offline or Failed
+      - no runs yet reads No runs yet
+    links:
+      - to: activity.pane
+        via: a source row, a Latest runs row, All activity or the status line
+      - to: activity.run-sheet
+        via: a run named by the status line
+      - to: settings.page
+        via: the gear
+      - to: settings.passkeys
+        via: the status line while the enrolment window is open
+
+  - id: activity.pane
+    area: activity
+    title: Activity
+    root: data-surface
+    reach:
+      - the Activity tab
+      - a Home source row, the Home status line or All activity
+      - a Telegram link that carries a run id
+    holds:
+      - the header with the status line, the Run now action, the theme toggle and the gear
+      - a scope switch, Messages, Calendar and Traffic
+      - a filter field
+      - the runs grouped by day, each row a kind glyph, a title, the time, the funnel's last numbers and exception chips
+      - a Filtered out fold row at the end of Messages
+      - a Load more button and a count of hidden self-skipped runs
+    does:
+      - the scope switch changes which kind of run the list shows
+      - the filter narrows the loaded runs by kind, status or time
+      - a run row opens the run
+      - Traffic folds each day's checks into one row, and a tap expands it
+      - a coverage gap row stands for a connector outage and names its days and scans
+      - Run now opens the manual run sheet
+      - Load more pages in older runs
+    states:
+      - loading reads Reading runs
+      - error reads Runs are unavailable. Try again.
+      - empty reads No runs here yet, or No loaded runs match while a filter is typed
+      - a live run is listed first under Today
+    phone: tapping a run opens the run sheet
+    desktop: tapping a run shows it in the right-hand pane and keeps the list in view
+    links:
+      - to: activity.run-sheet
+        via: a run row
+      - to: activity.run-now
+        via: Run now
+      - to: activity.filtered
+        via: the Filtered out fold row
+      - to: activity.coverage-gap
+        via: a connector outage in Messages
+      - to: activity.skipped-line
+        via: Calendar or Traffic with self-skipped runs
+      - to: activity.unpriced-run-list
+        via: a Traffic day with unpriced legs
+      - to: settings.page
+        via: the gear
+
+  - id: activity.coverage-gap
+    area: activity
+    title: Coverage gap row
+    root:
+      none: a row of the Activity list, drawn by the list builder
+    reach:
+      - Messages, in place of the scans a connector outage made fail
+    holds:
+      - the title Coverage gap, the first and last day, the number of days and failed scans, and an Offline chip
+      - a tooltip with the exact times and when the connector recovered
+    does:
+      - stands for every failed scan of the outage, so the list reads as one event
+    states:
+      - a gap not yet recovered says recovery not yet recorded in the tooltip
+
+  - id: activity.skipped-line
+    area: activity
+    title: Self-skipped line
+    root:
+      none: one muted line under the Activity list, shown only on Calendar and Traffic
+    reach:
+      - Calendar or Traffic when the scope has self-skipped runs
+    holds:
+      - a count, such as 5 self-skipped runs hidden
+    why: a scheduled job skips itself between its cadence windows, so those runs are hidden from the list but stay visible in the count, per kind
+
+  - id: activity.unpriced-run-list
+    area: activity
+    title: Unpriced traffic row
+    root:
+      none: a run row of the Activity list, in the Traffic scope
+    reach:
+      - a Traffic day expanded from its fold row
+    holds:
+      - the priced count first, then the not priced count, never a bare checked count
+      - on the day's fold row, an alert chip in the attention tone when the day had an alert
+    why: a count of legs checked would make a run where nothing was priced read as healthy
+
+  - id: activity.run-sheet
+    area: activity
+    title: Run sheet
+    root: data-surface
+    reach:
+      - a run row in Activity
+      - a Filtered out row
+      - a Home source row, the Home status line or a Latest runs row
+      - a Telegram link with a run id, which then drops the id from the address bar
+    holds:
+      - the run's title, a meta line with status, mode, start, duration and parameters
+      - the funnel, then the per-source funnel
+      - one disclosure per channel with the full decision record of a message run
+      - the Telegram message the run contributed
+      - a Raw output disclosure, closed by default
+      - a Stop this run button
+    does:
+      - tapping the raw output copies it and shows a toast
+      - Stop this run ends a live run
+      - the close button, the backdrop and Esc close the sheet
+    states:
+      - a live run streams, and only then is Stop this run shown
+      - a run with no per-channel record says so in place
+      - a deleted run shows a toast, That run is no longer available
+    why: one detail for every kind of run, so a scan, a calendar sync and a traffic check read the same way
+    phone: a full-screen sheet
+    desktop: the same card moves into the right-hand pane of Activity
+    links:
+      - to: activity.traffic-run-sheet
+        via: a Traffic run
+      - to: activity.travel-sweep
+        via: a calendar sync that ran a sweep
+      - to: activity.travel-gated
+        via: a calendar sync whose sweep was gated
+      - to: activity.run-sheet-redacted
+        via: the raw payload of a calendar sync
+
+  - id: activity.traffic-run-sheet
+    area: activity
+    title: Traffic run sheet
+    root:
+      none: the run sheet card, drawn for a Traffic run
+    reach:
+      - a run row in the Traffic scope
+    holds:
+      - a funnel with Priced and Not priced cells, never a Checked cell
+    why: the same rule as the list row, so a run where nothing was priced cannot read as a healthy count
+
+  - id: activity.travel-sweep
+    area: activity
+    title: Travel-block sweep section
+    root:
+      none: a section of the run sheet card, drawn for a calendar sync that ran a sweep
+    reach:
+      - a calendar sync run that computed a plan
+    holds:
+      - the sweep's outcome and counts, with Block adds in the funnel
+      - the writes it made and any failures
+    does:
+      - the section never pushes the card sideways at phone width
+
+  - id: activity.travel-gated
+    area: activity
+    title: Gated sweep section
+    root:
+      none: a section of the run sheet card, drawn for a calendar sync whose sweep never ran
+    reach:
+      - a calendar sync run whose sweep was disabled or lacked a key or an address
+    holds:
+      - the line Gated, naming the gate, and the note that this is not a sweep that looked and found nothing to do
+      - a single Blocks cell in the funnel, with no counts of zero
+    why: a sweep that never got as far as planning must not read as a sweep that planned nothing
+
+  - id: activity.run-sheet-redacted
+    area: activity
+    title: Redacted raw payload
+    root:
+      none: the raw payload of a calendar sync inside the run sheet card
+    reach:
+      - the Raw output and the structured dump of a calendar sync run
+    holds:
+      - the dump with each sensitive field replaced by the word withheld
+      - a note saying the dump is not the whole record
+    why: an operator has to be able to tell the dump is redacted, so a withheld value is marked and never dropped
+
+  - id: activity.run-now
+    area: activity
+    title: Run now
+    root: data-surface
+    reach:
+      - the play action in the Activity header
+    holds:
+      - four step switches, Sync messages, Process messages and email, Send alerts, and an independent Calendar sync
+      - a Dry run switch
+      - when Dry run is on, a window switch, New only or Last N days, and a number field for the days
+      - a Run button and a busy line
+    does:
+      - Run starts the chosen steps as one run, closes this sheet and opens the new run's sheet to follow it
+      - Dry run on makes the steps plan and log without sending
+    states:
+      - a run already in flight shows the busy line, and the steps queue behind it
+    why: manual runs are rare, so the controls fold behind one header action
+    links:
+      - to: activity.run-sheet
+        via: Run
+
+  - id: activity.filtered
+    area: activity
+    title: Filtered out
+    root: data-surface
+    reach:
+      - the Filtered out fold row at the end of the Messages list
+    holds:
+      - a 7, 30 or 90 day switch
+      - the recent decisions that raised no alert, each with the chat, the source, the time and a distilled reason
+      - a Load more button
+    does:
+      - a row closes the sheet and opens the run that decided it
+    states:
+      - loading reads Reading filtered decisions
+      - empty reads Nothing was filtered out in this period
+      - a failed refresh keeps the list it had and marks it stale
+    links:
+      - to: activity.run-sheet
+        via: a decision row
+
+  - id: inbox.pane
+    area: inbox
+    title: Inbox
+    root: data-surface
+    reach:
+      - the Inbox tab
+    holds:
+      - the header with a count of monitored chats, the theme toggle and the gear
+      - a name search and a Filters and sort button with a badge counting non-default values
+      - the Worth a look section, only when it has hits
+      - a count line while a filter narrows the list
+      - one row per chat, an avatar with a source mark, the name, a preview and a watch toggle
+    does:
+      - a row opens the chat
+      - the eye on a row starts or stops monitoring that chat
+      - the search narrows the list by name
+      - Filters and sort opens the filter sheet
+    states:
+      - empty reads No message channels match these filters
+      - the Gmail source lists senders rather than channels
+    phone: tapping a chat opens the chat sheet
+    desktop: tapping a chat shows it in the right-hand pane beside the list
+    links:
+      - to: inbox.filters
+        via: Filters and sort
+      - to: inbox.history
+        via: a chat row
+      - to: inbox.tripwire
+        via: a Worth a look hit
+      - to: settings.page
+        via: the gear
+
+  - id: inbox.tripwire
+    area: inbox
+    title: Worth a look
+    root: data-surface
+    reach:
+      - shown above the chat list only when a recent message in an unmonitored chat matches its source's Stage 1 rules
+    holds:
+      - one row per chat with the signals it matched
+      - an unpainted eye button
+    does:
+      - a row opens the chat
+      - the eye starts monitoring the chat
+    states:
+      - a failed check shows Could not check recent unmonitored chats
+      - hidden when there is nothing to show
+    why: the scope of the check (Stage 1 only, the last days) sits in the section title's tooltip and in that chat's sheet, not as a permanent line
+    links:
+      - to: inbox.history
+        via: a hit row
+
+  - id: inbox.filters
+    area: inbox
+    title: Filters and sort
+    root: data-surface
+    reach:
+      - the Filters and sort button beside the Inbox search
+    holds:
+      - a status switch, Monitored, Ignored and All
+      - a source switch, All sources, WhatsApp and Gmail
+      - Clear and Done
+    does:
+      - each switch applies as it changes
+      - Clear returns both to their defaults and is disabled while they are at the defaults
+      - Done closes the sheet
+    why: one button holds the status and the source filter so the list keeps one search field
+
+  - id: inbox.history
+    area: inbox
+    title: Chat sheet
+    root: data-surface
+    reach:
+      - a chat row or a Worth a look row
+    holds:
+      - an avatar, the name, and a subtitle of source, message count, monitoring state and a Gmail sender address
+      - a note when the tripwire flagged the chat, and the link panel when it is open
+      - the messages, newest first, each with its time, sender and text
+      - per message, Summarize, Play summary aloud, Send to Task-OS and a voice note player where they apply
+      - a menu button and a close button
+    does:
+      - scrolling to the end pages in older messages
+      - Summarize asks the model for a summary and Play reads it aloud
+      - Send to Task-OS hands an actionable message to Task-OS
+    states:
+      - empty reads No messages stored for this channel
+      - a failed load reads Could not load history
+    phone: a full-screen sheet
+    desktop: the same card moves into the right-hand pane beside the list
+    links:
+      - to: inbox.chat-menu
+        via: the menu button
+      - to: inbox.link-panel
+        via: Link chats
+
+  - id: inbox.chat-menu
+    area: inbox
+    title: Chat menu
+    root: data-surface
+    reach:
+      - the menu button in the chat sheet's header
+    holds:
+      - Rename
+      - Link chats, with the count of linked chats, for a WhatsApp chat only
+      - Monitor or Stop monitoring
+    does:
+      - Rename asks for an alias
+      - Link chats opens the link panel
+      - Monitor and Stop monitoring flip the chat's status
+      - Esc closes the menu and returns focus to its button
+    why: one labelled menu holds the rare actions so the header has two hit areas, the menu and the close
+    links:
+      - to: inbox.rename
+        via: Rename
+      - to: inbox.link-panel
+        via: Link chats
+
+  - id: inbox.rename
+    area: inbox
+    title: Rename prompt
+    root:
+      none: the browser's own prompt, with no element of the app's
+    reach:
+      - Rename in the chat menu
+    holds:
+      - a text field holding the current alias
+    does:
+      - confirming saves the alias, which shows first with the connector name in brackets
+      - a blank answer clears the alias
+    states:
+      - a failed save shows a toast, Rename failed
+
+  - id: inbox.link-panel
+    area: inbox
+    title: Link panel
+    root: data-surface
+    reach:
+      - Link chats in the chat menu
+      - reopens by itself after a link or an unlink, so the result is visible
+    holds:
+      - for a linked chat, its parent with Unlink and Change parent
+      - for a parent, the linked chats, each with Unlink
+      - for an unlinked chat, a hint and a Link to a parent button
+    does:
+      - Unlink separates a chat and shows a toast
+      - Link to a parent and Change parent open the picker
+    why: linking is local metadata only, so it is reversible and moves no message
+    links:
+      - to: inbox.link-picker
+        via: Link to a parent, Change parent
+
+  - id: inbox.link-picker
+    area: inbox
+    title: Link picker
+    root: data-surface
+    reach:
+      - Link to a parent or Change parent in the link panel
+    holds:
+      - a search field for a name or an alias
+      - a count of candidates and the candidate chats
+    does:
+      - a candidate links the chat to it, closes the picker and shows a toast
+    states:
+      - empty reads No matching chats
+      - a failed link shows a toast, Link failed
+
+  - id: family.pane
+    area: family
+    title: Family
+    root: data-surface
+    reach:
+      - the Family tab
+    holds:
+      - the header with a status line, the theme toggle and the gear
+      - Household, with Home, Calendars and Scan window
+      - Schedule, with Who's on duty, Kids home by, Childcare windows and Quiet hours
+      - Calendar scan, with Calendar sync and Ask for missing locations, each with its own switch
+      - Traffic checks, with the enable switch, Check every, Significant delay, Skip train commutes, Check now and Check now (dry run)
+      - Travel blocks
+    does:
+      - a row that edits something opens its sheet and shows its current value on the row
+      - the three switches apply as they change
+      - Check now runs the traffic check live and sends an alert if a jam is found, and Check now (dry run) sends nothing
+    states:
+      - Home and Scan window are read-only and file-provisioned
+      - a missing calendar token or Routes API key is called out in the row's sheet
+    why: the household rules are set once and then left, so each is an inset row with its value, not a form
+    links:
+      - to: family.calendars
+        via: Calendars
+      - to: family.duty
+        via: Who's on duty
+      - to: family.kids
+        via: Kids home by
+      - to: family.windows
+        via: Childcare windows
+      - to: family.quiet
+        via: Quiet hours
+      - to: family.sync
+        via: Calendar sync
+      - to: family.ask
+        via: Ask for missing locations
+      - to: family.traffic
+        via: Traffic checks
+      - to: family.cadence
+        via: Check every
+      - to: family.delay
+        via: Significant delay
+      - to: family.train
+        via: Skip train commutes
+      - to: family.travel
+        via: Travel blocks
+      - to: activity.pane
+        via: Check now
+      - to: settings.page
+        via: the gear
+
+  - id: family.sheet
+    area: family
+    title: Family rule sheet
+    root: data-surface
+    reach:
+      - any Family row except Travel blocks
+    holds:
+      - a title, one line of help, the rule's controls, a Where this lives line and the Done button
+    does:
+      - Done saves the draft, closes the sheet and shows a toast
+      - the close button, the backdrop and Esc discard the draft
+    states:
+      - a rejected value shows the server's message inside the sheet
+    why: one shell is filled per rule, so every rule edits and commits the same way
+
+  - id: family.calendars
+    area: family
+    title: Calendars
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Calendars row
+    holds:
+      - the household calendars the daily scan reads, and the Calendar token state
+    states:
+      - empty reads No household calendars configured yet
+      - a missing token reads No Calendar token, nothing can be checked
+    why: read-only, because the calendars and the token are provisioned in files
+
+  - id: family.duty
+    area: family
+    title: Who's on duty
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Who's on duty row
+    holds:
+      - one person picker per weekday
+    does:
+      - Done saves the week
+
+  - id: family.kids
+    area: family
+    title: Kids home by
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Kids home by row
+    holds:
+      - a time field
+    does:
+      - Done saves the time
+
+  - id: family.windows
+    area: family
+    title: Childcare windows
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Childcare windows row
+    holds:
+      - one block per window with a label, its days, a start and an end time
+      - an add button and a remove button per window
+    does:
+      - the plus Add childcare window button adds a block, the remove button on a block drops it, and Done saves the list
+
+  - id: family.quiet
+    area: family
+    title: Quiet hours
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Quiet hours row
+    holds:
+      - From and Until hour fields
+    does:
+      - no traffic alert is sent between the two hours
+
+  - id: family.sync
+    area: family
+    title: Calendar sync
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Calendar sync row
+    holds:
+      - a Calendar sync switch
+    does:
+      - turns the daily calendar scan on or off
+    why: the row's own switch applies at once, and the sheet carries the same switch with its help
+
+  - id: family.ask
+    area: family
+    title: Ask for missing locations
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Ask for missing locations row
+    holds:
+      - a switch
+    does:
+      - off hides the No location set list from the summary, and those events are still assumed home and recorded in Activity
+
+  - id: family.traffic
+    area: family
+    title: Traffic checks
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Traffic checks row
+    holds:
+      - a Traffic checks switch
+    states:
+      - a missing Routes API key shows a warning that checks will error
+    does:
+      - turns the live traffic checks on or off, while the schedule itself is an App Launcher job
+
+  - id: family.cadence
+    area: family
+    title: Check every
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Check every row
+    holds:
+      - a field for the minutes between checks, 5 to 240
+    does:
+      - the job fires often and skips itself against this cadence, so a change needs no re-arm
+
+  - id: family.delay
+    area: family
+    title: Significant delay
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Significant delay row
+    holds:
+      - a field for the minutes, 0 to 240
+    does:
+      - a traffic alert is sent only when a jam adds more than this
+
+  - id: family.train
+    area: family
+    title: Skip train commutes
+    root:
+      none: drawn inside the Family rule sheet
+    reach:
+      - the Skip train commutes row
+    holds:
+      - a switch and the keywords a title is matched against, read-only
+    does:
+      - the leave-now alert is a driving judgment, so it is skipped for a commute whose title names a train
+
+  - id: family.travel
+    area: family
+    title: Travel blocks
+    root: data-surface
+    reach:
+      - the Travel blocks row
+    holds:
+      - a mode banner naming live, dry run or off
+      - a Write travel blocks switch and a Dry run switch
+      - fields for the minimum home dwell and the block title
+      - the calendar capability list, each calendar Writable, Not writable or Unknown
+      - the last sweep, with its time, outcome and counts
+      - Rehearse (dry run) and Run sweep
+    does:
+      - Rehearse fires the calendar sync forced to plan only
+      - Run sweep fires it live
+      - Done saves the settings, while the sweep controls act at once and are not part of the draft
+    states:
+      - a sweep that never got as far as planning says so in words and shows no counts
+      - an unresolved calendar probe is Unknown, with its own glyph and a dashed border, never a tick or a cross
+      - Run sweep is disabled, with the reason, while a live sweep is blocked
+      - no write token shows a warning that nothing can be written
+    why: Unknown is its own state because a probe that did not resolve is not a pass
+    links:
+      - to: activity.pane
+        via: a sweep, which runs as a calendar sync
+
+  - id: settings.page
+    area: settings
+    title: Settings
+    root: data-surface
+    reach:
+      - the gear in any tab's header
+    holds:
+      - Display, with a Text size switch, Small, Default and Large
+      - Sources, with WhatsApp, Gmail and Calendar
+      - How messages are judged, with Classifier, the two Keyword rules rows, Gmail survey taxonomy and Instructions to the model
+      - Alerts, with Delivery, Task-OS and Model hub
+      - Maintenance, with Rebuild message cache
+      - This install, with Passkeys and Build
+    does:
+      - a row shows its current value and opens its sheet
+      - Text size applies at once
+      - the close button and Esc return to the tab underneath
+    states:
+      - a value that needs attention, such as Bot token not set or Not configured, is marked in the row
+    why: Settings is a full page over the current tab, never a tab of its own
+    phone: a full-screen page
+    desktop: the same full page over the tab
+    links:
+      - to: settings.text-size-large
+        via: Text size, Large
+      - to: settings.source-sheet
+        via: WhatsApp, Gmail or Calendar
+      - to: settings.classifier
+        via: Classifier
+      - to: settings.rules-whatsapp
+        via: Keyword rules, WhatsApp
+      - to: settings.rules-gmail
+        via: Keyword rules, Gmail
+      - to: settings.taxonomy
+        via: Gmail survey taxonomy
+      - to: settings.instructions
+        via: Instructions to the model
+      - to: settings.delivery
+        via: Delivery
+      - to: settings.task-os
+        via: Task-OS
+      - to: settings.hub
+        via: Model hub
+      - to: settings.rebuild
+        via: Rebuild message cache
+      - to: settings.passkeys
+        via: Passkeys
+
+  - id: settings.text-size-large
+    area: settings
+    title: Large text
+    root:
+      none: the whole app redrawn at the Large step, with no element of its own
+    reach:
+      - Text size, Large, in Settings
+    holds:
+      - every label grows a step and the segmented track keeps its height
+    why: the track is a fixed control height, so the Large step grows its labels and never the track
+
+  - id: settings.sheet
+    area: settings
+    title: Settings sheet
+    root: data-surface
+    reach:
+      - any Settings row except the three sources
+    holds:
+      - a title, one line of help, the row's controls, a Where this lives line and the Done button
+    does:
+      - Done saves a partial change and shows a toast, or runs the action of a confirm sheet
+      - the close button, the backdrop and Esc discard the draft
+    states:
+      - a rejected value shows the server's message inside the sheet
+      - a read-only sheet has no footer
+    why: one shell is filled per row, so every row edits and commits the same way
+
+  - id: settings.source-sheet
+    area: settings
+    title: Source sheet
+    root: data-surface
+    reach:
+      - the WhatsApp, Gmail or Calendar row
+    holds:
+      - for WhatsApp and Gmail, an Enabled switch, and for WhatsApp a Connector picker
+      - the stored counts, the source's health and its recent syncs
+      - for WhatsApp, the Reconnect block
+    does:
+      - Done saves the switch and the connector
+      - the health and the syncs refresh in place while the sheet is open
+    states:
+      - Calendar has nothing to edit, because the daily scan is switched on in Family
+      - no syncs yet reads No syncs yet, run Sync to pull new messages
+    why: read-only by design, so the sheet states that messages are ingested and judged, never sent
+    links:
+      - to: settings.reconnect
+        via: Reconnect
+
+  - id: settings.reconnect
+    area: settings
+    title: Reconnect WhatsApp
+    root:
+      none: a block inside the WhatsApp source sheet, shown only when the connector is not linked
+    reach:
+      - the WhatsApp source sheet while the sidecar is disconnected or needs a pairing code
+    holds:
+      - a message saying why, the pairing QR code, and one button
+    does:
+      - the button starts the WhatsApp sidecar and shows a toast, and its label reads Reconnect WhatsApp, Start and show QR or Refresh QR by state
+      - when a pairing code is needed the block tells the person to open Linked devices in WhatsApp and scan it, and the code refreshes about every twenty seconds
+    states:
+      - hidden while the connector is healthy
+      - the button is disabled while a link is in progress
+
+  - id: settings.classifier
+    area: settings
+    title: Classifier
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Classifier row
+    holds:
+      - a Classifier picker
+    does:
+      - Done saves how a new message is judged before anything is sent
+
+  - id: settings.rules-whatsapp
+    area: settings
+    title: Keyword rules for WhatsApp
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Keyword rules, WhatsApp row
+    holds:
+      - the keyword pass a WhatsApp message must clear before the model sees it, read-only, and the file it lives in
+    why: read-only, because the rules are edited in the file
+
+  - id: settings.rules-gmail
+    area: settings
+    title: Keyword rules for Gmail
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Keyword rules, Gmail row
+    holds:
+      - the bucket and keyword pass a Gmail message must clear, read-only, and the Gmail whitelist of senders and labels
+    states:
+      - an empty whitelist reads empty
+
+  - id: settings.taxonomy
+    area: settings
+    title: Gmail survey taxonomy
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Gmail survey taxonomy row
+    holds:
+      - a reference for writing the Gmail keyword rules, read-only
+    why: it is never sent to the model
+
+  - id: settings.instructions
+    area: settings
+    title: Instructions to the model
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Instructions to the model row
+    holds:
+      - the system prompt both sources share, read-only
+    does:
+      - Activity shows the exact prompt for every call
+
+  - id: settings.delivery
+    area: settings
+    title: Delivery
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Delivery row
+    holds:
+      - a Notifier picker, a Telegram chat ID field, the bot token state and a New bot token field
+    does:
+      - a typed token is sent, and a blank one keeps the stored token
+    states:
+      - the row reads Bot token not set while Telegram is chosen without a token
+
+  - id: settings.task-os
+    area: settings
+    title: Task-OS
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Task-OS row
+    holds:
+      - a Send automatically switch and an Export line
+    does:
+      - on sends actionable messages to the Task-OS Inbox after each run, and off waits for Send to Task-OS in the chat
+    states:
+      - the row reads Not configured when automatic export lacks a token
+
+  - id: settings.hub
+    area: settings
+    title: Model hub
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Model hub row
+    holds:
+      - a Base URL field and a Model field
+    does:
+      - Done saves the hub the classifier calls
+
+  - id: settings.rebuild
+    area: settings
+    title: Rebuild cache
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Rebuild message cache row
+    holds:
+      - what is preserved, what is backed up first and what is reset
+      - a red Rebuild cache button in place of Done
+    does:
+      - the button rebuilds the local store from the connector buffer, and Close cancels
+    why: a destructive action is a confirm sheet, never a switch
+
+  - id: settings.passkeys
+    area: settings
+    title: Passkeys
+    root:
+      none: drawn inside the Settings sheet
+    reach:
+      - the Passkeys row
+      - the Home status line while the enrolment window is open
+    holds:
+      - the enrolled devices, each with a remove button
+      - while enrolment is open, a Device name field and an Enroll this device button
+    does:
+      - remove turns the row into a Remove question with Cancel and Remove, inside the same row
+      - Enroll this device registers this browser
+    states:
+      - enrolment closed reads that it opens from the tray menu on the PC, for a few minutes at a time
+      - a browser without passkey support shows a toast saying so
+
+  - id: keys.dialogs
+    area: keys
+    title: Closing a sheet
+    root:
+      none: a behaviour of every sheet, with no element of its own
+    holds:
+      - Esc, a tap on the backdrop and the close button all close the open sheet
+    does:
+      - each of them discards an unsaved draft, and only Done saves
+
+  - id: keys.nav
+    area: keys
+    title: Nav keys
+    root:
+      none: keys on the nav, with no element of their own
+    holds:
+      - Left, Right, Up and Down move between the tabs, and Home and End jump to the first and last

@@ -51,6 +51,7 @@ The connector path for personal and group chats is a WhatsApp Web linked-device 
 | [`docs/gmail-source.md`](docs/gmail-source.md) | Gmail source behaviour — whitelist, sender monitoring, child registry, calendar reminders |
 | [`docs/voice-and-summaries.md`](docs/voice-and-summaries.md) | voice-note transcription, playback, on-demand summaries and read-aloud |
 | [`docs/webapp.md`](docs/webapp.md) | the admin PWA tab by tab, its endpoints, running it, logs, usage log, the Tailscale HTTPS cert |
+| [`docs/ux-surface-map.md`](docs/ux-surface-map.md) | every tab, sheet, dialog, menu, Settings row and state in the admin PWA as one checklist, with a diagram per area; generated from `docs/ux-surfaces.yaml` |
 | [`docs/family-checks.md`](docs/family-checks.md) | the family checks and travel blocks in full — behaviour, every knob, and the rollout runbook |
 | [`docs/verification.md`](docs/verification.md) | e2e routing, the static ratchet, design capture, CI |
 | [`docs/status-vocabularies.md`](docs/status-vocabularies.md) | the declared lifecycle words (run, delivery, transcription), their owner modules and the copies the PWA and sidecar keep |
@@ -177,12 +178,13 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate # no new console-window spawn, print in library code or drive-path literal
 .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate # no new write target resolving under src/, app/ or scripts/
 .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate # no new untracked control or sheet, built tracking id, or unwired usage log
+.\.venv\Scripts\python.exe -m scripts.ux_surface_ratchet_gate # every surface root carries a data-surface id with a map entry, and the map page is current
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
 
 
-Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs, dead-code, conventions and runtime-write ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
+Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs, dead-code, conventions, runtime-write, usage-track and ux-surface ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
 
 ## Repository Status
 

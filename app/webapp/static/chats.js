@@ -669,7 +669,7 @@ function closeHistory() {
 const sheetMenu = createRowMenu({ className: 'history-menu-list' });
 
 function wireSheetMenu() {
-  sheetMenu.attach('chat-sheet', els.historyMenu, [
+  const menu = sheetMenu.attach('chat-sheet', els.historyMenu, [
     { label: 'Rename…', glyph: 'pencil', onTap: function () { renameCurrentChat(linkDeps); } },
     {
       label: function () {
@@ -688,6 +688,8 @@ function wireSheetMenu() {
       onTap: function () { if (hist.chat) toggleWatch(hist.chat); },
     },
   ]);
+  // The vendored menu builds its own element, so the app stamps the surface id on what `attach` returns.
+  menu.dataset.surface = 'inbox.chat-menu';
 }
 
 // ------------------------------------------------------- link management

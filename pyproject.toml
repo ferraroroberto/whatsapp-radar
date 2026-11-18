@@ -24,6 +24,8 @@ select = ["E", "F", "I", "UP", "B"]
 "scripts/conventions_ratchet.py" = ["E501"]
 "scripts/runtime_write_ratchet.py" = ["E501"]
 "scripts/runtime_write_resolve.py" = ["E501"]
+"scripts/ux_surface_ratchet.py" = ["E501"]
+"scripts/ux_surface_map.py" = ["E501"]
 "src/login_lockout.py" = ["E501"]
 "app/webapp/serve.py" = ["E501", "B010"]
 

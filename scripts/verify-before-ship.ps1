@@ -196,6 +196,14 @@ try {
     & $python -m scripts.usage_track_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "usage track ratchet failed or was NOT CONFIRMED." }
 
+    # Whole tree too: a surface root with no constant data-surface id, an id with no entry in
+    # docs/ux-surfaces.yaml, an entry no element carries, one id on two surfaces, a link to no
+    # entry, or a docs/ux-surface-map.md page not regenerated from the map. Exit 3 fails as
+    # NOT CONFIRMED (tests/gates/test_ux_surface_ratchet_gate.py pins it).
+    Write-Host "==> ux surface ratchet (data-surface ids held to the surface map)..." -ForegroundColor Cyan
+    & $python -m scripts.ux_surface_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "ux surface ratchet failed or was NOT CONFIRMED." }
+
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app
     if ($LASTEXITCODE -ne 0) { Fail "mypy failed." }

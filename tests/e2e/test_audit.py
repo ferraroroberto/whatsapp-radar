@@ -154,7 +154,7 @@ def _filtered_out_phase(page: Page, base_url: str) -> None:
     row = page.locator("#auditFiltered .audit-filtered-row")
     expect(row).to_contain_text("School Parents Group")
     expect(row).to_contain_text("Routine pickup acknowledgement")
-    surface(page, "activity.filtered-sheet")
+    surface(page, "activity.filtered")
     row.click()
     expect(page.locator("#filteredSheet")).to_be_hidden()
     expect(page.locator("#runSheetCard")).to_be_visible()

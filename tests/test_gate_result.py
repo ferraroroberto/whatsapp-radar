@@ -24,10 +24,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GATE = REPO_ROOT / "scripts" / "verify-before-ship.ps1"
 POWERSHELL = Path("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "win32" or not POWERSHELL.is_file(),
-    reason="the gate is a Windows PowerShell script",
-)
+pytestmark = [
+    pytest.mark.windows_only,
+    pytest.mark.skipif(
+        sys.platform != "win32" or not POWERSHELL.is_file(),
+        reason="the gate is a Windows PowerShell script",
+    ),
+]
 
 
 def _gate_text() -> str:

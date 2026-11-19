@@ -44,6 +44,7 @@ def test_context_manager_releases() -> None:
     assert inst._handle is None
 
 
+@pytest.mark.windows_only
 @pytest.mark.skipif(not _WINDOWS, reason="cross-process mutex semantics are Windows-only")
 def test_duplicate_is_rejected_then_freed() -> None:
     name = _unique("dup")

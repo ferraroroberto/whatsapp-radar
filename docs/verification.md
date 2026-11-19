@@ -79,3 +79,5 @@ Each e2e test that opens a distinct screen calls the vendored `surface(page, "<t
 ## CI
 
 The same gate runs in CI on every branch push and PR to `main` ([`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)) — the local gate stays the contract; the workflow just creates the `.venv` it expects and calls it unmodified. The WebKit/iPhone e2e leg is the flaky one on the hosted runner, so CI sets `WR_E2E_TIMEOUT_SCALE=3` to give every browser wait budget 3× headroom (local runs leave it unset and keep Playwright's native budgets) and gives only the WebKit projection a bounded rerun.
+
+The Mac Mini nightly also checks `main`, configured by the `[ci.nightly]` table in `.fleet.toml`: the unit suite with `-m "not windows_only"`, then the e2e suite on WebKit with the iPhone projection, then an iOS Simulator smoke of `/`. A test that needs Windows (the PowerShell gate scripts, the named mutex, the console creation flags) carries `@pytest.mark.windows_only`; the local gate keeps running those.

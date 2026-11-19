@@ -72,6 +72,18 @@ instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "c5535ac32
 single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
 notify = { src = "src/notify", sha = "5eb0f90147d417b55afef214ad53b9d08e62dc09", dest = "src/notify" }
 
+# [ci.nightly] -- the Mac Mini nightly's settings for this repo (schema: project-scaffolding
+# docs/mac-runner.md, "The [ci.nightly] table"). The unit leg skips tests marked
+# `windows_only` (the PowerShell gate scripts and the Windows mutex/console-flag checks);
+# the e2e leg self-boots a throwaway webapp and runs on WebKit with the iPhone projection.
+[ci.nightly]
+python       = "3.12"
+requirements = ["requirements.txt", "requirements-dev.txt"]
+samples      = "config"
+unit         = ["tests", "--ignore=tests/e2e"]
+e2e          = ["tests/e2e", "--e2e-autoboot"]
+views        = ["/"]
+
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet.py, which fails on a
 # duplicate block (jscpd via npx, Python and JS), an unused import/variable (ruff

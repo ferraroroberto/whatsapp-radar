@@ -22,10 +22,13 @@ POWERSHELL = Path(
     "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 )
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "win32" or not POWERSHELL.is_file(),
-    reason="the gate is a Windows PowerShell script",
-)
+pytestmark = [
+    pytest.mark.windows_only,
+    pytest.mark.skipif(
+        sys.platform != "win32" or not POWERSHELL.is_file(),
+        reason="the gate is a Windows PowerShell script",
+    ),
+]
 
 FULL = "tier=full target=tests/e2e browsers=chromium,webkit"
 

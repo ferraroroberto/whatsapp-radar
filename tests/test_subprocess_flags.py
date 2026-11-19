@@ -32,6 +32,7 @@ def test_flags_never_include_detached_process() -> None:
     assert NO_WINDOW_NEW_GROUP & _DETACHED_PROCESS == 0
 
 
+@pytest.mark.windows_only
 @pytest.mark.skipif(sys.platform != "win32", reason="creation flags are Windows-only")
 def test_new_group_flag_is_window_suppressing_group() -> None:
     assert NO_WINDOW_NEW_GROUP & subprocess.CREATE_NO_WINDOW

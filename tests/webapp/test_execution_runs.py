@@ -199,6 +199,9 @@ def test_prune_runs_removes_a_stale_running_record(
     assert not run_dir.exists()
 
 
+# POSIX unlinks an open file, so the prune succeeds there and the lock this test
+# simulates only exists on Windows.
+@pytest.mark.windows_only
 def test_prune_runs_tolerates_a_locked_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

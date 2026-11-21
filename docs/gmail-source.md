@@ -6,7 +6,7 @@ Gmail is an optional second source. Provisioning (OAuth registration, token crea
 
 Gmail uses the official Gmail API with the read-only `gmail.readonly` scope. Named senders and labels from the ignored `config/local.json` are the explicit whitelist (full-history ingest): a sender or label becomes a channel, an email becomes a message, attachments are never downloaded, and sender matches take precedence over labels so one email cannot create duplicate digest lines.
 
-On top of that whitelist, **sender-level monitoring** discovers every sender active in the last `discovery_days` (default 30, capped at `discovery_max_messages` metadata reads so a huge mailbox never floods the store) and lists them on the Messages tab, where one tap promotes a sender to monitored — it then enters the classification pipeline like a monitored WhatsApp chat, baselined to new mail.
+On top of that whitelist, **sender-level monitoring** discovers every sender active in the last `discovery_days` (default 30, capped at `discovery_max_messages` metadata reads so a huge mailbox never floods the store) and lists them on the Inbox tab, where one tap promotes a sender to monitored — it then enters the classification pipeline like a monitored WhatsApp chat, baselined to new mail.
 
 A retention pass on each successful Gmail sync prunes messages from **unmonitored** senders older than `retention_days` (default 30) and drops any sender left with no recent mail. **Monitored senders are exempt** — their history is kept like a monitored WhatsApp chat — and WhatsApp data is never touched.
 

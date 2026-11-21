@@ -103,7 +103,7 @@ Then ingest and pick what to watch:
 .\scripts\wr.bat monitor 3                  # watch chat #3 (baselines its cursor to "now")
 ```
 
-Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start — no backlog dump. You can also do all of this from the PWA's **Messages** tab once the webapp is up (Step 5).
+Marking a chat **monitored** baselines its cursor to the latest message, so the first review only classifies messages that arrive *after* you start — no backlog dump. You can also do all of this from the PWA's **Inbox** tab once the webapp is up (Step 5).
 
 ## 4 — Create a new Telegram bot
 

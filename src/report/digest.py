@@ -12,6 +12,8 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import date
 
+from src.db import store
+
 
 @dataclass(frozen=True)
 class DigestItem:
@@ -134,14 +136,6 @@ def build_digest(conn: sqlite3.Connection, run_id: int) -> Digest:
             evidence_message_ids=json.loads(row["evidence_message_ids_json"] or "[]"),
             prep_complexity=row["prep_complexity"],
         )
-        for row in store_actionable(conn, run_id)
+        for row in store.actionable_items_for_run(conn, run_id)
     ]
     return Digest(run_id=run_id, items=items)
-
-
-def store_actionable(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
-    # Thin indirection kept local so report does not import the whole store module's
-    # surface; the query lives with the schema knowledge in db.store.
-    from src.db import store
-
-    return store.actionable_items_for_run(conn, run_id)

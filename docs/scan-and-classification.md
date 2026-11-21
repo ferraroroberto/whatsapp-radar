@@ -35,11 +35,11 @@ With keep-alive holding the buffer warm the gate is a near-instant no-op, so **o
 
 ## Classifier
 
-Defaults to the offline stub. Set `WR_CLASSIFIER=hub` (or its alias `cascade`) to route through [local-llm-hub](../../local-llm-hub) (the `claude_sonnet` model on `127.0.0.1:8000`). Stage 1, a cheap multilingual keyword prefilter, runs for every classifier and gates the LLM call, so "utter noise" deltas never reach the model. See [`manual.md`](manual.md#choosing-the-classifier).
+Defaults to the offline stub. Set `WR_CLASSIFIER=hub` to route through [local-llm-hub](../../local-llm-hub) (the `claude_sonnet` model on `127.0.0.1:8000`). Stage 1, a cheap multilingual keyword prefilter, runs for every classifier and gates the LLM call, so "utter noise" deltas never reach the model. See [`manual.md`](manual.md#choosing-the-classifier).
 
 Use a model that answers with JSON directly — the default `claude_sonnet` does. A reasoning model that emits a long `<think>` trace can overrun the token budget and return nothing parseable; that case is recorded as a distinct `llm_truncated` trace state rather than a generic contract error. The output budget is configurable (`WR_HUB_MAX_TOKENS`) and the per-prompt delta is capped (`WR_HUB_MAX_PROMPT_CHARS`) so a whole-history scan cannot blow the model's context window.
 
-All four prompt assets are inspectable plain-text files, tunable without touching code: the system prompt at `src/analysis/prompts/classification_system.md`, the cascade's actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`, the Gmail survey/reference bucket definitions at `src/analysis/prompts/gmail_classification_taxonomy.md` (not sent to Stage 2), and Gmail's `bucket | root` Stage-1 rules at `src/analysis/prompts/gmail_keyword_roots.txt`.
+All four prompt assets are inspectable plain-text files, tunable without touching code: the system prompt at `src/analysis/prompts/classification_system.md`, the Stage-1 actionable roots (Spanish/English/Catalan) at `src/analysis/prompts/keyword_roots.txt`, the Gmail survey/reference bucket definitions at `src/analysis/prompts/gmail_classification_taxonomy.md` (not sent to Stage 2), and Gmail's `bucket | root` Stage-1 rules at `src/analysis/prompts/gmail_keyword_roots.txt`.
 
 ## Short-term alert memory
 

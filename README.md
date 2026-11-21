@@ -91,7 +91,7 @@ Adding new messages causes only the delta to be reviewed. The per-chat cursor ad
 .\scripts\wr.bat scan --dry-run       # replay stored messages, touch nothing
 ```
 
-Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOURCES=whatsapp,gmail`; the classifier with `WR_CLASSIFIER` (`stub` offline default, or `hub` / `cascade` — equivalent names for the LLM classifier; the keyword prefilter gates the LLM for every classifier). A run that cannot check its source or reach the classifier fails loudly and holds every cursor. Preflight, the settled-buffer gate, prompt assets and alert memory: [`docs/scan-and-classification.md`](docs/scan-and-classification.md).
+Sources are chosen with `sources` in the ignored `config/local.json` or `WR_SOURCES=whatsapp,gmail`; the classifier with `WR_CLASSIFIER` (`stub` offline default, or `hub` for the LLM classifier; the keyword prefilter gates the LLM for every classifier). A run that cannot check its source or reach the classifier fails loudly and holds every cursor. Preflight, the settled-buffer gate, prompt assets and alert memory: [`docs/scan-and-classification.md`](docs/scan-and-classification.md).
 
 ## Running Against Real WhatsApp + Telegram
 
@@ -188,4 +188,4 @@ Detail on e2e routing (a docs-only or backend-only diff skips the browser suite)
 
 ## Repository Status
 
-The app runs day to day against real WhatsApp + Telegram, with Gmail, the two family checks, and travel blocks available as opt-in sources and features — all built on the same foundation used for offline development: a read-only connector, a SQLite store, a cursor/delta review engine, a validated LLM JSON contract, and a consolidated digest. The linked-device connector baselines each chat to now on first monitor, a multilingual (ES/EN/CA) cascade classifier gates LLM calls behind a keyword prefilter, and Telegram delivery is retryable independently of analysis. The fixture connector and offline stub classifier remain the default, so the whole suite still runs with no credentials.
+The app runs day to day against real WhatsApp + Telegram, with Gmail, the two family checks, and travel blocks available as opt-in sources and features — all built on the same foundation used for offline development: a read-only connector, a SQLite store, a cursor/delta review engine, a validated LLM JSON contract, and a consolidated digest. The linked-device connector baselines each chat to now on first monitor, a multilingual (ES/EN/CA) Stage-1 keyword prefilter gates LLM calls behind a keyword prefilter, and Telegram delivery is retryable independently of analysis. The fixture connector and offline stub classifier remain the default, so the whole suite still runs with no credentials.

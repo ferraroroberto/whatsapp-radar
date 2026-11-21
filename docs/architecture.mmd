@@ -54,7 +54,7 @@ flowchart TB
     TRANSCRIBE["transcription.py — voice notes -> hub Whisper"]
     KEYWORDS["keywords.py — Stage 1 prefilter"]
     TRIPWIRE["tripwire.py — bounded Stage-1-only scan\nof discovered chats; no classifier"]
-    CLASSIFIER["classifier.py — Stage 2 (stub | hub | cascade)"]
+    CLASSIFIER["classifier.py — Stage 2 (stub | hub)"]
     CONTRACT["contract.py — parse_analysis / AnalysisResult"]
     REVIEW["review.py — cursor advance + alert memory"]
     SURVEY["gmail_survey.py — bounded whitelist survey\n-> generic Gmail taxonomy/rules"]
@@ -221,7 +221,7 @@ the declared status vocabularies, one owner each"]
     CALWRITEAPI["Google Calendar API — calendar.events\nOAuth token under auth/calendar/write_token.json"]
     ROUTESAPI["Google Routes API v2 — API key"]
   end
-  CLASSIFIER -->|hub / cascade mode| HUB
+  CLASSIFIER -->|hub mode| HUB
   SURVEY -->|one local analysis pass| HUB
   TRANSCRIBE --> HUB
   TELEGRAM --> TELEGRAMAPI

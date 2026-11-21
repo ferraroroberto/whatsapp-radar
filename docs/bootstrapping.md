@@ -13,7 +13,7 @@ For day-to-day operation once this is done, see [`manual.md`](manual.md). For th
 ```
 WhatsApp ──▶ Node sidecar (Baileys) ──▶ data/linked_device/*.ndjson ──▶ wr (Python core) ──▶ SQLite
                                                                               │
-                                          classifier (stub | hub | cascade) ──┤
+                                          classifier (stub | hub) ──┤
                                                                               ▼
                                                               Telegram digest (read-only, actionable-only)
 
@@ -124,7 +124,7 @@ Verify delivery end-to-end:
 .\scripts\wr.bat scan               # sync → classify the delta → deliver one digest if actionable
 ```
 
-If nothing is actionable, no message is sent — that is correct. See [`manual.md`](manual.md) for the classifier choice (`stub` / `hub` / `cascade`) and tuning.
+If nothing is actionable, no message is sent — that is correct. See [`manual.md`](manual.md) for the classifier choice (`stub` / `hub`) and tuning.
 
 ## 5 — Bring up the admin PWA + phone access (Tailscale)
 

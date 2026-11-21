@@ -1,4 +1,4 @@
-"""Cheap source-aware keyword prefilter for the cascade classifier.
+"""Cheap source-aware Stage-1 keyword prefilter.
 
 Matches accent-stripped, lowercased message text against an inspectable list of
 actionable ROOTS (``prompts/keyword_roots.txt``) covering Spanish, English, and
@@ -43,7 +43,7 @@ class KeywordRule:
 class KeywordSignal:
     """Result of the Stage-1 prefilter: whether it matched and which roots did.
 
-    ``matched`` is exposed via :meth:`__bool__` so the cascade can keep using
+    ``matched`` is exposed via :meth:`__bool__` so the pipeline can keep using
     ``if not has_actionable_signal(delta)``, while ``roots`` carries the Stage-1
     evidence the audit trace records.
     """

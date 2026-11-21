@@ -173,7 +173,10 @@ baseline = ".doc-refs-ratchet-baseline.json"
 allow_refs = ["config/apps.json", "config/jobs.json", ":8000", ":8447", ":8448"]
 # The sidecar lives in src/sidecar/; a shell command naming the old root folder passes the
 # path check (it is no link), so the retired-term list is what catches it.
-retired = [{ term = "cd sidecar", why = "the sidecar lives in src/sidecar/; use `cd src/sidecar`" }]
+retired = [
+    { term = "cd sidecar", why = "the sidecar lives in src/sidecar/; use `cd src/sidecar`" },
+    { term = "cascade", why = "the classifier is `stub` or `hub`; the Stage-1 keyword prefilter is its own step, and `cascade` survives only as a config-load alias in src/config" },
+]
 
 # [dead_code_ratchet] -- the scaffold's baseline-and-ratchet dead-code check. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/dead_code_ratchet.py through

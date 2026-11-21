@@ -28,7 +28,7 @@ WhatsApp Radar is a standalone local service, integrated with the home-automatio
 - A WhatsApp linked-device connector (read-only Node/Baileys sidecar + Python reader) owns pairing, chat discovery, message ingestion, and reconnect handling. An optional Gmail OAuth client and the `calendar_readonly` / `calendar_write` clients own the other two Google sources.
 - A local SQLite store owns chat/sender metadata, messages, review cursors, analysis results, run traces, and notification history.
 - A processing pipeline analyzes only message/mail deltas and calls the local LLM Hub rather than duplicating model/subprocess orchestration.
-- The admin PWA (four tabs — Home, Activity, Messages, Family) with a header gear opening Settings (display, sources, how messages are judged, alerts, maintenance, this install), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
+- The admin PWA (four tabs — Home, Activity, Inbox, Family) with a header gear opening Settings (display, sources, how messages are judged, alerts, maintenance, this install), handles connection status, discovered chats/senders, monitor/ignore decisions, classifier configuration, and the family-check rules.
 - App Launcher schedules the three jobs (`family-radar-scan`, `family-radar-calendar-sync`, `family-radar-traffic-check`) through its Jobs tab and opens the admin UI through its Apps tab.
 
 The internal module map is [`docs/architecture.mmd`](docs/architecture.mmd); where new code goes is [`docs/layout.md`](docs/layout.md).
@@ -175,7 +175,7 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate # no new prompt-audit lint hit or size-cap breach in CLAUDE.md / AGENTS.md
 .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate # no doc names a repo path, module or link that does not exist
 .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate # no new function, class or method nothing refers to
-.\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate # no new console-window spawn, print in library code or drive-path literal
+.\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate # no new hit of the conventions enabled in .fleet.toml (spawn flags and timeouts, print in library code, drive paths, raw sqlite/os.replace/requests, ...)
 .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate # no new write target resolving under src/, app/ or scripts/
 .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate # no new untracked control or sheet, built tracking id, or unwired usage log
 .\.venv\Scripts\python.exe -m scripts.ux_surface_ratchet_gate # every surface root carries a data-surface id with a map entry, and the map page is current

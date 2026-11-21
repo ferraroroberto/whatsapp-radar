@@ -33,11 +33,11 @@ def test_deep_merges_without_clobbering(tmp_path: Path) -> None:
         json.dumps({"connector": "fixture", "hub": {"base_url": "http://x", "model": "old"}}),
         encoding="utf-8",
     )
-    config.save_local_overrides({"classifier": "cascade", "hub": {"model": "new"}}, root=root)
+    config.save_local_overrides({"classifier": "hub", "hub": {"model": "new"}}, root=root)
     written = json.loads(local.read_text(encoding="utf-8"))
     assert written == {
         "connector": "fixture",          # untouched
-        "classifier": "cascade",         # added
+        "classifier": "hub",             # added
         "hub": {"base_url": "http://x", "model": "new"},  # nested-merged
     }
 
@@ -54,10 +54,24 @@ def test_load_config_reads_local_overrides(
     (root / "config" / "default.json").write_text(
         json.dumps({"connector": "fixture", "classifier": "stub"}), encoding="utf-8"
     )
-    config.save_local_overrides({"classifier": "cascade"}, root=root)
+    config.save_local_overrides({"classifier": "hub"}, root=root)
     cfg = config.load_config(root=root)
-    assert cfg.classifier == "cascade"
+    assert cfg.classifier == "hub"
     assert cfg.connector == "fixture"
+
+
+@pytest.mark.parametrize("env", [False, True])
+def test_load_config_maps_retired_classifier_name_to_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, env: bool
+) -> None:
+    # Saved configs and env files written before the rename still say "cascade".
+    monkeypatch.delenv("WR_CLASSIFIER", raising=False)
+    root = _make_root(tmp_path)
+    if env:
+        monkeypatch.setenv("WR_CLASSIFIER", "cascade")
+    else:
+        config.save_local_overrides({"classifier": "cascade"}, root=root)
+    assert config.load_config(root=root).classifier == "hub"
 
 
 def test_e2e_local_config_override_never_opens_or_writes_host_config(
@@ -227,3 +241,13 @@ def test_rooted_path_prefers_env_then_raw_then_default_and_roots_relative(
     absolute = tmp_path / "abs.json"
     monkeypatch.setenv("WR_TEST_PATH", str(absolute))
     assert rooted_path("WR_TEST_PATH", {"p": "r.json"}, "p", "d", tmp_path / "other") == absolute
+
+
+def test_every_classifier_the_settings_accept_builds() -> None:
+    # The settings validation list and the classifier factory are two views of one
+    # set of names; a name accepted by one and rejected by the other fails a scan.
+    from app.webapp.routers.config import _VALID_CLASSIFIERS
+    from src.analysis.classifier import build_stage2_classifier
+
+    for name in _VALID_CLASSIFIERS:
+        build_stage2_classifier(name, config.HubConfig())

@@ -83,6 +83,11 @@ __all__ = [
     "save_local_overrides",
 ]
 
+# A saved config or env may still name a classifier that now resolves to another
+# one; the mapping lives here so the classifier factory and the settings
+# validation only ever see the live names.
+_CLASSIFIER_ALIASES = {"cascade": "hub"}
+
 
 @dataclass(frozen=True)
 class Config:
@@ -164,6 +169,7 @@ def load_config(root: Path | None = None) -> Config:
     connector = os.environ.get("WR_CONNECTOR", merged.get("connector", "fixture"))
     sources = _as_sources(os.environ.get("WR_SOURCES") or merged.get("sources"))
     classifier = os.environ.get("WR_CLASSIFIER", merged.get("classifier", "stub"))
+    classifier = _CLASSIFIER_ALIASES.get(classifier, classifier)
     notifier = os.environ.get("WR_NOTIFIER", merged.get("notifier", "none"))
     linked_device_dir = os.environ.get(
         "WR_LINKED_DEVICE_DIR", merged.get("linked_device_dir", "data/linked_device")

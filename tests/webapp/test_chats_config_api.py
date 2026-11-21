@@ -595,7 +595,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
             json={
                 "connector": "linked_device",
                 "sources": ["whatsapp", "gmail"],
-                "classifier": "cascade",
+                "classifier": "hub",
                 "notifier": "telegram",
                 "hub_base_url": "http://127.0.0.1:8000",
                 "hub_model": "claude_sonnet",
@@ -609,7 +609,7 @@ def test_post_config_routes_fields(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert saved_local["connector"] == "linked_device"
     assert saved_local["sources"] == ["whatsapp", "gmail"]
-    assert saved_local["classifier"] == "cascade"
+    assert saved_local["classifier"] == "hub"
     assert saved_local["notifier"] == "telegram"
     assert saved_local["hub"] == {"base_url": "http://127.0.0.1:8000", "model": "claude_sonnet"}
     assert saved_local["task_os"] == {"auto_export": True}

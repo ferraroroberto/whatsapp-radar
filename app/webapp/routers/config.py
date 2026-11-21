@@ -27,7 +27,7 @@ router = APIRouter()
 
 _VALID_CONNECTORS = {"fixture", "linked_device"}
 _VALID_SOURCES = {"whatsapp", "gmail"}
-_VALID_CLASSIFIERS = {"stub", "hub", "cascade"}
+_VALID_CLASSIFIERS = {"stub", "hub"}
 _VALID_NOTIFIERS = {"none", "telegram"}
 
 _FREQUENCY_NOTE = "Scan frequency is configured in App Launcher's Jobs tab, not here."

@@ -12,8 +12,8 @@ Node process is process management, not a WhatsApp write. Nothing here sends,
 reacts, or reads receipts.
 
 Liveness is the heartbeat: the sidecar rewrites ``status.json`` every 30s (and on
-every event), so a file fresher than :data:`STALE_AFTER_SECONDS` means a live,
-paired session. The coarse states the UI and the preflight gate care about:
+every event), so a file that :func:`~src.connector.linked_device.is_heartbeat_fresh`
+accepts means a live, paired session. The coarse states the UI and the preflight gate care about:
 
 - ``running``   — paired, connected, heartbeat fresh. The happy path.
 - ``connecting``— paired and fresh but not yet ``connected`` (just launched / linking).

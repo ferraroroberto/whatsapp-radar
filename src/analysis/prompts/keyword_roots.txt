@@ -1,4 +1,4 @@
-# Actionable keyword ROOTS for the cascade classifier's cheap prefilter.
+# Actionable keyword ROOTS for the Stage-1 keyword prefilter.
 #
 # Purpose: drop "utter noise" batches before spending an LLM call. This is a
 # HIGH-RECALL gate — a false positive only costs one LLM call, a false negative

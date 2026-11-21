@@ -340,11 +340,10 @@ def build_stage2_classifier(
 
     The pipeline owns Stage 1 (the keyword prefilter) itself, so this builds only
     the engine that runs *after* the prefilter. ``stub`` stays deterministic/
-    offline; both ``hub`` and ``cascade`` map to the LLM-backed
-    :class:`HubClassifier`.
+    offline; ``hub`` is the LLM-backed :class:`HubClassifier`.
     """
     if name == "stub":
         return StubClassifier()
-    if name in ("hub", "cascade"):
+    if name == "hub":
         return HubClassifier(hub, children)
-    raise ValueError(f"unknown classifier: {name!r} (expected 'stub', 'hub', or 'cascade')")
+    raise ValueError(f"unknown classifier: {name!r} (expected 'stub' or 'hub')")

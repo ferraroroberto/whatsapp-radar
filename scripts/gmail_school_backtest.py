@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Read-only historical backtest of Gmail school-sender classification (#216). "
+            "Read-only historical backtest of Gmail school-sender classification. "
             "Hits the REAL Gmail API and REAL config/local.json — never writes to the "
             "local chats/messages database, never advances a cursor, and makes one real "
             "local-llm-hub call per email in range."

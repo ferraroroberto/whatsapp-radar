@@ -23,7 +23,7 @@ set "CERT=%CERT_DIR%\cert.pem"
 set "KEY=%CERT_DIR%\key.pem"
 
 REM Auto-renew a Tailscale cert expiring within 30 days (no-op on a
-REM self-signed cert or when no cert exists) — project-scaffolding#89.
+REM self-signed cert or when no cert exists), so HTTPS never lapses.
 "%VENV_PY%" "%SCRIPT_DIR%scripts\gen_tailscale_cert.py" --check
 
 if not exist "%CERT%" (

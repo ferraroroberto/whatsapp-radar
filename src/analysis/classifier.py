@@ -96,36 +96,19 @@ def _extract_json_object(text: str) -> str:
     """Best-effort extraction of the JSON object from a model's raw text.
 
     Reasoning models wrap their answer in ``<think>...</think>`` and may add code
-    fences or prose. This strips the think block and returns the first balanced
-    ``{...}`` object. Validation stays strict downstream: if nothing parseable is
+    fences or prose. This strips the think block and returns the first complete
+    ``{...}`` JSON object. Validation stays strict downstream: if nothing parseable is
     found, the original text is returned so the contract parser raises cleanly.
     """
     cleaned = _THINK_BLOCK.sub("", text).strip()
     start = cleaned.find("{")
     if start == -1:
         return cleaned
-    depth = 0
-    in_string = False
-    escaped = False
-    for i in range(start, len(cleaned)):
-        ch = cleaned[i]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return cleaned[start : i + 1]
-    return cleaned
+    try:
+        _, end = json.JSONDecoder().raw_decode(cleaned[start:])
+    except ValueError:
+        return cleaned
+    return cleaned[start : start + end]
 
 
 @dataclass(frozen=True)

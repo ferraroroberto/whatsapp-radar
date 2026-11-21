@@ -61,6 +61,7 @@ import requests
 
 from src.config import Config
 from src.db import store
+from src.db.runs import KIND_TRAFFIC_CHECK
 from src.delivery.alert import send_alert
 from src.family import dedup, leg_status, rules
 from src.family.calendar_source import fetch_events_by_person
@@ -521,7 +522,7 @@ def traffic_cadence_skip_reason(conn: sqlite3.Connection, config: Config) -> str
     dry-run rows from the "last run" lookup, so a dry run can't distort this
     either way.
     """
-    last_started = store.last_run_started_at(conn, "traffic-check")
+    last_started = store.last_run_started_at(conn, KIND_TRAFFIC_CHECK)
     if last_started is None:
         return None
     last_dt = datetime.fromisoformat(last_started)
@@ -546,11 +547,11 @@ def run_traffic_check(
     """
     traffic = config.traffic
     if not traffic.enabled and not dry_run:
-        return {"kind": "traffic-check", "status": "disabled", "checked": [], "alerts": 0}
+        return {"kind": KIND_TRAFFIC_CHECK, "status": "disabled", "checked": [], "alerts": 0}
     if rules.in_quiet_hours(now, traffic.quiet_start_hour, traffic.quiet_end_hour):
-        return {"kind": "traffic-check", "status": "quiet_hours", "checked": [], "alerts": 0}
+        return {"kind": KIND_TRAFFIC_CHECK, "status": "quiet_hours", "checked": [], "alerts": 0}
     if not traffic.api_key:
-        return {"kind": "traffic-check", "status": "error", "error": "no Routes API key",
+        return {"kind": KIND_TRAFFIC_CHECK, "status": "error", "error": "no Routes API key",
                 "checked": [], "alerts": 0}
 
     lookahead = timedelta(hours=traffic.lookahead_hours)
@@ -590,7 +591,7 @@ def run_traffic_check(
     sweep.flush_leave_now()
 
     return {
-        "kind": "traffic-check", "status": "ok",
+        "kind": KIND_TRAFFIC_CHECK, "status": "ok",
         "checked": sweep.checked, "alerts": sweep.alerts, "dry_run": dry_run,
         # The window actually applied, which may be higher than configured.
         "dedup_window_min": dedup_window_min,

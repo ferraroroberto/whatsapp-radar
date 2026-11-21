@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
 from src.db.delivery_status import DELIVERY_OFFLINE
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, KIND_CALENDAR_SCAN, KIND_TRAFFIC_CHECK
 from src.family.scan_summary import normalize_scan_summary
 
 router = APIRouter()
@@ -150,8 +150,8 @@ def _filtered_trace_row(row: sqlite3.Row) -> dict[str, Any]:
 #: family check, so a new message-pipeline kind lands there without an edit.
 _SCOPES: dict[str, dict[str, tuple[str, ...]]] = {
     "messages": {"exclude_kinds": FAMILY_KINDS},
-    "calendar": {"kinds": ("calendar-scan",)},
-    "traffic": {"kinds": ("traffic-check",)},
+    "calendar": {"kinds": (KIND_CALENDAR_SCAN,)},
+    "traffic": {"kinds": (KIND_TRAFFIC_CHECK,)},
 }
 
 

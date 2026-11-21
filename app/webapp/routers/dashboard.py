@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.db import store
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, KIND_CALENDAR_SCAN, KIND_TRAFFIC_CHECK
 from src.family.leg_status import count_legs
 from src.family.scan_summary import scan_counts
 
@@ -75,7 +75,7 @@ def _message_activity(runs: list[sqlite3.Row], source: str) -> dict[str, Any]:
 
 def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     """Last-activity card for the traffic-jam check."""
-    row = next((r for r in runs if r["kind"] == "traffic-check"), None)
+    row = next((r for r in runs if r["kind"] == KIND_TRAFFIC_CHECK), None)
     if row is None:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}
@@ -111,7 +111,7 @@ def _traffic_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
 
 def _calendar_activity(runs: list[sqlite3.Row]) -> dict[str, Any]:
     """Last-activity card for the daily calendar-conflict scan."""
-    row = next((r for r in runs if r["kind"] == "calendar-scan"), None)
+    row = next((r for r in runs if r["kind"] == KIND_CALENDAR_SCAN), None)
     if row is None:
         return _never()
     result = loads_json_column(row["summary_json"]) or {}

@@ -27,10 +27,9 @@ logger = logging.getLogger("run_named_tunnel")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.tray import cloudflared_proc  # noqa: E402 — needs the repo root on sys.path
-from app.webapp.manager import WebappManager, WebappManagerConfig  # noqa: E402
+from app.webapp.manager import WebappManager, webapp_manager_config  # noqa: E402
 from src.paths import PROJECT_ROOT  # noqa: E402
 from src.subprocess_flags import NO_WINDOW_NEW_GROUP  # noqa: E402
-from src.webapp_config import load_webapp_config  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "config" / "cloudflared.sample.yml"
@@ -93,14 +92,7 @@ def main() -> int:
     if hostname:
         logger.info(f"🌍 Public hostname: https://{hostname}")
 
-    wcfg = load_webapp_config()
-    manager = WebappManager(
-        WebappManagerConfig(
-            enabled=wcfg.enabled,
-            host=wcfg.host,
-            port=int(os.environ.get("WR_WEBAPP_PORT", wcfg.port)),
-        )
-    )
+    manager = WebappManager(webapp_manager_config())
     try:
         status = manager.start(wait=True)
     except RuntimeError as exc:

@@ -40,7 +40,7 @@ from src.connector.base import ConnectorStatus
 from src.connector.factory import ConnectorBinding, build_connectors
 from src.connector.gmail import GmailConnector
 from src.db import store
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, KIND_CALENDAR_SCAN
 from src.demand_snapshot import DemandSnapshot
 from src.family.scan_summary import normalize_scan_summary
 
@@ -108,7 +108,7 @@ def _compose_argv(action: str, body: dict[str, Any]) -> list[str]:
         argv = [action]
         if mode == "dry_run":
             argv.append("--dry-run")
-        if action == "calendar-scan":
+        if action == KIND_CALENDAR_SCAN:
             # Every run this router spawns is a button press: Activity's Run-now
             # Calendar-sync step and the Family tab's Rehearse / Run sweep
             # controls. The webapp schedules nothing of its own, so an
@@ -134,7 +134,7 @@ def _calendar_source(cfg: Any, recent_runs: list[sqlite3.Row]) -> dict[str, Any]
         (
             row["started_at"]
             for row in recent_runs
-            if row["kind"] == "calendar-scan" and row["status"] == store.STATUS_COMPLETED
+            if row["kind"] == KIND_CALENDAR_SCAN and row["status"] == store.STATUS_COMPLETED
         ),
         None,
     )
@@ -332,7 +332,7 @@ def execution_health(request: Request) -> dict[str, Any]:
         detail = "; ".join(
             f"{item['source']}: {item['detail']}" for item in statuses
         )
-        calendar_runs = store.list_runs_by_kind(conn, ("calendar-scan",))
+        calendar_runs = store.list_runs_by_kind(conn, (KIND_CALENDAR_SCAN,))
         sources = [*statuses, _calendar_source(cfg, calendar_runs)]
         return {
             "name": statuses[0]["name"] if len(statuses) == 1 else "multi-source",

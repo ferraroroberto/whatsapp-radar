@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from app.webapp.routers._helpers import get_conn, loads_json_column
 from src.config import Config, load_config, save_local_overrides
 from src.db import store
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, KIND_CALENDAR_SCAN, KIND_TRAFFIC_CHECK
 from src.family.leg_status import count_legs
 from src.family.scan_summary import scan_counts
 from src.family.travel_blocks import (
@@ -153,7 +153,7 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         "finished_at": row["completed_at"],
         "result_status": result.get("status"),
     }
-    if kind == "traffic-check":
+    if kind == KIND_TRAFFIC_CHECK:
         # `checked` counts every leg, priced or not. It stays, because
         # stored run rows are rendered by clients that read it and a coverage
         # number vanishing is worse than one that is merely coarse — but it is
@@ -216,7 +216,7 @@ def _last_travel_sweep(
     rides along in the summary so a stale answer is visibly stale.
     """
     for row in recent_runs:
-        if row["kind"] != "calendar-scan":
+        if row["kind"] != KIND_CALENDAR_SCAN:
             continue
         section = _summary_json(row).get("travel_blocks")
         if isinstance(section, dict):
@@ -429,9 +429,9 @@ def _family_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     # The daily calendar run, by itself: a day of traffic checks pushes it out of
     # the 15 above, and the Family header names its missing locations.
     last_calendar = next(
-        (_run_summary(row) for row in recent_runs if row["kind"] == "calendar-scan"), None
+        (_run_summary(row) for row in recent_runs if row["kind"] == KIND_CALENDAR_SCAN), None
     )
-    traffic_rows = [row for row in recent_runs if row["kind"] == "traffic-check"]
+    traffic_rows = [row for row in recent_runs if row["kind"] == KIND_TRAFFIC_CHECK]
     last_check = traffic_rows[0]["started_at"] if traffic_rows else None
     last_alert = next(
         (row["started_at"] for row in traffic_rows if _traffic_alerts(row) > 0), None

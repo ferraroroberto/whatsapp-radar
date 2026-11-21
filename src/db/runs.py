@@ -50,7 +50,9 @@ LEGAL_TRANSITIONS: dict[str, frozenset[str]] = {
 #: The one-shot family checks. They share ``review_runs`` with the message
 #: pipeline but never touch the message store, so every list that must treat them
 #: apart (Audit scopes, run modal, CLI run capture, staleness) reads this one tuple.
-FAMILY_KINDS: tuple[str, ...] = ("traffic-check", "calendar-scan")
+KIND_TRAFFIC_CHECK = "traffic-check"
+KIND_CALENDAR_SCAN = "calendar-scan"
+FAMILY_KINDS: tuple[str, ...] = (KIND_TRAFFIC_CHECK, KIND_CALENDAR_SCAN)
 
 #: How long a run of each kind may legitimately stay at ``running``. Only
 #: kinds with a known, short bound are listed: a one-shot family check records

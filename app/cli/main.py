@@ -39,7 +39,7 @@ from src.db.delivery_status import (
     run_delivery_ok,
 )
 from src.db.reprocess import reprocess, reprocess_outcome_to_dict
-from src.db.runs import FAMILY_KINDS
+from src.db.runs import FAMILY_KINDS, KIND_CALENDAR_SCAN, KIND_TRAFFIC_CHECK
 from src.db.sync import resync, resync_outcome_to_dict, sync_sources
 from src.delivery import deliver_digest
 from src.delivery.alert import send_alert
@@ -355,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p_cal = sub.add_parser(
-        "calendar-scan", help="daily family calendar-conflict scan"
+        KIND_CALENDAR_SCAN, help="daily family calendar-conflict scan"
     )
     p_cal.add_argument(
         "--dry-run",
@@ -368,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="run even before family.run_hour (an explicit, human-requested fire)",
     )
     p_traffic = sub.add_parser(
-        "traffic-check", help="traffic-jam check for upcoming commutes"
+        KIND_TRAFFIC_CHECK, help="traffic-jam check for upcoming commutes"
     )
     p_traffic.add_argument(
         "--dry-run",
@@ -408,9 +408,9 @@ def _cmd_family_check(
 
     now = _local_now()
     skip_reason: str | None = None
-    if kind == "traffic-check" and not dry_run:
+    if kind == KIND_TRAFFIC_CHECK and not dry_run:
         skip_reason = traffic_check.traffic_cadence_skip_reason(conn, config)
-    elif kind == "calendar-scan" and not force:
+    elif kind == KIND_CALENDAR_SCAN and not force:
         skip_reason = calendar_scan.calendar_run_hour_skip_reason(config, now=now)
     if skip_reason is not None:
         _progress(f"⏭ {kind} skipped — {skip_reason}")
@@ -422,7 +422,7 @@ def _cmd_family_check(
     # earlier fires left at `running`.
     store.reconcile_stale_runs(conn)
     run_id = store.start_run(conn, mode="dry_run" if dry_run else "live", kind=kind)
-    if kind == "calendar-scan":
+    if kind == KIND_CALENDAR_SCAN:
         runner = calendar_scan.run_calendar_scan
     else:
         runner = traffic_check.run_traffic_check
@@ -453,7 +453,7 @@ def _cmd_family_check(
         store.abandon_run(conn, run_id, f"abandoned: interrupted ({type(exc).__name__})")
         raise
     payload["run_id"] = run_id
-    if kind == "calendar-scan":
+    if kind == KIND_CALENDAR_SCAN:
         _progress(
             f"📅 calendar-scan: {payload['status']} — "
             f"{len(payload.get('conflicts', []))} conflict(s), "

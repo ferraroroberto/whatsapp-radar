@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================================
-REM  WEBAPP - standalone FastAPI admin (HTTPS on :8455 when cert present)
+REM  WEBAPP - standalone FastAPI admin (HTTPS when a cert is present)
 REM ----------------------------------------------------------------------------
 REM  Daily use: launch tray.bat instead — it adopt-or-spawns the webapp for you.
 REM  This bat is for headless boxes, dev iteration, or when you want the webapp
@@ -18,21 +18,9 @@ if not exist "%VENV_PY%" (
 
 cd /d "%SCRIPT_DIR%" || exit /b 1
 
-set "CERT_DIR=%SCRIPT_DIR%webapp\certificates"
-set "CERT=%CERT_DIR%\cert.pem"
-set "KEY=%CERT_DIR%\key.pem"
-
-REM Auto-renew a Tailscale cert expiring within 30 days (no-op on a
-REM self-signed cert or when no cert exists), so HTTPS never lapses.
-"%VENV_PY%" "%SCRIPT_DIR%scripts\gen_tailscale_cert.py" --check
-
-if not exist "%CERT%" (
-    echo [INFO] No HTTPS cert found, running HTTP-only on :8455.
-    echo        Run scripts\gen_tailscale_cert.py to enable HTTPS.
-    "%VENV_PY%" -m app.webapp.serve --host 0.0.0.0 --port 8455
-) else (
-    echo [INFO] HTTPS via %CERT%
-    "%VENV_PY%" -m app.webapp.serve --host 0.0.0.0 --port 8455 --ssl-keyfile "%KEY%" --ssl-certfile "%CERT%"
-)
+REM Host, port, server and TLS come from config\webapp_config.json (and
+REM WR_WEBAPP_PORT) through WebappManager, the same source the tray reads.
+REM It also auto-renews a Tailscale cert expiring within 30 days before binding.
+"%VENV_PY%" -m app.webapp.standalone
 
 exit /b %ERRORLEVEL%

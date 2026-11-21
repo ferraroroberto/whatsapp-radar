@@ -24,6 +24,7 @@ from app.tray import cloudflared_proc
 from app.tray.single_instance import cross_process_lock
 from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
+from src.webapp_config import load_webapp_config
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,17 @@ class WebappManagerConfig:
     poll_interval_seconds: float = 0.4
     # hypercorn serves HTTP/2 over the certificate; uvicorn is the HTTP/1.1 fallback.
     server: str = "hypercorn"
+
+
+def webapp_manager_config() -> WebappManagerConfig:
+    """The manager config from ``webapp_config.json``; ``WR_WEBAPP_PORT`` overrides the port."""
+    wcfg = load_webapp_config()
+    return WebappManagerConfig(
+        enabled=wcfg.enabled,
+        host=wcfg.host,
+        port=int(os.environ.get("WR_WEBAPP_PORT", wcfg.port)),
+        server=wcfg.server,
+    )
 
 
 @dataclass
@@ -248,12 +260,9 @@ class WebappManager:
             detail="stopped",
         )
 
-    def _build_command(self) -> list[str]:
-        py = sys.executable
-        cmd: list[str] = [
-            py,
-            "-m",
-            "app.webapp.serve",
+    def serve_args(self) -> list[str]:
+        """The ``app.webapp.serve`` flags for this config, TLS included when a cert exists."""
+        args = [
             "--host",
             self.config.host,
             "--port",
@@ -266,15 +275,26 @@ class WebappManager:
         certs = cert_paths()
         if certs is not None:
             cert, key = certs
-            cmd.extend(
-                [
-                    "--ssl-keyfile",
-                    str(key),
-                    "--ssl-certfile",
-                    str(cert),
-                ]
-            )
-        return cmd
+            args.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
+        return args
+
+    def _build_command(self) -> list[str]:
+        return [sys.executable, "-m", "app.webapp.serve", *self.serve_args()]
+
+    def serve_foreground(self) -> int:
+        """Serve in this process until it is stopped; the standalone ``webapp.bat`` path.
+
+        Same flags as the spawned child, so the bat and the tray cannot disagree on
+        host, port, server or TLS. A disabled webapp is not started.
+        """
+        if not self.config.enabled:
+            logger.error("❌ Webapp is disabled in config (webapp.enabled=false)")
+            return 1
+        from app.webapp import serve
+
+        check_tailscale_cert()
+        logger.info(f"🚀 Serving webapp at {self.base_url}")
+        return serve.main(self.serve_args())
 
     def _wait_until_ready(self) -> None:
         deadline = time.time() + self.config.startup_timeout_seconds

@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
 
 from src.config import Config
+from src.db.runs import KIND_CALENDAR_SCAN
 from src.delivery.alert import send_alert
 from src.family import rules
 from src.family.calendar_source import fetch_events_by_person
@@ -270,7 +271,7 @@ def run_calendar_scan(
     """
     family = config.family
     if not family.enabled and not dry_run:
-        return {"kind": "calendar-scan", "status": "disabled", "conflicts": [],
+        return {"kind": KIND_CALENDAR_SCAN, "status": "disabled", "conflicts": [],
                 "missing_locations": [], "decisions": [],
                 "summary": {"status": "skipped", "reason": "disabled"}}
 
@@ -335,7 +336,7 @@ def run_calendar_scan(
             summary["detail"] = detail
 
     return {
-        "kind": "calendar-scan", "status": "ok",
+        "kind": KIND_CALENDAR_SCAN, "status": "ok",
         "conflicts": conflict_dicts,
         "missing_locations": missing,
         "decisions": decisions,

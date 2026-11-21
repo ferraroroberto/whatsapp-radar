@@ -355,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p_cal = sub.add_parser(
-        "calendar-scan", help="daily family calendar-conflict scan (#160)"
+        "calendar-scan", help="daily family calendar-conflict scan"
     )
     p_cal.add_argument(
         "--dry-run",
@@ -368,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="run even before family.run_hour (an explicit, human-requested fire)",
     )
     p_traffic = sub.add_parser(
-        "traffic-check", help="traffic-jam check for upcoming commutes (#160)"
+        "traffic-check", help="traffic-jam check for upcoming commutes"
     )
     p_traffic.add_argument(
         "--dry-run",

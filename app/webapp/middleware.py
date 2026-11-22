@@ -16,6 +16,7 @@ import ipaddress
 import logging
 from collections.abc import Callable, Mapping
 
+from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -96,6 +97,20 @@ def passkey_http_gate(request: Request) -> JSONResponse | None:
     return None
 
 
+def require_authenticated(request: Request) -> None:
+    """Route dependency: refuse unless :class:`BearerTokenMiddleware` let this call in.
+
+    The middleware marks a request it admitted by auth (the PC itself, no token
+    configured off the public edge, or a matching token); the exempt paths
+    (``/``, ``/static/*``, login) are admitted without that mark. A route that
+    must never be reachable on an exempt path, such as the restart, depends on
+    this so it cannot be mounted open, and an app built without the middleware
+    refuses it too.
+    """
+    if not getattr(request.state, "auth_passed", False):
+        raise HTTPException(status_code=401, detail="missing or invalid bearer token")
+
+
 class BearerTokenMiddleware(BaseHTTPMiddleware):
     """Require Authorization: Bearer <token> on API endpoints (non-loopback only)."""
 
@@ -119,6 +134,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
                 return gate_err
 
         if is_loopback:
+            request.state.auth_passed = True
             return await call_next(request)
 
         if path in AUTH_EXEMPT_EXACT or any(
@@ -136,6 +152,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={"detail": "remote access requires a configured token"},
                 )
+            request.state.auth_passed = True
             return await call_next(request)
 
         presented = ""
@@ -146,6 +163,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
             presented = request.query_params.get("token", "").strip()
 
         if presented and hmac.compare_digest(presented.encode("utf-8"), token.encode("utf-8")):
+            request.state.auth_passed = True
             return await call_next(request)
 
         return JSONResponse(

@@ -40,7 +40,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from app.webapp import runs
-from app.webapp.middleware import BearerTokenMiddleware
+from app.webapp.middleware import BearerTokenMiddleware, require_authenticated
 from app.webapp.routers import (
     audit,
     auth,
@@ -58,7 +58,8 @@ from src.compression import StreamSafeGZipMiddleware
 from src.config import load_config
 from src.db import store
 from src.logging_setup import configure_file_logging
-from src.runtime_data import runtime_db_path
+from src.runtime_data import runtime_data_dir, runtime_db_path
+from src.self_restart import TRAY_RESTART, RestartTarget, restart_router
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
 from src.usage_log import usage_router
 from src.webapp_config import load_webapp_config
@@ -202,6 +203,13 @@ def create_app() -> FastAPI:
     # already gates every /api path, loopback bypass included.
     app.include_router(usage_router(
         runtime_db_path("whatsapp-radar", "usage.sqlite3", env_var="WR_USAGE_DB_PATH", create=True),
+    ))
+    # The build readout's restart sheet runs this repo's own `tray.bat --restart`,
+    # behind the same bearer gate as every other /api write.
+    app.include_router(restart_router(
+        targets=[RestartTarget("app", "Restart app", TRAY_RESTART)],
+        status_dir=runtime_data_dir("whatsapp-radar") / "restart",
+        guard=require_authenticated,
     ))
 
     # Added last so it is the outermost layer: a 401 or 304 passes through unchanged.

@@ -35,7 +35,7 @@ A long message in the Chats overlay — a long voice-note transcript or a long t
 
 **Play summary aloud** streams the summary through one of four logical voice profiles — `en_female` / `en_male` / `es_female` / `es_male` — resolved entirely server-side from the message's own context, never from the client:
 
-- **Language** is detected deterministically from the *original* message text (never the summary), using the same `langdetect` pattern the transcription phase uses for its Whisper hint. Below ~20 characters of text, a detector error, or any language other than Spanish all fall back to English — the feature only distinguishes English and Spanish.
+- **Language** is detected deterministically from the *original* message text (never the summary), using the same `src/language_detect.py` helper the transcription phase uses for its Whisper hint. Below ~20 characters of text, a detector error, or any language other than Spanish all fall back to English — the feature only distinguishes English and Spanish.
 - **Gender** comes from an explicit per-sender mapping (`sender_voice_genders` in `config/webapp_config.json`, keyed by the lowercased/trimmed sender label) with a configured fallback (`default_voice_gender`, default `"female"`) for any unmapped or unlabeled sender. It is never inferred from a name — only an explicit mapping counts. Edit the JSON directly; there is no UI form for either key.
 
 The hub model and voice behind each profile are committed, non-secret config under `tts.profiles` in `config/default.json` (override per-host in `config/local.json`):

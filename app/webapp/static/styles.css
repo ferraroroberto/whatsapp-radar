@@ -316,21 +316,9 @@ hr { border: none; border-top: 1px solid var(--line-muted); margin: 14px 0; }
 .glance-row .action-row-main:disabled { cursor: default; opacity: 1; }
 .dash-latest #dashLatest:empty { min-height: calc(3 * var(--row-lg)); }
 .dash-latest-empty { padding: 14px; list-style: none; }
-.dash-all-activity {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: var(--row-sm);
-  padding: 0 14px;
-  border: 0;
-  border-top: 1px solid var(--line-muted);
-  background: transparent;
-  color: var(--accent-text);
-  font: inherit;
-  font-size: var(--font-label);
-  font-weight: 600;
-  cursor: pointer;
-}
+/* The footer control sits inside the card, inset so the ghost's own border
+   reads as a button rather than a row edge; layout only, the look is vendored. */
+.dash-all-activity { display: block; width: calc(100% - 2 * var(--space-md)); margin: var(--space-sm) var(--space-md); }
 /* Home's header line is a button: the exception it names opens that run in
    Activity. At rest (a plain fact) it is disabled and reads as the
    home-head's muted status. */

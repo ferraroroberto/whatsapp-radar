@@ -4,9 +4,10 @@
  * the polls once. */
 
 import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
-import { jsonApi, tokenFromUrl, toast, writeToken } from './api.js';
+import { api, jsonApi, tokenFromUrl, toast, writeToken } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
+import { initRestartSheet } from './_vendored/page-foot/restart-sheet.js';
 import { wireTabs } from './tabs.js';
 import { fetchWebauthnStatus } from './webauthn.js';
 import { fetchDashboard, wireDashboard } from './dashboard.js';
@@ -30,6 +31,20 @@ async function fetchVersion() {
     // armed that would keep 401-ing against a token the server refuses.
     if (String(exc.message) === 'auth required') throw exc;
   }
+}
+
+// The sheet's POST reads the status itself (a refusal is an answer, not an error).
+async function postRestart(url, body) {
+  let res;
+  try {
+    res = await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (exc) {
+    if (exc && exc.message === 'auth required') return { status: 401, body: null };
+    throw exc;
+  }
+  let data = null;
+  try { data = await res.json(); } catch (_) { data = null; }
+  return { status: res.status, body: data };
 }
 
 // --------------------------------------------------------- theme toggle
@@ -71,6 +86,7 @@ async function boot() {
     }
     return;
   }
+  initRestartSheet({ fetchJson: jsonApi, postJson: postRestart });
   await fetchWebauthnStatus();
   await fetchDashboard();
   await openLinkedRun();

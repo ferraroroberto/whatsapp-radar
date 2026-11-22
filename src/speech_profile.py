@@ -3,9 +3,8 @@
 Picks one of four logical voice profiles — ``{en,es}_{female,male}`` — for a
 message's summary. Language is detected deterministically from the message's
 own *original* text (never the summary, which can be short or in a different
-register), using the same ``langdetect`` pattern
-:func:`src.analysis.transcription.detect_chat_language` uses for the Whisper
-language hint. Gender comes from an explicit per-sender mapping in the
+register), using the same :func:`src.language_detect.detect_language_code` the
+Whisper language hint uses. Gender comes from an explicit per-sender mapping in the
 gitignored webapp config, falling back to a single configured default — never
 a name-based guess (an unofficial/uncertain signal the issue explicitly rules
 out).
@@ -17,9 +16,7 @@ profile to use; this module owns the *selection*, and ``src/config/tts.py``'s
 
 from __future__ import annotations
 
-# Below this many characters, langdetect's guess is unreliable — mirrors
-# src/analysis/transcription.py's _MIN_DETECT_CHARS threshold.
-_MIN_DETECT_CHARS = 20
+from src.language_detect import detect_language_code
 
 LANGUAGES = ("en", "es")
 GENDERS = ("female", "male")
@@ -35,16 +32,7 @@ def detect_language(text: str) -> str:
     reliably, a detector error, or any detected language other than Spanish —
     is always English.
     """
-    sample = (text or "").strip()
-    if len(sample) < _MIN_DETECT_CHARS:
-        return DEFAULT_LANGUAGE
-    try:
-        from langdetect import DetectorFactory, detect
-
-        DetectorFactory.seed = 0  # deterministic results across runs/tests
-        return "es" if detect(sample) == "es" else DEFAULT_LANGUAGE
-    except Exception:  # noqa: BLE001 — LangDetectException or import issue
-        return DEFAULT_LANGUAGE
+    return "es" if detect_language_code(text) == "es" else DEFAULT_LANGUAGE
 
 
 def normalize_sender(sender_label: str | None) -> str:

@@ -52,6 +52,7 @@ from src.db.transcription_status import (
     TRANSCRIPTION_SKIPPED_OLD,
     awaiting_transcript,
 )
+from src.language_detect import detect_language_code
 from src.models import StoredMessage
 from src.pooled_http import SESSION as POOLED_SESSION
 from src.progress import Progress, emit
@@ -69,10 +70,6 @@ _WS_RUN = re.compile(r"\s+")
 # ffmpeg decodes a voice note to WAV far faster than real time; two minutes is well
 # past a healthy run for the longest note and keeps a hung child from stalling the scan.
 _FFMPEG_WAV_TIMEOUT_SECONDS = 120
-
-# Below this many characters of chat text, language detection isn't trustworthy —
-# we send no hint and let the backend auto-detect rather than guess from noise.
-_MIN_DETECT_CHARS = 20
 
 
 class TranscriptionError(Exception):
@@ -246,27 +243,15 @@ def detect_chat_language(conn: sqlite3.Connection, chat_id: int) -> str | None:
     prior for the language of a voice note in it — used as the Whisper ``language``
     hint so a note transcribes in its real language regardless of any backend
     auto-detect bias. Placeholder rows (``[voice note]``, ``[image]``, …) are
-    excluded; below :data:`_MIN_DETECT_CHARS` of text we return ``None`` (too little
-    to be sure) and let the backend auto-detect.
+    excluded; below :data:`~src.language_detect.MIN_DETECT_CHARS` of text we return
+    ``None`` (too little to be sure) and let the backend auto-detect.
     """
     rows = conn.execute(
         "SELECT text FROM messages WHERE chat_id = ? AND text IS NOT NULL "
         "AND substr(text, 1, 1) != '[' ORDER BY id DESC LIMIT 40",
         (chat_id,),
     ).fetchall()
-    sample = " ".join(r["text"] for r in rows if r["text"]).strip()
-    if len(sample) < _MIN_DETECT_CHARS:
-        return None
-    try:
-        from langdetect import DetectorFactory, detect
-
-        DetectorFactory.seed = 0  # deterministic results across runs/tests
-        return str(detect(sample))
-    except Exception:  # noqa: BLE001 — LangDetectException or import issue → just skip the hint
-        # no-silent-except-exempt: both causes legitimately collapse to the same
-        # "no hint, let the backend auto-detect" outcome -- there is no distinct
-        # established fact being hidden here, unlike a self-skip's cadence/hour gate.
-        return None
+    return detect_language_code(" ".join(r["text"] for r in rows if r["text"]))
 
 
 def _resolve_language(

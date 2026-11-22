@@ -468,8 +468,10 @@ export async function fetchExecution() {
 // sheets); refresh them while it is open so the pairing QR, the
 // connection word and the Sources rows stay current.
 export function fetchSettingsHealth() {
-  fetchHealth().catch(function () {});
-  fetchSyncs().catch(function () {});
+  return Promise.all([
+    fetchHealth().catch(function () {}),
+    fetchSyncs().catch(function () {}),
+  ]);
 }
 
 function updateRunLabel() {

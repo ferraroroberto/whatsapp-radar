@@ -3,7 +3,9 @@
  * boot() fetches build identity, passkey status, and Home's metrics, then arms
  * the polls once. */
 
-import { els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS } from './state.js';
+import {
+  els, state, THEME_KEY, WEBAUTHN_POLL_MS, DASHBOARD_POLL_MS, EXECUTION_POLL_MS, EXECUTION_IDLE_POLL_MS,
+} from './state.js';
 import { api, jsonApi, tokenFromUrl, toast, writeToken } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
@@ -16,6 +18,7 @@ import { wireSettings } from './config.js';
 import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
 import { fetchActivity, openLinkedRun, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
+import { startPoll } from './poll.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 
 // --------------------------------------------------------- build identity
@@ -71,7 +74,7 @@ els.themeToggles.forEach(function (btn) { btn.addEventListener('click', toggleTh
 
 // --------------------------------------------------------- boot
 function refreshHome() {
-  fetchDashboard().catch(function () {});
+  return fetchDashboard().catch(function () {});
 }
 
 async function boot() {
@@ -91,21 +94,18 @@ async function boot() {
   await fetchDashboard();
   await openLinkedRun();
 
-  setInterval(function () {
-    fetchWebauthnStatus().catch(function () {});
-  }, WEBAUTHN_POLL_MS);
-  setInterval(function () {
-    if (state.tab === 'dashboard') refreshHome();
-  }, DASHBOARD_POLL_MS);
-  // While Activity is open, poll runs so a live run streams; also keep polling
-  // whenever a run is in flight, so leaving the tab doesn't strand its queue.
-  // Settings' source-health card refreshes while it is open (the pairing QR).
-  setInterval(function () {
-    if (state.tab === 'activity' || state.execution.active) {
-      fetchExecution().catch(function () {});
-    }
-    if (els.settingsDialog.open) fetchSettingsHealth();
-  }, EXECUTION_POLL_MS);
+  startPoll(fetchWebauthnStatus, WEBAUTHN_POLL_MS);
+  startPoll(refreshHome, DASHBOARD_POLL_MS, { enabled: function () { return state.tab === 'dashboard'; } });
+  // A run in flight streams at the fast cadence on any tab, so leaving Activity
+  // doesn't strand its queue. Otherwise only an open Activity tab polls, at the
+  // slow one: a run started elsewhere (a scheduled Job) shows up within one
+  // beat and the fast poll takes over. Settings' source-health card refreshes
+  // while it is open (the pairing QR).
+  startPoll(fetchExecution, EXECUTION_POLL_MS, { enabled: function () { return Boolean(state.execution.active); } });
+  startPoll(fetchExecution, EXECUTION_IDLE_POLL_MS, {
+    enabled: function () { return state.tab === 'activity' && !state.execution.active; },
+  });
+  startPoll(fetchSettingsHealth, EXECUTION_POLL_MS, { enabled: function () { return els.settingsDialog.open; } });
 }
 
 // --------------------------------------------------------- wire + go

@@ -24,6 +24,7 @@ a second request returns 409.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import sqlite3
@@ -474,7 +475,8 @@ async def list_execution_runs(
     by_db_id: dict[int, dict[str, Any]] = {}
     skipped_count = 0
     skipped_by_kind: dict[str, int] = {}
-    for record in runs.list_runs(read_limit):
+    # Off the event loop: it stats the runs folder, and the poll lands every 1.5 s.
+    for record in await asyncio.to_thread(runs.list_runs, read_limit):
         record.setdefault("mode", _fs_mode(record))
         result = record.get("result")
         is_skip = isinstance(result, dict) and result.get("status") == "skipped"

@@ -73,7 +73,10 @@ export const state = {
   family: null,
 };
 
+// The run poll streams a live run at 1.5 s; with none in flight, an open Activity tab
+// checks at the slow beat.
 export const EXECUTION_POLL_MS = 1500;
+export const EXECUTION_IDLE_POLL_MS = 15000;
 
 // "All" can be ~900 chats on a real account; cap the DOM rows we render and
 // nudge the operator to search instead of scrolling a phone forever.

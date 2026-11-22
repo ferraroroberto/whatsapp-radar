@@ -219,6 +219,65 @@ def find_by_db_run_id(kind: str, db_run_id: int) -> dict[str, Any] | None:
     return None
 
 
+#: What identifies one version of a ``run.json``: the writer replaces it
+#: atomically, so a rewrite changes the file id even when size and mtime tie.
+_FileSig = tuple[int, int, int]
+
+
+class _KindListing:
+    """One kind directory's sorted names and the records read from them."""
+
+    __slots__ = ("dir_mtime_ns", "names", "records")
+
+    def __init__(self, dir_mtime_ns: int, names: list[str]) -> None:
+        self.dir_mtime_ns = dir_mtime_ns
+        self.names = names
+        self.records: dict[str, tuple[_FileSig | None, dict[str, Any]]] = {}
+
+
+# The listing cache. The Activity poll lists runs every 1.5 s while a run is in
+# flight, and a re-read of every ``run.json`` per poll is the cost it removes:
+# an unchanged folder is answered from here with stat calls only. The lock
+# covers the dicts because the router calls in from a worker thread.
+_LISTING_LOCK = threading.Lock()
+_LISTINGS: dict[Path, _KindListing] = {}
+
+
+def _run_json_sig(run_dir: Path) -> _FileSig | None:
+    """The version of ``run_dir/run.json``, or None when it is absent."""
+    try:
+        st = os.stat(run_dir / "run.json")
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def _kind_listing(kind_dir: Path) -> _KindListing | None:
+    """The cached listing of ``kind_dir``, rescanned only when its mtime moved.
+
+    ``os.stat`` rather than ``DirEntry.stat``: on Windows the latter reports the
+    directory index's copy of the timestamp, which can lag a just-made run
+    directory, and a stale answer here would hide a new run.
+    """
+    try:
+        mtime_ns = os.stat(kind_dir).st_mtime_ns
+    except OSError:
+        _LISTINGS.pop(kind_dir, None)
+        return None
+    cached = _LISTINGS.get(kind_dir)
+    if cached is not None and cached.dir_mtime_ns == mtime_ns:
+        return cached
+    names = sorted((e.name for e in os.scandir(kind_dir) if e.is_dir()), reverse=True)
+    fresh = _KindListing(mtime_ns, names)
+    if cached is not None:
+        # Keep the records of names that survived the rescan, drop the rest: the
+        # cache stays bounded by what is on disk.
+        keep = set(names)
+        fresh.records = {n: rec for n, rec in cached.records.items() if n in keep}
+    _LISTINGS[kind_dir] = fresh
+    return fresh
+
+
 def list_runs(limit: int = 50) -> list[dict[str, Any]]:
     """Newest-first run records across all kinds (no output bytes — cheap).
 
@@ -232,24 +291,38 @@ def list_runs(limit: int = 50) -> list[dict[str, Any]]:
     self-skips) and this function runs on every Execution-tab poll. Deliberately
     a read bound and not a cleanup — this function never deletes a run; the
     retention cap lives in :func:`prune_runs`.
+
+    Cached by file stat: a kind directory is rescanned only when its mtime
+    moves, and a ``run.json`` is re-read only when its version
+    (:data:`_FileSig`) differs from the one cached, so an unchanged folder costs
+    stat calls and no reads. Blocking filesystem work: async callers run it in a
+    worker thread. Each record is a fresh top-level dict, so a caller may add or
+    replace keys; the values under them are shared and read-only.
     """
     if not RUNS_DIR.is_dir():
         return []
     rows: list[tuple[str, dict[str, Any]]] = []
-    for kind_dir in sorted(RUNS_DIR.iterdir()):
-        if not kind_dir.is_dir():
-            continue
-        names = sorted(
-            (entry.name for entry in kind_dir.iterdir() if entry.is_dir()), reverse=True
-        )
-        for name in names[:limit]:
-            run_dir = kind_dir / name
-            record = read_run(run_dir)
-            record.setdefault("kind", kind_dir.name)
-            record.setdefault("run_id", name)
-            # Sort key: the run id is timestamp-sortable within a kind; pair it
-            # with started_at so cross-kind ordering is by wall-clock start.
-            rows.append((str(record.get("started_at") or name), record))
+    with _LISTING_LOCK:
+        for kind_dir in sorted(RUNS_DIR.iterdir()):
+            if not kind_dir.is_dir():
+                continue
+            listing = _kind_listing(kind_dir)
+            if listing is None:
+                continue
+            for name in listing.names[:limit]:
+                sig = _run_json_sig(kind_dir / name)
+                cached = listing.records.get(name)
+                if cached is not None and cached[0] == sig:
+                    base = cached[1]
+                else:
+                    base = read_run(kind_dir / name)
+                    listing.records[name] = (sig, base)
+                record = dict(base)
+                record.setdefault("kind", kind_dir.name)
+                record.setdefault("run_id", name)
+                # Sort key: the run id is timestamp-sortable within a kind; pair it
+                # with started_at so cross-kind ordering is by wall-clock start.
+                rows.append((str(record.get("started_at") or name), record))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [record for _, record in rows[:limit]]
 

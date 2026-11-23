@@ -204,6 +204,14 @@ try {
     & $python -m scripts.ux_surface_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "ux surface ratchet failed or was NOT CONFIRMED." }
 
+    # Whole tree too: a fixed-rate browser poll that reaches the server, a poll under 2 s, a fast
+    # unwatched server loop, a directory walk in a handler, a default-pool submit, or a web app
+    # without the timing middleware. Exit 3 (git unusable, a file that cannot be read or parsed)
+    # fails as NOT CONFIRMED (tests/gates/test_request_budget_ratchet_gate.py pins it).
+    Write-Host "==> request budget ratchet (polls, fast loops, default pool, timing middleware)..." -ForegroundColor Cyan
+    & $python -m scripts.request_budget_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "request budget ratchet failed or was NOT CONFIRMED." }
+
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app
     if ($LASTEXITCODE -ne 0) { Fail "mypy failed." }

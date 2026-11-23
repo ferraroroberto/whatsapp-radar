@@ -89,6 +89,7 @@ Gate, from the repo root, with the project venv:
 .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate
 .\.venv\Scripts\python.exe -m scripts.ux_surface_ratchet_gate
+.\.venv\Scripts\python.exe -m scripts.request_budget_ratchet_gate
 ```
 
 The gate runs offline on sanitized fixtures. The static ratchet is the one exception: it needs Node, because the duplicate-block detector runs through `npx`.
@@ -98,6 +99,7 @@ Every ratchet is a vendored `scripts/<name>_ratchet.py` with a `.fleet.toml [<na
 - **runtime write** (`code_folders = ["src", "app", "scripts"]`) — runtime output goes under `data/` or the runtime root (`src/runtime_data.py`). A caller-named path goes through `src/runtime_files.py`, which raises when the path lands in a code folder. A `# runtime-write-exempt: <reason>` marker is for a path fixed from outside, with that reason stated.
 - **usage track** — a new web control takes a constant `data-track` id and a `<dialog>` a `data-track-view` in the same change; a deliberate exception carries `<!-- untracked-control-exempt: <reason> -->` (`//` in JS).
 - **ux surface** — a new surface root (`<dialog>`, a dialog, menu or tabpanel role, a `popover`) takes a constant `data-surface` id and an entry in `docs/ux-surfaces.yaml`, and the page is regenerated; a surface drawn two ways keeps one id and one entry, with `<!-- duplicate-surface-exempt: <reason> -->` on each root.
+- **request budget** — a browser poll goes through the vendored `app/webapp/static/_vendored/poll/` helper, never a `setInterval` that reaches the server, and runs no faster than every 2 s; a server loop under 5 s is declared in `.fleet.toml` `[[request_budget.loops]]`; a new `asyncio.to_thread` goes to a named `TimedExecutor`; a deliberate exception carries `request-budget-exempt: <reason>`.
 - **comment, docs** — comments, docstrings and docs state the present-tense why: no `#N` issue references, no history phrases.
 - **structure** — new code goes where `docs/layout.md` says (Google API code in the portable root packages, not `src/`); split rather than grow.
 - **conventions** — `no-window`, `logging-not-print`, `no-drive-path`, `subprocess-timeout`, and `must-use` for `requests`, `sqlite3.connect` and `os.replace` (their helpers are named in `.fleet.toml`). Mark a deliberate exception `# <rule>-exempt: <reason>`.

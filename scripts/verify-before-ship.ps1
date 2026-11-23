@@ -212,6 +212,14 @@ try {
     & $python -m scripts.request_budget_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "request budget ratchet failed or was NOT CONFIRMED." }
 
+    # Whole tree too: a test that needs Windows (a win32 module, ctypes.windll, os.startfile, a
+    # console flag, a planted .exe under a fake ProgramFiles) without the windows_only marker the
+    # Mac nightly deselects. Exit 3 fails as NOT CONFIRMED
+    # (tests/gates/test_windows_only_ratchet_gate.py pins it).
+    Write-Host "==> windows only ratchet (tests that need Windows carry the marker)..." -ForegroundColor Cyan
+    & $python -m scripts.windows_only_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "windows only ratchet failed or was NOT CONFIRMED." }
+
     Write-Host "==> mypy (strict, src + app)..." -ForegroundColor Cyan
     & $python -m mypy src app
     if ($LASTEXITCODE -ne 0) { Fail "mypy failed." }

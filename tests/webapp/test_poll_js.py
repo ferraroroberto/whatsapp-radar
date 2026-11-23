@@ -1,9 +1,10 @@
-"""The browser poll helper's schedule, driven by a fake clock under Node.
+"""The browser poll schedule the PWA runs on, driven by a fake clock under Node.
 
-``static/poll.js`` is single-flight and visibility-aware: a hidden page makes
-no requests apart from one catch-up read on return, and a slow read is never
-stacked on. The helper takes its clock and visibility as an ``env`` argument, so
-the schedule is proven deterministically, with no real timers and no browser.
+``static/_vendored/poll/poll.js`` arms the next read only after the last one
+settled, arms nothing while the page is hidden or its ``activeWhile`` condition
+is false, and shares one in-flight read per shape (``singleFlight``). The page's
+``window`` timers and ``document`` visibility are replaced with a manual clock,
+so each schedule is proven with no real timers and no browser.
 """
 
 from __future__ import annotations
@@ -18,40 +19,51 @@ import pytest
 from src.paths import PROJECT_ROOT
 from src.subprocess_flags import NO_WINDOW
 
-POLL_JS = PROJECT_ROOT / "app" / "webapp" / "static" / "poll.js"
+POLL_JS = PROJECT_ROOT / "app" / "webapp" / "static" / "_vendored" / "poll" / "poll.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")
 
-# A manual clock: timers fire only when advance() crosses them, in order.
+# A manual one-shot clock: a timer fires only when advance() crosses it.
 _HARNESS = """
-import { startPoll } from __MODULE__;
-
-function makeEnv(hidden) {
-  const env = { isHidden: hidden, now: 0, timers: new Map(), nextId: 1, listeners: [] };
-  env.hidden = () => env.isHidden;
-  env.onVisible = (fn) => env.listeners.push(fn);
-  env.setTimer = (fn, ms) => {
-    const id = env.nextId++;
-    env.timers.set(id, { fn, ms, due: env.now + ms });
+const clock = { now: 0, timers: new Map(), nextId: 1 };
+globalThis.window = {
+  setTimeout: (fn, ms) => {
+    const id = clock.nextId++;
+    clock.timers.set(id, { fn, due: clock.now + ms });
     return id;
-  };
-  env.clearTimer = (id) => env.timers.delete(id);
-  env.advance = (ms) => {
-    const end = env.now + ms;
-    for (;;) {
-      const ready = [...env.timers.values()].filter((t) => t.due <= end);
-      const due = ready.sort((a, b) => a.due - b.due)[0];
-      if (!due) break;
-      env.now = due.due;
-      due.due += due.ms;
-      due.fn();
-    }
-    env.now = end;
-  };
-  env.setHidden = (value) => { env.isHidden = value; env.listeners.forEach((fn) => fn()); };
-  return env;
-}
+  },
+  clearTimeout: (id) => { clock.timers.delete(id); },
+};
+const listeners = [];
+globalThis.document = {
+  hidden: false,
+  addEventListener: (_name, fn) => listeners.push(fn),
+  removeEventListener: (_name, fn) => {
+    const i = listeners.indexOf(fn);
+    if (i >= 0) listeners.splice(i, 1);
+  },
+};
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+async function advance(ms) {
+  const end = clock.now + ms;
+  for (;;) {
+    const due = [...clock.timers.entries()]
+      .filter(([, t]) => t.due <= end)
+      .sort((a, b) => a[1].due - b[1].due)[0];
+    if (!due) break;
+    clock.timers.delete(due[0]);
+    clock.now = due[1].due;
+    due[1].fn();
+    await settle();
+  }
+  clock.now = end;
+}
+async function setHidden(value) {
+  document.hidden = value;
+  listeners.slice().forEach((fn) => fn());
+  await settle();
+}
+const { startPoll, singleFlight } = await import(__MODULE__);
 const out = {};
 __BODY__
 console.log(JSON.stringify(out));
@@ -72,89 +84,111 @@ def _run_node(body: str) -> dict[str, Any]:
 
 def test_a_hidden_page_reads_nothing_but_one_catch_up_on_return() -> None:
     out = _run_node("""
-      const env = makeEnv(true);
+      document.hidden = true;
       let calls = 0;
-      startPoll(async () => { calls += 1; }, 1500, { env });
-      env.advance(10 * 60 * 1000);
-      await settle();
+      startPoll(async () => { calls += 1; }, 15000);
+      await advance(10 * 60 * 1000);
       out.hiddenAtStart = calls;
-      env.setHidden(false);
-      await settle();
+      await setHidden(false);
       out.afterReturn = calls;
-      env.advance(1500);
-      await settle();
+      await advance(15000);
       out.nextTick = calls;
-      env.setHidden(true);
-      env.advance(10 * 60 * 1000);
-      await settle();
+      await setHidden(true);
+      await advance(10 * 60 * 1000);
       out.hiddenAgain = calls;
     """)
     assert out == {"hiddenAtStart": 0, "afterReturn": 1, "nextTick": 2, "hiddenAgain": 2}
 
 
-def test_a_visible_page_polls_on_the_interval_and_a_redundant_event_adds_nothing() -> None:
+def test_a_visible_page_polls_on_the_interval() -> None:
     out = _run_node("""
-      const env = makeEnv(false);
       let calls = 0;
-      startPoll(async () => { calls += 1; }, 1500, { env });
-      for (let i = 0; i < 4; i += 1) { env.advance(1500); await settle(); }
+      startPoll(async () => { calls += 1; }, 15000);
+      await advance(4 * 15000);
       out.ticks = calls;
-      env.setHidden(false);
-      await settle();
-      out.afterRedundantEvent = calls;
     """)
-    assert out == {"ticks": 4, "afterRedundantEvent": 4}
+    assert out == {"ticks": 4}
 
 
-def test_a_slow_read_is_never_stacked_on() -> None:
+def test_a_slow_read_stretches_the_gap_instead_of_stacking() -> None:
     out = _run_node("""
-      const env = makeEnv(false);
       let calls = 0;
       let release;
       const slow = () => { calls += 1; return new Promise((resolve) => { release = resolve; }); };
-      startPoll(slow, 1500, { env });
-      env.advance(1500 * 5);
-      await settle();
+      startPoll(slow, 1500);
+      await advance(1500 * 5);
       out.whileInFlight = calls;
       release();
       await settle();
-      env.advance(1500);
-      await settle();
-      out.afterSettled = calls;
+      await advance(1499);
+      out.justBeforeTheGap = calls;
+      await advance(1);
+      out.afterTheGap = calls;
     """)
-    assert out == {"whileInFlight": 1, "afterSettled": 2}
+    assert out == {"whileInFlight": 1, "justBeforeTheGap": 1, "afterTheGap": 2}
 
 
 def test_a_failed_read_does_not_stop_the_poll() -> None:
     out = _run_node("""
-      const env = makeEnv(false);
       let calls = 0;
-      startPoll(async () => { calls += 1; throw new Error('down'); }, 1500, { env });
-      env.advance(1500);
-      await settle();
-      env.advance(1500);
-      await settle();
+      startPoll(async () => { calls += 1; throw new Error('down'); }, 1500);
+      await advance(1500 * 2);
       out.calls = calls;
     """)
     assert out == {"calls": 2}
 
 
-def test_enabled_gates_every_tick_and_the_catch_up() -> None:
+def test_a_busy_only_poll_arms_nothing_until_kicked_and_stops_by_itself() -> None:
+    # The run poll's shape: fast while a run is in flight, nothing at all otherwise.
     out = _run_node("""
-      const env = makeEnv(false);
       let calls = 0;
-      let on = false;
-      startPoll(async () => { calls += 1; }, 1500, { env, enabled: () => on });
-      env.advance(1500 * 3);
+      let active = false;
+      const poll = startPoll(async () => { calls += 1; }, 1500, { activeWhile: () => active });
+      await advance(10 * 60 * 1000);
+      out.whileIdle = calls;
+      out.timersWhileIdle = clock.timers.size;
+      active = true;
+      poll.kick();
       await settle();
-      out.whileOff = calls;
-      env.setHidden(true);
-      env.setHidden(false);
-      await settle();
-      out.catchUpWhileOff = calls;
-      on = true;
-      env.advance(1500);
-      await settle();
-      out.whileOn = calls;
+      out.onKick = calls;
+      await advance(1500 * 2);
+      out.whileActive = calls;
+      active = false;
+      await advance(1500);
+      out.lastTick = calls;
+      await advance(10 * 60 * 1000);
+      out.afterTheRun = calls;
+      out.timersAfterTheRun = clock.timers.size;
     """)
-    assert out == {"whileOff": 0, "catchUpWhileOff": 0, "whileOn": 1}
+    assert out == {
+        "whileIdle": 0, "timersWhileIdle": 0, "onKick": 1, "whileActive": 3,
+        "lastTick": 3, "afterTheRun": 3, "timersAfterTheRun": 0,
+    }
+
+
+def test_single_flight_shares_a_read_and_fresh_waits_for_the_next() -> None:
+    # A kick beside a tab tap's read shares it; a caller that just wrote never
+    # takes a read that predates its write.
+    out = _run_node("""
+      let calls = 0;
+      const releases = [];
+      const slow = () => { calls += 1; return new Promise((resolve) => releases.push(resolve)); };
+      const read = singleFlight(slow);
+      const a = read();
+      const b = read();
+      out.sameRead = a === b;
+      out.afterTwoCallers = calls;
+      const c = read.fresh();
+      await settle();
+      out.freshWaits = calls;
+      releases[0]();
+      await a;
+      await settle();
+      out.freshStarted = calls;
+      releases[1]();
+      await c;
+      out.total = calls;
+    """)
+    assert out == {
+        "sameRead": True, "afterTwoCallers": 1, "freshWaits": 1, "freshStarted": 2, "total": 2,
+    }

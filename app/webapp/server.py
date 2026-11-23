@@ -26,6 +26,7 @@ re-pair affordances in Settings.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
 import os
@@ -58,6 +59,7 @@ from src.compression import StreamSafeGZipMiddleware
 from src.config import load_config
 from src.db import store
 from src.logging_setup import configure_file_logging
+from src.request_timing import RequestTimingMiddleware, default_executor
 from src.runtime_data import runtime_data_dir, runtime_db_path
 from src.self_restart import TRAY_RESTART, RestartTarget, restart_router
 from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
@@ -144,6 +146,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             conn.close()
     except sqlite3.Error as exc:
         _log.warning(f"⚠️ startup stale-run reconcile failed: {exc}")
+    # Work still sent to the loop's default pool (Starlette's sync routes and file
+    # responses) is timed too, so a request's Server-Timing names every pool it used.
+    asyncio.get_running_loop().set_default_executor(default_executor())
     yield
     probe = getattr(app.state, "source_probe", None)
     if probe is not None:
@@ -212,6 +217,8 @@ def create_app() -> FastAPI:
         guard=require_authenticated,
     ))
 
+    # Every /api request gets a Server-Timing header and a log line when it is slow.
+    app.add_middleware(RequestTimingMiddleware)
     # Added last so it is the outermost layer: a 401 or 304 passes through unchanged.
     # No bypass paths: the one stream (/api/tts/speak) is audio/L16, skipped by type.
     app.add_middleware(StreamSafeGZipMiddleware, bypass_paths=())

@@ -82,6 +82,8 @@ windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "5ba99b0
 # `windows_only` (the PowerShell gate scripts and the Windows mutex/console-flag checks);
 # the e2e leg self-boots a throwaway webapp and runs on WebKit with the iPhone projection.
 self_restart = { src = "src/self_restart.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "src/self_restart.py" }
+build_info = { src = "src/build_info.py", sha = "1c1007fcd0b65b54342779250cb66975d57482e8", dest = "src/build_info.py" }
+restart_check = { src = "src/restart_check.py", sha = "1c1007fcd0b65b54342779250cb66975d57482e8", dest = "src/restart_check.py" }
 [ci.nightly]
 python       = "3.12"
 requirements = ["requirements.txt", "requirements-dev.txt"]

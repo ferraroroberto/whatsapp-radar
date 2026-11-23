@@ -15,10 +15,10 @@ import { fetchWebauthnStatus } from './webauthn.js';
 import { fetchDashboard, wireDashboard } from './dashboard.js';
 import { fetchChats, wireChats } from './chats.js';
 import { wireSettings } from './config.js';
-import { fetchExecution, fetchSettingsHealth, wireExecution } from './execution.js';
+import { fetchExecution, fetchSettingsHealth, onExecutionChange, wireExecution } from './execution.js';
 import { fetchActivity, openLinkedRun, wireActivity } from './activity.js';
 import { fetchFamily, wireFamily } from './family.js';
-import { startPoll } from './poll.js';
+import { startPoll } from './_vendored/poll/poll.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 
 // --------------------------------------------------------- build identity
@@ -95,24 +95,54 @@ async function boot() {
   await openLinkedRun();
 
   startPoll(fetchWebauthnStatus, WEBAUTHN_POLL_MS);
-  startPoll(refreshHome, DASHBOARD_POLL_MS, { enabled: function () { return state.tab === 'dashboard'; } });
+  polls.home = startPoll(refreshHome, DASHBOARD_POLL_MS, { activeWhile: homeShown });
   // A run in flight streams at the fast cadence on any tab, so leaving Activity
   // doesn't strand its queue. Otherwise only an open Activity tab polls, at the
   // slow one: a run started elsewhere (a scheduled Job) shows up within one
   // beat and the fast poll takes over. Settings' source-health card refreshes
   // while it is open (the pairing QR).
-  startPoll(fetchExecution, EXECUTION_POLL_MS, { enabled: function () { return Boolean(state.execution.active); } });
-  startPoll(fetchExecution, EXECUTION_IDLE_POLL_MS, {
-    enabled: function () { return state.tab === 'activity' && !state.execution.active; },
-  });
-  startPoll(fetchSettingsHealth, EXECUTION_POLL_MS, { enabled: function () { return els.settingsDialog.open; } });
+  polls.runLive = startPoll(fetchExecution, EXECUTION_POLL_MS, { activeWhile: runInFlight });
+  polls.runIdle = startPoll(fetchExecution, EXECUTION_IDLE_POLL_MS, { activeWhile: activityIdle });
+  polls.health = startPoll(fetchSettingsHealth, EXECUTION_POLL_MS, { activeWhile: settingsShown });
 }
+
+// --------------------------------------------------------- poll wake-ups
+// A poll whose condition is false arms no timer, so whatever turns the
+// condition true kicks it. The reads are single-flight, so a kick that lands
+// beside a direct read shares it. Before boot() arms the polls, a kick is the
+// plain read.
+const polls = {};
+
+function homeShown() { return state.tab === 'dashboard'; }
+function runInFlight() { return Boolean(state.execution.active); }
+function activityIdle() { return state.tab === 'activity' && !state.execution.active; }
+function settingsShown() { return els.settingsDialog.open; }
+
+function wake(name, read) {
+  if (polls[name]) polls[name].kick();
+  else read();
+}
+
+let runWasActive = false;
+onExecutionChange(function () {
+  if (runInFlight() === runWasActive) return;
+  runWasActive = runInFlight();
+  if (runWasActive) wake('runLive', fetchExecution);
+  else if (activityIdle()) wake('runIdle', fetchExecution);
+});
+
+new MutationObserver(function () {
+  if (settingsShown()) wake('health', fetchSettingsHealth);
+}).observe(els.settingsDialog, { attributes: true, attributeFilter: ['open'] });
 
 // --------------------------------------------------------- wire + go
 wireTabs(function (tab) {
-  if (tab === 'dashboard') refreshHome();
+  if (tab === 'dashboard') wake('home', refreshHome);
   if (tab === 'chats') fetchChats().catch(function () {});
-  if (tab === 'activity') fetchActivity().catch(function () {});
+  if (tab === 'activity') {
+    fetchActivity().catch(function () {});
+    if (activityIdle() && polls.runIdle) polls.runIdle.kick();
+  }
   if (tab === 'family') fetchFamily().catch(function () {});
 });
 wireChats();

@@ -8,7 +8,6 @@ the first review classifies only *new* messages, never months of backlog.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import shutil
 import sqlite3
@@ -22,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from app.webapp.pools import ON_DEMAND, run_in
 from app.webapp.routers._helpers import (
     buffer_dir,
     get_conn,
@@ -343,7 +343,7 @@ async def message_audio(
     if suffix == ".wav":
         return FileResponse(target, media_type="audio/wav")
     try:
-        mp3 = await asyncio.to_thread(_transcode_to_mp3, target)
+        mp3 = await run_in(ON_DEMAND, _transcode_to_mp3, target)
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         logger.warning("⚠️ audio transcode failed for message %s: %s", message_id, exc)
         media_type = _AUDIO_MEDIA_TYPES.get(suffix, "application/octet-stream")
@@ -382,7 +382,7 @@ async def summarize_message(request: Request, message_id: int) -> dict[str, Any]
     summarizer = getattr(request.app.state, "summarizer", None) or summarize_client.summarize
     base = hub_base_url(request)
     try:
-        summary = await asyncio.to_thread(summarizer, base, text)
+        summary = await run_in(ON_DEMAND, summarizer, base, text)
     except summarize_client.SummarizeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
@@ -419,7 +419,7 @@ async def export_message_task(request: Request, message_id: int) -> dict[str, An
     )
     config = task_os_config(request)
     try:
-        await asyncio.to_thread(exporter, config, ctx)
+        await run_in(ON_DEMAND, exporter, config, ctx)
     except task_os_client.TaskOsError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 
@@ -433,7 +433,7 @@ async def tts_health(request: Request) -> dict[str, bool]:
     """Report whether the hub is reachable for manual summary playback."""
     probe = getattr(request.app.state, "tts_health", None) or tts_client.health
     try:
-        available = await asyncio.to_thread(probe, hub_base_url(request))
+        available = await run_in(ON_DEMAND, probe, hub_base_url(request))
     except tts_client.TtsError as exc:
         logger.info("ℹ️ summary TTS health probe unavailable: %s", exc)
         return {"available": False}

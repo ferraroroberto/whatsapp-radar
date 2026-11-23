@@ -1,12 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/webapp/manager.py", "counts": {"unwatched-loop": 1}},
-    {"key": "app/webapp/routers/chats.py", "counts": {"default-pool": 4}},
-    {"key": "app/webapp/routers/execution.py", "counts": {"default-pool": 1}},
-    {"key": "app/webapp/server.py", "counts": {"timing-middleware": 1}},
-    {"key": "app/webapp/static/poll.js", "counts": {"fixed-rate-poll": 1}},
-    {"key": "src/connector/sidecar.py", "counts": {"unwatched-loop": 3}},
-    {"key": "src/demand_snapshot.py", "counts": {"unwatched-loop": 1}}
-  ]
+  "entries": []
 }

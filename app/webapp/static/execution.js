@@ -18,6 +18,7 @@ import { fmtLocalDateTime, fmtNum, kindLabel, sourceIcon, SOURCE_LABEL } from '.
 import { setSwitch } from './_vendored/switch/switch.js';
 import { patchFamily } from './family.js';
 import { setRowValue } from './edit-sheet.js';
+import { singleFlight } from './_vendored/poll/poll.js';
 
 // Guards the brief window between firing a run and the server reporting it
 // active, so the poll loop never fires the next chained step twice.
@@ -120,7 +121,7 @@ export async function runSelection() {
   execState().queue = chain;
   toast(chain.length > 1 ? `Running ${chain.length} steps…` : 'Running…');
   await pumpQueue();
-  fetchExecution().catch(function () {});
+  fetchExecution.fresh().catch(function () {});
   return execState().active;
 }
 
@@ -130,7 +131,7 @@ export async function runSelection() {
 export function rebuildCache() {
   execState().queue = [{ action: 'reprocess', confirm: true }];
   toast('Rebuilding the message cache…');
-  pumpQueue().then(function () { fetchExecution().catch(function () {}); });
+  pumpQueue().then(function () { fetchExecution.fresh().catch(function () {}); });
 }
 
 // Stop the live run the run sheet shows (Stop lives in its footer).
@@ -141,7 +142,7 @@ export async function killRun(kind, runId) {
   } catch (exc) {
     toast(String(exc.message || exc), 'error');
   }
-  fetchExecution().catch(function () {});
+  fetchExecution.fresh().catch(function () {});
 }
 
 // ----------------------------------------------------------- polling + render
@@ -397,7 +398,7 @@ function runTraffic(mode) {
   }
   ex.queue = [{ action: 'traffic-check', mode: mode }];
   toast('Running…');
-  pumpQueue().then(function () { fetchExecution().catch(function () {}); });
+  pumpQueue().then(function () { fetchExecution.fresh().catch(function () {}); });
 }
 
 function renderReconnect(s) {
@@ -443,8 +444,9 @@ async function reconnectSidecar() {
 // The run poll: the active run and the unified records list, which
 // Activity merges for the runs the DB store does not hold (a webapp-launched
 // sync or rebuild, a run still in flight). Sources health, syncs and traffic
-// are fetched where their cards live (Settings, Family), not here.
-export async function fetchExecution() {
+// are fetched where their cards live (Settings, Family), not here. Callers
+// that ask while a read is out (a poll tick, a tab tap) share it.
+async function readExecution() {
   let data;
   try {
     data = await jsonApi('/api/execution/runs');
@@ -467,12 +469,15 @@ export async function fetchExecution() {
 // Settings holds the source health and recent syncs (in the source
 // sheets); refresh them while it is open so the pairing QR, the
 // connection word and the Sources rows stay current.
-export function fetchSettingsHealth() {
+function readSettingsHealth() {
   return Promise.all([
     fetchHealth().catch(function () {}),
     fetchSyncs().catch(function () {}),
   ]);
 }
+
+export const fetchExecution = singleFlight(readExecution);
+export const fetchSettingsHealth = singleFlight(readSettingsHealth);
 
 function updateRunLabel() {
   const ex = execState();

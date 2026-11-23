@@ -24,7 +24,6 @@ a second request returns 409.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import sqlite3
@@ -35,6 +34,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.webapp import runs
+from app.webapp.pools import HOT_POLL, run_in
 from app.webapp.routers._helpers import db_path, get_conn, loads_json_column, maybe_json
 from src.config import load_config
 from src.connector.base import ConnectorStatus
@@ -475,8 +475,8 @@ async def list_execution_runs(
     by_db_id: dict[int, dict[str, Any]] = {}
     skipped_count = 0
     skipped_by_kind: dict[str, int] = {}
-    # Off the event loop: it stats the runs folder, and the poll lands every 1.5 s.
-    for record in await asyncio.to_thread(runs.list_runs, read_limit):
+    # Off the event loop on its own pool: it stats the runs folder, and the poll lands every 1.5 s.
+    for record in await run_in(HOT_POLL, runs.list_runs, read_limit):
         record.setdefault("mode", _fs_mode(record))
         result = record.get("result")
         is_skip = isinstance(result, dict) and result.get("status") == "skipped"

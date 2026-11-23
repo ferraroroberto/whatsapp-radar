@@ -284,6 +284,37 @@ enabled      = true
 baseline     = ".request-budget-ratchet-baseline.json"
 handler_dirs = ["app/webapp/routers"]
 
+# Server loops that run with nobody viewing, each with the reason it cannot wait for a viewer.
+[[request_budget.loops]]
+path       = "app/webapp/manager.py"
+function   = "WebappManager._wait_until_ready"
+interval_s = 0.4
+why        = "the tray's launch waits for its own child server to answer; it ends on ready or after the 15 s startup timeout"
+
+[[request_budget.loops]]
+path       = "src/connector/sidecar.py"
+function   = "ensure_running"
+interval_s = 1
+why        = "a preflight relaunch reads the local status.json until the session is live, capped at 25 s"
+
+[[request_budget.loops]]
+path       = "src/connector/sidecar.py"
+function   = "run_supervisor"
+interval_s = 90
+why        = "the WhatsApp connection is the product: the tray keeps the sidecar alive so messages arrive whether or not a page is open, relaunching it only when stale"
+
+[[request_budget.loops]]
+path       = "src/connector/sidecar.py"
+function   = "wait_for_settled"
+interval_s = 1
+why        = "a run waits for the history backfill to stop growing before it reads the buffer, capped by its timeout"
+
+[[request_budget.loops]]
+path       = "src/demand_snapshot.py"
+function   = "DemandSnapshot._tick"
+interval_s = 60
+why        = "refreshes a slow read only while a reader came back within the demand window, then ends the thread"
+
 # [windows_only_ratchet] -- scripts/windows_only_ratchet.py fails when a test that touches a
 # Windows-only API (a win32 module, ctypes.windll, os.startfile, a subprocess console flag, a
 # Windows-only os.environ read, or a planted .exe under a fake ProgramFiles) lacks the

@@ -179,12 +179,13 @@ Run the gate from the repo root with the project venv:
 .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate # no new write target resolving under src/, app/ or scripts/
 .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate # no new untracked control or sheet, built tracking id, or unwired usage log
 .\.venv\Scripts\python.exe -m scripts.ux_surface_ratchet_gate # every surface root carries a data-surface id with a map entry, and the map page is current
+.\.venv\Scripts\python.exe -m scripts.request_budget_ratchet_gate # no new fixed-rate poll, fast unwatched loop, default-pool submit or missing timing middleware
 powershell -File scripts\verify-before-ship.ps1   # all of the above + the e2e slice the diff needs (Chromium + WebKit/iPhone)
 powershell -File scripts\verify-before-ship.ps1 -RouteOnly   # print the e2e routing decision, run nothing
 ```
 
 
-Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs, dead-code, conventions, runtime-write, usage-track and ux-surface ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
+Detail on e2e routing (a docs-only or backend-only diff skips the browser suite), the static, docs, comment, structure, instruction, doc-refs, dead-code, conventions, runtime-write, usage-track, ux-surface and request-budget ratchets, design capture and CI: [`docs/verification.md`](docs/verification.md).
 
 ## Repository Status
 

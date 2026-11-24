@@ -41,6 +41,10 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "scripts").mkdir()
     script = tmp_path / "scripts" / "dead_code_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    # every ratchet loads this sibling to find its baseline in .ratchets/
+    shutil.copy(
+        gate.SCRIPT.with_name("ratchet_baseline.py"), script.with_name("ratchet_baseline.py"),
+    )
     (tmp_path / ".fleet.toml").write_text("[dead_code_ratchet]\nenabled = true\n", encoding="utf-8")
     module = tmp_path / "app.py"
     module.write_text(LIVE, encoding="utf-8")

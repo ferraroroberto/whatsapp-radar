@@ -95,6 +95,10 @@ def test_a_new_issue_reference_in_a_doc_turns_the_real_script_red_by_name(
     (repo / "docs").mkdir(parents=True)
     (repo / "scripts").mkdir()
     shutil.copy(REAL_SCRIPT, repo / "scripts" / "docs_ratchet.py")
+    # every ratchet loads this sibling to find its baseline in .ratchets/
+    shutil.copy(
+        REAL_SCRIPT.with_name("ratchet_baseline.py"), repo / "scripts" / "ratchet_baseline.py",
+    )
     (repo / ".fleet.toml").write_text("[docs_ratchet]\nenabled = true\n", encoding="utf-8")
     (repo / "README.md").write_text("# Title\n\nPresent-tense text.\n", encoding="utf-8")
     doc = repo / "docs" / "topic.md"

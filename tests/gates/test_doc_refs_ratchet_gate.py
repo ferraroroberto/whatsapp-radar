@@ -44,6 +44,10 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "scripts").mkdir()
     script = tmp_path / "scripts" / "doc_refs_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    # every ratchet loads this sibling to find its baseline in .ratchets/
+    shutil.copy(
+        gate.SCRIPT.with_name("ratchet_baseline.py"), script.with_name("ratchet_baseline.py"),
+    )
     fleet = "[doc_refs_ratchet]\nenabled = true\n"
     (tmp_path / ".fleet.toml").write_text(fleet, encoding="utf-8")
     readme = tmp_path / "README.md"

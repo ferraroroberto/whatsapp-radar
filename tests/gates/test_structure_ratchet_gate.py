@@ -46,6 +46,10 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
         (tmp_path / folder / "mod.py").write_text("VALUE = 1\n", encoding="utf-8")
     script = tmp_path / "scripts" / "structure_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    # every ratchet loads this sibling to find its baseline in .ratchets/
+    shutil.copy(
+        gate.SCRIPT.with_name("ratchet_baseline.py"), script.with_name("ratchet_baseline.py"),
+    )
     for sibling in ("structure_layout.py", "structure_band.py"):
         shutil.copy(gate.SCRIPT.with_name(sibling), script.with_name(sibling))
     (tmp_path / ".fleet.toml").write_text(FLEET, encoding="utf-8")

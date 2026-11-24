@@ -32,7 +32,11 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     assert GIT, "git is a prerequisite of the request budget ratchet"
     (tmp_path / "scripts").mkdir()
     script = tmp_path / "scripts" / gate.SCRIPT.name
-    for source in (gate.SCRIPT, gate.SCRIPT.with_name("request_budget_scan.py")):
+    for source in (
+        gate.SCRIPT,
+        gate.SCRIPT.with_name("request_budget_scan.py"),
+        gate.SCRIPT.with_name("ratchet_baseline.py"),
+    ):
         shutil.copy(source, script.with_name(source.name))
     (tmp_path / ".fleet.toml").write_text(TABLE, encoding="utf-8")
     page = tmp_path / PAGE

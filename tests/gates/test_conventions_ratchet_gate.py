@@ -49,6 +49,10 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "src").mkdir()
     script = tmp_path / "scripts" / "conventions_ratchet.py"
     shutil.copy(gate.SCRIPT, script)
+    # every ratchet loads this sibling to find its baseline in .ratchets/
+    shutil.copy(
+        gate.SCRIPT.with_name("ratchet_baseline.py"), script.with_name("ratchet_baseline.py"),
+    )
     # the ratchet loads these siblings at import
     for sibling in ("conventions_readers.py", "conventions_state.py"):
         shutil.copy(gate.SCRIPT.with_name(sibling), script.with_name(sibling))

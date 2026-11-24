@@ -40,7 +40,7 @@ MAP = (
     "    root: data-surface\n"
 )
 MARKED = '<dialog data-surface="home.sheet"></dialog>\n'
-SIBLINGS = ("usage_track_scan.py", "ux_surface_map.py")
+SIBLINGS = ("usage_track_scan.py", "ux_surface_map.py", "ratchet_baseline.py")
 
 
 @pytest.fixture

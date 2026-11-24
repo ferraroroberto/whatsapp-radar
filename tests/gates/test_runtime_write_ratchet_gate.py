@@ -46,7 +46,11 @@ def sandbox(tmp_path: Path) -> tuple[Path, Path]:
     for name in ("scripts", "src"):
         (tmp_path / name).mkdir()
     script = tmp_path / "scripts" / gate.SCRIPT.name
-    for source in (gate.SCRIPT, gate.SCRIPT.with_name("runtime_write_resolve.py")):
+    for source in (
+        gate.SCRIPT,
+        gate.SCRIPT.with_name("runtime_write_resolve.py"),
+        gate.SCRIPT.with_name("ratchet_baseline.py"),
+    ):
         shutil.copy(source, script.with_name(source.name))
     (tmp_path / ".fleet.toml").write_text(
         TABLE, encoding="utf-8"

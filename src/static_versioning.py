@@ -154,6 +154,7 @@ def inline_index_partials(body: str, static_dir: Path) -> str:
     """
 
     def _sub(match: re.Match[str]) -> str:
+        # path-sep-exempt: an include name from this repo's own HTML, forward slashes
         return (static_dir / match.group(1)).read_text(encoding="utf-8").rstrip("\r\n")
 
     return _INDEX_INCLUDE_RE.sub(_sub, body)

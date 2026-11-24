@@ -65,4 +65,5 @@
 /tests/e2e/_e2e_live_guard.py
 /tests/e2e/_paced_browser.py
 /tests/e2e/_surface.py
+/tests/e2e/budget/_request_budget.py
 # END vendored-copies

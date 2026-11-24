@@ -76,6 +76,7 @@ request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "2e2a4cca9
 request_timing = { src = "src/request_timing.py", sha = "2e2a4cca9d3180980db6f8cd7f03a6f12737b7db", dest = "src/request_timing.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "2e2a4cca9d3180980db6f8cd7f03a6f12737b7db", dest = "app/webapp/static/_vendored/poll" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/windows_only_ratchet.py" }
+request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "be7de0edb225505f0b4773736b4eaf6b34a49363", dest = "tests/e2e/budget/_request_budget.py" }
 
 # [ci.nightly] -- the Mac Mini nightly's settings for this repo (schema: project-scaffolding
 # docs/mac-runner.md, "The [ci.nightly] table"). The unit leg skips tests marked
@@ -285,6 +286,13 @@ paths    = ["app/webapp/static/**"]
 enabled      = true
 baseline     = ".request-budget-ratchet-baseline.json"
 handler_dirs = ["app/webapp/routers"]
+
+# [request_budget] -- the most API requests the main page may send in one visible minute, checked
+# by tests/e2e/test_request_budget.py on a frozen clock. 18 is what the page sends: four reads
+# each of the dashboard, audit runs, sidecar status and passkey status at their 15 s cadence,
+# plus one usage-log flush and one health read.
+[request_budget]
+visible_requests_per_minute = 18
 
 # Server loops that run with nobody viewing, each with the reason it cannot wait for a viewer.
 [[request_budget.loops]]

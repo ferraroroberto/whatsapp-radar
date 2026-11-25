@@ -77,7 +77,7 @@ request_timing = { src = "src/request_timing.py", sha = "2e2a4cca9d3180980db6f8c
 poll = { src = "app/webapp/static/_vendored/poll", sha = "2e2a4cca9d3180980db6f8cd7f03a6f12737b7db", dest = "app/webapp/static/_vendored/poll" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
 request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "b31f6d06caeb02d1fd8ddc7ff7bc4d502e415b31", dest = "tests/e2e/budget/_request_budget.py" }
-webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "b31f6d06caeb02d1fd8ddc7ff7bc4d502e415b31", dest = "scripts/tools/webkit_budget_check.py" }
+webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "d15277a91fdaff7d24790c19a0d187baa559228a", dest = "scripts/tools/webkit_budget_check.py" }
 
 # [ci.nightly] -- the Mac Mini nightly's settings for this repo (schema: project-scaffolding
 # docs/mac-runner.md, "The [ci.nightly] table"). The unit leg skips tests marked

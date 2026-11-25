@@ -2,7 +2,7 @@
 pipeline — or a single stage — and watch it live.
 
 This router is a thin launcher over the CLI verbs. Every action maps to a
-``python launcher.py <cmd>`` invocation spawned by :mod:`app.webapp.runs`, which
+``python scripts/launcher.py <cmd>`` invocation spawned by :mod:`app.webapp.runs`, which
 captures the process's combined output to ``output.log`` and parses its final
 ``__WR_RESULT__`` sentinel into a structured result. The router holds no business
 logic: it validates the request, composes argv, and surfaces run records.

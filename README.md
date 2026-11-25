@@ -61,7 +61,7 @@ The connector path for personal and group chats is a WhatsApp Web linked-device 
 
 The app runs end-to-end with a deterministic sanitized fixture connector and a deterministic stub classifier, so it needs **no WhatsApp credentials and no network**. Session/auth state lives under the ignored `data/` and `auth/` paths; the message database itself resolves to the fleet runtime-data root (`C:\sqlite\whatsapp-radar\` by default on this machine, overridable via `WR_DB_PATH`, `WHATSAPP_RADAR_DATA_DIR`, or `FLEET_DATA_ROOT` — see `src/runtime_data.py`), which also holds the `reprocess` backups and sits outside this git checkout, so it needs its own backup source rather than git-derived backup.
 
-It runs from a checkout with no install step — `scripts\wr.bat <cmd>` is the ergonomic wrapper for `python launcher.py <cmd>`.
+It runs from a checkout with no install step — `scripts\wr.bat <cmd>` is the ergonomic wrapper for `python scripts/launcher.py <cmd>`.
 
 ```powershell
 python -m venv .venv
@@ -115,7 +115,7 @@ A FastAPI + vanilla-JS PWA on port **8455** with four tabs — Home, Activity, I
 
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons
-.\webapp.bat                # run the webapp standalone (HTTPS when a cert is present)
+.\scripts\webapp.bat                # run the webapp standalone (HTTPS when a cert is present)
 .\tray.bat                  # adopt-or-spawn the webapp behind a tray icon (daily use)
 .\tray.bat --restart        # stop the running tray + reclaim :8455, start fresh
 ```
@@ -124,7 +124,7 @@ A FastAPI + vanilla-JS PWA on port **8455** with four tabs — Home, Activity, I
 | --- | --- |
 | `tray.bat` | no-op if a WhatsApp Radar tray is already running |
 | `tray.bat --restart` | kills only this repo's tray + reclaims `:8455` by PID (scoped to this `.venv` — never a blanket `pythonw` kill), then relaunches |
-| `webapp.bat` | standalone server, no tray (headless / dev iteration) |
+| `scripts\webapp.bat` | standalone server, no tray (headless / dev iteration) |
 
 Secrets — bearer token, passkey state, and the Telegram token/chat id — live in the gitignored `config/webapp_config.json`; the login password is stored only as a salted hash in the gitignored `config/app_password.json` (set with `python -m src.password set`, the vendored `src/password.py`) (`config/webapp_config.sample.json` is the template); `WR_TELEGRAM_*` env still overrides it. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`. HTTPS: `scripts\gen_tailscale_cert.py` provisions the cert ([`docs/webapp.md`](docs/webapp.md#https-certificate-tailscale)).
 

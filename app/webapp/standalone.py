@@ -1,6 +1,6 @@
 """Run the webapp in the foreground with the settings the tray would use.
 
-``webapp.bat`` calls this so a headless box and the tray read one source for host,
+``scripts/webapp.bat`` calls this so a headless box and the tray read one source for host,
 port, server and TLS (``webapp_config.json``, ``WR_WEBAPP_PORT``) instead of the
 bat carrying its own copy of them.
 """

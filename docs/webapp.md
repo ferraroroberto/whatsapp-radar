@@ -100,7 +100,7 @@ Settings is the header gear on every pane, never a tab: the full Settings page (
 ```powershell
 .\setup.bat                 # one-shot: .venv + deps + PWA icons
 .\.venv\Scripts\python.exe scripts\gen_tailscale_cert.py  # provision HTTPS (see below)
-.\webapp.bat                # run the webapp standalone (HTTPS when a cert is present)
+.\scripts\webapp.bat                # run the webapp standalone (HTTPS when a cert is present)
 .\tray.bat                  # adopt-or-spawn the webapp behind a tray icon (daily use)
 .\tray.bat --restart        # stop the running tray + reclaim :8455, start fresh
 
@@ -117,7 +117,7 @@ Restart matrix:
 | --- | --- |
 | `tray.bat` | no-op if a WhatsApp Radar tray is already running |
 | `tray.bat --restart` | kills only this repo's tray + reclaims `:8455` by PID (scoped to this `.venv` — never a blanket `pythonw` kill), then relaunches |
-| `webapp.bat` | standalone server, no tray (headless / dev iteration) |
+| `scripts\webapp.bat` | standalone server, no tray (headless / dev iteration) |
 
 Secrets — bearer token, login password, passkey state, **and the Telegram token/chat id** — live in the gitignored `config/webapp_config.json` (`config/webapp_config.sample.json` is the template). `WR_TELEGRAM_*` env still overrides it. The same file holds the summary-speech sender-gender preferences (`sender_voice_genders`, `default_voice_gender`); edit the JSON directly, as with `tailnet_allowlist`. Confirm the live build with `GET /api/version` → `{git_sha, built_at, asset_hash}`.
 
@@ -129,7 +129,7 @@ Secrets — bearer token, login password, passkey state, **and the Telegram toke
 
 **Logs.** The tray, the webapp and the CLI each write a rotating file under the ignored `webapp/` directory — `tray.log`, `webapp.log`, `cli.log` (1 MB × 3 backups; plus `auth.log` for sign-in events). The tray runs under `pythonw` with no console, so these files are where its warnings and errors land. They carry ids, counts and exception text, never chat names or message bodies, and only this repo's own loggers are written (not third-party HTTP clients). `WR_LOG_DIR` relocates the directory; set it empty to turn file logging off. Every CLI run logs a breadcrumb before each blocking step (run record, DB, the check itself, finalize) and its exit with elapsed time, so a stalled run shows in `cli.log` where it stopped.
 
-**Stalled-run stack dumps.** `launcher.py` arms `faulthandler` before importing the app (`app/cli/stack_watchdog.py`): a family check still running after 60 s, or any other verb after 15 min, writes every thread's stack to stderr, which App Launcher captures into the Job log, and repeats at the same interval. Frames carry file, line and function names only, never values. The tray is never armed.
+**Stalled-run stack dumps.** `scripts\launcher.py` arms `faulthandler` before importing the app (`app/cli/stack_watchdog.py`): a family check still running after 60 s, or any other verb after 15 min, writes every thread's stack to stderr, which App Launcher captures into the Job log, and repeats at the same interval. Frames carry file, line and function names only, never values. The tray is never armed.
 
 ## HTTPS certificate (Tailscale)
 
@@ -142,6 +142,6 @@ Provision a **real Let's Encrypt cert** via `tailscale cert` — no self-signed 
 
 One-time prereq: enable **DNS → HTTPS Certificates** in the [Tailscale admin console](https://login.tailscale.com/admin/dns). The script auto-detects the MagicDNS name and writes `webapp/certificates/cert.pem` + `key.pem`. Every device on the tailnet then trusts `https://<host>.<tailnet>.ts.net:8455` natively — no CA install, no profile, no Certificate Trust toggle.
 
-**Renewal is automatic.** The Let's Encrypt leaf lives ~90 days, so every uvicorn-boot path (`tray.bat` via the webapp manager, `webapp.bat`) runs `gen_tailscale_cert.py --check` first, which renews only a `.ts.net` cert expiring within 30 days and no-ops on any other cert. No calendar entry needed.
+**Renewal is automatic.** The Let's Encrypt leaf lives ~90 days, so every uvicorn-boot path (`tray.bat` via the webapp manager, `scripts\webapp.bat`) runs `gen_tailscale_cert.py --check` first, which renews only a `.ts.net` cert expiring within 30 days and no-ops on any other cert. No calendar entry needed.
 
 > **Loopback and LAN URLs:** the Tailscale cert is issued *only* for the ts.net name, so `https://127.0.0.1:8455` and LAN-IP URLs show a hostname-mismatch warning by design — open the webapp via the ts.net URL on the PC too. With no cert at all the server runs plain HTTP on loopback, which is fine for a fresh clone; but iOS Safari needs HTTPS for the PWA and the WebAuthn passkey ceremonies, so provision the Tailscale cert before phone use.

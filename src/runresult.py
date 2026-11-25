@@ -1,6 +1,6 @@
 """Structured result contract between a launched CLI run and its watcher.
 
-Every Execution-tab action runs as a subprocess (``python launcher.py <cmd>``)
+Every Execution-tab action runs as a subprocess (``python scripts/launcher.py <cmd>``)
 whose combined stdout+stderr is streamed to ``output.log`` for live viewing. The
 human-readable progress lines are for the operator; the *structured* result (the
 scan funnel, the resync delta, the reprocess summary) is emitted as one final

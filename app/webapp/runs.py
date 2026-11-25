@@ -9,7 +9,7 @@ byte exactly as it would in App Launcher's Jobs tab.
 
 Why a subprocess and not an in-process call: Run now is where the
 operator *validates* the very command App Launcher Jobs will schedule
-(``python launcher.py scan|resync|reprocess``). Running the identical process
+(``python scripts/launcher.py scan|resync|reprocess``). Running the identical process
 here means what you watch is byte-for-byte what runs there. The structured
 outcome (funnel / counts) rides back on the ``__WR_RESULT__`` sentinel line the
 CLI prints last (see :mod:`src.runresult`).
@@ -43,7 +43,7 @@ from src.subprocess_flags import NO_WINDOW_NEW_GROUP
 logger = logging.getLogger(__name__)
 
 RUNS_DIR = PROJECT_ROOT / "webapp" / "runs"
-_LAUNCHER = PROJECT_ROOT / "launcher.py"
+_LAUNCHER = PROJECT_ROOT / "scripts" / "launcher.py"
 
 #: Retention cap: each kind directory keeps at most this many run
 #: records, newest first. A hard count bound, not an age cap — it directly

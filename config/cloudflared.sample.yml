@@ -11,7 +11,7 @@
 #      → prints a UUID and writes credentials to ~/.cloudflared/<UUID>.json
 #   3. cloudflared tunnel route dns whatsapp-radar radar.<your-domain>
 #   4. Copy this file to webapp/cloudflared.yml and edit `tunnel:` + `hostname:`
-#   5. webapp_tunnel_named.bat (or just tray.bat — the tray adopts the same config)
+#   5. scripts\webapp_tunnel_named.bat (or just tray.bat — the tray adopts the same config)
 
 # Tunnel UUID — replace with the one returned by `tunnel create`.
 tunnel: 00000000-0000-0000-0000-000000000000

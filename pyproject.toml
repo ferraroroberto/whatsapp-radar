@@ -1,5 +1,5 @@
 # Tool configuration only. WhatsApp Radar is not an installable package — it is
-# run from a checkout via `python launcher.py` (see CLAUDE.md for the src/+app/
+# run from a checkout via `python scripts/launcher.py` (see CLAUDE.md for the src/+app/
 # layout shared across the fleet). Runtime deps live in requirements.txt.
 
 [tool.ruff]

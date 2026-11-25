@@ -10,7 +10,7 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 | `src/` | The logic: connector, store, classifier, notifiers, family checks. Imported as `from src.…`. |
 | `tests/` | The offline pytest suite (fixture connector only), the Playwright e2e suite in `tests/e2e/` and the sanitized sample chats the fixture connector reads, `tests/fixtures/sample_chats.json`. `tests/` stays under the 40-module directory limit: a new test module goes in a domain subfolder (`tests/delivery/`, `tests/family/`, `tests/webapp/`, `tests/connectors/`, `tests/gates/` for the ratchet gate tests, `tests/fakes/` for the shared offline fakes, `tests/e2e_harness/` for the e2e harness's own checks), and only the portable-package contract tests (`test_gmail_readonly.py`, `test_google_oauth_common.py`, `test_calendar_readonly.py`, `test_calendar_write.py`) stay at the top because consumers copy them by path. |
 | `docs/` | Durable reference, this file included. |
-| `scripts/` | Helper CLIs, the verification gate, `wr.bat` (the `launcher.py` wrapper) and the vendored ratchets with their gate wrappers. |
+| `scripts/` | Helper CLIs, the verification gate, `wr.bat` (the `scripts\launcher.py` wrapper) and the vendored ratchets with their gate wrappers. |
 | `config/` | Committed defaults (`default.json`) and `*.sample` templates. Machine-local overrides next to them are gitignored. |
 | `assets/` | Tray icon, Stream Deck icon and the Telegram bot avatars. |
 
@@ -18,9 +18,9 @@ Where code goes. The shape is `webapp-tray`, declared in `.fleet.toml`; the stru
 
 | Path | Holds |
 |---|---|
-| `app/cli/` | `main.py`, the argparse dispatcher behind `launcher.py` and `scripts\wr.bat`. |
+| `app/cli/` | `main.py`, the argparse dispatcher behind `scripts\launcher.py` and `scripts\wr.bat`. |
 | `app/tray/` | The pystray surface that owns the webapp lifecycle. |
-| `app/webapp/` | FastAPI server (`server.py`), adopt-or-spawn webapp lifecycle (`manager.py`), the foreground entry `webapp.bat` runs (`standalone.py`), the vendored HTTP/2 launch module (`serve.py`), auth middleware, the named worker pools routes hand blocking work to (`pools.py`), run tracking. |
+| `app/webapp/` | FastAPI server (`server.py`), adopt-or-spawn webapp lifecycle (`manager.py`), the foreground entry `scripts\webapp.bat` runs (`standalone.py`), the vendored HTTP/2 launch module (`serve.py`), auth middleware, the named worker pools routes hand blocking work to (`pools.py`), run tracking. |
 | `app/webapp/routers/` | One API router per area (chats, config, family, audit, auth, …). |
 | `app/webapp/static/` | The vanilla-JS PWA shell, its CSS, and vendored components under `_vendored/`. `index.html` stays under the size cap by keeping the icon sprite in `app-icons-sprite.html`, spliced in at the `<!-- @include app-icons-sprite.html -->` marker when `/` is served (the sprite must sit inside the document: iOS Safari does not resolve an external `<use>`). |
 

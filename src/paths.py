@@ -11,5 +11,5 @@ from __future__ import annotations
 
 from pathlib import Path
 
-#: Repository root — the directory holding ``launcher.py``.
+#: Repository root — the directory holding ``tray.bat``.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

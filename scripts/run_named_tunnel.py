@@ -1,6 +1,6 @@
 """Start the webapp + cloudflared on a named (persistent) tunnel.
 
-Used by ``webapp_tunnel_named.bat`` for headless / no-tray use. The tray already
+Used by ``scripts/webapp_tunnel_named.bat`` for headless / no-tray use. The tray already
 does this same work as part of normal startup — only reach for this script when
 running without the tray.
 

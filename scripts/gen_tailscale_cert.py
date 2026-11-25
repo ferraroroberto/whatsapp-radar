@@ -20,7 +20,7 @@ Usage:
     & .\\.venv\\Scripts\\python.exe scripts\\gen_tailscale_cert.py
     & .\\.venv\\Scripts\\python.exe scripts\\gen_tailscale_cert.py <host>.ts.net
 
-    # Check and auto-renew if expiring within 30 days (run by webapp.bat /
+    # Check and auto-renew if expiring within 30 days (run by scripts/webapp.bat /
     # the tray on startup so a stale cert self-heals before uvicorn binds):
     & .\\.venv\\Scripts\\python.exe scripts\\gen_tailscale_cert.py --check
 """
@@ -192,7 +192,7 @@ def main() -> None:
     print(f"Provisioning Tailscale cert for: {hostname}")
     _provision(hostname)
     print()
-    print("Restart the app (tray.bat --restart, or webapp.bat), then open:")
+    print("Restart the app (tray.bat --restart, or scripts/webapp.bat), then open:")
     print(f"  https://{hostname}:8455")
     print()
     print("Note: https://localhost:8455 will show a cert hostname-mismatch warning")

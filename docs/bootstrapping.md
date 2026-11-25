@@ -156,7 +156,7 @@ copy config\cloudflared.sample.yml webapp\cloudflared.yml
 # then edit webapp\cloudflared.yml: fill in `tunnel:` (the UUID) and `hostname:`
 ```
 
-Launch it with `webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the sample ingress points at the origin's HTTPS port with `noTLSVerify` (the origin cert is issued for the tailnet name, not the public hostname) — see `config/cloudflared.sample.yml`.
+Launch it with `scripts\webapp_tunnel_named.bat` (or just `tray.bat` — the tray adopts the same config). The public URL stays the same every launch. Cloudflare's edge provides the public TLS; the sample ingress points at the origin's HTTPS port with `noTLSVerify` (the origin cert is issued for the tailnet name, not the public hostname) — see `config/cloudflared.sample.yml`.
 
 ## 7 — Schedule the digest + add the launch surfaces (App Launcher)
 
@@ -164,7 +164,7 @@ WhatsApp Radar runs as part of the home stack through [App Launcher](../../app-l
 
 ### Jobs tab — scheduled digest, calendar sync, traffic check
 
-All three jobs are named with a `family-radar-` prefix — two of the three are family checks, not WhatsApp, so a `whatsapp-radar-*` name would be misleading. App Launcher's executor points every job at this repo's `launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe launcher.py <command>` — no PYTHONPATH juggling needed.
+All three jobs are named with a `family-radar-` prefix — two of the three are family checks, not WhatsApp, so a `whatsapp-radar-*` name would be misleading. App Launcher's executor points every job at this repo's `scripts\launcher.py`, so it resolves this repo's own `.venv`, runs with `cwd` + `PYTHONPATH` set to the repo root, and invokes `…\whatsapp-radar\.venv\Scripts\python.exe scripts\launcher.py <command>` — no PYTHONPATH juggling needed.
 
 From the Jobs tab's **+**, add:
 
@@ -180,8 +180,8 @@ A live `scan` self-heals the sidecar when the device is still paired and **abort
 
 From an **Apps-tab scan** for the bats, add two rows, both named *WhatsApp Radar*:
 
-- `whatsapp-radar-webapp` (`kind: webapp` → `webapp.bat`) — serves the PWA on `:8455`.
-- `whatsapp-radar-webapp-tunnel-named` (`kind: tunnel` → `webapp_tunnel_named.bat`) — the same PWA behind its persistent named Cloudflare URL (needs Step 6 wired first).
+- `whatsapp-radar-webapp` (`kind: webapp` → `scripts\webapp.bat`) — serves the PWA on `:8455`.
+- `whatsapp-radar-webapp-tunnel-named` (`kind: tunnel` → `scripts\webapp_tunnel_named.bat`) — the same PWA behind its persistent named Cloudflare URL (needs Step 6 wired first).
 
 Tapping either from the phone spawns the matching bat. For daily use prefer this repo's own `tray.bat` (adopt-or-spawn behind a tray icon); the Apps-tab rows are for launching from the phone when the tray isn't already up.
 

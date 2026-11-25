@@ -15,7 +15,7 @@ The connection is **read-only**: there is no code path that sends a WhatsApp mes
 
 ## CLI surface
 
-Run any command via `scripts\wr.bat <cmd>`, `python launcher.py <cmd>`, or `python -m app.cli.main <cmd>`.
+Run any command via `scripts\wr.bat <cmd>`, `python scripts/launcher.py <cmd>`, or `python -m app.cli.main <cmd>`.
 
 | Command | What it does |
 | --- | --- |

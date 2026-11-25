@@ -3,7 +3,7 @@
 ``status()`` probes ``/healthz`` + a TCP fallback, ``start()`` adopts an
 already-listening uvicorn or spawns one, ``stop()`` only terminates a process
 this manager owns. Used by the tray so launching ``tray.bat`` brings the webapp
-up; ``webapp.bat`` is the "server only, no tray" alternative.
+up; ``scripts/webapp.bat`` is the "server only, no tray" alternative.
 """
 
 from __future__ import annotations
@@ -282,7 +282,7 @@ class WebappManager:
         return [sys.executable, "-m", "app.webapp.serve", *self.serve_args()]
 
     def serve_foreground(self) -> int:
-        """Serve in this process until it is stopped; the standalone ``webapp.bat`` path.
+        """Serve in this process until it is stopped; the standalone ``scripts/webapp.bat`` path.
 
         Same flags as the spawned child, so the bat and the tray cannot disagree on
         host, port, server or TLS. A disabled webapp is not started.

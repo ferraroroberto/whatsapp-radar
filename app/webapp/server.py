@@ -58,11 +58,17 @@ from app.webapp.routers._helpers import STATIC_DIR
 from src.compression import StreamSafeGZipMiddleware
 from src.config import load_config
 from src.db import store
+from src.health_routes import health_router
 from src.logging_setup import configure_file_logging
 from src.request_timing import RequestTimingMiddleware, default_executor
 from src.runtime_data import runtime_data_dir, runtime_db_path
 from src.self_restart import TRAY_RESTART, RestartTarget, restart_router
-from src.static_versioning import compute_asset_hashes, fleet_hash_of, rewrite_js_imports
+from src.static_versioning import (
+    asset_hash_for,
+    compute_asset_hashes,
+    fleet_hash_of,
+    rewrite_js_imports,
+)
 from src.usage_log import usage_router
 from src.webapp_config import load_webapp_config
 from src.webauthn_gate import WebAuthnGate
@@ -194,6 +200,11 @@ def create_app() -> FastAPI:
             name="static",
         )
 
+    # The fleet's standard liveness and build identity routes (vendored).
+    app.include_router(health_router(
+        service="whatsapp-radar",
+        extra={"asset_hash": asset_hash_for(asset_hashes, "styles.css") or ""},
+    ))
     app.include_router(misc.router)
     app.include_router(auth.router)
     app.include_router(webauthn.router)

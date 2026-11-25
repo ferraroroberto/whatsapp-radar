@@ -55,6 +55,7 @@ from app.webapp.routers import (
 )
 from app.webapp.routers import config as config_router
 from app.webapp.routers._helpers import STATIC_DIR
+from src.build_info import build_identity
 from src.compression import StreamSafeGZipMiddleware
 from src.config import load_config
 from src.db import store
@@ -79,6 +80,10 @@ _LONG_CACHE = "public, max-age=31536000, immutable"
 _DAY_CACHE = "public, max-age=86400"
 _HASHED_SUFFIXES = {".js", ".css"}
 _DAY_CACHE_SUFFIXES = {".webmanifest", ".png", ".ico"}
+
+
+# This process's build identity, captured once at module load.
+_BUILD_IDENTITY = build_identity()
 
 
 class _VersionedStatic(StaticFiles):
@@ -203,6 +208,7 @@ def create_app() -> FastAPI:
     # The fleet's standard liveness and build identity routes (vendored).
     app.include_router(health_router(
         service="whatsapp-radar",
+        identity=_BUILD_IDENTITY,
         extra={"asset_hash": asset_hash_for(asset_hashes, "styles.css") or ""},
     ))
     app.include_router(misc.router)

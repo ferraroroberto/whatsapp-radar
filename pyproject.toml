@@ -12,6 +12,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 # Vendored byte-for-byte from project-scaffolding (#409); never reformat locally.
+"src/health_routes.py" = ["E501"]
 "tests/e2e/_browser_sweep.py" = ["E501"]
 "tests/e2e/_surface.py" = ["E501"]
 "tests/e2e/budget/_request_budget.py" = ["E501"]

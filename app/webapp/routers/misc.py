@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as _dt
 import hashlib
 import logging
 import subprocess
@@ -13,7 +12,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.webapp.routers._helpers import STATIC_DIR
 from src.paths import PROJECT_ROOT
-from src.static_versioning import asset_hash_for, inline_index_partials, rewrite_index_html
+from src.static_versioning import inline_index_partials, rewrite_index_html
 from src.subprocess_flags import NO_WINDOW
 
 _log = logging.getLogger(__name__)
@@ -54,7 +53,6 @@ def _resolve_git_sha() -> str:
 
 
 _GIT_SHA = _resolve_git_sha()
-_BUILT_AT = _dt.datetime.now().replace(microsecond=0).isoformat()
 
 
 def _entry_etag(stamped: str, asset_hashes: dict[str, str]) -> str:
@@ -101,19 +99,3 @@ async def index(request: Request) -> Response:
     if _if_none_match_hits(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return HTMLResponse(content=stamped, headers=headers)
-
-
-@router.get("/api/version")
-async def version(request: Request) -> dict[str, str]:
-    """Build identity. Stable across requests; cached at module load."""
-    asset_hashes = getattr(request.app.state, "asset_hashes", {}) or {}
-    return {
-        "git_sha": _GIT_SHA,
-        "built_at": _BUILT_AT,
-        "asset_hash": asset_hash_for(asset_hashes, "styles.css") or "",
-    }
-
-
-@router.get("/healthz")
-async def healthz() -> dict[str, Any]:
-    return {"ok": True, "service": "whatsapp-radar"}

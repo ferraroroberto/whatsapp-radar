@@ -261,6 +261,37 @@ try {
     }
     if ($e2eExit -ne 0) { Fail "Playwright e2e suite failed." }
 
+    if ($e2e.Tier -eq "skip") {
+        Write-Host "[SKIP] request budget on webkit - no e2e surface touched" -ForegroundColor DarkGray
+    }
+    elseif ($e2e.Tier -eq "static") {
+        Write-Host "[SKIP] request budget on webkit - an inert-asset diff runs only the smoke target" -ForegroundColor DarkGray
+    }
+    else {
+        # The Mac nightly runs the request-budget tests on WebKit, which the Chromium
+        # slice above never does. 0 passed; 4 (WebKit not installed) and 5 (the repo
+        # has no budget test) are "not run", printed as such and never as a pass;
+        # anything else, 3 (not confirmed) included, fails the gate.
+        Write-Host "==> request budget on webkit..." -ForegroundColor Cyan
+        $env:WR_E2E_AUTOBOOT = "1"
+        try {
+            & $python "scripts/tools/webkit_budget_check.py"
+            $webkitBudget = $LASTEXITCODE
+        }
+        finally {
+            Remove-Item Env:\WR_E2E_AUTOBOOT -ErrorAction SilentlyContinue
+        }
+        if ($webkitBudget -eq 4) {
+            Write-Host "[NOT RUN] request budget on webkit - WebKit is not installed here, so the nightly's engine was not checked" -ForegroundColor Yellow
+        }
+        elseif ($webkitBudget -eq 5) {
+            Write-Host "[NOT RUN] request budget on webkit - no request-budget test in this repo" -ForegroundColor Yellow
+        }
+        elseif ($webkitBudget -ne 0) {
+            Fail "request budget on webkit failed (exit $webkitBudget): a budget test failed on WebKit, or the run could not be confirmed."
+        }
+    }
+
     # Runtime write probe, second half: any file the unit and e2e runs left under a code folder.
     Write-Host "==> runtime write probe..." -ForegroundColor Cyan
     & $python scripts/runtime_write_ratchet.py --probe $runtimeSnapshot
